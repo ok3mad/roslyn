@@ -114,6 +114,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         NoOpStatement,
         ReturnStatement,
         YieldReturnStatement,
+        YieldReturnSpreadStatement,
         YieldBreakStatement,
         ThrowStatement,
         ExpressionStatement,
@@ -3670,6 +3671,40 @@ namespace Microsoft.CodeAnalysis.CSharp
             if (expression != this.Expression)
             {
                 var result = new BoundYieldReturnStatement(this.Syntax, expression, this.HasErrors);
+                result.CopyAttributes(this);
+                return result;
+            }
+            return this;
+        }
+    }
+
+    internal sealed partial class BoundYieldReturnSpreadStatement : BoundStatement
+    {
+        public BoundYieldReturnSpreadStatement(SyntaxNode syntax, BoundExpression expression, ForEachEnumeratorInfo? enumeratorInfoOpt, BoundValuePlaceholder? elementPlaceholder, BoundExpression? elementConversion, bool hasErrors = false)
+            : base(BoundKind.YieldReturnSpreadStatement, syntax, hasErrors || expression.HasErrors() || elementPlaceholder.HasErrors() || elementConversion.HasErrors())
+        {
+
+            RoslynDebug.Assert(expression is object, "Field 'expression' cannot be null (make the type nullable in BoundNodes.xml to remove this check)");
+
+            this.Expression = expression;
+            this.EnumeratorInfoOpt = enumeratorInfoOpt;
+            this.ElementPlaceholder = elementPlaceholder;
+            this.ElementConversion = elementConversion;
+        }
+
+        public BoundExpression Expression { get; }
+        public ForEachEnumeratorInfo? EnumeratorInfoOpt { get; }
+        public BoundValuePlaceholder? ElementPlaceholder { get; }
+        public BoundExpression? ElementConversion { get; }
+
+        [DebuggerStepThrough]
+        public override BoundNode? Accept(BoundTreeVisitor visitor) => visitor.VisitYieldReturnSpreadStatement(this);
+
+        public BoundYieldReturnSpreadStatement Update(BoundExpression expression, ForEachEnumeratorInfo? enumeratorInfoOpt, BoundValuePlaceholder? elementPlaceholder, BoundExpression? elementConversion)
+        {
+            if (expression != this.Expression || enumeratorInfoOpt != this.EnumeratorInfoOpt || elementPlaceholder != this.ElementPlaceholder || elementConversion != this.ElementConversion)
+            {
+                var result = new BoundYieldReturnSpreadStatement(this.Syntax, expression, enumeratorInfoOpt, elementPlaceholder, elementConversion, this.HasErrors);
                 result.CopyAttributes(this);
                 return result;
             }
@@ -9262,6 +9297,8 @@ namespace Microsoft.CodeAnalysis.CSharp
                     return VisitReturnStatement((BoundReturnStatement)node, arg);
                 case BoundKind.YieldReturnStatement:
                     return VisitYieldReturnStatement((BoundYieldReturnStatement)node, arg);
+                case BoundKind.YieldReturnSpreadStatement:
+                    return VisitYieldReturnSpreadStatement((BoundYieldReturnSpreadStatement)node, arg);
                 case BoundKind.YieldBreakStatement:
                     return VisitYieldBreakStatement((BoundYieldBreakStatement)node, arg);
                 case BoundKind.ThrowStatement:
@@ -9650,6 +9687,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         public virtual R VisitNoOpStatement(BoundNoOpStatement node, A arg) => this.DefaultVisit(node, arg);
         public virtual R VisitReturnStatement(BoundReturnStatement node, A arg) => this.DefaultVisit(node, arg);
         public virtual R VisitYieldReturnStatement(BoundYieldReturnStatement node, A arg) => this.DefaultVisit(node, arg);
+        public virtual R VisitYieldReturnSpreadStatement(BoundYieldReturnSpreadStatement node, A arg) => this.DefaultVisit(node, arg);
         public virtual R VisitYieldBreakStatement(BoundYieldBreakStatement node, A arg) => this.DefaultVisit(node, arg);
         public virtual R VisitThrowStatement(BoundThrowStatement node, A arg) => this.DefaultVisit(node, arg);
         public virtual R VisitExpressionStatement(BoundExpressionStatement node, A arg) => this.DefaultVisit(node, arg);
@@ -9891,6 +9929,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         public virtual BoundNode? VisitNoOpStatement(BoundNoOpStatement node) => this.DefaultVisit(node);
         public virtual BoundNode? VisitReturnStatement(BoundReturnStatement node) => this.DefaultVisit(node);
         public virtual BoundNode? VisitYieldReturnStatement(BoundYieldReturnStatement node) => this.DefaultVisit(node);
+        public virtual BoundNode? VisitYieldReturnSpreadStatement(BoundYieldReturnSpreadStatement node) => this.DefaultVisit(node);
         public virtual BoundNode? VisitYieldBreakStatement(BoundYieldBreakStatement node) => this.DefaultVisit(node);
         public virtual BoundNode? VisitThrowStatement(BoundThrowStatement node) => this.DefaultVisit(node);
         public virtual BoundNode? VisitExpressionStatement(BoundExpressionStatement node) => this.DefaultVisit(node);
@@ -10389,6 +10428,11 @@ namespace Microsoft.CodeAnalysis.CSharp
             return null;
         }
         public override BoundNode? VisitYieldReturnStatement(BoundYieldReturnStatement node)
+        {
+            this.Visit(node.Expression);
+            return null;
+        }
+        public override BoundNode? VisitYieldReturnSpreadStatement(BoundYieldReturnSpreadStatement node)
         {
             this.Visit(node.Expression);
             return null;
@@ -11689,6 +11733,13 @@ namespace Microsoft.CodeAnalysis.CSharp
         {
             BoundExpression expression = (BoundExpression)this.Visit(node.Expression);
             return node.Update(expression);
+        }
+        public override BoundNode? VisitYieldReturnSpreadStatement(BoundYieldReturnSpreadStatement node)
+        {
+            BoundExpression expression = (BoundExpression)this.Visit(node.Expression);
+            BoundValuePlaceholder? elementPlaceholder = node.ElementPlaceholder;
+            BoundExpression? elementConversion = node.ElementConversion;
+            return node.Update(expression, node.EnumeratorInfoOpt, elementPlaceholder, elementConversion);
         }
         public override BoundNode? VisitYieldBreakStatement(BoundYieldBreakStatement node) => node;
         public override BoundNode? VisitThrowStatement(BoundThrowStatement node)
@@ -16305,6 +16356,15 @@ namespace Microsoft.CodeAnalysis.CSharp
             new TreeDumperNode("hasErrors", node.HasErrors, null)
         }
         );
+        public override TreeDumperNode VisitYieldReturnSpreadStatement(BoundYieldReturnSpreadStatement node, object? arg) => new TreeDumperNode("yieldReturnSpreadStatement", null, new TreeDumperNode[]
+        {
+            new TreeDumperNode("expression", null, new TreeDumperNode[] { Visit(node.Expression, null) }),
+            new TreeDumperNode("enumeratorInfoOpt", node.EnumeratorInfoOpt, null),
+            new TreeDumperNode("elementPlaceholder", null, new TreeDumperNode[] { Visit(node.ElementPlaceholder, null) }),
+            new TreeDumperNode("elementConversion", null, new TreeDumperNode[] { Visit(node.ElementConversion, null) }),
+            new TreeDumperNode("hasErrors", node.HasErrors, null)
+        }
+        );
         public override TreeDumperNode VisitYieldBreakStatement(BoundYieldBreakStatement node, object? arg) => new TreeDumperNode("yieldBreakStatement", null, Array.Empty<TreeDumperNode>()
         );
         public override TreeDumperNode VisitThrowStatement(BoundThrowStatement node, object? arg) => new TreeDumperNode("throwStatement", null, new TreeDumperNode[]
@@ -17719,6 +17779,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 BoundKind.DefaultLiteral => PipelinePhase.LocalRewriting,
                 BoundKind.LocalFunctionStatement => PipelinePhase.ClosureConversion,
                 BoundKind.YieldReturnStatement => PipelinePhase.StateMachineRewriting,
+                BoundKind.YieldReturnSpreadStatement => PipelinePhase.LocalRewriting,
                 BoundKind.YieldBreakStatement => PipelinePhase.StateMachineRewriting,
                 BoundKind.IfStatement => PipelinePhase.LocalRewriting,
                 BoundKind.UsingStatement => PipelinePhase.LocalRewriting,
