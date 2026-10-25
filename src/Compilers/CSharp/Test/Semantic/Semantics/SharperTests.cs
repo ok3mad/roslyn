@@ -4,6 +4,8 @@
 
 using System.Collections.Generic;
 using Microsoft.CodeAnalysis.CSharp.Test.Utilities;
+using Microsoft.CodeAnalysis.Test.Utilities;
+using Roslyn.Test.Utilities;
 using Xunit;
 
 namespace Microsoft.CodeAnalysis.CSharp.UnitTests
@@ -34,6 +36,49 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             Assert.Equal("Feature 'Sharper' is experimental and unsupported; use '/features:sharper' to enable.", info.GetMessage());
 
             Assert.Null(MessageID.IDS_FeatureSharper.GetFeatureAvailabilityDiagnosticInfo(TestOptions.Regular.WithExperimental(MessageID.IDS_FeatureSharper)));
+        }
+
+        private static readonly CSharpParseOptions s_sharperOptions = TestOptions.Regular.WithExperimental(MessageID.IDS_FeatureSharper);
+
+        [Fact]
+        public void YieldReturnSpread_Basic()
+        {
+            var source = """
+                using System;
+                using System.Collections.Generic;
+
+                foreach (var x in Spread(new[] { 1, 2, 3 }))
+                    Console.Write(x);
+
+                static IEnumerable<int> Spread(IEnumerable<int> xs)
+                {
+                    yield return 0;
+                    yield return ..xs;
+                    yield return 4;
+                }
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "01234" : null).VerifyDiagnostics();
+        }
+
+        [Theory]
+        [CombinatorialData]
+        public void YieldReturnSpread_ExistingRangeMeaningIsKept(bool sharper)
+        {
+            // In an iterator of Range, `..i` is already a valid range expression in C#.
+            // Sharper must keep that meaning; the spread only applies where C# reports an error.
+            var source = """
+                using System;
+                using System.Collections.Generic;
+
+                foreach (var r in Ranges(2))
+                    Console.Write(r);
+
+                static IEnumerable<Range> Ranges(int i)
+                {
+                    yield return ..i;
+                }
+                """;
+            CompileAndVerify(source, parseOptions: sharper ? s_sharperOptions : TestOptions.Regular, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "0..2" : null).VerifyDiagnostics();
         }
     }
 }
