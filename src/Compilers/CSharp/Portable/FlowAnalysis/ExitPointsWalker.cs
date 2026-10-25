@@ -138,6 +138,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                         // Return statements are included
                         break;
                     case BoundKind.YieldReturnStatement:
+                    case BoundKind.YieldReturnSpreadStatement:
                     case BoundKind.AwaitExpression:
                     case BoundKind.UsingStatement:
                     case BoundKind.ForEachStatement when ((BoundForEachStatement)pending.Branch).EnumeratorInfoOpt is { MoveNextAwaitableInfo: not null }:
