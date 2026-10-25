@@ -80,5 +80,45 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 """;
             CompileAndVerify(source, parseOptions: sharper ? s_sharperOptions : TestOptions.Regular, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "0..2" : null).VerifyDiagnostics();
         }
+
+        [Theory]
+        [CombinatorialData]
+        public void YieldReturnSpread_ExistingRangeMeaningIsKept_ObjectElement(bool sharper)
+        {
+            // In an iterator of object, `..i` is a valid range that gets boxed, so it stays a range.
+            var source = """
+                using System;
+                using System.Collections.Generic;
+
+                foreach (var r in Ranges(2))
+                    Console.Write(r);
+
+                static IEnumerable<object> Ranges(int i)
+                {
+                    yield return ..i;
+                }
+                """;
+            CompileAndVerify(source, parseOptions: sharper ? s_sharperOptions : TestOptions.Regular, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "0..2" : null).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void YieldReturnSpread_ObjectElement()
+        {
+            // In an iterator of object, `..xs` is not a valid range, so it spreads,
+            // and each element is boxed rather than the sequence being yielded as one object.
+            var source = """
+                using System;
+                using System.Collections.Generic;
+
+                foreach (var x in Spread(new[] { 1, 2, 3 }))
+                    Console.Write(x);
+
+                static IEnumerable<object> Spread(IEnumerable<int> xs)
+                {
+                    yield return ..xs;
+                }
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "123" : null).VerifyDiagnostics();
+        }
     }
 }
