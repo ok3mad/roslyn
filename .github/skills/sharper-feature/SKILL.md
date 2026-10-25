@@ -7,8 +7,9 @@ description: "Implement a Sharper language feature (or any new construct) in the
 
 Sharper is a stricter C# dialect built inside Roslyn, on the `sharper/*` branches of this fork. Its features are
 compiled by the C# compiler itself: new syntax binds to bound nodes and lowers to ordinary constructs. This skill is
-the checklist distilled from the first feature, `yield return ..xs` (see `SharperTests.cs` and the commits on
-`sharper/gating`).
+the checklist distilled from the first two features: `yield return ..xs` (a new bound node; the commits merged
+from `sharper/gating`) and `val` locals (a contextual keyword on an existing symbol; branch `sharper/val`). See
+`SharperTests.cs` for both.
 
 ## When to Use
 
@@ -25,6 +26,8 @@ the checklist distilled from the first feature, `yield return ..xs` (see `Sharpe
 2. **No semantic breaking changes.** Where Sharper syntax could already mean something in C#, the C# meaning wins.
    Implement this by trial binding: bind as C# into a temporary diagnostic bag, and use the Sharper meaning only if
    that reported errors. Do not hand-write the rule; it misses cases (a `Range` boxes to `object`).
+   For a contextual keyword in a type position (`val`, like `var`), name lookup is already that trial: route it
+   through `BindTypeOrAliasOrKeyword`, which treats the identifier as the keyword only when no type of that name binds.
 3. **Reuse the parser where possible.** New syntax nodes mean `Syntax.xml`, generated code and public API entries.
    Prefer reinterpreting existing syntax in the binder.
 4. **Follow-ups are `// PROTOTYPE(sharper): ...` comments.** Plain `TODO` is banned in this repo;
@@ -34,7 +37,8 @@ the checklist distilled from the first feature, `yield return ..xs` (see `Sharpe
 ## Workflow
 
 1. **Probe first.** Write tests for the target behavior and the traps, with empty expectations, and run them.
-   Read the actual diagnostics and runtime output before deciding anything.
+   Read the actual diagnostics and runtime output before deciding anything. For a new keyword the first run only
+   shows "type not found"; the probe pays off once the smallest binding is in, so add that first and probe again.
 2. **Pick the precedent**: the closest existing construct (for the spread: `foreach` and the collection-expression
    spread `[..xs]`). Model the new bound node on it.
 3. **Find every mention of the precedent**, not just its visitors:
@@ -57,7 +61,7 @@ Paths are under `src/Compilers/CSharp/Portable/`.
 | Nullable | `FlowAnalysis/NullableWalker.cs` | Always override here too (see trap 2). Reuse the precedent's analysis helpers. |
 | IOperation | `Operations/CSharpOperationFactory.cs` | Until there is an API design, add the kind to the catch-all `NoneOperation` case and override `Children` in `BoundTree/Statement.cs`. |
 | Lowering | `Lowering/LocalRewriter/` | Rewrite into existing nodes with the shared helpers (e.g. `RewriteForEachEnumerator`). Add the kind to the helpers' node-kind asserts and instrumentation switches, as the precedent does. |
-| Diagnostics | `Errors/ErrorCode.cs` | Follow the checklist comment at the end of `ErrorCode.cs` (`ErrorFacts.IsBuildOnlyDiagnostic`, `GetWarningLevel` and `DiagnosticTest.WarningLevel_2` for warnings, `.resx` message and `_Title`), then regenerate code and run `dotnet msbuild src/Compilers/CSharp/Portable/Microsoft.CodeAnalysis.CSharp.csproj /t:UpdateXlf`. A warning only new syntax can trigger gets level 1. |
+| Diagnostics | `Errors/ErrorCode.cs` (a new cause string for an existing error: a `MessageID` plus a `.resx` entry and `UpdateXlf`, no `ErrorCode`) | Follow the checklist comment at the end of `ErrorCode.cs` (`ErrorFacts.IsBuildOnlyDiagnostic`, `GetWarningLevel` and `DiagnosticTest.WarningLevel_2` for warnings, `.resx` message and `_Title`), then regenerate code and run `dotnet msbuild src/Compilers/CSharp/Portable/Microsoft.CodeAnalysis.CSharp.csproj /t:UpdateXlf`. A warning only new syntax can trigger gets level 1. |
 
 ## Traps Found So Far
 
@@ -79,6 +83,13 @@ Paths are under `src/Compilers/CSharp/Portable/`.
    machine needs care, and an Edit and Continue check.
 7. **`dynamic` defers errors to runtime**, so a "C# wins unless it errors" rule rarely fires for a dynamic operand.
    Decide what Sharper does there explicitly.
+8. **A keyword's spelling is checked far from its binder.** `var` is tested syntactically (`TypeSyntax.IsVar`,
+   `IsIdentifierVar()`) in the parser (deconstruction, designations, patterns), `SourceLocalSymbol`, the foreach
+   binder, the semantic model and script fields. Grep the spelling checks, not just the binder method, and decide for
+   each whether the new keyword joins it now or is left with a `PROTOTYPE(sharper)` comment.
+9. **Look for an existing flag before writing an analysis.** Read-only locals already existed for foreach, using
+   and fixed variables: `LocalSymbol.IsWritableVariable` plus a cause in `ReportReadonlyLocalError` covered every
+   write (`=`, `+=`, `++`, `ref`/`out`, ref reassignment, struct members, lambdas) with no new analysis.
 
 ## Testing
 
