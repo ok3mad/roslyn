@@ -573,5 +573,259 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 """;
             CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "123" : null).VerifyDiagnostics();
         }
+
+        [Fact]
+        public void Val_Basic()
+        {
+            var source = """
+                using System;
+
+                val x = 1;
+                val s = "a";
+                Func<int> f = () => x + 1;
+                Console.Write(x);
+                Console.Write(s);
+                Console.Write(f());
+                M();
+
+                static void M()
+                {
+                    val y = 3;
+                    Console.Write(y);
+                }
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "1a23" : null).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void Val_FeatureDisabled()
+        {
+            var source = """
+                class C
+                {
+                    void M()
+                    {
+                        val x = 1;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: TestOptions.Regular, targetFramework: TargetFramework.Net90).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void Val_Writes()
+        {
+            // Each write to the val local next to the same write to its var twin, which is allowed.
+            var source = """
+                using System;
+
+                class C
+                {
+                    static void Ref(ref int i) { }
+                    static void Out(out int i) { i = 0; }
+                    static void In(in int i) { }
+
+                    void M()
+                    {
+                        val x = 1;
+                        var y = 1;
+                        x = 2;
+                        y = 2;
+                        x += 1;
+                        y += 1;
+                        x++;
+                        y++;
+                        --x;
+                        --y;
+                        Ref(ref x);
+                        Ref(ref y);
+                        Out(out x);
+                        Out(out y);
+                        In(in x);
+                        In(in y);
+                        ref int r = ref x;
+                        ref int q = ref y;
+                        ref readonly int rr = ref x;
+                        Action a = () => x = 3;
+                        Action b = () => y = 3;
+                        void Local() { x = 4; }
+                        void Local2() { y = 4; }
+
+                        val s = (string)null;
+                        var t = (string)null;
+                        s ??= "a";
+                        t ??= "a";
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void Val_StructField()
+        {
+            var source = """
+                struct S
+                {
+                    public int F;
+                    public int P { get; set; }
+                    public void Mutate() { F++; }
+                }
+
+                class C
+                {
+                    void M()
+                    {
+                        val v = new S();
+                        var w = new S();
+                        v.F = 1;
+                        w.F = 1;
+                        v.P = 1;
+                        w.P = 1;
+                        v.Mutate();
+                        w.Mutate();
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void Val_StructMutatingMethod()
+        {
+            // Probe: does a mutating method on a val struct mutate the local, as for a foreach variable?
+            var source = """
+                using System;
+
+                val v = new S();
+                v.Mutate();
+                Console.Write(v.F);
+                foreach (var w in new[] { new S() })
+                {
+                    w.Mutate();
+                    Console.Write(w.F);
+                }
+
+                struct S
+                {
+                    public int F;
+                    public void Mutate() { F++; }
+                }
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "" : null).VerifyDiagnostics();
+        }
+
+        [Theory]
+        [CombinatorialData]
+        public void Val_TypeNamedValWins(bool sharper)
+        {
+            // With a type named val in scope, val keeps its C# meaning.
+            var source = """
+                class val { }
+
+                class C
+                {
+                    void M()
+                    {
+                        val x = new val();
+                        x = new val();
+                        val y = 1;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: sharper ? s_sharperOptions : TestOptions.Regular, targetFramework: TargetFramework.Net90).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void Val_SameErrorsAsVar()
+        {
+            var source = """
+                class C
+                {
+                    void M()
+                    {
+                        val a;
+                        var a2;
+                        val b = 1, c = 2;
+                        var b2 = 1, c2 = 2;
+                        val d = null;
+                        var d2 = null;
+                        const val e = 1;
+                        const var e2 = 1;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void Val_RefAndScoped()
+        {
+            var source = """
+                using System;
+
+                class C
+                {
+                    void M(Span<int> span)
+                    {
+                        int i = 1, j = 2;
+                        ref val r = ref i;
+                        ref var r2 = ref i;
+                        r = 3;
+                        r2 = 3;
+                        r = ref j;
+                        r2 = ref j;
+                        scoped val s = span;
+                        scoped var s2 = span;
+                        s = default;
+                        s2 = default;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void Val_UsingAndFor()
+        {
+            var source = """
+                using System;
+
+                class D : IDisposable { public void Dispose() { } }
+
+                class C
+                {
+                    void M()
+                    {
+                        using val d = new D();
+                        using var d2 = new D();
+                        d = null;
+                        d2 = null;
+                        for (val i = 0; i < 3; i++) { }
+                        for (var j = 0; j < 3; j++) { }
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void Val_Nullable()
+        {
+            var source = """
+                #nullable enable
+                class C
+                {
+                    void M(string? maybe)
+                    {
+                        val v = maybe;
+                        var w = maybe;
+                        _ = v.Length;
+                        _ = w.Length;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics();
+        }
     }
 }
