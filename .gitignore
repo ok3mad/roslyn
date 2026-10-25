@@ -204,5 +204,6 @@ Library/
 # WPF temp projects
 *wpftmp.*
 
-# Agent directories
-.claude/
+# Agent directories (skills are shared; everything else stays local)
+.claude/*
+!.claude/skills/
