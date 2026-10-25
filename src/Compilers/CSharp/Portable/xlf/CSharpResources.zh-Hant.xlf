@@ -3357,6 +3357,11 @@
         <target state="translated">指標</target>
         <note />
       </trans-unit>
+      <trans-unit id="IDS_VALLOCAL">
+        <source>val variable</source>
+        <target state="new">val variable</target>
+        <note />
+      </trans-unit>
       <trans-unit id="INF_TooManyBoundLambdas">
         <source>Compiling requires binding the lambda expression at least {0} times. Consider declaring the lambda expression with explicit parameter types, or if the containing method call is generic, consider using explicit type arguments.</source>
         <target state="translated">編譯至少需要繫結 Lambda 運算式 {0} 次。請考慮在宣告 Lambda 運算式時，指定明確的參數類型；若包含了泛型方法呼叫，請考慮使用明確的類型引數。</target>

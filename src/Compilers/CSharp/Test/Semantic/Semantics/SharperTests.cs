@@ -609,7 +609,10 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                     }
                 }
                 """;
-            CreateCompilation(source, parseOptions: TestOptions.Regular, targetFramework: TargetFramework.Net90).VerifyDiagnostics();
+            CreateCompilation(source, parseOptions: TestOptions.Regular, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (5,9): error CS0246: The type or namespace name 'val' could not be found (are you missing a using directive or an assembly reference?)
+                //         val x = 1;
+                Diagnostic(ErrorCode.ERR_SingleTypeNameNotFound, "val").WithArguments("val").WithLocation(5, 9));
         }
 
         [Fact]
@@ -658,7 +661,43 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                     }
                 }
                 """;
-            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics();
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (13,9): error CS1656: Cannot assign to 'x' because it is a 'val variable'
+                //         x = 2;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "val variable").WithLocation(13, 9),
+                // (15,9): error CS1656: Cannot assign to 'x' because it is a 'val variable'
+                //         x += 1;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "val variable").WithLocation(15, 9),
+                // (17,9): error CS1656: Cannot assign to 'x' because it is a 'val variable'
+                //         x++;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "val variable").WithLocation(17, 9),
+                // (19,11): error CS1656: Cannot assign to 'x' because it is a 'val variable'
+                //         --x;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "val variable").WithLocation(19, 11),
+                // (21,17): error CS1657: Cannot use 'x' as a ref or out value because it is a 'val variable'
+                //         Ref(ref x);
+                Diagnostic(ErrorCode.ERR_RefReadonlyLocalCause, "x").WithArguments("x", "val variable").WithLocation(21, 17),
+                // (23,17): error CS1657: Cannot use 'x' as a ref or out value because it is a 'val variable'
+                //         Out(out x);
+                Diagnostic(ErrorCode.ERR_RefReadonlyLocalCause, "x").WithArguments("x", "val variable").WithLocation(23, 17),
+                // (27,25): error CS1657: Cannot use 'x' as a ref or out value because it is a 'val variable'
+                //         ref int r = ref x;
+                Diagnostic(ErrorCode.ERR_RefReadonlyLocalCause, "x").WithArguments("x", "val variable").WithLocation(27, 25),
+                // (30,26): error CS1656: Cannot assign to 'x' because it is a 'val variable'
+                //         Action a = () => x = 3;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "val variable").WithLocation(30, 26),
+                // (32,14): warning CS8321: The local function 'Local' is declared but never used
+                //         void Local() { x = 4; }
+                Diagnostic(ErrorCode.WRN_UnreferencedLocalFunction, "Local").WithArguments("Local").WithLocation(32, 14),
+                // (32,24): error CS1656: Cannot assign to 'x' because it is a 'val variable'
+                //         void Local() { x = 4; }
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "val variable").WithLocation(32, 24),
+                // (33,14): warning CS8321: The local function 'Local2' is declared but never used
+                //         void Local2() { y = 4; }
+                Diagnostic(ErrorCode.WRN_UnreferencedLocalFunction, "Local2").WithArguments("Local2").WithLocation(33, 14),
+                // (37,9): error CS1656: Cannot assign to 's' because it is a 'val variable'
+                //         s ??= "a";
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "s").WithArguments("s", "val variable").WithLocation(37, 9));
         }
 
         [Fact]
@@ -687,13 +726,19 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                     }
                 }
                 """;
-            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics();
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (14,9): error CS1654: Cannot modify members of 'v' because it is a 'val variable'
+                //         v.F = 1;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocal2Cause, "v.F").WithArguments("v", "val variable").WithLocation(14, 9),
+                // (16,9): error CS1654: Cannot modify members of 'v' because it is a 'val variable'
+                //         v.P = 1;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocal2Cause, "v.P").WithArguments("v", "val variable").WithLocation(16, 9));
         }
 
         [Fact]
         public void Val_StructMutatingMethod()
         {
-            // Probe: does a mutating method on a val struct mutate the local, as for a foreach variable?
+            // val is binding immutability only: like a foreach variable, a mutating method changes the local itself.
             var source = """
                 using System;
 
@@ -712,7 +757,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                     public void Mutate() { F++; }
                 }
                 """;
-            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "" : null).VerifyDiagnostics();
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "11" : null).VerifyDiagnostics();
         }
 
         [Theory]
@@ -733,7 +778,13 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                     }
                 }
                 """;
-            CreateCompilation(source, parseOptions: sharper ? s_sharperOptions : TestOptions.Regular, targetFramework: TargetFramework.Net90).VerifyDiagnostics();
+            CreateCompilation(source, parseOptions: sharper ? s_sharperOptions : TestOptions.Regular, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (1,7): warning CS8981: The type name 'val' only contains lower-cased ascii characters. Such names may become reserved for the language.
+                // class val { }
+                Diagnostic(ErrorCode.WRN_LowerCaseTypeName, "val").WithArguments("val").WithLocation(1, 7),
+                // (9,17): error CS0029: Cannot implicitly convert type 'int' to 'val'
+                //         val y = 1;
+                Diagnostic(ErrorCode.ERR_NoImplicitConv, "1").WithArguments("int", "val").WithLocation(9, 17));
         }
 
         [Fact]
@@ -755,7 +806,55 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                     }
                 }
                 """;
-            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics();
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (5,13): error CS0818: Implicitly-typed variables must be initialized
+                //         val a;
+                Diagnostic(ErrorCode.ERR_ImplicitlyTypedVariableWithNoInitializer, "a").WithLocation(5, 13),
+                // (5,13): warning CS0168: The variable 'a' is declared but never used
+                //         val a;
+                Diagnostic(ErrorCode.WRN_UnreferencedVar, "a").WithArguments("a").WithLocation(5, 13),
+                // (6,13): error CS0818: Implicitly-typed variables must be initialized
+                //         var a2;
+                Diagnostic(ErrorCode.ERR_ImplicitlyTypedVariableWithNoInitializer, "a2").WithLocation(6, 13),
+                // (6,13): warning CS0168: The variable 'a2' is declared but never used
+                //         var a2;
+                Diagnostic(ErrorCode.WRN_UnreferencedVar, "a2").WithArguments("a2").WithLocation(6, 13),
+                // (7,9): error CS0819: Implicitly-typed variables cannot have multiple declarators
+                //         val b = 1, c = 2;
+                Diagnostic(ErrorCode.ERR_ImplicitlyTypedVariableMultipleDeclarator, "val b = 1, c = 2").WithLocation(7, 9),
+                // (7,13): warning CS0219: The variable 'b' is assigned but its value is never used
+                //         val b = 1, c = 2;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "b").WithArguments("b").WithLocation(7, 13),
+                // (7,20): warning CS0219: The variable 'c' is assigned but its value is never used
+                //         val b = 1, c = 2;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "c").WithArguments("c").WithLocation(7, 20),
+                // (8,9): error CS0819: Implicitly-typed variables cannot have multiple declarators
+                //         var b2 = 1, c2 = 2;
+                Diagnostic(ErrorCode.ERR_ImplicitlyTypedVariableMultipleDeclarator, "var b2 = 1, c2 = 2").WithLocation(8, 9),
+                // (8,13): warning CS0219: The variable 'b2' is assigned but its value is never used
+                //         var b2 = 1, c2 = 2;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "b2").WithArguments("b2").WithLocation(8, 13),
+                // (8,21): warning CS0219: The variable 'c2' is assigned but its value is never used
+                //         var b2 = 1, c2 = 2;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "c2").WithArguments("c2").WithLocation(8, 21),
+                // (9,13): error CS0815: Cannot assign <null> to an implicitly-typed variable
+                //         val d = null;
+                Diagnostic(ErrorCode.ERR_ImplicitlyTypedVariableAssignedBadValue, "d = null").WithArguments("<null>").WithLocation(9, 13),
+                // (10,13): error CS0815: Cannot assign <null> to an implicitly-typed variable
+                //         var d2 = null;
+                Diagnostic(ErrorCode.ERR_ImplicitlyTypedVariableAssignedBadValue, "d2 = null").WithArguments("<null>").WithLocation(10, 13),
+                // (11,15): error CS0822: Implicitly-typed variables cannot be constant
+                //         const val e = 1;
+                Diagnostic(ErrorCode.ERR_ImplicitlyTypedVariableCannotBeConst, "val e = 1").WithLocation(11, 15),
+                // (11,19): warning CS0219: The variable 'e' is assigned but its value is never used
+                //         const val e = 1;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "e").WithArguments("e").WithLocation(11, 19),
+                // (12,15): error CS0822: Implicitly-typed variables cannot be constant
+                //         const var e2 = 1;
+                Diagnostic(ErrorCode.ERR_ImplicitlyTypedVariableCannotBeConst, "var e2 = 1").WithLocation(12, 15),
+                // (12,19): warning CS0219: The variable 'e2' is assigned but its value is never used
+                //         const var e2 = 1;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "e2").WithArguments("e2").WithLocation(12, 19));
         }
 
         [Fact]
@@ -782,7 +881,13 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                     }
                 }
                 """;
-            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics();
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (12,9): error CS1656: Cannot assign to 'r' because it is a 'val variable'
+                //         r = ref j;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "r").WithArguments("r", "val variable").WithLocation(12, 9),
+                // (16,9): error CS1656: Cannot assign to 's' because it is a 'val variable'
+                //         s = default;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "s").WithArguments("s", "val variable").WithLocation(16, 9));
         }
 
         [Fact]
@@ -806,7 +911,16 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                     }
                 }
                 """;
-            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics();
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (11,9): error CS1656: Cannot assign to 'd' because it is a 'using variable'
+                //         d = null;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "d").WithArguments("d", "using variable").WithLocation(11, 9),
+                // (12,9): error CS1656: Cannot assign to 'd2' because it is a 'using variable'
+                //         d2 = null;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "d2").WithArguments("d2", "using variable").WithLocation(12, 9),
+                // (13,32): error CS1656: Cannot assign to 'i' because it is a 'val variable'
+                //         for (val i = 0; i < 3; i++) { }
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "i").WithArguments("i", "val variable").WithLocation(13, 32));
         }
 
         [Fact]
@@ -825,7 +939,75 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                     }
                 }
                 """;
-            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics();
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (8,13): warning CS8602: Dereference of a possibly null reference.
+                //         _ = v.Length;
+                Diagnostic(ErrorCode.WRN_NullReferenceReceiver, "v").WithLocation(8, 13),
+                // (9,13): warning CS8602: Dereference of a possibly null reference.
+                //         _ = w.Length;
+                Diagnostic(ErrorCode.WRN_NullReferenceReceiver, "w").WithLocation(9, 13));
+        }
+
+        [Fact]
+        public void Val_SemanticModel()
+        {
+            // The val keyword reports the inferred type, as var does, and the local symbol is an ordinary local.
+            var source = """
+                class C
+                {
+                    void M()
+                    {
+                        val x = 1;
+                        var y = 1;
+                    }
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics(
+                // (5,13): warning CS0219: The variable 'x' is assigned but its value is never used
+                //         val x = 1;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "x").WithArguments("x").WithLocation(5, 13),
+                // (6,13): warning CS0219: The variable 'y' is assigned but its value is never used
+                //         var y = 1;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "y").WithArguments("y").WithLocation(6, 13));
+            var tree = comp.SyntaxTrees[0];
+            var model = comp.GetSemanticModel(tree);
+            var declarations = tree.GetRoot().DescendantNodes().OfType<VariableDeclarationSyntax>().ToArray();
+            foreach (var declaration in declarations)
+            {
+                Assert.Equal("System.Int32", model.GetTypeInfo(declaration.Type).Type.ToTestDisplayString());
+                Assert.Equal("System.Int32", model.GetSymbolInfo(declaration.Type).Symbol.ToTestDisplayString());
+                Assert.Null(model.GetAliasInfo((IdentifierNameSyntax)declaration.Type));
+            }
+            Assert.Equal("System.Int32 x", model.GetDeclaredSymbol(declarations[0].Variables[0]).ToTestDisplayString());
+        }
+
+        [Fact]
+        public void Val_IOperation()
+        {
+            var source = """
+                class C
+                {
+                    void M()
+                    {
+                        /*<bind>*/val x = 1;/*</bind>*/
+                        _ = x;
+                    }
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            var expectedOperationTree = """
+                IVariableDeclarationGroupOperation (1 declarations) (OperationKind.VariableDeclarationGroup, Type: null) (Syntax: 'val x = 1;')
+                  IVariableDeclarationOperation (1 declarators) (OperationKind.VariableDeclaration, Type: null) (Syntax: 'val x = 1')
+                    Declarators:
+                        IVariableDeclaratorOperation (Symbol: System.Int32 x) (OperationKind.VariableDeclarator, Type: null) (Syntax: 'x = 1')
+                          Initializer:
+                            IVariableInitializerOperation (OperationKind.VariableInitializer, Type: null) (Syntax: '= 1')
+                              ILiteralOperation (OperationKind.Literal, Type: System.Int32, Constant: 1) (Syntax: '1')
+                    Initializer:
+                      null
+                """;
+            VerifyOperationTreeAndDiagnosticsForTest<LocalDeclarationStatementSyntax>(comp, expectedOperationTree, []);
         }
     }
 }

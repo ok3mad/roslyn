@@ -3357,6 +3357,11 @@
         <target state="translated">wskaźnik</target>
         <note />
       </trans-unit>
+      <trans-unit id="IDS_VALLOCAL">
+        <source>val variable</source>
+        <target state="new">val variable</target>
+        <note />
+      </trans-unit>
       <trans-unit id="INF_TooManyBoundLambdas">
         <source>Compiling requires binding the lambda expression at least {0} times. Consider declaring the lambda expression with explicit parameter types, or if the containing method call is generic, consider using explicit type arguments.</source>
         <target state="translated">Kompilowanie wymaga powiązania wyrażenia lambda co najmniej {0} razy. Rozważ zadeklarowanie wyrażenia lambda z jawnymi typami parametrów lub jeśli zawarte wywołanie metody jest ogólne, rozważ użycie jawnych argumentów typu.</target>

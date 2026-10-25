@@ -342,6 +342,9 @@
   <data name="IDS_FOREACHLOCAL" xml:space="preserve">
     <value>foreach iteration variable</value>
   </data>
+  <data name="IDS_VALLOCAL" xml:space="preserve">
+    <value>val variable</value>
+  </data>
   <data name="IDS_FIXEDLOCAL" xml:space="preserve">
     <value>fixed variable</value>
   </data>

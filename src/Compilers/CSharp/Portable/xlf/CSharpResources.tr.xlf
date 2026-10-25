@@ -3357,6 +3357,11 @@
         <target state="translated">işaretçi</target>
         <note />
       </trans-unit>
+      <trans-unit id="IDS_VALLOCAL">
+        <source>val variable</source>
+        <target state="new">val variable</target>
+        <note />
+      </trans-unit>
       <trans-unit id="INF_TooManyBoundLambdas">
         <source>Compiling requires binding the lambda expression at least {0} times. Consider declaring the lambda expression with explicit parameter types, or if the containing method call is generic, consider using explicit type arguments.</source>
         <target state="translated">Derleme için lambda ifadesinin en az {0} kez bağlanması gerekir. Lambda ifadesini açık parametre türleriyle bildirin veya kapsayan metot çağrısı genelse açık genel tür bağımsız değişkenlerini kullanmayı göz önünde bulundurun.</target>
