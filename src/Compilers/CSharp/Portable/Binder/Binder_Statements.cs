@@ -324,10 +324,14 @@ namespace Microsoft.CodeAnalysis.CSharp
 
             // Each element converts to the iterator element type as the argument of `yield return x` would:
             // implicitly, not with the explicit cast a foreach iteration variable gets.
+            // A failed conversion is reported but not always marked as an error on the result, so check the diagnostics.
             var elementPlaceholder = new BoundValuePlaceholder(operandSyntax, inferredType.Type).MakeCompilerGenerated();
-            BoundExpression elementConversion = GenerateConversionForAssignment(elementType, elementPlaceholder, diagnostics);
+            var elementDiagnostics = BindingDiagnosticBag.GetInstance(withDiagnostics: true, withDependencies: diagnostics.AccumulatesDependencies);
+            BoundExpression elementConversion = GenerateConversionForAssignment(elementType, elementPlaceholder, elementDiagnostics);
+            hasErrors = elementConversion.HasErrors || elementDiagnostics.HasAnyErrors();
+            diagnostics.AddRangeAndFree(elementDiagnostics);
 
-            return new BoundYieldReturnSpreadStatement(node, convertedCollection, builder.Build(this.Flags), elementPlaceholder, elementConversion, hasErrors: elementConversion.HasErrors);
+            return new BoundYieldReturnSpreadStatement(node, convertedCollection, builder.Build(this.Flags), elementPlaceholder, elementConversion, hasErrors);
         }
 
         private BoundExpression BindYieldReturnArgument(YieldStatementSyntax node, TypeSymbol elementType, BindingDiagnosticBag diagnostics)

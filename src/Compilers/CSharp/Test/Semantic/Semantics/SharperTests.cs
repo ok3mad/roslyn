@@ -311,9 +311,9 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
-                // (7,24): warning CS8603: Possible null reference return.
+                // (8,24): warning CS8603: Possible null reference return.
                 //         yield return ..xs;
-                Diagnostic(ErrorCode.WRN_NullReferenceReturn, "xs").WithLocation(7, 24),
+                Diagnostic(ErrorCode.WRN_NullReferenceReturn, "xs").WithLocation(8, 24),
                 // (13,22): warning CS8603: Possible null reference return.
                 //         yield return x;
                 Diagnostic(ErrorCode.WRN_NullReferenceReturn, "x").WithLocation(13, 22));
@@ -342,9 +342,9 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
-                // (7,24): warning CS8602: Dereference of a possibly null reference.
+                // (8,24): warning CS8602: Dereference of a possibly null reference.
                 //         yield return ..xs;
-                Diagnostic(ErrorCode.WRN_NullReferenceReceiver, "xs").WithLocation(7, 24),
+                Diagnostic(ErrorCode.WRN_NullReferenceReceiver, "xs").WithLocation(8, 24),
                 // (13,27): warning CS8602: Dereference of a possibly null reference.
                 //         foreach (var x in xs)
                 Diagnostic(ErrorCode.WRN_NullReferenceReceiver, "xs").WithLocation(13, 27));

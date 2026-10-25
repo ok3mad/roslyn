@@ -13774,6 +13774,50 @@ namespace Microsoft.CodeAnalysis.CSharp
             return null;
         }
 
+        public override BoundNode? VisitYieldReturnSpreadStatement(BoundYieldReturnSpreadStatement node)
+        {
+            if (node is not { Expression: BoundConversion { Conversion: var conversion }, ElementPlaceholder: { } elementPlaceholder, ElementConversion: { } elementConversion })
+            {
+                // A binding error was already reported.
+                Debug.Assert(node.HasErrors);
+                VisitRvalue(node.Expression);
+                return null;
+            }
+
+            // Analyze xs as the collection of a foreach: this reports a maybe-null collection, and leaves
+            // the state of the current element in _visitResult.
+            var (expr, _) = RemoveConversion(node.Expression, includeExplicitConversions: false);
+            SnapshotWalkerThroughConversionGroup(node.Expression, expr);
+            VisitForEachExpression(node, node.Expression, conversion, expr, node.EnumeratorInfoOpt);
+
+            // Then yield each element as `yield return element` would: this reports a maybe-null element.
+            // As for a foreach iteration variable, the element conversion is checked without being visited:
+            // it is built on a placeholder that is not part of the tree, so its nullability must not be recorded.
+            TypeWithState elementState = node.EnumeratorInfoOpt == null ? default : ResultType;
+            if (!elementState.HasNullType && !node.HasErrors)
+            {
+                var method = (MethodSymbol)CurrentSymbol;
+                TypeWithAnnotations elementType = InMethodBinder.GetIteratorElementTypeFromReturnType(compilation, RefKind.None,
+                    method.ReturnType, errorLocation: null, diagnostics: null);
+
+                _ = VisitConversion(
+                    conversionOpt: null,
+                    conversionOperand: elementPlaceholder,
+                    BoundNode.GetConversion(elementConversion, elementPlaceholder),
+                    elementType,
+                    elementState,
+                    checkConversion: true,
+                    fromExplicitCast: false,
+                    useLegacyWarnings: false,
+                    AssignmentKind.Return,
+                    isSuppressed: expr.IsSuppressed,
+                    diagnosticLocation: expr.Syntax.GetLocation());
+            }
+
+            Unsplit();
+            return null;
+        }
+
         public override BoundNode? VisitCatchBlock(BoundCatchBlock node)
         {
             TakeIncrementalSnapshot(node);
