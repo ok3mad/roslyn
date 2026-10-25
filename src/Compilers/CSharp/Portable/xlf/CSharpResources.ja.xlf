@@ -3242,6 +3242,11 @@
         <target state="translated">レコードでシールされた ToString</target>
         <note />
       </trans-unit>
+      <trans-unit id="IDS_FeatureSharper">
+        <source>Sharper</source>
+        <target state="new">Sharper</target>
+        <note />
+      </trans-unit>
       <trans-unit id="IDS_FeatureSimpleLambdaParameterModifiers">
         <source>simple lambda parameter modifiers</source>
         <target state="translated">単純なラムダ パラメーター修飾子</target>

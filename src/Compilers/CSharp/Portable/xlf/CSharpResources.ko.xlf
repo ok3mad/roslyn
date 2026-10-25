@@ -3242,6 +3242,11 @@
         <target state="translated">레코드의 봉인된 ToString</target>
         <note />
       </trans-unit>
+      <trans-unit id="IDS_FeatureSharper">
+        <source>Sharper</source>
+        <target state="new">Sharper</target>
+        <note />
+      </trans-unit>
       <trans-unit id="IDS_FeatureSimpleLambdaParameterModifiers">
         <source>simple lambda parameter modifiers</source>
         <target state="translated">단순 람다 매개변수 수정자</target>

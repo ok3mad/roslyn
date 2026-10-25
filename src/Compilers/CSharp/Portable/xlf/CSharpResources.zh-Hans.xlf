@@ -3242,6 +3242,11 @@
         <target state="translated">记录的密封 ToString</target>
         <note />
       </trans-unit>
+      <trans-unit id="IDS_FeatureSharper">
+        <source>Sharper</source>
+        <target state="new">Sharper</target>
+        <note />
+      </trans-unit>
       <trans-unit id="IDS_FeatureSimpleLambdaParameterModifiers">
         <source>simple lambda parameter modifiers</source>
         <target state="translated">简单的 lambda 参数修饰符</target>

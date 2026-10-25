@@ -3242,6 +3242,11 @@
         <target state="translated">ToString selado no registro</target>
         <note />
       </trans-unit>
+      <trans-unit id="IDS_FeatureSharper">
+        <source>Sharper</source>
+        <target state="new">Sharper</target>
+        <note />
+      </trans-unit>
       <trans-unit id="IDS_FeatureSimpleLambdaParameterModifiers">
         <source>simple lambda parameter modifiers</source>
         <target state="translated">modificadores de parâmetro lambda simples</target>

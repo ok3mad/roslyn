@@ -314,6 +314,8 @@ namespace Microsoft.CodeAnalysis.CSharp
         IDS_FeatureClosedClasses = MessageBase + 12862,
         IDS_FeatureExtensionIndexers = MessageBase + 12863,
         IDS_FeatureLabeledBreakContinue = MessageBase + 12864,
+
+        IDS_FeatureSharper = MessageBase + 12865,
     }
 
     // Message IDs may refer to strings that need to be localized.
@@ -358,6 +360,9 @@ namespace Microsoft.CodeAnalysis.CSharp
             // Check for current experimental features, if any, in the current branch.
             switch (feature)
             {
+                case MessageID.IDS_FeatureSharper:
+                    return Feature.Sharper;
+
                 default:
                     return null;
             }
