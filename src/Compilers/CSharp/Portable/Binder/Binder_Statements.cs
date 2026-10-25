@@ -235,17 +235,28 @@ namespace Microsoft.CodeAnalysis.CSharp
         {
             ValidateYield(node, diagnostics);
             TypeSymbol elementType = GetIteratorElementType().Type;
-            BoundExpression argument = (node.Expression == null)
-                ? BadExpression(node).MakeCompilerGenerated()
-                : BindValue(node.Expression, diagnostics, BindValueKind.RValue);
+            BoundExpression argument;
 
-            if (elementType is { } && node.Expression != null)
+            if (node.Expression is RangeExpressionSyntax { LeftOperand: null, RightOperand: { } } &&
+                node.Expression.IsFeatureEnabled(MessageID.IDS_FeatureSharper))
             {
-                argument = GenerateConversionForAssignment(elementType, argument, diagnostics);
+                // Sharper: `yield return ..xs` yields every element of xs. But `..xs` is already a valid
+                // C# range in some iterators (of Range, of object), so it is a spread only where binding
+                // it as C# reports an error. The trial bag must hold diagnostics even when the caller's
+                // bag only tracks dependencies, or we could not see the errors.
+                var csharpDiagnostics = BindingDiagnosticBag.GetInstance(withDiagnostics: true, withDependencies: diagnostics.AccumulatesDependencies);
+                argument = BindYieldReturnArgument(node, elementType, csharpDiagnostics);
+
+                if (csharpDiagnostics.HasAnyErrors())
+                {
+                    // The spread will be bound here. Until then, the C# errors are reported unchanged.
+                }
+
+                diagnostics.AddRangeAndFree(csharpDiagnostics);
             }
             else
             {
-                argument = BindToTypeForErrorRecovery(argument);
+                argument = BindYieldReturnArgument(node, elementType, diagnostics);
             }
 
             // NOTE: it's possible that more than one of these conditions is satisfied and that
@@ -274,6 +285,24 @@ namespace Microsoft.CodeAnalysis.CSharp
 
             CheckRequiredLangVersionForIteratorMethods(node, diagnostics);
             return new BoundYieldReturnStatement(node, argument);
+        }
+
+        private BoundExpression BindYieldReturnArgument(YieldStatementSyntax node, TypeSymbol elementType, BindingDiagnosticBag diagnostics)
+        {
+            BoundExpression argument = (node.Expression == null)
+                ? BadExpression(node).MakeCompilerGenerated()
+                : BindValue(node.Expression, diagnostics, BindValueKind.RValue);
+
+            if (elementType is { } && node.Expression != null)
+            {
+                argument = GenerateConversionForAssignment(elementType, argument, diagnostics);
+            }
+            else
+            {
+                argument = BindToTypeForErrorRecovery(argument);
+            }
+
+            return argument;
         }
 
         private BoundStatement BindYieldBreakStatement(YieldStatementSyntax node, BindingDiagnosticBag diagnostics)
