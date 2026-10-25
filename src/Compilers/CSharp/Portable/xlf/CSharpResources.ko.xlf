@@ -2597,6 +2597,11 @@
         <target state="translated">포함된 레코드가 봉인되지 않았으므로 '{0}'을(를) 봉인할 수 없습니다.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperSpreadInAsyncIterator">
+        <source>A spread 'yield return ..' cannot be used in an async iterator.</source>
+        <target state="new">A spread 'yield return ..' cannot be used in an async iterator.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SignatureMismatchInRecord">
         <source>Record member '{0}' must return '{1}'.</source>
         <target state="translated">레코드 멤버 '{0}'은(는) '{1}'을(를) 반환해야 합니다.</target>
@@ -4095,6 +4100,16 @@
       <trans-unit id="WRN_ScopedMismatchInParameterOfTarget_Title">
         <source>The 'scoped' modifier of parameter doesn't match target.</source>
         <target state="translated">매개 변수의 '범위' 한정자가 대상과 일치하지 않습니다.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WRN_SharperDynamicRangeNotSpread">
+        <source>'..{0}' is a range here, not a spread, because '{0}' is dynamic. To yield each element, convert '{0}' to a sequence type first.</source>
+        <target state="new">'..{0}' is a range here, not a spread, because '{0}' is dynamic. To yield each element, convert '{0}' to a sequence type first.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WRN_SharperDynamicRangeNotSpread_Title">
+        <source>'..' on a dynamic operand is a range, not a spread</source>
+        <target state="new">'..' on a dynamic operand is a range, not a spread</target>
         <note />
       </trans-unit>
       <trans-unit id="WRN_SwitchExpressionNotExhaustiveWithUnnamedEnumValue">

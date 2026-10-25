@@ -8239,6 +8239,15 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
     <value>'node' is not an 'await using' statement</value>
     <comment>node and await using are not localizable</comment>
   </data>
+  <data name="ERR_SharperSpreadInAsyncIterator" xml:space="preserve">
+    <value>A spread 'yield return ..' cannot be used in an async iterator.</value>
+  </data>
+  <data name="WRN_SharperDynamicRangeNotSpread" xml:space="preserve">
+    <value>'..{0}' is a range here, not a spread, because '{0}' is dynamic. To yield each element, convert '{0}' to a sequence type first.</value>
+  </data>
+  <data name="WRN_SharperDynamicRangeNotSpread_Title" xml:space="preserve">
+    <value>'..' on a dynamic operand is a range, not a spread</value>
+  </data>
   <data name="WRN_RedundantPattern" xml:space="preserve">
     <value>The pattern is redundant.</value>
   </data>

@@ -463,5 +463,115 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             Assert.True(dataFlow.Succeeded);
             Assert.Equal("xs", string.Join(", ", dataFlow.ReadInside.Select(s => s.Name)));
         }
+
+        [Fact]
+        public void YieldReturnSpread_AsyncIterator_NotSupported()
+        {
+            // Spreads are not supported in async iterators, whether the source is synchronous or asynchronous.
+            var source = """
+                using System.Collections.Generic;
+
+                class C
+                {
+                    static async IAsyncEnumerable<int> SyncSource(IEnumerable<int> xs)
+                    {
+                        yield return ..xs;
+                    }
+
+                    static async IAsyncEnumerable<int> AsyncSource(IAsyncEnumerable<int> xs)
+                    {
+                        yield return ..xs;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyEmitDiagnostics(
+                // (7,22): error CS9402: A spread 'yield return ..' cannot be used in an async iterator.
+                //         yield return ..xs;
+                Diagnostic(ErrorCode.ERR_SharperSpreadInAsyncIterator, "..xs").WithLocation(7, 22),
+                // (12,22): error CS9402: A spread 'yield return ..' cannot be used in an async iterator.
+                //         yield return ..xs;
+                Diagnostic(ErrorCode.ERR_SharperSpreadInAsyncIterator, "..xs").WithLocation(12, 22));
+        }
+
+        [Fact]
+        public void YieldReturnSpread_AsyncIterator_RangeIsKept()
+        {
+            // Valid C# keeps its meaning in an async iterator too.
+            var source = """
+                using System;
+                using System.Collections.Generic;
+
+                await foreach (var r in Ranges(2))
+                    Console.Write(r);
+
+                static async IAsyncEnumerable<Range> Ranges(int i)
+                {
+                    yield return ..i;
+                }
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "0..2" : null, verify: Verification.Skipped).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void YieldReturnSpread_RefStructSource()
+        {
+            // A span's enumerator cannot live across the yields.
+            var source = """
+                using System;
+                using System.Collections.Generic;
+
+                class C
+                {
+                    static IEnumerable<int> Spread(int[] xs)
+                    {
+                        yield return ..xs.AsSpan();
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyEmitDiagnostics(
+                // (8,9): error CS4007: Instance of type 'System.Span<int>.Enumerator' cannot be preserved across 'await' or 'yield' boundary.
+                //         yield return ..xs.AsSpan();
+                Diagnostic(ErrorCode.ERR_ByRefTypeAndAwait, "yield return ..xs.AsSpan();").WithArguments("System.Span<int>.Enumerator").WithLocation(8, 9));
+        }
+
+        [Fact]
+        public void YieldReturnSpread_Dynamic_ObjectElement()
+        {
+            // `..d` converts d to Index at runtime, so it is valid C# and stays a range, with a warning.
+            var source = """
+                using System.Collections.Generic;
+
+                class C
+                {
+                    static IEnumerable<object> Spread(dynamic d)
+                    {
+                        yield return ..d;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (7,24): warning CS9403: '..d' is a range here, not a spread, because 'd' is dynamic. To yield each element, convert 'd' to a sequence type first.
+                //         yield return ..d;
+                Diagnostic(ErrorCode.WRN_SharperDynamicRangeNotSpread, "d").WithArguments("d").WithLocation(7, 24));
+        }
+
+        [Fact]
+        public void YieldReturnSpread_Dynamic_IntElement()
+        {
+            // A Range is not an int, so `..d` is not valid C# here and spreads, enumerating d dynamically.
+            var source = """
+                using System;
+                using System.Collections.Generic;
+
+                foreach (var x in Spread(new[] { 1, 2, 3 }))
+                    Console.Write(x);
+
+                static IEnumerable<int> Spread(dynamic d)
+                {
+                    yield return ..d;
+                }
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "123" : null).VerifyDiagnostics();
+        }
     }
 }

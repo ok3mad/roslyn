@@ -257,6 +257,17 @@ namespace Microsoft.CodeAnalysis.CSharp
                 }
                 else
                 {
+                    if (isRangeOverDynamic(argument))
+                    {
+                        // A dynamic operand converts to Index at runtime, so `..d` is valid C# and stays a range
+                        // even when d holds a sequence, which then fails at runtime. Point that out.
+                        // PROTOTYPE(sharper): Decide between the range and the spread at runtime instead, from the
+                        // value in d: try the C# conversion to Index first, as the compile-time rule does, and
+                        // spread if d holds a sequence. That changes what currently valid C# does at runtime
+                        // (an exception today), so it needs a decision under the sharpening rules.
+                        Error(csharpDiagnostics, ErrorCode.WRN_SharperDynamicRangeNotSpread, spreadOperand, spreadOperand);
+                    }
+
                     diagnostics.AddRangeAndFree(csharpDiagnostics);
                     result = new BoundYieldReturnStatement(node, argument);
                 }
@@ -292,12 +303,34 @@ namespace Microsoft.CodeAnalysis.CSharp
 
             CheckRequiredLangVersionForIteratorMethods(node, diagnostics);
             return result;
+
+            static bool isRangeOverDynamic(BoundExpression argument)
+            {
+                while (argument is BoundConversion conversion)
+                {
+                    argument = conversion.Operand;
+                }
+
+                return argument is BoundRangeExpression { RightOperandOpt: BoundConversion { Operand.Type: { } operandType } } &&
+                    operandType.IsDynamic();
+            }
         }
 
         private BoundYieldReturnSpreadStatement BindYieldReturnSpread(YieldStatementSyntax node, ExpressionSyntax operandSyntax, TypeSymbol elementType, BindingDiagnosticBag diagnostics)
         {
             // Bound like the collection of a foreach statement.
             BoundExpression collectionExpr = BindRValueWithoutTargetType(operandSyntax, diagnostics);
+
+            if (((MethodSymbol)this.ContainingMemberOrLambda).IsAsync)
+            {
+                // PROTOTYPE(sharper): Spreads are not supported in async iterators, and may never be. Supporting a
+                // synchronous source needs the lowered try/finally to be accepted by the async rewriter, which
+                // checks its syntax for Edit and Continue (SyntaxBindingUtilities.BindsToTryStatement). Supporting
+                // an async source would also mean an implicit `await foreach`, a hidden suspension point.
+                Error(diagnostics, ErrorCode.ERR_SharperSpreadInAsyncIterator, node.Expression);
+                return new BoundYieldReturnSpreadStatement(node, collectionExpr, enumeratorInfoOpt: null, elementPlaceholder: null, elementConversion: null, hasErrors: true);
+            }
+
             bool hasErrors = !GetEnumeratorInfoAndInferCollectionElementType(node, operandSyntax, ref collectionExpr, isAsync: false, isSpread: true, diagnostics, out TypeWithAnnotations inferredType, out ForEachEnumeratorInfo.Builder builder) ||
                 builder.IsIncomplete;
 
@@ -305,6 +338,10 @@ namespace Microsoft.CodeAnalysis.CSharp
             {
                 return new BoundYieldReturnSpreadStatement(node, collectionExpr, enumeratorInfoOpt: null, elementPlaceholder: null, elementConversion: null, hasErrors: true);
             }
+
+            // PROTOTYPE(sharper): A ref struct source (a span, an inline array) is rejected later with CS4007 about its
+            // enumerator ("cannot be preserved across 'await' or 'yield' boundary"), which the user never wrote.
+            // Consider a spread-specific error here.
 
             builder.ReportDiagnosticsIfUnsafeMemberAccess(this, node.YieldKeyword, node, diagnostics);
 

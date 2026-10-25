@@ -2597,6 +2597,11 @@
         <target state="translated">'{0}' non può essere sealed perché il record contenitore non è sealed.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperSpreadInAsyncIterator">
+        <source>A spread 'yield return ..' cannot be used in an async iterator.</source>
+        <target state="new">A spread 'yield return ..' cannot be used in an async iterator.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SignatureMismatchInRecord">
         <source>Record member '{0}' must return '{1}'.</source>
         <target state="translated">Il membro di record '{0}' deve restituire '{1}'.</target>
@@ -4095,6 +4100,16 @@
       <trans-unit id="WRN_ScopedMismatchInParameterOfTarget_Title">
         <source>The 'scoped' modifier of parameter doesn't match target.</source>
         <target state="translated">Il modificatore 'scoped' del parametro non corrisponde alla destinazione.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WRN_SharperDynamicRangeNotSpread">
+        <source>'..{0}' is a range here, not a spread, because '{0}' is dynamic. To yield each element, convert '{0}' to a sequence type first.</source>
+        <target state="new">'..{0}' is a range here, not a spread, because '{0}' is dynamic. To yield each element, convert '{0}' to a sequence type first.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WRN_SharperDynamicRangeNotSpread_Title">
+        <source>'..' on a dynamic operand is a range, not a spread</source>
+        <target state="new">'..' on a dynamic operand is a range, not a spread</target>
         <note />
       </trans-unit>
       <trans-unit id="WRN_SwitchExpressionNotExhaustiveWithUnnamedEnumValue">

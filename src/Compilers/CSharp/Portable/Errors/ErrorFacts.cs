@@ -571,6 +571,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 case ErrorCode.WRN_AccessorDoesNotUseBackingField:
                 case ErrorCode.WRN_UnscopedRefAttributeOldRules:
                 case ErrorCode.WRN_RedundantPattern:
+                case ErrorCode.WRN_SharperDynamicRangeNotSpread:
                     return 1;
                 default:
                     return 0;
@@ -2604,6 +2605,8 @@ namespace Microsoft.CodeAnalysis.CSharp
                 or ErrorCode.ERR_ClosedBadDerivedTypesProperty
                 or ErrorCode.ERR_BadCompilationOptionValueAccepted
                 or ErrorCode.ERR_IllegalUnsafeModifier
+                or ErrorCode.ERR_SharperSpreadInAsyncIterator
+                or ErrorCode.WRN_SharperDynamicRangeNotSpread
                     => false,
             };
 #pragma warning restore CS8524 // The switch expression does not handle some values of its input type (it is not exhaustive) involving an unnamed enum value.
