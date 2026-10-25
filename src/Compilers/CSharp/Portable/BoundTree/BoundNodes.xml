@@ -1170,6 +1170,17 @@
     <Field Name="Expression" Type="BoundExpression" Null="disallow"/>
   </Node>
 
+  <!-- Sharper: `yield return ..xs`, which yields every element of xs. Lowered to a foreach over xs. -->
+  <Node Name="BoundYieldReturnSpreadStatement" Base="BoundStatement" DoesNotSurvive="LocalRewriting">
+    <!-- The spread collection, converted to the collection type used for enumeration, as in BoundForEachStatement. -->
+    <Field Name="Expression" Type="BoundExpression"/>
+    <Field Name="EnumeratorInfoOpt" Type="ForEachEnumeratorInfo?"/>
+    <!-- Stands for the current element in ElementConversion. -->
+    <Field Name="ElementPlaceholder" Type="BoundValuePlaceholder?" SkipInVisitor="true" Null="allow"/>
+    <!-- Converts the current element to the iterator element type. -->
+    <Field Name="ElementConversion" Type="BoundExpression?" SkipInVisitor="true" Null="allow"/>
+  </Node>
+
   <Node Name="BoundYieldBreakStatement" Base="BoundStatement" DoesNotSurvive="StateMachineRewriting"/>
 
   <Node Name="BoundThrowStatement" Base="BoundStatement">

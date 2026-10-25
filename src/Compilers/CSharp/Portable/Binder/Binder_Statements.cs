@@ -235,17 +235,46 @@ namespace Microsoft.CodeAnalysis.CSharp
         {
             ValidateYield(node, diagnostics);
             TypeSymbol elementType = GetIteratorElementType().Type;
-            BoundExpression argument = (node.Expression == null)
-                ? BadExpression(node).MakeCompilerGenerated()
-                : BindValue(node.Expression, diagnostics, BindValueKind.RValue);
+            BoundStatement result;
 
-            if (elementType is { } && node.Expression != null)
+            if (node.Expression is RangeExpressionSyntax { LeftOperand: null, RightOperand: { } spreadOperand } &&
+                elementType is { } &&
+                node.Expression.IsFeatureEnabled(MessageID.IDS_FeatureSharper))
             {
-                argument = GenerateConversionForAssignment(elementType, argument, diagnostics);
+                // Sharper: `yield return ..xs` yields every element of xs. But `..xs` is already a valid
+                // C# range in some iterators (of Range, of object), so it is a spread only where binding
+                // it as C# reports an error. The trial bag must hold diagnostics even when the caller's
+                // bag only tracks dependencies, or we could not see the errors.
+                var csharpDiagnostics = BindingDiagnosticBag.GetInstance(withDiagnostics: true, withDependencies: diagnostics.AccumulatesDependencies);
+                BoundExpression argument = BindYieldReturnArgument(node, elementType, csharpDiagnostics);
+
+                if (csharpDiagnostics.HasAnyErrors())
+                {
+                    // Not valid C#, so it is a spread. The C# errors are dropped; if the spread is
+                    // invalid too, its own errors explain the problem better.
+                    csharpDiagnostics.Free();
+                    result = BindYieldReturnSpread(node, spreadOperand, elementType, diagnostics);
+                }
+                else
+                {
+                    if (isRangeOverDynamic(argument))
+                    {
+                        // A dynamic operand converts to Index at runtime, so `..d` is valid C# and stays a range
+                        // even when d holds a sequence, which then fails at runtime. Point that out.
+                        // PROTOTYPE(sharper): Decide between the range and the spread at runtime instead, from the
+                        // value in d: try the C# conversion to Index first, as the compile-time rule does, and
+                        // spread if d holds a sequence. That changes what currently valid C# does at runtime
+                        // (an exception today), so it needs a decision under the sharpening rules.
+                        Error(csharpDiagnostics, ErrorCode.WRN_SharperDynamicRangeNotSpread, spreadOperand, spreadOperand);
+                    }
+
+                    diagnostics.AddRangeAndFree(csharpDiagnostics);
+                    result = new BoundYieldReturnStatement(node, argument);
+                }
             }
             else
             {
-                argument = BindToTypeForErrorRecovery(argument);
+                result = new BoundYieldReturnStatement(node, BindYieldReturnArgument(node, elementType, diagnostics));
             }
 
             // NOTE: it's possible that more than one of these conditions is satisfied and that
@@ -273,7 +302,91 @@ namespace Microsoft.CodeAnalysis.CSharp
             }
 
             CheckRequiredLangVersionForIteratorMethods(node, diagnostics);
-            return new BoundYieldReturnStatement(node, argument);
+            return result;
+
+            static bool isRangeOverDynamic(BoundExpression argument)
+            {
+                while (argument is BoundConversion conversion)
+                {
+                    argument = conversion.Operand;
+                }
+
+                return argument is BoundRangeExpression { RightOperandOpt: BoundConversion { Operand.Type: { } operandType } } &&
+                    operandType.IsDynamic();
+            }
+        }
+
+        private BoundYieldReturnSpreadStatement BindYieldReturnSpread(YieldStatementSyntax node, ExpressionSyntax operandSyntax, TypeSymbol elementType, BindingDiagnosticBag diagnostics)
+        {
+            // Bound like the collection of a foreach statement.
+            BoundExpression collectionExpr = BindRValueWithoutTargetType(operandSyntax, diagnostics);
+
+            if (((MethodSymbol)this.ContainingMemberOrLambda).IsAsync)
+            {
+                // PROTOTYPE(sharper): Spreads are not supported in async iterators, and may never be. Supporting a
+                // synchronous source needs the lowered try/finally to be accepted by the async rewriter, which
+                // checks its syntax for Edit and Continue (SyntaxBindingUtilities.BindsToTryStatement). Supporting
+                // an async source would also mean an implicit `await foreach`, a hidden suspension point.
+                Error(diagnostics, ErrorCode.ERR_SharperSpreadInAsyncIterator, node.Expression);
+                return new BoundYieldReturnSpreadStatement(node, collectionExpr, enumeratorInfoOpt: null, elementPlaceholder: null, elementConversion: null, hasErrors: true);
+            }
+
+            bool hasErrors = !GetEnumeratorInfoAndInferCollectionElementType(node, operandSyntax, ref collectionExpr, isAsync: false, isSpread: true, diagnostics, out TypeWithAnnotations inferredType, out ForEachEnumeratorInfo.Builder builder) ||
+                builder.IsIncomplete;
+
+            if (hasErrors)
+            {
+                return new BoundYieldReturnSpreadStatement(node, collectionExpr, enumeratorInfoOpt: null, elementPlaceholder: null, elementConversion: null, hasErrors: true);
+            }
+
+            // PROTOTYPE(sharper): A ref struct source (a span, an inline array) is rejected later with CS4007 about its
+            // enumerator ("cannot be preserved across 'await' or 'yield' boundary"), which the user never wrote.
+            // Consider a spread-specific error here.
+
+            builder.ReportDiagnosticsIfUnsafeMemberAccess(this, node.YieldKeyword, node, diagnostics);
+
+            CompoundUseSiteInfo<AssemblySymbol> useSiteInfo = GetNewCompoundUseSiteInfo(diagnostics);
+            Conversion collectionConversion = this.Conversions.ClassifyConversionFromExpression(collectionExpr, builder.CollectionType, isChecked: CheckOverflowAtRuntime, ref useSiteInfo);
+            Conversion currentConversion = this.Conversions.ClassifyConversionFromType(builder.CurrentPropertyGetter.ReturnType, builder.ElementType, isChecked: CheckOverflowAtRuntime, ref useSiteInfo);
+            diagnostics.Add(operandSyntax, useSiteInfo);
+            Debug.Assert(collectionConversion.IsValid);
+
+            BoundExpression convertedCollection = ConvertForEachCollection(collectionExpr, collectionConversion, builder.CollectionType, diagnostics);
+
+            if (currentConversion.IsValid)
+            {
+                builder.CurrentPlaceholder = new BoundValuePlaceholder(node, builder.CurrentPropertyGetter.ReturnType).MakeCompilerGenerated();
+                builder.CurrentConversion = CreateConversion(node, builder.CurrentPlaceholder, currentConversion, isCast: false, conversionGroupOpt: null, InConversionGroupFlags.Unspecified, builder.ElementType, diagnostics);
+            }
+
+            // Each element converts to the iterator element type as the argument of `yield return x` would:
+            // implicitly, not with the explicit cast a foreach iteration variable gets.
+            // A failed conversion is reported but not always marked as an error on the result, so check the diagnostics.
+            var elementPlaceholder = new BoundValuePlaceholder(operandSyntax, inferredType.Type).MakeCompilerGenerated();
+            var elementDiagnostics = BindingDiagnosticBag.GetInstance(withDiagnostics: true, withDependencies: diagnostics.AccumulatesDependencies);
+            BoundExpression elementConversion = GenerateConversionForAssignment(elementType, elementPlaceholder, elementDiagnostics);
+            hasErrors = elementConversion.HasErrors || elementDiagnostics.HasAnyErrors();
+            diagnostics.AddRangeAndFree(elementDiagnostics);
+
+            return new BoundYieldReturnSpreadStatement(node, convertedCollection, builder.Build(this.Flags), elementPlaceholder, elementConversion, hasErrors);
+        }
+
+        private BoundExpression BindYieldReturnArgument(YieldStatementSyntax node, TypeSymbol elementType, BindingDiagnosticBag diagnostics)
+        {
+            BoundExpression argument = (node.Expression == null)
+                ? BadExpression(node).MakeCompilerGenerated()
+                : BindValue(node.Expression, diagnostics, BindValueKind.RValue);
+
+            if (elementType is { } && node.Expression != null)
+            {
+                argument = GenerateConversionForAssignment(elementType, argument, diagnostics);
+            }
+            else
+            {
+                argument = BindToTypeForErrorRecovery(argument);
+            }
+
+            return argument;
         }
 
         private BoundStatement BindYieldBreakStatement(YieldStatementSyntax node, BindingDiagnosticBag diagnostics)

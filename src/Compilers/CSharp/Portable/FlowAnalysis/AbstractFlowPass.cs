@@ -1877,7 +1877,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                         continue; // a tracked exception
                     }
 
-                    if (pend.Branch.Kind != BoundKind.YieldReturnStatement)
+                    if (pend.Branch.Kind is not (BoundKind.YieldReturnStatement or BoundKind.YieldReturnSpreadStatement))
                     {
                         updatePendingBranchState(ref pend.State, ref stateMovedUpInFinally);
 
@@ -3481,6 +3481,16 @@ namespace Microsoft.CodeAnalysis.CSharp
 
         public override BoundNode VisitYieldReturnStatement(BoundYieldReturnStatement node)
         {
+            VisitRvalue(node.Expression);
+            PendingBranches.Add(new PendingBranch(node, this.State, null));
+            return null;
+        }
+
+        public override BoundNode VisitYieldReturnSpreadStatement(BoundYieldReturnSpreadStatement node)
+        {
+            // yield return ..xs: xs is evaluated once, then each element is yielded. Enumerating assigns
+            // no variable the analysis tracks, so every yield sees the same state and one pending branch
+            // stands for all of them.
             VisitRvalue(node.Expression);
             PendingBranches.Add(new PendingBranch(node, this.State, null));
             return null;

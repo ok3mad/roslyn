@@ -303,6 +303,9 @@ namespace Microsoft.CodeAnalysis.Operations
                 case BoundKind.StackAllocArrayCreation:
                 case BoundKind.TypeExpression:
                 case BoundKind.TypeOrValueExpression:
+                // Sharper's `yield return ..xs` has no IOperation shape yet, so analyzers see an
+                // OperationKind.None node whose only child is xs.
+                case BoundKind.YieldReturnSpreadStatement:
                     ConstantValue? constantValue = (boundNode as BoundExpression)?.ConstantValueOpt;
                     bool isImplicit = boundNode.WasCompilerGenerated;
 
