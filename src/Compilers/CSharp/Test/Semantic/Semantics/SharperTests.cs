@@ -3,6 +3,8 @@
 // See the LICENSE file in the project root for more information.
 
 using System.Collections.Generic;
+using System.Linq;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.CSharp.Test.Utilities;
 using Microsoft.CodeAnalysis.Test.Utilities;
 using Roslyn.Test.Utilities;
@@ -367,6 +369,99 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void YieldReturnSpread_IOperation()
+        {
+            var source = """
+                using System.Collections.Generic;
+
+                class C
+                {
+                    static IEnumerable<int> Spread(IEnumerable<int> xs)
+                    {
+                        /*<bind>*/yield return ..xs;/*</bind>*/
+                    }
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            var expectedOperationTree = """
+                IOperation:  (OperationKind.None, Type: null) (Syntax: 'yield return ..xs;')
+                  Children(1):
+                      IConversionOperation (TryCast: False, Unchecked) (OperationKind.Conversion, Type: System.Collections.Generic.IEnumerable<System.Int32>, IsImplicit) (Syntax: 'xs')
+                        Conversion: CommonConversion (Exists: True, IsIdentity: True, IsNumeric: False, IsReference: False, IsUserDefined: False) (MethodSymbol: null)
+                        Operand:
+                          IParameterReferenceOperation: xs (OperationKind.ParameterReference, Type: System.Collections.Generic.IEnumerable<System.Int32>) (Syntax: 'xs')
+                """;
+            VerifyOperationTreeAndDiagnosticsForTest<YieldStatementSyntax>(comp, expectedOperationTree, []);
+        }
+
+        [Fact]
+        public void YieldReturnSpread_FlowGraph()
+        {
+            var source = """
+                using System.Collections.Generic;
+
+                class C
+                {
+                    static IEnumerable<int> Spread(IEnumerable<int> xs)
+                    /*<bind>*/{
+                        yield return ..xs;
+                    }/*</bind>*/
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            var expectedFlowGraph = """
+                Block[B0] - Entry
+                    Statements (0)
+                    Next (Regular) Block[B1]
+                Block[B1] - Block
+                    Predecessors: [B0]
+                    Statements (2)
+                        IConversionOperation (TryCast: False, Unchecked) (OperationKind.Conversion, Type: System.Collections.Generic.IEnumerable<System.Int32>, IsImplicit) (Syntax: 'xs')
+                          Conversion: CommonConversion (Exists: True, IsIdentity: True, IsNumeric: False, IsReference: False, IsUserDefined: False) (MethodSymbol: null)
+                            (Identity)
+                          Operand:
+                            IParameterReferenceOperation: xs (OperationKind.ParameterReference, Type: System.Collections.Generic.IEnumerable<System.Int32>) (Syntax: 'xs')
+                        IOperation:  (OperationKind.None, Type: null) (Syntax: 'yield return ..xs;')
+                    Next (Regular) Block[B2]
+                Block[B2] - Exit
+                    Predecessors: [B1]
+                    Statements (0)
+                """;
+            VerifyFlowGraphAndDiagnosticsForTest<BlockSyntax>(comp, expectedFlowGraph, []);
+        }
+
+        [Fact]
+        public void YieldReturnSpread_RegionAnalysis()
+        {
+            // The IDE's extract method uses region analysis. Like a yield return, the spread is not an exit point.
+            var source = """
+                using System.Collections.Generic;
+
+                class C
+                {
+                    static IEnumerable<int> Spread(IEnumerable<int> xs)
+                    {
+                        yield return ..xs;
+                    }
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics();
+            var tree = comp.SyntaxTrees.Single();
+            var model = comp.GetSemanticModel(tree);
+            var statement = tree.GetRoot().DescendantNodes().OfType<YieldStatementSyntax>().Single();
+
+            var controlFlow = model.AnalyzeControlFlow(statement);
+            Assert.True(controlFlow.Succeeded);
+            Assert.Empty(controlFlow.ExitPoints);
+            Assert.True(controlFlow.EndPointIsReachable);
+
+            var dataFlow = model.AnalyzeDataFlow(statement);
+            Assert.True(dataFlow.Succeeded);
+            Assert.Equal("xs", string.Join(", ", dataFlow.ReadInside.Select(s => s.Name)));
         }
     }
 }
