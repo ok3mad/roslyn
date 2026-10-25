@@ -46,7 +46,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             LabelSymbol continueLabel,
             bool hasErrors)
         {
-            Debug.Assert(loop.Kind is BoundKind.WhileStatement or BoundKind.ForEachStatement or BoundKind.CollectionExpressionSpreadElement);
+            Debug.Assert(loop.Kind is BoundKind.WhileStatement or BoundKind.ForEachStatement or BoundKind.CollectionExpressionSpreadElement or BoundKind.YieldReturnSpreadStatement);
 
             // while (condition) 
             //   body;
@@ -80,6 +80,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                         break;
 
                     case BoundKind.CollectionExpressionSpreadElement:
+                    case BoundKind.YieldReturnSpreadStatement:
                         // No instrumentation needed since the loop for the spread expression
                         // was generated in lowering, and not explicit in the source.
                         break;
