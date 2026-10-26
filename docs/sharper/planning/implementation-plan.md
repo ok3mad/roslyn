@@ -1,8 +1,8 @@
 # Sharper: Roslyn Implementation Plan
 
 > [!NOTE]
-> Ported from the "Sharper: Roslyn Implementation Plan" planning doc (revision 41, 2026-10-23) and otherwise
-> unchanged. For current feature status, see the [Sharper overview](../README.md#features).
+> This plan is maintained here; it started as the "Sharper: Roslyn Implementation Plan" planning doc. For a quick
+> view of feature status, see the [Sharper overview](../README.md#features).
 
 
 This is the companion to the [language design draft](brainstorm.md), which stays for design discussions. This doc tracks how Sharper features get built inside the C# compiler.

@@ -1,8 +1,8 @@
 # Strict C# Dialect for Coding Agents: Initial Brainstorm
 
 > [!NOTE]
-> Ported from the "Strict C# Dialect for Coding Agents: Brainstorm" planning doc and otherwise unchanged. This is the
-> language design draft: the syntax in it is a working guess, not a specification. How the ideas are being built
+> This is the language design draft, maintained here; it started as the "Strict C# Dialect for Coding Agents:
+> Brainstorm" planning doc. The syntax in it is a working guess, not a specification. How the ideas are being built
 > is tracked in the [implementation plan](implementation-plan.md).
 
 
