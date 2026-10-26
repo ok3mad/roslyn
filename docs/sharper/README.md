@@ -85,6 +85,7 @@ Not done yet:
 | --- | --- | --- | --- |
 | [Spread in `yield return`](features/yield-return-spread.md) | `yield return ..xs;` yields every element of `xs`. | Prototype, merged into `main` | [#13](https://github.com/ok3mad/roslyn/issues/13) |
 | [`val` locals](features/val-locals.md) | `val x = e;` declares an implicitly typed local that cannot be reassigned, also in deconstructions, `foreach`, `out` and patterns. | Prototype, merged into `main` | [#14](https://github.com/ok3mad/roslyn/issues/14), [#15](https://github.com/ok3mad/roslyn/issues/15), [#18](https://github.com/ok3mad/roslyn/issues/18) |
+| [`readonly` locals](features/readonly-locals.md) | `readonly int x = e;` and `readonly var x = e;` declare locals that cannot be reassigned; `readonly var` is `val`. | Prototype, on `sharper/readonly-locals` | [#16](https://github.com/ok3mad/roslyn/issues/16) |
 
 Every planned feature has an issue, one per row of the
 [syntax roadmap](planning/implementation-plan.md#syntax-roadmap), collected under the tracking issue
@@ -102,6 +103,7 @@ git grep -n "PROTOTYPE(sharper)"
 - `main` is the integration branch. It holds upstream Roslyn plus the finished Sharper prototypes.
 - `sharper/<feature>` branches hold features in progress; `sharper/gating`, `sharper/val`,
   `sharper/val-designations` and `sharper/val-patterns` are merged.
+- `sharper/readonly-locals` holds `readonly` locals (#16).
 
 ## Diagnostics
 
@@ -118,6 +120,8 @@ in `#pragma warning`, `/nowarn` and `.editorconfig`.
 | CS20004 | Error | The syntax 'val' for a pattern is not permitted to refer to a type, but '{0}' is in scope here. Use '@val' for the type. |
 | CS20005 | Error | Deconstruction 'val (...)' form disallows a specific type for 'val'. Use '@val' for the type. |
 | CS20006 | Error | Cannot ref-assign '{0}' because it is a ref val: it always refers to the same variable. Writes through '{0}' are allowed. |
+| CS20007 | Warning | Call to non-readonly member '{0}' on readonly local '{1}' runs on a copy, so '{1}' is not changed. |
+| CS20008 | Error | A readonly local must be initialized in its declaration, because it cannot be assigned later. |
 
 ## Where the code is
 

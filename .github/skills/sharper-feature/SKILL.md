@@ -8,8 +8,9 @@ description: "Implement a Sharper language feature (or any new construct) in the
 Sharper is a stricter C# dialect built inside Roslyn in this fork: `main` holds the merged features and `sharper/*`
 branches the ones in progress (overview and feature status in `docs/sharper/README.md`). Its features are compiled
 by the C# compiler itself: new syntax binds to bound nodes and lowers to ordinary constructs. This skill is the
-checklist distilled from the first two features: `yield return ..xs` (a new bound node; the commits merged from
-`sharper/gating`) and `val` locals (a contextual keyword on an existing symbol; merged from `sharper/val`). See
+checklist distilled from the first features: `yield return ..xs` (a new bound node; the commits merged from
+`sharper/gating`), `val` locals (a contextual keyword on an existing symbol; merged from `sharper/val`) and `readonly`
+locals (a modifier C# rejected, reusing the `val` checks). See
 `SharperTests.cs` for both.
 
 ## When to Use
@@ -109,6 +110,11 @@ Paths are under `src/Compilers/CSharp/Portable/`.
    to `EndOfFileToken`, so a new keyword kind must sit in the keyword range: take free slots from the top
    (`ValKeyword` = 8466, below `ElifKeyword`) and test that no other `SyntaxKind` has the value, because duplicate enum
    values compile silently. Diagnostics have no such limit: Sharper codes start at `SharperErrorCodes.Base` (CS20001).
+14. **A modifier C# rejects may be rejected by the parser.** `readonly` on a local parses, but the parser attaches CS0106
+   to the token, so no binder change can lift it. Gate the error in the parser, then add it back wherever the same
+   modifier list builds another construct (`readonly` locals: the local function path and `const readonly`). Check that
+   every position the feature should cover has a slot for the modifier: a `for` initializer has none, and adding one
+   is a public syntax API change.
 
 ## Testing
 

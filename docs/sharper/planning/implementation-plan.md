@@ -84,7 +84,7 @@ A new construct's real cost is in the places that never mention it. Model it on 
 
 ## Syntax roadmap
 
-The brainstorm proposes 28 pieces of syntax (#28, discard arguments, is still to be discussed). Each row has a GitHub issue, collected under the tracking issue [#12](https://github.com/ok3mad/roslyn/issues/12). Four are done: `yield return ..xs` and `val` in locals, deconstruction and patterns. Everything that depends on unions or purity waits for those designs.
+The brainstorm proposes 28 pieces of syntax (#28, discard arguments, is still to be discussed). Each row has a GitHub issue, collected under the tracking issue [#12](https://github.com/ok3mad/roslyn/issues/12). Five are done: `yield return ..xs`, `val` in locals, deconstruction and patterns, and `readonly` locals. Everything that depends on unions or purity waits for those designs.
 
 - **Size**, relative to the `yield return ..xs` PoC. **S**: about that size (no parser change, one bound node, reused lowering). **M**: a gated parser change, or a new lowering with its own rules. **L**: new inference or binding rules that interact with overload resolution or signature binding. **XL**: a new checker layer (refinements, unions, effects).
 - **Certainty**. **High**: decided in the brainstorm, spelling stable. **Med**: the leading direction, details or spelling open. **Low**: only sketched in examples, contradicted elsewhere, or blocked on an open question.
@@ -96,7 +96,7 @@ The brainstorm proposes 28 pieces of syntax (#28, discard arguments, is still to
 | 1 | Spread in iterators | `yield return ..xs` | `foreach` of yield returns | none | S | Done | Follow-ups below: async iterators, `dynamic`, Edit and Continue | [#13](https://github.com/ok3mad/roslyn/issues/13) |
 | 2 | `val` immutable local | `val total = 0;` | `var` plus a no-reassignment check | none (`val` parses as a type name) | S | Done | The only breaking keyword; trial binding plus a sharpener `@val` escape | [#14](https://github.com/ok3mad/roslyn/issues/14) |
 | 3 | `val` deconstruction | `val (small, large) = ...;` | deconstruction plus the same check | small: accept `val` wherever the parser checks for `var` (`IsPossibleDeconstructionLeft`, statement disambiguation, `IsVarType`) | S | Done | Comes with #2. Without the parser change, `val (a, b) = e` parses as an invocation; the same checks cover `foreach (val (a, b) in ...)` and `out val (a, b)` | [#15](https://github.com/ok3mad/roslyn/issues/15) |
-| 4 | `readonly` locals | `readonly int x`, `readonly var x` | local plus the same check | likely none (modifier probably parses, with an error) | S | Med | Rarely written; completes the mutability grid | [#16](https://github.com/ok3mad/roslyn/issues/16) |
+| 4 | `readonly` locals | `readonly int x`, `readonly var x` | local plus the same check | small: the modifier already parses, with CS0106; Sharper drops that error for variable declarations | S | Done | Completes the mutability grid. `for`, `foreach`, deconstruction and `out` left out (no modifier slot; `val` covers them) | [#16](https://github.com/ok3mad/roslyn/issues/16) |
 | 5 | `val` lambda parameter | `(val x) => ...` | lambda plus the same check | small | S | Med |  | [#17](https://github.com/ok3mad/roslyn/issues/17) |
 | 6 | `val` in patterns | `is { Length: val n }` | `var n` pattern plus the same check | yes: in a pattern the parser turns `val` into a keyword, as it does `var` (`LanguageParser_Patterns.cs`) | S | Done | Decided: `val` is always a keyword in patterns, like `var`. Breaks a type pattern on a type named `val`, so the sharpener escapes it as `@val`. Still open: is `val i` in an arm a binding pattern or a parameter modifier? | [#18](https://github.com/ok3mad/roslyn/issues/18) |
 | 7 | Sequence type | `int[..]` | `IEnumerable<int>` | small (reported today as ERR\_ArraySizeInDeclaration) | S | High | Small and decided: a good second feature | [#19](https://github.com/ok3mad/roslyn/issues/19) |
@@ -199,6 +199,40 @@ Merged as #4. The first Sharper parser change: one helper (`IsIdentifierVarOrSha
 ## Feature 2, step 3: `val` in patterns
 
 `val` followed by a designation in a pattern (`is val x`, `case val x:`, `val x =>`, `val (a, b)`, `(val a, var b)`, `{ P: val p }`) is a var pattern whose keyword token is `SyntaxKind.ValKeyword` (first a `VarKeyword` token with the text `val`; replaced so code that rebuilds a token from its kind keeps `val`). `VarPatternSyntax` is reused, so no syntax node is added. Its variables cannot be reassigned. As for `var`, `val` is a keyword in patterns even where a type named `val` exists; that surfaces as the existing error CS8508 rather than a change of meaning. `is val` without a designation and `is @val x` keep their C# meaning.
+
+## Feature 3: `readonly` locals
+
+`readonly int x = e;` and `readonly var x = e;` declare locals that cannot be reassigned, on branch
+`sharper/readonly-locals` ([#16](https://github.com/ok3mad/roslyn/issues/16), feature page
+[readonly-locals.md](../features/readonly-locals.md)). `readonly var x` means exactly `val x`.
+
+**Probe.** The parser already accepts `readonly` as a local declaration modifier (`ParseLocalDeclarationStatementModifiers`)
+and attaches CS0106 to the token; after `using` it attaches CS9229. A `for` initializer, `foreach`, a deconstruction and
+an `out` argument have no modifier list, so `readonly` there is a cascade of syntax errors. In a script, a top-level
+`readonly int t = 1;` is a C# readonly field.
+
+**Change.** With the feature on, the parser skips the error on `readonly` and adds it back where the same modifier list
+ends up on a local function (`TryParseLocalFunctionStatementBody`) or next to `const`. `SourceLocalSymbol.IsSharperReadOnly`
+reads the modifier from the declaration statement and makes `IsWritableVariable` false, which reuses the whole `val`
+machinery: the write checks, `ReportReadonlyLocalError` (cause 'readonly local') and the struct copy
+(`Binder.IsSharperValValue`). With the flag off, the parser is unchanged and the C# errors stay.
+
+| Question | Decision | Why |
+| --- | --- | --- |
+| Meaning | Not a writable variable, like `val`; `readonly var x` is `val x` | The brainstorm's mutability grid |
+| Messages | CS1656, CS1657 and CS1654 with the cause 'readonly local'; CS20007 (the readonly-local form of CS20003) for a member call on a copy | The user wrote `readonly`, not `val`. A separate warning code keeps CS20003's text unchanged for `val` |
+| No initializer | Error CS20008 for an explicitly typed `readonly` local; `readonly var x;` keeps CS0818 | Nothing can assign the local later, so the declaration is the place to say so |
+| `using readonly var` | Allowed, cause 'readonly local' | Covered by the issue; CS9229 still applies to every other modifier |
+| `for` initializer | Not supported; stays a syntax error | `ForStatementSyntax` has no modifier slot, so it needs a public syntax API change, for a loop variable the loop usually increments. `for (val i = ...)` works |
+| `foreach`, deconstruction, `out` | Not supported; stay syntax errors | No modifier slot; `val` covers each of them |
+| `const readonly` | CS0106 on `readonly`, as without Sharper | A constant is already read-only |
+| `readonly ref int r` | Allowed: no ref reassignment (CS1656), writes through the ref allowed | Matches C#'s `readonly ref` fields and the brainstorm's "one meaning of readonly"; same as `ref val` |
+| `ref readonly int r` | Unchanged C# | Already valid C#, so the C# meaning wins |
+| `readonly ref readonly int r` | Both: no writes through the ref (CS0131, as for `ref readonly`) and no ref reassignment | Matches C#'s `readonly ref readonly` fields |
+| `readonly scoped` | Allowed | `scoped readonly` stays a syntax error, as for any modifier after `scoped` |
+| `readonly val x` | Allowed, means `val x` | Redundant but harmless |
+| Local functions | CS0106 kept | `readonly` does not apply to them |
+| Script top-level fields | Unchanged C# readonly fields | Already C#; the C# meaning wins |
 
 ## Follow-ups
 

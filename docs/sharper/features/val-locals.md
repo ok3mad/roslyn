@@ -13,7 +13,8 @@ val total = items.Sum();
 total = 0;   // error CS1656: Cannot assign to 'total' because it is a 'val variable'
 ```
 
-It is `var` plus the read-only rule that C# already applies to `foreach` and `using` variables.
+It is `var` plus the read-only rule that C# already applies to `foreach` and `using` variables, and the same as
+[`readonly var x = e;`](readonly-locals.md), which also has an explicitly typed form, `readonly int x = e;`.
 
 ## Rules
 
