@@ -136,9 +136,10 @@ statements of a block body.
   body first. A method that needs its own inferred return type, directly or through other methods, is an error and
   must write its return type, as in F#. A recursive method with a non-recursive `return` to start from could be
   allowed later.
-- **Public API.** An inferred return type of a public or protected member changes the public contract whenever the
-  body changes. Whether such members must write their return type, or only get a warning, or only in strict files,
-  is open.
+- **Any member, without a nudge.** Public members infer like any other, with no warning, even though their
+  signature then follows the body. Inferring a type is the author's choice about their API: whoever cares about a
+  published API writes its types out, and most code (anything but a published library) does not need to care. The
+  existing public API analyzers (`PublicAPI.Shipped.txt`) still catch an accidental change.
 
 ### Inferred parameter types
 
@@ -155,8 +156,10 @@ already names, in this order, and two sources that disagree are an error that na
 
 - **Each member alone.** Every source is in the member's own signature or body, or in a signature that is already
   known. A member's types never depend on its callers, so editing a caller never changes a callee.
-- **Public members** may use only sources 1 and 2, and 5 if it is accepted, whose types do not change when the body
-  changes. Sources 3 and 4 are for private members and local functions.
+- **Any member, without a nudge,** as for return types: source 4 works in a public method just as well, for
+  example `public infer Hello(infer id) => profiles.Load(id);`.
+- **Source 3 is limited for another reason.** A conversion of the method to a function type is a use somewhere
+  else, so beyond local functions and private members it would be inference from callers, which is dropped.
 - **Source 4 is the valuable one and the expensive one.** Real code learns that `id` is an `int` from passing it to
   `Find(int)`. But Roslyn binds a body only after it knows the parameter types, so this needs binding with a
   placeholder type and collecting what overload resolution requires of it. It is built in small steps, starting
@@ -772,6 +775,7 @@ What is settled so far, what was tried and dropped, and what waits for a later s
 - A multi-case function is one declaration with ordered arms, a switch expression over its parameters, so evaluation order is the same as in C#. The leading spelling is the parameter switch body `=> switch { ... }`. Arms are not a source of parameter types. Plain C# parameter declarations stay valid and mean the same thing when there is nothing to refine.
 - Functions are ordinary methods, and the parts of the earlier `fun` are separate features (see [Functions as separate elements](#functions-as-separate-elements)). `fun` is parked for a later "functional all in" mode.
 - `infer` stands in place of an inferred return or parameter type. Parameter types are copied from a type that a signature or a value names (an overridden member, a default value, a function type, a call that pins one type), never from the shape of their uses.
+- Inferred types are allowed on public members, with no warning: whoever cares about a published API writes its types out.
 - A general default arm after the specific ones expresses a domain rule that also covers cases added later, such as "anything can be cancelled".
 - `it` works in any single-parameter lambda, and lifting through pipes happens one argument at a time.
 - Errors accumulate through the plain function `collect` across independent pure checks, and fail fast between dependent stages. It is a function, not new syntax.
@@ -812,7 +816,7 @@ What is settled so far, what was tried and dropped, and what waits for a later s
 - Immutability depth: shallow readonly marker, or deep immutability where an immutable value can only reach other immutable things? Leaning towards a flexible design that allows proper deep immutability.
 - Is immutability declared per type, per member, or both?
 - How are guarantees (immutability, refined parameter types) preserved across assembly boundaries, through metadata attributes and runtime guards at C# entry points?
-- How does the checker's flow analysis tie into the more flexible type inference, and how far should parameter inference go before public APIs need annotations?
+- How does the checker's flow analysis tie into the more flexible type inference?
 - What escape hatches are needed to keep the language pragmatic, for example an `assume` that lowers to a runtime check?
 - How are diagnostics mapped back to original source after lowering?
 - Which effect conversions are safe enough to infer automatically, and which need a manual converter?
@@ -824,6 +828,5 @@ What is settled so far, what was tried and dropped, and what waits for a later s
 - **Implicit lifting stops at generics and `object` (deep dive).** Lifting fires on a type mismatch, but a generic `Log<T>(T x)` or an `object` parameter accepts a `Task` with no mismatch, and with the object root every value fits there. A library adding an overload can silently flip a call site between lifting and not lifting. At minimum generic and `object` positions need an explicit lift marker, which largely answers the implicit-versus-explicit question above.
 - **Inferred domains swallow exhaustiveness.** If a refined domain were ever inferred from arm patterns, a forgotten arm would narrow the domain instead of raising a non-exhaustive error, and the errors would surface at call sites instead. That is why arms are not a source of parameter types; domains are written out.
 - **Generic by default (source 5).** Should a parameter that nothing pins become a generic type parameter, or be an error? See [Inferred parameter types](#inferred-parameter-types).
-- **Inferred types on public members.** Must a public or protected member write its return type, or is a warning, or a strict-file error, enough?
 - **Lowering is really binding.** Lifting and union inference interleave with overload resolution, so Sharper cannot be a syntax-desugaring pass in front of Roslyn. It needs its own binder or a Roslyn fork, with ongoing upstream tracking.
 - **Lifting impure stages over sequences must be eager.** Lowering to a lazy `Select` would repeat the I/O on every enumeration, which contradicts "eager by semantics".
