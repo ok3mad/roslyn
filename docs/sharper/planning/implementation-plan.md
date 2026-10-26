@@ -206,7 +206,7 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 
 - [x] Turn Sharper on for `.cx` files in the command-line compiler.
 - [ ] Turn Sharper on for `.cx` documents in the IDE workspace and the language server.
-- [ ] Add `*.cx` to the default `Compile` items in the MSBuild targets.
+- [x] Add `*.cx` to the default `Compile` items (the `Microsoft.Net.Compilers.Toolset` props).
 - [ ] Decide whether `dynamic` should choose range or spread at runtime, under the sharpening rules.
 - [ ] Decide whether async iterators should ever support spreads.
 - [ ] Give ref-struct sources a spread-specific error instead of CS4007.

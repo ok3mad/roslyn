@@ -51,9 +51,9 @@ dotnet build Compilers.slnf                  # compilers only
 ```
 
 Sharper files use the `.cx` extension: the built `csc` parses them with Sharper turned on. To use Sharper in `.cs`
-files too, pass `/features:sharper`. In an SDK-style project, add `<Compile Include="**/*.cx" />` (or set
-`<Features>sharper</Features>` for `.cs` files) and point the build at the locally built compiler (see
-[Bootstrap Builds](docs/contributing/Bootstrap%20Builds.md)).
+files too, pass `/features:sharper`. In an SDK-style project, point the build at the locally built compiler (see
+[Bootstrap Builds](docs/contributing/bootstrap-builds.md)): it includes `**/*.cx` in the `Compile` items, next to
+the SDK's `**/*.cs`. Set `<Features>sharper</Features>` to use Sharper in `.cs` files too.
 
 To run the Sharper tests:
 

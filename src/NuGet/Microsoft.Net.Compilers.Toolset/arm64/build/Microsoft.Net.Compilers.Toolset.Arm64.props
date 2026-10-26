@@ -11,6 +11,14 @@
     <VisualBasicCoreTargetsPath>$(_RoslynTasksDirectory)Microsoft.VisualBasic.Core.targets</VisualBasicCoreTargetsPath>
   </PropertyGroup>
 
+  <!--
+    Sharper: source files with the .cx extension are Sharper files. Include them by default in C# projects, next to
+    the SDK's **/*.cs glob and under the same conditions and excludes.
+  -->
+  <ItemGroup Condition="'$(EnableDefaultItems)' == 'true' and '$(EnableDefaultCompileItems)' == 'true' and '$(Language)' == 'C#'">
+    <Compile Include="**/*.cx" Exclude="$(DefaultItemExcludes);$(DefaultExcludesInProjectFolder)" />
+  </ItemGroup>
+
   <UsingTask TaskName="Microsoft.CodeAnalysis.BuildTasks.Csc" AssemblyFile="$(RoslynTasksAssembly)" />
   <UsingTask TaskName="Microsoft.CodeAnalysis.BuildTasks.Vbc" AssemblyFile="$(RoslynTasksAssembly)" />
   <UsingTask TaskName="Microsoft.CodeAnalysis.BuildTasks.CopyRefAssembly" AssemblyFile="$(RoslynTasksAssembly)" />
