@@ -544,7 +544,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                         return GetSymbolInfoFromSymbolOrNone(GetTypeInfoWorker(parent, cancellationToken).Type.GetPublicSymbol());
 
                     case SyntaxKind.ParenthesizedVariableDesignation:
-                        if (((TypeSyntax)expression).IsVar)
+                        if (((TypeSyntax)expression).IsVarOrVal)
                         {
                             var varTypeInfo = GetTypeInfoWorker(expression, cancellationToken);
                             if (varTypeInfo.Type is { TypeKind: not TypeKind.Error })
@@ -986,7 +986,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                         return new CSharpTypeInfo(declarationInfo.Type, declarationInfo.Type, declarationInfo.Nullability, declarationInfo.Nullability, Conversion.Identity);
 
                     case SyntaxKind.ParenthesizedVariableDesignation:
-                        if (((TypeSyntax)expression).IsVar)
+                        if (((TypeSyntax)expression).IsVarOrVal)
                         {
                             var varTypeInfo = GetTypeInfoWorker(expression, cancellationToken);
                             if (varTypeInfo.Type is { TypeKind: not TypeKind.Error })

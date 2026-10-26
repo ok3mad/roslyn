@@ -15,6 +15,11 @@ namespace Microsoft.CodeAnalysis.CSharp.Syntax
         /// </summary>
         internal bool IsVal => ((InternalSyntax.TypeSyntax)this.Green).IsVal && this.IsFeatureEnabled(MessageID.IDS_FeatureSharper);
 
+        /// <summary>
+        /// True if this may stand for an implicitly typed local: <see cref="IsVar"/> or <see cref="IsVal"/>.
+        /// </summary>
+        internal bool IsVarOrVal => IsVar || IsVal;
+
         public bool IsUnmanaged => ((InternalSyntax.TypeSyntax)this.Green).IsUnmanaged;
 
         public bool IsNotNull => ((InternalSyntax.TypeSyntax)this.Green).IsNotNull;

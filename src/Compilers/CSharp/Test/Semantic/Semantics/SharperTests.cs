@@ -1184,5 +1184,355 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 """;
             VerifyOperationTreeAndDiagnosticsForTest<LocalDeclarationStatementSyntax>(comp, expectedOperationTree, []);
         }
+
+        [Fact]
+        public void ValDesignation_Basic()
+        {
+            var source = """
+                using System;
+                
+                val (a, b) = (1, "x");
+                Console.Write(a);
+                Console.Write(b);
+                (val c, var d) = (2, 3);
+                Console.Write(c + d);
+                foreach (val x in new[] { 4, 5 })
+                    Console.Write(x);
+                foreach (val (k, v) in new[] { (6, "y") })
+                    Console.Write($"{k}{v}");
+                for (val (i, j) = (7, 8); i < 8; )
+                {
+                    Console.Write(i + j);
+                    break;
+                }
+                if (int.TryParse("9", out val n))
+                    Console.Write(n);
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "1x5456y159" : null).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void ValDesignation_Writes()
+        {
+            var source = """
+                class C
+                {
+                    void M((int, int)[] pairs)
+                    {
+                        val (a, b) = (1, 2);
+                        var (a2, b2) = (1, 2);
+                        a = 3;
+                        a2 = 3;
+                        (val c, var d) = (1, 2);
+                        c = 3;
+                        d = 3;
+                        foreach (val x in new[] { 1 }) { x = 2; }
+                        foreach (var x2 in new[] { 1 }) { x2 = 2; }
+                        foreach (val (k, v) in pairs) { k = 2; }
+                        foreach (var (k2, v2) in pairs) { k2 = 2; }
+                        int.TryParse("1", out val n);
+                        int.TryParse("1", out var n2);
+                        n = 2;
+                        n2 = 2;
+                        (a, b) = (5, 6);
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (7,9): error CS1656: Cannot assign to 'a' because it is a 'val variable'
+                //         a = 3;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "a").WithArguments("a", "val variable").WithLocation(7, 9),
+                // (10,9): error CS1656: Cannot assign to 'c' because it is a 'val variable'
+                //         c = 3;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "c").WithArguments("c", "val variable").WithLocation(10, 9),
+                // (12,42): error CS1656: Cannot assign to 'x' because it is a 'foreach iteration variable'
+                //         foreach (val x in new[] { 1 }) { x = 2; }
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "foreach iteration variable").WithLocation(12, 42),
+                // (13,43): error CS1656: Cannot assign to 'x2' because it is a 'foreach iteration variable'
+                //         foreach (var x2 in new[] { 1 }) { x2 = 2; }
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x2").WithArguments("x2", "foreach iteration variable").WithLocation(13, 43),
+                // (14,41): error CS1656: Cannot assign to 'k' because it is a 'foreach iteration variable'
+                //         foreach (val (k, v) in pairs) { k = 2; }
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "k").WithArguments("k", "foreach iteration variable").WithLocation(14, 41),
+                // (15,43): error CS1656: Cannot assign to 'k2' because it is a 'foreach iteration variable'
+                //         foreach (var (k2, v2) in pairs) { k2 = 2; }
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "k2").WithArguments("k2", "foreach iteration variable").WithLocation(15, 43),
+                // (18,9): error CS1656: Cannot assign to 'n' because it is a 'val variable'
+                //         n = 2;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "n").WithArguments("n", "val variable").WithLocation(18, 9),
+                // (20,10): error CS1656: Cannot assign to 'a' because it is a 'val variable'
+                //         (a, b) = (5, 6);
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "a").WithArguments("a", "val variable").WithLocation(20, 10),
+                // (20,13): error CS1656: Cannot assign to 'b' because it is a 'val variable'
+                //         (a, b) = (5, 6);
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "b").WithArguments("b", "val variable").WithLocation(20, 13));
+        }
+
+        [Theory]
+        [CombinatorialData]
+        public void ValDesignation_FeatureDisabledAndTypeNamedVal(bool sharper, bool typeNamedVal)
+        {
+            var source = (typeNamedVal ? "class val { }\n" : "") + """
+                class C
+                {
+                    void M(object[] xs)
+                    {
+                        val (a, b) = (1, 2);
+                        foreach (val x in xs) { }
+                        int.TryParse("1", out val n);
+                    }
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: sharper ? s_sharperOptions : TestOptions.Regular, targetFramework: TargetFramework.Net90);
+            // With Sharper on and no type named val, every form is a val declaration.
+            if (sharper && !typeNamedVal)
+            {
+                comp.VerifyDiagnostics();
+            }
+            else if (typeNamedVal)
+            {
+                // A type named val keeps its C# meaning, with the same error var gets for `var (...)` when a type named var exists.
+                comp.VerifyDiagnostics(sharper ? [
+                // (1,7): warning CS8981: The type name 'val' only contains lower-cased ascii characters. Such names may become reserved for the language.
+                // class val { }
+                Diagnostic(ErrorCode.WRN_LowerCaseTypeName, "val").WithArguments("val").WithLocation(1, 7),
+                // (6,13): error CS8136: Deconstruction 'var (...)' form disallows a specific type for 'var'.
+                //         val (a, b) = (1, 2);
+                Diagnostic(ErrorCode.ERR_DeconstructionVarFormDisallowsSpecificType, "(a, b)").WithLocation(6, 13),
+                // (6,23): error CS0029: Cannot implicitly convert type 'int' to 'val'
+                //         val (a, b) = (1, 2);
+                Diagnostic(ErrorCode.ERR_NoImplicitConv, "1").WithArguments("int", "val").WithLocation(6, 23),
+                // (6,26): error CS0029: Cannot implicitly convert type 'int' to 'val'
+                //         val (a, b) = (1, 2);
+                Diagnostic(ErrorCode.ERR_NoImplicitConv, "2").WithArguments("int", "val").WithLocation(6, 26),
+                // (8,22): error CS1503: Argument 1: cannot convert from 'string' to 'System.ReadOnlySpan<byte>'
+                //         int.TryParse("1", out val n);
+                Diagnostic(ErrorCode.ERR_BadArgType, @"""1""").WithArguments("1", "string", "System.ReadOnlySpan<byte>").WithLocation(8, 22),
+                // (8,31): error CS1503: Argument 2: cannot convert from 'out val' to 'out int'
+                //         int.TryParse("1", out val n);
+                Diagnostic(ErrorCode.ERR_BadArgType, "val n").WithArguments("2", "out val", "out int").WithLocation(8, 31)] : [
+                // (1,7): warning CS8981: The type name 'val' only contains lower-cased ascii characters. Such names may become reserved for the language.
+                // class val { }
+                Diagnostic(ErrorCode.WRN_LowerCaseTypeName, "val").WithArguments("val").WithLocation(1, 7),
+                // (6,9): error CS1955: Non-invocable member 'val' cannot be used like a method.
+                //         val (a, b) = (1, 2);
+                Diagnostic(ErrorCode.ERR_NonInvocableMemberCalled, "val").WithArguments("val").WithLocation(6, 9),
+                // (6,14): error CS0103: The name 'a' does not exist in the current context
+                //         val (a, b) = (1, 2);
+                Diagnostic(ErrorCode.ERR_NameNotInContext, "a").WithArguments("a").WithLocation(6, 14),
+                // (6,17): error CS0103: The name 'b' does not exist in the current context
+                //         val (a, b) = (1, 2);
+                Diagnostic(ErrorCode.ERR_NameNotInContext, "b").WithArguments("b").WithLocation(6, 17),
+                // (8,22): error CS1503: Argument 1: cannot convert from 'string' to 'System.ReadOnlySpan<byte>'
+                //         int.TryParse("1", out val n);
+                Diagnostic(ErrorCode.ERR_BadArgType, @"""1""").WithArguments("1", "string", "System.ReadOnlySpan<byte>").WithLocation(8, 22),
+                // (8,31): error CS1503: Argument 2: cannot convert from 'out val' to 'out int'
+                //         int.TryParse("1", out val n);
+                Diagnostic(ErrorCode.ERR_BadArgType, "val n").WithArguments("2", "out val", "out int").WithLocation(8, 31)]);
+            }
+            else
+            {
+                comp.VerifyDiagnostics(
+                // (5,9): error CS0103: The name 'val' does not exist in the current context
+                //         val (a, b) = (1, 2);
+                Diagnostic(ErrorCode.ERR_NameNotInContext, "val").WithArguments("val").WithLocation(5, 9),
+                // (5,14): error CS0103: The name 'a' does not exist in the current context
+                //         val (a, b) = (1, 2);
+                Diagnostic(ErrorCode.ERR_NameNotInContext, "a").WithArguments("a").WithLocation(5, 14),
+                // (5,17): error CS0103: The name 'b' does not exist in the current context
+                //         val (a, b) = (1, 2);
+                Diagnostic(ErrorCode.ERR_NameNotInContext, "b").WithArguments("b").WithLocation(5, 17),
+                // (6,18): error CS0246: The type or namespace name 'val' could not be found (are you missing a using directive or an assembly reference?)
+                //         foreach (val x in xs) { }
+                Diagnostic(ErrorCode.ERR_SingleTypeNameNotFound, "val").WithArguments("val").WithLocation(6, 18),
+                // (7,31): error CS0246: The type or namespace name 'val' could not be found (are you missing a using directive or an assembly reference?)
+                //         int.TryParse("1", out val n);
+                Diagnostic(ErrorCode.ERR_SingleTypeNameNotFound, "val").WithArguments("val").WithLocation(7, 31));
+            }
+        }
+
+        [Theory]
+        [CombinatorialData]
+        public void ValDesignation_MethodNamedValIsAcceptedBreak(bool sharper)
+        {
+            // `val (a, b) = e` assigns through a ref-returning method named val in C#. Sharper makes it a declaration
+            // (an accepted break; the sharpener will escape the method as @val).
+            var source = """
+                class C
+                {
+                    static int s;
+                    static ref int val(int x, int y) => ref s;
+
+                    void M()
+                    {
+                        int a = 1, b = 2;
+                        val (a, b) = 3;
+                        @val (a, b) = 4;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: sharper ? s_sharperOptions : TestOptions.Regular, targetFramework: TargetFramework.Net90).VerifyDiagnostics(sharper ? [
+                // (9,14): error CS0128: A local variable or function named 'a' is already defined in this scope
+                //         val (a, b) = 3;
+                Diagnostic(ErrorCode.ERR_LocalDuplicate, "a").WithArguments("a").WithLocation(9, 14),
+                // (9,14): error CS8130: Cannot infer the type of implicitly-typed deconstruction variable 'a'.
+                //         val (a, b) = 3;
+                Diagnostic(ErrorCode.ERR_TypeInferenceFailedForImplicitlyTypedDeconstructionVariable, "a").WithArguments("a").WithLocation(9, 14),
+                // (9,17): error CS0128: A local variable or function named 'b' is already defined in this scope
+                //         val (a, b) = 3;
+                Diagnostic(ErrorCode.ERR_LocalDuplicate, "b").WithArguments("b").WithLocation(9, 17),
+                // (9,17): error CS8130: Cannot infer the type of implicitly-typed deconstruction variable 'b'.
+                //         val (a, b) = 3;
+                Diagnostic(ErrorCode.ERR_TypeInferenceFailedForImplicitlyTypedDeconstructionVariable, "b").WithArguments("b").WithLocation(9, 17),
+                // (9,22): error CS1061: 'int' does not contain a definition for 'Deconstruct' and no accessible extension method 'Deconstruct' accepting a first argument of type 'int' could be found (are you missing a using directive or an assembly reference?)
+                //         val (a, b) = 3;
+                Diagnostic(ErrorCode.ERR_NoSuchMemberOrExtension, "3").WithArguments("int", "Deconstruct").WithLocation(9, 22),
+                // (9,22): error CS8129: No suitable 'Deconstruct' instance or extension method was found for type 'int', with 2 out parameters and a void return type.
+                //         val (a, b) = 3;
+                Diagnostic(ErrorCode.ERR_MissingDeconstruct, "3").WithArguments("int", "2").WithLocation(9, 22)] : []);
+        }
+
+        [Fact]
+        public void ValDesignation_StructCopies()
+        {
+            var source = """
+                using System;
+
+                foreach (val s in new[] { new S() })
+                {
+                    s.Mutate();
+                    Console.Write(s.F);
+                }
+                val (t, u) = (new S(), 0);
+                t.Mutate();
+                Console.Write(t.F);
+                Make(out val o);
+                o.Mutate();
+                Console.Write(o.F);
+
+                static void Make(out S s) => s = new S();
+
+                struct S
+                {
+                    public int F;
+                    public void Mutate() { F++; }
+                }
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "000" : null).VerifyDiagnostics(
+                // (5,5): warning CS9404: Call to non-readonly member 'S.Mutate()' on val variable 's' runs on a copy, so 's' is not changed.
+                //     s.Mutate();
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "s").WithArguments("S.Mutate()", "s").WithLocation(5, 5),
+                // (9,1): warning CS9404: Call to non-readonly member 'S.Mutate()' on val variable 't' runs on a copy, so 't' is not changed.
+                // t.Mutate();
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "t").WithArguments("S.Mutate()", "t").WithLocation(9, 1),
+                // (12,1): warning CS9404: Call to non-readonly member 'S.Mutate()' on val variable 'o' runs on a copy, so 'o' is not changed.
+                // o.Mutate();
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "o").WithArguments("S.Mutate()", "o").WithLocation(12, 1));
+        }
+
+        [Fact]
+        public void ValDesignation_Nullable()
+        {
+            var source = """
+                #nullable enable
+                class C
+                {
+                    void M(string? maybe, string?[] items)
+                    {
+                        val (v, w) = (maybe, maybe);
+                        _ = v.Length;
+                        foreach (val x in items) { _ = x.Length; }
+                        Get(out val o);
+                        _ = o.Length;
+                    }
+
+                    static void Get(out string? s) => s = null;
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (7,13): warning CS8602: Dereference of a possibly null reference.
+                //         _ = v.Length;
+                Diagnostic(ErrorCode.WRN_NullReferenceReceiver, "v").WithLocation(7, 13),
+                // (8,40): warning CS8602: Dereference of a possibly null reference.
+                //         foreach (val x in items) { _ = x.Length; }
+                Diagnostic(ErrorCode.WRN_NullReferenceReceiver, "x").WithLocation(8, 40),
+                // (10,13): warning CS8602: Dereference of a possibly null reference.
+                //         _ = o.Length;
+                Diagnostic(ErrorCode.WRN_NullReferenceReceiver, "o").WithLocation(10, 13));
+        }
+
+        [Fact]
+        public void ValDesignation_SemanticModel()
+        {
+            var source = """
+                class C
+                {
+                    void M()
+                    {
+                        val (a, b) = (1, "x");
+                        foreach (val x in new[] { 1L }) { }
+                        int.TryParse("1", out val n);
+                    }
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics();
+            var tree = comp.SyntaxTrees[0];
+            var model = comp.GetSemanticModel(tree);
+            var valTypes = tree.GetRoot().DescendantNodes().OfType<IdentifierNameSyntax>().Where(n => n.Identifier.ValueText == "val").ToArray();
+            Assert.Equal(3, valTypes.Length);
+            Assert.Equal("(System.Int32 a, System.String b)", model.GetTypeInfo(valTypes[0]).Type.ToTestDisplayString());
+            Assert.Equal("System.Int64", model.GetTypeInfo(valTypes[1]).Type.ToTestDisplayString());
+            Assert.Equal("System.Int32", model.GetTypeInfo(valTypes[2]).Type.ToTestDisplayString());
+        }
+
+        [Fact]
+        public void ValDesignation_IOperation()
+        {
+            var source = """
+                class C
+                {
+                    void M()
+                    {
+                        /*<bind>*/val (a, b) = (1, 2)/*</bind>*/;
+                    }
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            var expectedOperationTree = """
+                IDeconstructionAssignmentOperation (OperationKind.DeconstructionAssignment, Type: (System.Int32 a, System.Int32 b)) (Syntax: 'val (a, b) = (1, 2)')
+                  Left:
+                    IDeclarationExpressionOperation (OperationKind.DeclarationExpression, Type: (System.Int32 a, System.Int32 b)) (Syntax: 'val (a, b)')
+                      ITupleOperation (OperationKind.Tuple, Type: (System.Int32 a, System.Int32 b)) (Syntax: '(a, b)')
+                        NaturalType: (System.Int32 a, System.Int32 b)
+                        Elements(2):
+                            ILocalReferenceOperation: a (IsDeclaration: True) (OperationKind.LocalReference, Type: System.Int32) (Syntax: 'a')
+                            ILocalReferenceOperation: b (IsDeclaration: True) (OperationKind.LocalReference, Type: System.Int32) (Syntax: 'b')
+                  Right:
+                    ITupleOperation (OperationKind.Tuple, Type: (System.Int32, System.Int32)) (Syntax: '(1, 2)')
+                      NaturalType: (System.Int32, System.Int32)
+                      Elements(2):
+                          ILiteralOperation (OperationKind.Literal, Type: System.Int32, Constant: 1) (Syntax: '1')
+                          ILiteralOperation (OperationKind.Literal, Type: System.Int32, Constant: 2) (Syntax: '2')
+                """;
+            VerifyOperationTreeAndDiagnosticsForTest<AssignmentExpressionSyntax>(comp, expectedOperationTree, []);
+        }
+
+        [Theory]
+        [CombinatorialData]
+        public void ValDesignation_Parsing(bool sharper)
+        {
+            var options = sharper ? s_sharperOptions : TestOptions.Regular;
+            var statement = (ExpressionStatementSyntax)SyntaxFactory.ParseStatement("val (a, b) = e;", options: options);
+            var left = ((AssignmentExpressionSyntax)statement.Expression).Left;
+            Assert.Equal(sharper ? SyntaxKind.DeclarationExpression : SyntaxKind.InvocationExpression, left.Kind());
+
+            var forEach = (ForEachVariableStatementSyntax)SyntaxFactory.ParseStatement("foreach (val (a, b) in e) { }", options: options);
+            Assert.Equal(sharper ? SyntaxKind.DeclarationExpression : SyntaxKind.InvocationExpression, forEach.Variable.Kind());
+
+            // A verbatim @val is always an identifier.
+            statement = (ExpressionStatementSyntax)SyntaxFactory.ParseStatement("@val (a, b) = e;", options: options);
+            Assert.Equal(SyntaxKind.InvocationExpression, ((AssignmentExpressionSyntax)statement.Expression).Left.Kind());
+        }
     }
 }
