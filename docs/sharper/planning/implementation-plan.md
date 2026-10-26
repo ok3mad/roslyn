@@ -210,11 +210,12 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 - [x] Turn Sharper on for `.cx` documents in the IDE workspace.
 - [ ] Treat `.cx` files as C# in the language server.
 - [x] Add `*.cx` to the default `Compile` items (the `Microsoft.Net.Compilers.Toolset` props).
-- [ ] Decide whether `dynamic` should choose range or spread at runtime, under the sharpening rules.
-- [ ] Decide whether async iterators should ever support spreads.
-- [ ] Give ref-struct sources a spread-specific error instead of CS4007.
-- [ ] Verify the spread with Edit and Continue: the generated try/finally and the yield share one syntax offset.
-- [ ] Design a real IOperation shape once the syntax settles.
+- [ ] Decide whether `dynamic` should choose range or spread at runtime, under the sharpening rules. [#42](https://github.com/ok3mad/roslyn/issues/42)
+- [ ] Decide whether async iterators should ever support spreads. [#43](https://github.com/ok3mad/roslyn/issues/43)
+- [ ] Give ref-struct sources a spread-specific error instead of CS4007. [#44](https://github.com/ok3mad/roslyn/issues/44)
+- [ ] Verify the spread with Edit and Continue: the generated try/finally and the yield share one syntax offset. [#45](https://github.com/ok3mad/roslyn/issues/45)
+- [ ] Design a real IOperation shape once the syntax settles. [#46](https://github.com/ok3mad/roslyn/issues/46)
+- [ ] Avoid the O(depth) cost of recursive spreads with a delegating state machine. [#47](https://github.com/ok3mad/roslyn/issues/47)
 - [x] Number Sharper diagnostics from their own base, `SharperErrorCodes.Base` = 20000 (CS20001 and up), far from upstream.
 - [x] Full C# compiler regression run (net10.0, Debug): 88,327 tests passed and 0 failed across 10 test projects. WinRT was not run; it targets .NET Framework only.
 - [ ] Infer whether a struct member mutates `this`, and silence CS20003 for members that do not. Until then, every call to a non-`readonly` member of a `val` warns, including interface members on a generic `val` (`g.Get()`).

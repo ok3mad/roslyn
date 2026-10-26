@@ -264,7 +264,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                         // PROTOTYPE(sharper): Decide between the range and the spread at runtime instead, from the
                         // value in d: try the C# conversion to Index first, as the compile-time rule does, and
                         // spread if d holds a sequence. That changes what currently valid C# does at runtime
-                        // (an exception today), so it needs a decision under the sharpening rules.
+                        // (an exception today), so it needs a decision under the sharpening rules. Tracked in #42.
                         Error(csharpDiagnostics, ErrorCode.WRN_SharperDynamicRangeNotSpread, spreadOperand, spreadOperand);
                     }
 
@@ -327,6 +327,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 // synchronous source needs the lowered try/finally to be accepted by the async rewriter, which
                 // checks its syntax for Edit and Continue (SyntaxBindingUtilities.BindsToTryStatement). Supporting
                 // an async source would also mean an implicit `await foreach`, a hidden suspension point.
+                // Tracked in #43.
                 Error(diagnostics, ErrorCode.ERR_SharperSpreadInAsyncIterator, node.Expression);
                 return new BoundYieldReturnSpreadStatement(node, collectionExpr, enumeratorInfoOpt: null, elementPlaceholder: null, elementConversion: null, hasErrors: true);
             }
@@ -341,7 +342,7 @@ namespace Microsoft.CodeAnalysis.CSharp
 
             // PROTOTYPE(sharper): A ref struct source (a span, an inline array) is rejected later with CS4007 about its
             // enumerator ("cannot be preserved across 'await' or 'yield' boundary"), which the user never wrote.
-            // Consider a spread-specific error here.
+            // Consider a spread-specific error here. Tracked in #44.
 
             builder.ReportDiagnosticsIfUnsafeMemberAccess(this, node.YieldKeyword, node, diagnostics);
 
