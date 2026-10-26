@@ -99,6 +99,11 @@ Paths are under `src/Compilers/CSharp/Portable/`.
    `BoundImplicitIndexerReceiverPlaceholder.Receiver` points back to it; for patterns, walk the decision DAG for
    evaluations whose `Input.IsOriginalInput`. Pattern lowering also reuses a plain local as its input, assuming members
    do not mutate it.
+12. **A keyword that already has C# rules inherits them.** Making `val` parse like `var` (one gated parser helper,
+   `IsIdentifierVarOrSharperVal`, at every spelling check) brought `var`'s existing errors along: CS8136 for
+   `val (...)` with a type named `val`, CS8508 for a `val` pattern. Reusing `VarPatternSyntax` with a `VarKeyword`
+   token whose text is `val` avoided a syntax node; pattern variables have no type syntax, so the local finds its
+   `val` through the enclosing pattern.
 
 ## Testing
 
