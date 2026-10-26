@@ -5,10 +5,11 @@ description: "Implement a Sharper language feature (or any new construct) in the
 
 # Implementing a Sharper Feature in the C# Compiler
 
-Sharper is a stricter C# dialect built inside Roslyn, on the `sharper/*` branches of this fork. Its features are
-compiled by the C# compiler itself: new syntax binds to bound nodes and lowers to ordinary constructs. This skill is
-the checklist distilled from the first two features: `yield return ..xs` (a new bound node; the commits merged
-from `sharper/gating`) and `val` locals (a contextual keyword on an existing symbol; branch `sharper/val`). See
+Sharper is a stricter C# dialect built inside Roslyn in this fork: `main` holds the merged features and `sharper/*`
+branches the ones in progress (overview and feature status in `docs/sharper/README.md`). Its features are compiled
+by the C# compiler itself: new syntax binds to bound nodes and lowers to ordinary constructs. This skill is the
+checklist distilled from the first two features: `yield return ..xs` (a new bound node; the commits merged from
+`sharper/gating`) and `val` locals (a contextual keyword on an existing symbol; merged from `sharper/val`). See
 `SharperTests.cs` for both.
 
 ## When to Use

@@ -1,3 +1,6 @@
+> [!NOTE]
+> **Sharper fork:** this document is inherited from upstream [dotnet/roslyn](https://github.com/dotnet/roslyn). The areas and owners are the dotnet/roslyn team, not maintainers of this fork; do not tag them on Sharper issues or pull requests.
+
 # Pull Requests Tagging
 
 If you need to tag folks on an issue or PR, you will generally want to tag the owners (not the lead) for [area](#areas) to which the change or issue is closest to.

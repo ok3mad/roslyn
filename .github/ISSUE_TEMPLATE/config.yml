@@ -3,7 +3,7 @@ contact_links:
   - name: Report issues related to CAxxxx rules
     url: https://github.com/dotnet/sdk/issues/new/choose
     about: Enhancements and bug reports to CAxxxx rules are reported to dotnet/sdk repository.
-  - name: Suggest language feature
+  - name: Suggest a C# language feature (not Sharper)
     url: https://github.com/dotnet/csharplang/issues/new/choose
-    about: Language feature suggestions are discussed in dotnet/csharplang repository first.
+    about: C# language feature suggestions are discussed in the dotnet/csharplang repository. Suggest Sharper features with a blank issue here.
     

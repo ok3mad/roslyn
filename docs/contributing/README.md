@@ -1,3 +1,6 @@
+> [!NOTE]
+> **Sharper fork:** this document is inherited from upstream [dotnet/roslyn](https://github.com/dotnet/roslyn). The build, debug and test guides apply to Sharper unchanged. For Sharper's own contribution process, see [CONTRIBUTING.md](../../CONTRIBUTING.md).
+
 Contributing
 ===
 

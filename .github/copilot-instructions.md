@@ -1,10 +1,21 @@
-# Roslyn (.NET Compiler Platform) — Copilot Instructions
+# Sharper (fork of Roslyn) — Copilot Instructions
 
 > This is the **canonical** repo-wide agent entry point. `AGENTS.md` at the repo root points here. Path-scoped rules in `.github/instructions/{Compiler,IDE,Razor}.instructions.md` apply automatically by area and supplement this file. This file establishes the memory-first orientation protocol and doc-maintenance obligation.
 >
 > Across AI-generated output (code, documentation, and user-facing prose), prefer terminology already used in this repository.
 
 ## Project Overview
+
+**This repository is Sharper**, a fork of dotnet/roslyn that adds an experimental C# dialect to the C# compiler.
+Sharper features are gated on `/features:sharper` (`MessageID.IDS_FeatureSharper`), must not change the meaning of
+valid C#, and lower to ordinary C# constructs. Everything outside the Sharper features is upstream Roslyn and should
+stay mergeable with it, so keep changes to upstream code minimal.
+- Sharper overview, design rules and feature status: `docs/sharper/README.md`.
+- Implementing a feature: the `sharper-feature` skill (`.github/skills/sharper-feature/SKILL.md`).
+- Tests: `src/Compilers/CSharp/Test/Semantic/Semantics/SharperTests.cs`.
+- Branches: `main` is the integration branch; features in progress live on `sharper/<feature>`.
+
+The rest of this file is inherited from upstream and describes the Roslyn codebase Sharper is built on.
 
 Roslyn is the open-source C# and Visual Basic compilers plus the language services and IDE features built on their APIs. Built around **immutable** syntax trees, semantic models, symbols, and workspace snapshots. Major components:
 - **Compilers** (`src/Compilers/`) — C#/VB compilers (syntax, semantics, emit).
@@ -69,7 +80,7 @@ Other entry points: `dotnet run --file eng/generate-compiler-code.cs` (regenerat
 - Private fields `_camelCase`; namespaces `Microsoft.CodeAnalysis.[Language].[Area]`.
 - Always thread `CancellationToken` through async operations. (Null-checking style is layer-specific — see the area's instruction file: `Contract.ThrowIfNull` in IDE, `Debug.Assert` in the compiler.)
 - Language services are exported **per-language** (`[ExportLanguageService(..., LanguageNames.CSharp), Shared]`), never shared across C#/VB.
-- No `TODO`/`TODO2` comments — track follow-ups as linked GitHub issues in code; existing `TODO2`s are only a frozen enforcement baseline. No `PROTOTYPE` comments in PRs to `main`.
+- No `TODO`/`TODO2` comments — track follow-ups as linked GitHub issues in code; existing `TODO2`s are only a frozen enforcement baseline. Sharper follow-ups are `// PROTOTYPE(sharper): ...` comments; in this fork, `main` carries them for the merged prototypes.
 - Update `PublicAPI.Unshipped.txt` for public API changes. Never hand-edit generated code or `eng/common`.
 - It is acceptable to have async methods with no awaits. CS1998 is not active for this repository.
 
@@ -110,7 +121,7 @@ For the documentation-assessment checklist and routing rules, see the
 
 ### Skills
 
-Skills live in `.github/skills/<skill-name>/SKILL.md` and are auto-discovered by their YAML `description`. Useful ones here include `code-review`, `ci-analysis`, `analyzer-codefix`, `merge-into-branch`, `snap`, and `update-agent-docs`.
+Skills live in `.github/skills/<skill-name>/SKILL.md` and are auto-discovered by their YAML `description`. Useful ones here include `sharper-feature`, `code-review`, `ci-analysis`, `analyzer-codefix`, `merge-into-branch`, `snap`, and `update-agent-docs`.
 
 ## Working Loop (plan first)
 

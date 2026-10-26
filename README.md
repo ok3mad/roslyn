@@ -1,88 +1,84 @@
-<p align="center">
-<img width="450" src="https://user-images.githubusercontent.com/46729679/109719841-17b7dd00-7b5e-11eb-8f5e-87eb2d4d1be9.png" alt="Roslyn logo">
-</p>
+<h1 align="center">Sharper</h1>
 
-<h1 align="center">The .NET Compiler Platform</h1>
+<p align="center"><b>An experimental dialect of C#, built as a fork of <a href="https://github.com/dotnet/roslyn">Roslyn</a>.</b></p>
 
-<p align="center"><a href="http://aka.ms/discord-csharp-roslyn" rel="nofollow"><img title="Chat on Discord" src="docs/img/discord-mark-white.png" /></a></p>
+> [!IMPORTANT]
+> This repository is **not** the official .NET Compiler Platform. It is a fork of
+> [dotnet/roslyn](https://github.com/dotnet/roslyn) that is being turned into the compiler for **Sharper**.
+> Sharper is experimental, unsupported and not affiliated with Microsoft or the .NET Foundation.
+> For the official C# and Visual Basic compilers, go to [dotnet/roslyn](https://github.com/dotnet/roslyn).
 
-Roslyn is the open-source implementation of both the C# and Visual Basic compilers with an API surface for building code analysis tools.
+## What is Sharper?
 
-### C# and Visual Basic Language Feature Suggestions
+Sharper is C# with a few extra rules and constructs: a stricter, more concise dialect. It is not a new compiler.
+Sharper features live inside the Roslyn C# compiler. New syntax binds to its own bound nodes and lowers to ordinary
+C# constructs, so a Sharper program compiles to normal IL and runs on normal .NET.
 
-If you want to suggest a new feature for the C# or Visual Basic languages go here:
-- [dotnet/csharplang](https://github.com/dotnet/csharplang) for C# specific issues
-- [dotnet/vblang](https://github.com/dotnet/vblang) for VB-specific features
-- [dotnet/csharplang](https://github.com/dotnet/csharplang) for features that affect both languages
+Three rules hold for every feature:
 
-### Contributing
+- **Opt-in.** Every Sharper feature is off unless you enable it with `/features:sharper`. Without the flag the
+  compiler behaves exactly like upstream Roslyn.
+- **No semantic breaking changes.** If Sharper syntax already means something in C#, the C# meaning wins. Sharper
+  only gives a meaning to code that would otherwise be an error.
+- **Normal output.** Features lower to existing constructs. The emitted assemblies need no new runtime or library.
 
-All work on the C# and Visual Basic compiler happens directly on [GitHub](https://github.com/dotnet/roslyn). Both core team members and external contributors send pull requests which go through the same review process.
+See **[docs/sharper](docs/sharper/README.md)** for the design rules, feature status and how features are built.
 
-If you are interested in fixing issues and contributing directly to the code base, a great way to get started is to ask some questions on [GitHub Discussions](https://github.com/dotnet/roslyn/discussions)! Then check out our [contributing guide](https://github.com/dotnet/roslyn/blob/main/CONTRIBUTING.md) which covers the following:
+## Features
 
-- [Coding guidelines](https://github.com/dotnet/roslyn/blob/main/docs/wiki/Contributing-Code.md)
-- [The development workflow, including debugging and running tests](https://github.com/dotnet/roslyn/blob/main/docs/contributing/Building%2C%20Debugging%2C%20and%20Testing%20on%20Windows.md)
-- [Submitting pull requests](<https://github.com/dotnet/roslyn/blob/main/CONTRIBUTING.md#How-to-submit-a-PR>)
-- Finding a bug to fix in the [IDE](https://aka.ms/roslyn-ide-bugs-help-wanted) or [Compiler](https://aka.ms/roslyn-compiler-bugs-help-wanted)
-- Finding a feature to implement in the [IDE](https://aka.ms/roslyn-ide-feature-help-wanted) or [Compiler](https://aka.ms/roslyn-compiler-feature-help-wanted)
-- Roslyn API suggestions should go through the [API review process](<docs/contributing/API Review Process.md>)
+| Feature | Example | Status |
+| --- | --- | --- |
+| [Spread in `yield return`](docs/sharper/features/yield-return-spread.md) | `yield return ..xs;` | Prototype, merged into `main` |
+| [`val` locals](docs/sharper/features/val-locals.md) | `val x = Compute();` | Prototype (local declarations), merged into `main` |
 
-### Community
+```csharp
+// csc /features:sharper
+IEnumerable<int> Numbers(IEnumerable<int> middle)
+{
+    yield return 0;
+    yield return ..middle;  // yields every element of middle
+    yield return 4;
+}
+```
 
-The Roslyn community can be found on [GitHub Discussions](https://github.com/dotnet/roslyn/discussions), where you can ask questions, voice ideas, and share your projects.
+## Trying it
 
-To chat with other community members, you can join the Roslyn channel on the [CSharp Community Discord](https://discord.com/invite/tGJvv88).
+Sharper is not published as a package yet. Build it from source:
 
-Our [Code of Conduct](CODE-OF-CONDUCT.md) applies to all Roslyn community channels and has adopted the [.NET Foundation Code of Conduct](https://dotnetfoundation.org/code-of-conduct).
+```bash
+./build.sh                                   # Build.cmd on Windows
+dotnet build Compilers.slnf                  # compilers only
+```
 
-### Documentation
+Sharper files will use the `.cx` extension; until the compiler recognizes it, write Sharper code in `.cs` files.
+Then compile with the built `csc` and pass `/features:sharper`. In an SDK-style project, set
+`<Features>sharper</Features>` and point the build at the locally built compiler (see
+[Bootstrap Builds](docs/contributing/Bootstrap%20Builds.md)).
 
-Visit [Roslyn Architecture Overview](https://docs.microsoft.com/en-us/dotnet/csharp/roslyn-sdk/compiler-api-model) to get started with Roslyn’s API’s.
+To run the Sharper tests:
 
-### NuGet Feeds
+```bash
+dotnet test src/Compilers/CSharp/Test/Semantic/Microsoft.CodeAnalysis.CSharp.Semantic.UnitTests.csproj -f net10.0 --filter "FullyQualifiedName~SharperTests"
+```
 
-**The latest pre-release builds** are available from the following public NuGet feeds: 
-- [Compiler](https://dev.azure.com/dnceng/public/_packaging?_a=feed&feed=dotnet-tools): `https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet-tools/nuget/v3/index.json`
-- [IDE Services](https://dev.azure.com/azure-public/vside/_packaging?_a=feed&feed=vssdk): `https://pkgs.dev.azure.com/azure-public/vside/_packaging/vssdk/nuget/v3/index.json`
-- [.NET SDK](https://dev.azure.com/dnceng/public/_packaging?_a=feed&feed=dotnet5): `https://pkgs.dev.azure.com/dnceng/public/_packaging/dotnet5/nuget/v3/index.json`
+## Relationship to Roslyn
 
-[//]: # (Begin current test results)
+Almost all of this repository is upstream Roslyn: the C# and Visual Basic compilers, the Workspaces API, the IDE
+features, the language server and Razor. Sharper changes are kept small and confined to the C# compiler
+(`src/Compilers/CSharp`), so that changes from upstream can still be merged in.
 
-### Continuous Integration status
-#### Builds
+Most documents under [`docs/`](docs/README.md) come from upstream. They still describe the code correctly, but
+their process, contact, release and CI information belongs to dotnet/roslyn. Those documents carry a notice at the
+top.
 
-|Branch|Windows Debug|Windows Release|Unix Debug|
-|:--:|:--:|:--:|:--:|
-**main**|[![Build Status](https://dev.azure.com/dnceng-public/public/_apis/build/status/dotnet/roslyn/roslyn-CI?branchname=main&jobname=Build_Windows_Debug&configuration=Build_Windows_Debug&label=build)](https://dev.azure.com/dnceng-public/public/_build/latest?definitionId=95&branchname=main&view=logs)|[![Build Status](https://dev.azure.com/dnceng-public/public/_apis/build/status/dotnet/roslyn/roslyn-CI?branchname=main&jobname=Build_Windows_Release&configuration=Build_Windows_Release&label=build)](https://dev.azure.com/dnceng-public/public/_build/latest?definitionId=95&branchname=main&view=logs)|[![Build Status](https://dev.azure.com/dnceng-public/public/_apis/build/status/dotnet/roslyn/roslyn-CI?branchname=main&jobname=Build_Unix_Debug&configuration=Build_Unix_Debug&label=build)](https://dev.azure.com/dnceng-public/public/_build/latest?definitionId=95&branchname=main&view=logs)|
+## Contributing
 
-#### Desktop Unit Tests
+Report bugs and suggest Sharper features in this repository's
+[issues](https://github.com/ok3mad/roslyn/issues). See [CONTRIBUTING.md](CONTRIBUTING.md) for how Sharper work is
+organized. Problems that also happen with the official compiler, without `/features:sharper`, belong in
+[dotnet/roslyn](https://github.com/dotnet/roslyn/issues).
 
-|Branch|Debug x86|Debug x64|Release x86|Release x64|
-|:--:|:--:|:--:|:--:|:--:|
-**main**|[![Build Status](https://dev.azure.com/dnceng-public/public/_apis/build/status/dotnet/roslyn/roslyn-CI?branchname=main&jobname=Test_Windows_Desktop_Debug_32&configuration=Test_Windows_Desktop_Debug_32&label=build)](https://dev.azure.com/dnceng-public/public/_build/latest?definitionId=95&branchname=main&view=logs)|[![Build Status](https://dev.azure.com/dnceng-public/public/_apis/build/status/dotnet/roslyn/roslyn-CI?branchname=main&jobname=Test_Windows_Desktop_Debug_64&configuration=Test_Windows_Desktop_Debug_64&label=build)](https://dev.azure.com/dnceng-public/public/_build/latest?definitionId=95&branchname=main&view=logs)|[![Build Status](https://dev.azure.com/dnceng-public/public/_apis/build/status/dotnet/roslyn/roslyn-CI?branchname=main&jobname=Test_Windows_Desktop_Release_32&configuration=Test_Windows_Desktop_Release_32&label=build)](https://dev.azure.com/dnceng-public/public/_build/latest?definitionId=95&branchname=main&view=logs)|[![Build Status](https://dev.azure.com/dnceng-public/public/_apis/build/status/dotnet/roslyn/roslyn-CI?branchname=main&jobname=Test_Windows_Desktop_Release_64&configuration=Test_Windows_Desktop_Release_64&label=build)](https://dev.azure.com/dnceng-public/public/_build/latest?definitionId=95&branchname=main&view=logs)|
+## License
 
-#### CoreClr Unit Tests
-
-|Branch|Windows Debug|Windows Release|Linux|
-|:--:|:--:|:--:|:--:|
-**main**|[![Build Status](https://dev.azure.com/dnceng-public/public/_apis/build/status/dotnet/roslyn/roslyn-CI?branchname=main&jobname=Test_Windows_CoreClr_Debug&configuration=Test_Windows_CoreClr_Debug&label=build)](https://dev.azure.com/dnceng-public/public/_build/latest?definitionId=95&branchname=main&view=logs)|[![Build Status](https://dev.azure.com/dnceng-public/public/_apis/build/status/dotnet/roslyn/roslyn-CI?branchname=main&jobname=Test_Windows_CoreClr_Release&configuration=Test_Windows_CoreClr_Release&label=build)](https://dev.azure.com/dnceng-public/public/_build/latest?definitionId=95&branchname=main&view=logs)|[![Build Status](https://dev.azure.com/dnceng-public/public/_apis/build/status/dotnet/roslyn/roslyn-CI?branchname=main&jobname=Test_Linux_Debug&configuration=Test_Linux_Debug&label=build)](https://dev.azure.com/dnceng-public/public/_build/latest?definitionId=95&branchname=main&view=logs)|
-
-#### Integration Tests
-
-|Branch|Debug x86|Debug x64|Release x86|Release x64
-|:--:|:--:|:--:|:--:|:--:|
-**main**|[![Build Status](https://dev.azure.com/dnceng-public/public/_apis/build/status/dotnet/roslyn/roslyn-integration-CI?branchname=main&jobname=VS_Integration_Debug_32&configuration=VS_Integration_Debug_32&label=build)](https://dev.azure.com/dnceng-public/public/_build/latest?definitionId=96&branchname=main&view=logs)|[![Build Status](https://dev.azure.com/dnceng-public/public/_apis/build/status/dotnet/roslyn/roslyn-integration-CI?branchname=main&jobname=VS_Integration_Debug_64&configuration=VS_Integration_Debug_64&label=build)](https://dev.azure.com/dnceng-public/public/_build/latest?definitionId=96&branchname=main&view=logs)|[![Build Status](https://dev.azure.com/dnceng-public/public/_apis/build/status/dotnet/roslyn/roslyn-integration-CI?branchname=main&jobname=VS_Integration_Release_32&configuration=VS_Integration_Release_32&label=build)](https://dev.azure.com/dnceng-public/public/_build/latest?definitionId=96&branchname=main&view=logs)|[![Build Status](https://dev.azure.com/dnceng-public/public/_apis/build/status/dotnet/roslyn/roslyn-integration-CI?branchname=main&jobname=VS_Integration_Release_64&configuration=VS_Integration_Release_64&label=build)](https://dev.azure.com/dnceng-public/public/_build/latest?definitionId=96&branchname=main&view=logs)|
-
-#### Misc Tests
-
-|Branch|Determinism|Analyzers|Build Correctness|Source build|TODO/Prototype|Spanish|MacOS|
-|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
-**main**|[![Build Status](https://dev.azure.com/dnceng-public/public/_apis/build/status/dotnet/roslyn/roslyn-CI?branchname=main&jobname=Correctness_Determinism&configuration=Correctness_Determinism&label=build)](https://dev.azure.com/dnceng-public/public/_build/latest?definitionId=95&branchname=main&view=logs)|[![Build Status](https://dev.azure.com/dnceng-public/public/_apis/build/status/dotnet/roslyn/roslyn-CI?branchname=main&jobname=Correctness_Analyzers&configuration=Correctness_Analyzers&label=build)](https://dev.azure.com/dnceng-public/public/_build/latest?definitionId=95&branchname=main&view=logs)|[![Build Status](https://dev.azure.com/dnceng-public/public/_apis/build/status/dotnet/roslyn/roslyn-CI?branchname=main&jobname=Correctness_Build_Artifacts&configuration=Correctness_Build_Artifacts&label=build)](https://dev.azure.com/dnceng-public/public/_build/latest?definitionId=95&branchname=main&view=logs)|[![Build Status](https://dev.azure.com/dnceng-public/public/_apis/build/status/dotnet/roslyn/roslyn-CI?branchname=main&jobname=Source-Build+(Managed)&configuration=Source-Build+(Managed)&label=build)](https://dev.azure.com/dnceng-public/public/_build/latest?definitionId=95&branchname=main&view=logs)|[![Build Status](https://dev.azure.com/dnceng-public/public/_apis/build/status/dotnet/roslyn/roslyn-CI?branchname=main&jobname=Correctness_TodoCheck&configuration=Correctness_TodoCheck&label=build)](https://dev.azure.com/dnceng-public/public/_build/latest?definitionId=95&branchname=main&view=logs)|[![Build Status](https://dev.azure.com/dnceng-public/public/_apis/build/status/dotnet/roslyn/roslyn-CI?branchname=main&jobname=Test_Windows_Desktop_Spanish_Release_64&configuration=Test_Windows_Desktop_Spanish_Release_64&label=build)](https://dev.azure.com/dnceng-public/public/_build/latest?definitionId=95&branchname=main&view=logs)|[![Build Status](https://dev.azure.com/dnceng-public/public/_apis/build/status/dotnet/roslyn/roslyn-CI?branchname=main&jobname=Test_macOS_Debug&configuration=Test_macOS_Debug&label=build)](https://dev.azure.com/dnceng-public/public/_build/latest?definitionId=95&branchname=main&view=logs)|
-
-
-[//]: # (End current test results)
-
-### .NET Foundation
-
-This project is part of the [.NET Foundation](http://www.dotnetfoundation.org/projects) along with other projects like [the .NET Runtime](https://github.com/dotnet/runtime/).
+Sharper keeps Roslyn's [MIT license](License.txt). See [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt) for
+third-party components.

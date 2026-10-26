@@ -1,3 +1,6 @@
+> [!NOTE]
+> **Sharper fork:** this document is inherited from upstream [dotnet/roslyn](https://github.com/dotnet/roslyn). Its links point to dotnet/roslyn. It still describes the code this fork is built on, but its process, ownership, release and CI information belongs to dotnet/roslyn.
+
 # Getting Started
 
 * [Roslyn Overview](https://github.com/dotnet/roslyn/blob/main/docs/wiki/Roslyn-Overview.md)

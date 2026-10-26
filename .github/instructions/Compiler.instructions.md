@@ -4,6 +4,9 @@ applyTo: "src/{Compilers,Dependencies,ExpressionEvaluator,Tools}/**/*.{cs,vb}"
 
 # Roslyn Compiler Instructions for AI Coding Agents
 
+> **Sharper fork:** this repository adds the Sharper dialect to the C# compiler. For Sharper work, read
+> `docs/sharper/README.md` and follow the `sharper-feature` skill; everything below still applies.
+
 ## Architecture Overview
 
 Roslyn follows a **layered compiler architecture**:

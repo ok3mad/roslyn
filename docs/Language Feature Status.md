@@ -1,3 +1,6 @@
+> [!NOTE]
+> **Sharper fork:** this document is inherited from upstream [dotnet/roslyn](https://github.com/dotnet/roslyn). It tracks C# and VB features in upstream Roslyn. Sharper features and their status are listed in the [Sharper overview](sharper/README.md#features).
+
 Language Feature Status
 =====
 

@@ -1,4 +1,27 @@
-# Contributing to Roslyn
+# Contributing to Sharper
+
+This repository is the Sharper fork of [dotnet/roslyn](https://github.com/dotnet/roslyn). Sharper is a personal,
+experimental project; it has no team, review schedule or release process yet.
+
+## Sharper contributions
+
+- **Bugs and feature ideas:** open an issue in [this repository](https://github.com/ok3mad/roslyn/issues). Say
+  whether the problem needs `/features:sharper`. A problem that also happens without the flag is an upstream bug:
+  report it to [dotnet/roslyn](https://github.com/dotnet/roslyn/issues).
+- **Language features:** Sharper features are proposed and developed here, not in
+  [dotnet/csharplang](https://github.com/dotnet/csharplang). Read the [design rules](docs/sharper/README.md#design-rules)
+  first: every feature is gated on `/features:sharper` and must not change the meaning of valid C#.
+- **Code:** develop features on a `sharper/<feature>` branch and send a pull request to `main`. Follow the
+  [`sharper-feature` skill](.github/skills/sharper-feature/SKILL.md), which lists every compiler layer a feature
+  touches, and add tests to `SharperTests.cs`.
+- **Follow-ups:** mark open questions with `// PROTOTYPE(sharper): ...` comments, never `TODO`.
+- **Upstream code:** keep changes outside Sharper features to a minimum, so that upstream Roslyn can still be merged.
+  Fixes to upstream code belong in dotnet/roslyn.
+
+The building, coding style and testing guidance below comes from upstream Roslyn and applies here as well. Its
+process parts (the Roslyn team, `help wanted` labels, the CLA, Azure DevOps legs, LDM) describe dotnet/roslyn.
+
+# Contributing to Roslyn (upstream)
 
 One of the easiest ways to contribute is to participate in discussions on GitHub issues. You can also contribute by submitting pull requests with code changes.
 

@@ -1,3 +1,6 @@
+> [!NOTE]
+> **Sharper fork:** this document is inherited from upstream [dotnet/roslyn](https://github.com/dotnet/roslyn). This is the release process of the official compilers. Sharper has no releases yet.
+
 For each release, some steps to check:
 
 - start: declare the new Language Versions when a common branch becomes available (this has a checklist of its own)

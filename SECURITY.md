@@ -1,5 +1,12 @@
 # Security Policy
 
+> [!NOTE]
+> **Sharper fork.** This repository is the experimental Sharper fork of dotnet/roslyn and has no supported versions.
+> - For a vulnerability that only occurs with `/features:sharper`, or in Sharper-specific code, report it privately
+>   through this repository's [security advisories](https://github.com/ok3mad/roslyn/security/advisories/new). Do not
+>   open a public issue.
+> - For a vulnerability that also affects the official compiler, follow the upstream policy below.
+
 ## Supported Versions
 
 The .NET Core and ASP.NET Core support policy, including supported versions can be found at the [.NET Core Support Policy Page](https://dotnet.microsoft.com/platform/support/policy/dotnet-core).

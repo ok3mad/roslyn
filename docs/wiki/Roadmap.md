@@ -1,3 +1,6 @@
+> [!NOTE]
+> **Sharper fork:** this document is inherited from upstream [dotnet/roslyn](https://github.com/dotnet/roslyn). This is the (historical) roadmap of upstream Roslyn, not of Sharper. See the [Sharper overview](../sharper/README.md).
+
 There are two major categories of work that will happen here: active feature development and quality improvements. Some features are experimental. All submissions need to meet high quality and design expectations. Submissions adding new functionality require extra analysis and design, and remember to always start a design discussion before spending significant effort.
 
 # Quality Improvements
