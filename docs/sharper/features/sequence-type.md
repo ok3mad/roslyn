@@ -1,6 +1,6 @@
 # Sequence type `T[..]`
 
-**Status:** Prototype. Requires `/features:sharper`. Issue: [#19](https://github.com/ok3mad/roslyn/issues/19).
+**Status:** Prototype, merged into `main`. Requires `/features:sharper`. Issue: [#19](https://github.com/ok3mad/roslyn/issues/19).
 
 ## Summary
 
@@ -54,14 +54,16 @@ IEnumerable<int> Evens(IEnumerable<int> xs) => xs.Where(x => x % 2 == 0);
 ## Limitations
 
 - **Array creation keeps its C# meaning.** `new int[..]` is CS0029, and `new int[3][..]` CS0178. Write
-  `new IEnumerable<int>[3]` for an array of sequences.
+  `new IEnumerable<int>[3]` for an array of sequences. Whether to change that is
+  [#64](https://github.com/ok3mad/roslyn/issues/64).
 - **A cast of a parenthesized expression to a named sequence type** is read as an element access: `(A[..])(b)`
   invokes `A[..]`, as C# does. Write `(A[..])b` or `(IEnumerable<A>)(b)`. The same holds for `int?[..]`.
 - **Accepted break:** `F<a[..]>(x)` is a generic call, as `F<a>(x)` already is in C#. In C# it is two comparisons,
   which compile only with user-defined comparison operators. The sharpener will parenthesize it as
-  `F < (a[..]) > (x)`.
+  `F < (a[..]) > (x)` ([#66](https://github.com/ok3mad/roslyn/issues/66)).
 - **Diagnostic locations:** an invalid element type is reported on the whole sequence type (`System.Console[..]`), not
-  on the element type, because the type argument has no syntax of its own.
+  on the element type, because the type argument has no syntax of its own
+  ([#65](https://github.com/ok3mad/roslyn/issues/65)).
 - **IDE:** completion, classification, Quick Info and refactorings know nothing about `T[..]`. Symbol display shows
   `IEnumerable<T>`.
 

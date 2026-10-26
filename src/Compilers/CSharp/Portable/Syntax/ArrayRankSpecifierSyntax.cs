@@ -20,7 +20,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Syntax
         /// <c>..</c> is then part of the type, not an expression. An array creation (<c>new T[..]</c>, <c>stackalloc</c>)
         /// keeps its C# meaning.
         /// </summary>
-        // PROTOTYPE(sharper): decide whether array creation should accept sequence elements (`new int[3][..]`).
+        // PROTOTYPE(sharper): decide whether array creation should accept sequence elements, `new int[3][..]`
+        // (https://github.com/ok3mad/roslyn/issues/64).
         internal bool IsSharperSequence =>
             this.Sizes is [RangeExpressionSyntax { LeftOperand: null, RightOperand: null }] &&
             !this.CloseBracketToken.IsMissing &&
