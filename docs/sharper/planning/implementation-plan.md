@@ -84,7 +84,7 @@ A new construct's real cost is in the places that never mention it. Model it on 
 
 ## Syntax roadmap
 
-The brainstorm proposes 27 pieces of syntax. One is done (`yield return ..xs`). The next feature is `val`: small, decided, and it reaches parts of the compiler the first PoC did not. Everything that depends on unions or purity waits for those designs.
+The brainstorm proposes 28 pieces of syntax (#28, discard arguments, is still to be discussed). One is done (`yield return ..xs`). The next feature is `val`: small, decided, and it reaches parts of the compiler the first PoC did not. Everything that depends on unions or purity waits for those designs.
 
 - **Size**, relative to the `yield return ..xs` PoC. **S**: about that size (no parser change, one bound node, reused lowering). **M**: a gated parser change, or a new lowering with its own rules. **L**: new inference or binding rules that interact with overload resolution or signature binding. **XL**: a new checker layer (refinements, unions, effects).
 - **Certainty**. **High**: decided in the brainstorm, spelling stable. **Med**: the leading direction, details or spelling open. **Low**: only sketched in examples, contradicted elsewhere, or blocked on an open question.
@@ -130,6 +130,12 @@ The brainstorm proposes 27 pieces of syntax. One is done (`yield return ..xs`). 
 | 25 | Member declared on another type | `static fun Currency.Parse(string s)` | C# 14 extension block | yes | M | Low | Appears only in an example |
 | 26 | Arms as a lambda body | `{ 42 => ..., _ => ... }` | lambda with a switch expression | yes | M | Low | The brainstorm says it is not designed yet |
 | 27 | `assume` escape hatch | `assume x is >0` | runtime check | yes | S–M | Low | Only an open question so far |
+
+### Proposed, to be discussed
+
+| # | Syntax | Example | Lowers to | Parser change | Size | Certainty | Main risk or open point |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 28 | Discard arguments | `store.LoadAsync(_)` | the only fitting local or parameter in scope, such as the one `CancellationToken` | none (`_` parses as an identifier) | L | Low | Not yet discussed whether it is sound: implicit wiring, which candidates count, and interaction with overload resolution. See [Discard arguments](brainstorm.md#discard-arguments-proposed-not-yet-discussed) |
 
 Not listed: `union Name(A, B)` comes from C# 15, and `collect`, `Retry` and `Unexpected` are library code.
 

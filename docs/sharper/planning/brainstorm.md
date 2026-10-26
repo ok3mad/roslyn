@@ -118,6 +118,42 @@ Idiomatic C# passes interfaces where a functional style would pass functions, pa
 - **Argument matching.** The ordered-arms block from the state machine could serve as a lambda body, so `When(42).Returns(...)` becomes `{ 42 => new Profile { ... }, _ => new Unavailable() }`. The syntax for arms as a lambda body is not designed yet.
 - **What it does not cover:** interaction verification (was `Load` called twice?), which works by capturing a list in the lambda, and auto-mocking of very large interfaces.
 
+## Discard arguments (proposed, not yet discussed)
+
+A `_` in argument position asks the compiler to fill in the argument from the caller's scope. The motivating case is
+`CancellationToken`: most async code receives exactly one token and forwards it to every call, so the name is
+repeated everywhere and is easy to forget.
+
+```
+async void^ Sync(Store store, CancellationToken ct)
+{
+    val items = await store.LoadAsync(_);       // ct is the only CancellationToken in scope
+    await store.SaveAsync(items, _);
+}
+```
+
+- **The rule, as a starting point.** For a `_` argument, collect the locals and parameters in scope whose type fits
+  the parameter it binds to. Exactly one candidate means it is passed; none or several is an error that lists the
+  candidates.
+- **No breaking change.** Today `_` in an argument is either a real variable named `_` (then C# wins) or an error
+  (CS0103), so Sharper only gives a meaning to code that does not compile.
+- **Not to be confused** with the existing discards: `out _`, `var _`, `_ =` and `(_, _) =>` lambda parameters.
+
+To discuss before this goes further:
+
+- **Is it a sound idea?** It is an implicit argument, much like Scala's implicits, and implicit wiring tends to read
+  well and debug badly: a new local of the same type turns working code into an error, or worse, changes which
+  value is passed if the rule were ever relaxed. For coding agents, explicit names may be easier to check.
+- **Which candidates count:** only locals and parameters, or also fields and properties of `this`? Exact type, or
+  any implicit conversion? `CancellationToken` only, or any type?
+- **Overload resolution.** A `_` argument has no type of its own, so each overload candidate may pick a different
+  value. This makes the feature an L in the roadmap's terms, not an S.
+- **Prior art in C#:** the CA2016 analyzer already asks to forward a `CancellationToken`, and an optional
+  `CancellationToken ct = default` parameter compiles when it is left out, which is exactly the bug `_` would
+  make visible.
+- **Alternatives:** an analyzer and fixer that inserts the name; a marker on the parameter (for example an
+  attribute) that opts it into automatic forwarding, so call sites stay unchanged; or nothing.
+
 ## Patterns on pure functions
 
 C# patterns need compile-time constants, so `is <= max` fails when `max` is only readonly. Sharper could allow any pure expression in a pattern without growing the type system, by splitting patterns into two tiers.
@@ -610,6 +646,7 @@ What is settled so far, what was tried and dropped, and what waits for a later s
 
 ### Parked
 
+- Discard arguments (`F(x, _)` passes the only fitting local), to be discussed: see [Discard arguments](#discard-arguments-proposed-not-yet-discussed).
 - Exceptions beyond the basics: one "may throw" bit versus typed throws.
 - The boundary with C#: runtime guards on public entry points, and how refined parameter types lower.
 - A virtual-thread feel for concurrency by inferring "may suspend".
