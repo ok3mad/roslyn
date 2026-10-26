@@ -835,6 +835,82 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "g").WithArguments("IMutable.Get()", "g").WithLocation(41, 19));
         }
 
+        [Fact]
+        public void Val_PatternBasedMembersOnCopy()
+        {
+            // Members found by pattern (await, implicit indexers, list and property patterns, spreads, using) must not change a val either.
+            var source = """
+                using System;
+                using System.Collections.Generic;
+                using System.Runtime.CompilerServices;
+
+                val v = new S();
+                await v;
+                Console.Write(v.F);
+                _ = v[^1];
+                Console.Write(v.F);
+                _ = v[1..];
+                Console.Write(v.F);
+                _ = v is [_, ..];
+                Console.Write(v.F);
+                _ = v is { P: 0 };
+                Console.Write(v.F);
+                int[] a = [..v];
+                Console.Write(v.F);
+                using (v) { }
+                Console.Write(v.F);
+
+                struct S : IDisposable
+                {
+                    public int F;
+                    public int Length { get { F++; return 1; } }
+                    public int this[int i] { get { F++; return 0; } }
+                    public S Slice(int start, int length) { F++; return this; }
+                    public int P { get { F++; return 0; } }
+                    public Awaiter GetAwaiter() { F++; return default; }
+                    public IEnumerator<int> GetEnumerator() { F++; return new List<int>().GetEnumerator(); }
+                    public void Dispose() { F++; }
+                }
+
+                struct Awaiter : INotifyCompletion
+                {
+                    public bool IsCompleted => true;
+                    public void GetResult() { }
+                    public void OnCompleted(Action continuation) { }
+                }
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "" : null).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void Val_ExtensionReceivers()
+        {
+            var source = """
+                struct S { public int F; }
+
+                static class E
+                {
+                    public static void ByRef(this ref S s) { s.F++; }
+                    public static void ByIn(this in S s) { }
+                    public static void ByValue(this S s) { s.F++; }
+                }
+
+                class C
+                {
+                    void M()
+                    {
+                        val v = new S();
+                        var w = new S();
+                        v.ByRef();
+                        w.ByRef();
+                        v.ByIn();
+                        v.ByValue();
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics();
+        }
+
         [Theory]
         [CombinatorialData]
         public void Val_TypeNamedValWins(bool sharper)
