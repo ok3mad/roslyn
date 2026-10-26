@@ -1,0 +1,23 @@
+// A Sharper file: .cx files are parsed with the Sharper feature on.
+
+val numbers = new[] { 1, 2, 3 };
+val (first, rest) = (numbers[0], numbers[1..]);
+
+foreach (val n in Concat([0], numbers, [4]))
+{
+    Console.Write($"{n} ");
+}
+
+Console.WriteLine();
+Console.WriteLine($"first = {first}, rest = {string.Join(", ", rest)}");
+
+// Uncomment to see the error: a val local cannot be reassigned.
+// first = 10;
+
+static IEnumerable<int> Concat(params IEnumerable<int>[] parts)
+{
+    foreach (val part in parts)
+    {
+        yield return ..part;
+    }
+}

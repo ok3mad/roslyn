@@ -1,0 +1,2 @@
+<!-- Stops MSBuild from importing the Roslyn repository's build files. -->
+<Project />
