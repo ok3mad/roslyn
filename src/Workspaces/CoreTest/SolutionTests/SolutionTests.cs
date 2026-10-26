@@ -1361,7 +1361,7 @@ public sealed class SolutionTests : TestBase
         var text = SourceText.From("file class C { static int M() { val x = 1; return x; } }", Encoding.UTF8, SourceHashAlgorithms.Default);
 
         var solution = workspace.CurrentSolution
-            .AddProject(ProjectInfo.Create(projectId, VersionStamp.Default, "P", "P", LanguageNames.CSharp, Path.Combine(s_projectDir, "P.dll"), compilationOptions: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)))
+            .AddProject(ProjectInfo.Create(projectId, VersionStamp.Default, "P", "P", LanguageNames.CSharp, Path.Combine(s_projectDir, "P.dll"), compilationOptions: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary), metadataReferences: [s_mscorlib]))
             .AddDocument(csId, "a.cs", text, filePath: Path.Combine(s_projectDir, "a.cs"))
             .AddDocument(cxId, "b.cx", text, filePath: Path.Combine(s_projectDir, "b.CX"));
 
