@@ -51,10 +51,14 @@ plain C#. A compilation can mix the two, and each file says which language it is
 Sharper on for every file, `.cs` included. The code is `IsSharperFile` in
 `src/Compilers/CSharp/Portable/CommandLine/CSharpCompiler.cs`.
 
+The IDE workspace does the same for documents whose path ends in `.cx`, in
+`CSharpSyntaxTreeFactoryService.GetParseOptionsForFile` (`src/Workspaces/CSharp/Portable`). The document's
+`ParseOptions` stay the project's; only its syntax tree gets the Sharper feature. Renaming a document between `.cs`
+and `.cx` reparses it.
+
 Not done yet:
 
-- The IDE workspace and the language server parse `.cx` documents with the project's options, so Sharper syntax in
-  them shows the C# errors unless the project sets `<Features>sharper</Features>`.
+- The language server does not treat `.cx` files as C#.
 - The SDK does not add `*.cx` to the `Compile` items. Add them in the project:
   `<Compile Include="**/*.cx" />`.
 

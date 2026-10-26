@@ -205,7 +205,8 @@ Merged as #4. The first Sharper parser change: one helper (`IsIdentifierVarOrSha
 The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOTYPE(sharper)"`).
 
 - [x] Turn Sharper on for `.cx` files in the command-line compiler.
-- [ ] Turn Sharper on for `.cx` documents in the IDE workspace and the language server.
+- [x] Turn Sharper on for `.cx` documents in the IDE workspace.
+- [ ] Treat `.cx` files as C# in the language server.
 - [ ] Add `*.cx` to the default `Compile` items in the MSBuild targets.
 - [ ] Decide whether `dynamic` should choose range or spread at runtime, under the sharpening rules.
 - [ ] Decide whether async iterators should ever support spreads.
