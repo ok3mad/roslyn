@@ -542,7 +542,8 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         [Fact]
         public void YieldReturnSpread_RefStructSource()
         {
-            // A span's enumerator cannot live across the yields.
+            // A span's enumerator cannot live across the yields. The spread says so, instead of CS4007 about
+            // Span<int>.Enumerator, which the user never wrote.
             var source = """
                 using System;
                 using System.Collections.Generic;
@@ -556,9 +557,217 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyEmitDiagnostics(
-                // (8,9): error CS4007: Instance of type 'System.Span<int>.Enumerator' cannot be preserved across 'await' or 'yield' boundary.
+                // (8,24): error CS20007: A spread 'yield return ..' cannot enumerate 'Span<int>' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead.
                 //         yield return ..xs.AsSpan();
-                Diagnostic(ErrorCode.ERR_ByRefTypeAndAwait, "yield return ..xs.AsSpan();").WithArguments("System.Span<int>.Enumerator").WithLocation(8, 9));
+                Diagnostic(ErrorCode.ERR_SharperSpreadRefStructEnumerator, "xs.AsSpan()").WithArguments("System.Span<int>").WithLocation(8, 24));
+        }
+
+        [Fact]
+        public void YieldReturnSpread_RefStructSource_CSharp()
+        {
+            // The C# the spread stands for.
+            var source = """
+                using System;
+                using System.Collections.Generic;
+
+                class C
+                {
+                    static IEnumerable<int> Spread(int[] xs)
+                    {
+                        foreach (var x in xs.AsSpan())
+                            yield return x;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyEmitDiagnostics(
+                // (8,9): error CS4007: Instance of type 'System.Span<int>' cannot be preserved across 'await' or 'yield' boundary.
+                //         foreach (var x in xs.AsSpan())
+                Diagnostic(ErrorCode.ERR_ByRefTypeAndAwait, @"foreach (var x in xs.AsSpan())
+            yield return x;").WithArguments("System.Span<int>").WithLocation(8, 9));
+        }
+
+        [Fact]
+        public void YieldReturnSpread_RefStructSource_ReadOnlySpan()
+        {
+            // The element conversion (string to int) would fail too; only the spread error is reported.
+            var source = """
+                using System;
+                using System.Collections.Generic;
+
+                class C
+                {
+                    static IEnumerable<int> Spread(string s, int[] xs)
+                    {
+                        yield return ..s.AsSpan();
+                        yield return ..new ReadOnlySpan<int>(xs);
+                        yield return ..new ReadOnlySpan<string>([s]);
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyEmitDiagnostics(
+                // (8,24): error CS20007: A spread 'yield return ..' cannot enumerate 'ReadOnlySpan<char>' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead.
+                //         yield return ..s.AsSpan();
+                Diagnostic(ErrorCode.ERR_SharperSpreadRefStructEnumerator, "s.AsSpan()").WithArguments("System.ReadOnlySpan<char>").WithLocation(8, 24),
+                // (9,24): error CS20007: A spread 'yield return ..' cannot enumerate 'ReadOnlySpan<int>' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead.
+                //         yield return ..new ReadOnlySpan<int>(xs);
+                Diagnostic(ErrorCode.ERR_SharperSpreadRefStructEnumerator, "new ReadOnlySpan<int>(xs)").WithArguments("System.ReadOnlySpan<int>").WithLocation(9, 24),
+                // (10,24): error CS20007: A spread 'yield return ..' cannot enumerate 'ReadOnlySpan<string>' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead.
+                //         yield return ..new ReadOnlySpan<string>([s]);
+                Diagnostic(ErrorCode.ERR_SharperSpreadRefStructEnumerator, "new ReadOnlySpan<string>([s])").WithArguments("System.ReadOnlySpan<string>").WithLocation(10, 24));
+        }
+
+        [Fact]
+        public void YieldReturnSpread_RefStructSource_InlineArray()
+        {
+            // An inline array is not a ref struct, but it is enumerated through a span.
+            var source = """
+                using System.Collections.Generic;
+                using System.Runtime.CompilerServices;
+
+                class C
+                {
+                    static IEnumerable<int> Spread(Buffer b)
+                    {
+                        yield return ..b;
+                    }
+                }
+
+                [InlineArray(3)]
+                struct Buffer
+                {
+                    private int _element0;
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyEmitDiagnostics(
+                // (8,24): error CS20007: A spread 'yield return ..' cannot enumerate 'Buffer' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead.
+                //         yield return ..b;
+                Diagnostic(ErrorCode.ERR_SharperSpreadRefStructEnumerator, "b").WithArguments("Buffer").WithLocation(8, 24));
+        }
+
+        [Fact]
+        public void YieldReturnSpread_RefStructSource_PatternEnumerator()
+        {
+            // A ref struct collection whose pattern-based GetEnumerator returns a ref struct.
+            var source = """
+                using System.Collections.Generic;
+
+                class C
+                {
+                    static IEnumerable<int> Spread()
+                    {
+                        yield return ..new R();
+                    }
+                }
+
+                ref struct R
+                {
+                    public Enumerator GetEnumerator() => default;
+
+                    public ref struct Enumerator
+                    {
+                        public int Current => 0;
+                        public bool MoveNext() => false;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyEmitDiagnostics(
+                // (7,24): error CS20007: A spread 'yield return ..' cannot enumerate 'R' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead.
+                //         yield return ..new R();
+                Diagnostic(ErrorCode.ERR_SharperSpreadRefStructEnumerator, "new R()").WithArguments("R").WithLocation(7, 24));
+        }
+
+        [Fact]
+        public void YieldReturnSpread_RefStructSource_ClassEnumerator()
+        {
+            // A ref struct collection whose enumerator is a class is fine: only the enumerator lives across the yields.
+            var source = """
+                using System;
+                using System.Collections.Generic;
+
+                foreach (var x in C.Spread())
+                    Console.Write(x);
+
+                class C
+                {
+                    public static IEnumerable<int> Spread()
+                    {
+                        yield return ..new R();
+                    }
+                }
+
+                ref struct R
+                {
+                    public IEnumerator<int> GetEnumerator() => new List<int> { 1, 2, 3 }.GetEnumerator();
+                }
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "123" : null).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void YieldReturnSpread_RefStructEnumerator_ClassSource()
+        {
+            // A class collection whose enumerator is a ref struct is rejected too.
+            var source = """
+                using System.Collections.Generic;
+
+                class C
+                {
+                    static IEnumerable<int> Spread(S s)
+                    {
+                        yield return ..s;
+                    }
+                }
+
+                class S
+                {
+                    public Enumerator GetEnumerator() => default;
+
+                    public ref struct Enumerator
+                    {
+                        public int Current => 0;
+                        public bool MoveNext() => false;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyEmitDiagnostics(
+                // (7,24): error CS20007: A spread 'yield return ..' cannot enumerate 'S' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead.
+                //         yield return ..s;
+                Diagnostic(ErrorCode.ERR_SharperSpreadRefStructEnumerator, "s").WithArguments("S").WithLocation(7, 24));
+        }
+
+        [Fact]
+        public void YieldReturnSpread_RefStructSource_RangeWins()
+        {
+            // A ref struct that converts to Index makes `..r` a valid C# range in an iterator of Range. C# wins: no error.
+            var source = """
+                using System;
+                using System.Collections.Generic;
+
+                foreach (var x in C.Spread())
+                    Console.Write(x);
+
+                class C
+                {
+                    public static IEnumerable<Range> Spread()
+                    {
+                        yield return ..new R();
+                    }
+                }
+
+                ref struct R
+                {
+                    public static implicit operator Index(R r) => 2;
+                    public Enumerator GetEnumerator() => default;
+
+                    public ref struct Enumerator
+                    {
+                        public int Current => 0;
+                        public bool MoveNext() => false;
+                    }
+                }
+                """;
+            // ILVerify: Return type is ByRef, TypedReference, ArgHandle, or ArgIterator (R.GetEnumerator returns a ref struct).
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, verify: Verification.FailsILVerify, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "0..2" : null).VerifyDiagnostics();
         }
 
         [Fact]
