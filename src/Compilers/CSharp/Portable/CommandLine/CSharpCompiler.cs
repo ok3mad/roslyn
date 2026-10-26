@@ -48,6 +48,10 @@ namespace Microsoft.CodeAnalysis.CSharp
             // case there are many script files.
             var scriptParseOptions = parseOptions.WithKind(SourceCodeKind.Script);
 
+            // Sharper files (.cx) get the same options with the Sharper feature turned on.
+            var sharperParseOptions = WithSharperFeature(parseOptions);
+            var sharperScriptParseOptions = WithSharperFeature(scriptParseOptions);
+
             bool hadErrors = false;
 
             var sourceFiles = Arguments.SourceFiles;
@@ -66,6 +70,8 @@ namespace Microsoft.CodeAnalysis.CSharp
                         trees[i] = ParseFile(
                             parseOptions,
                             scriptParseOptions,
+                            sharperParseOptions,
+                            sharperScriptParseOptions,
                             ref hadErrors,
                             sourceFiles[i],
                             diagnosticBag,
@@ -81,6 +87,8 @@ namespace Microsoft.CodeAnalysis.CSharp
                     trees[i] = ParseFile(
                         parseOptions,
                         scriptParseOptions,
+                        sharperParseOptions,
+                        sharperScriptParseOptions,
                         ref hadErrors,
                         sourceFiles[i],
                         diagnosticBag,
@@ -173,6 +181,8 @@ namespace Microsoft.CodeAnalysis.CSharp
         private SyntaxTree? ParseFile(
             CSharpParseOptions parseOptions,
             CSharpParseOptions scriptParseOptions,
+            CSharpParseOptions sharperParseOptions,
+            CSharpParseOptions sharperScriptParseOptions,
             ref bool addedDiagnostics,
             CommandLineSourceFile file,
             DiagnosticBag diagnostics,
@@ -194,19 +204,23 @@ namespace Microsoft.CodeAnalysis.CSharp
             else
             {
                 Debug.Assert(fileDiagnostics.Count == 0);
-                return ParseFile(parseOptions, scriptParseOptions, content, file);
+                return ParseFile(parseOptions, scriptParseOptions, sharperParseOptions, sharperScriptParseOptions, content, file);
             }
         }
 
         private static SyntaxTree ParseFile(
             CSharpParseOptions parseOptions,
             CSharpParseOptions scriptParseOptions,
+            CSharpParseOptions sharperParseOptions,
+            CSharpParseOptions sharperScriptParseOptions,
             SourceText content,
             CommandLineSourceFile file)
         {
             var tree = SyntaxFactory.ParseSyntaxTree(
                 content,
-                file.IsScript ? scriptParseOptions : parseOptions,
+                IsSharperFile(file)
+                    ? (file.IsScript ? sharperScriptParseOptions : sharperParseOptions)
+                    : (file.IsScript ? scriptParseOptions : parseOptions),
                 file.Path);
 
             // prepopulate line tables.
@@ -217,6 +231,15 @@ namespace Microsoft.CodeAnalysis.CSharp
 
             return tree;
         }
+
+        private static bool IsSharperFile(CommandLineSourceFile file)
+            => !file.IsInputRedirected
+                && PathUtilities.GetExtension(file.Path.AsMemory()).Span.Equals(CSharpCommandLineParser.SharperFileExtension.AsSpan(), StringComparison.OrdinalIgnoreCase);
+
+        private static CSharpParseOptions WithSharperFeature(CSharpParseOptions parseOptions)
+            => parseOptions.HasFeature(Feature.Sharper)
+                ? parseOptions
+                : parseOptions.WithFeatures(parseOptions.Features.ToImmutableDictionary(StringComparer.OrdinalIgnoreCase).SetItem(Feature.Sharper, "true"));
 
         /// <summary>
         /// Given a compilation and a destination directory, determine three names:

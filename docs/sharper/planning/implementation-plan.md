@@ -196,7 +196,9 @@ Progress: rows 1 to 6 are done and pushed to `sharper/val` (commits `eae7a3b0` a
 
 The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOTYPE(sharper)"`).
 
-- [ ] Switch gating from the feature flag to the `.cx` file extension, in both the command-line compiler and the IDE workspace.
+- [x] Turn Sharper on for `.cx` files in the command-line compiler.
+- [ ] Turn Sharper on for `.cx` documents in the IDE workspace and the language server.
+- [ ] Add `*.cx` to the default `Compile` items in the MSBuild targets.
 - [ ] Decide whether `dynamic` should choose range or spread at runtime, under the sharpening rules.
 - [ ] Decide whether async iterators should ever support spreads.
 - [ ] Give ref-struct sources a spread-specific error instead of CS4007.
