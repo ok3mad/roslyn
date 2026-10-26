@@ -953,11 +953,13 @@ public sealed class FileBasedProgramsWorkspaceTests(ITestOutputHelper testOutput
         globalOptions.SetGlobalOption(LanguageServerProjectSystemOptionsStorage.EnableFileBasedPrograms, true);
 
         Assert.Null(await GetMiscellaneousDocumentAsync(testLspServer));
-        var looseFileUri = CreateAbsoluteDocumentUri("SomeFile.cx");
-        await testLspServer.OpenDocumentAsync(looseFileUri, """
+        var sourceText = """
             #:sdk Microsoft.NET.Sdk
             Console.WriteLine("Hello World!");
-            """).ConfigureAwait(false);
+            """;
+        var sourceFile = CreateTempDirectoryWithGlobalJson().CreateFile("SomeFile.cx").WriteAllText(sourceText);
+        var looseFileUri = ProtocolConversions.CreateAbsoluteDocumentUri(sourceFile.Path);
+        await testLspServer.OpenDocumentAsync(looseFileUri, sourceText).ConfigureAwait(false);
         await WaitForProjectLoad(looseFileUri, testLspServer);
 
         var (workspace, document) = await GetRequiredLspWorkspaceAndDocumentAsync(looseFileUri, testLspServer).ConfigureAwait(false);
