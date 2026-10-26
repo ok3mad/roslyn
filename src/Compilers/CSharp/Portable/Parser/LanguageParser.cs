@@ -9022,7 +9022,7 @@ done:
                         return null;
 
                     case SyntaxKind.OpenParenToken:
-                        if (current.IsIdentifierVar())
+                        if (IsIdentifierVarOrSharperVal(current))
                         {
                             // potentially either a tuple type in a local declaration (true), or
                             // a tuple lvalue in a deconstruction assignment (false).
@@ -9905,9 +9905,21 @@ done:
         /// <summary>
         /// Is the following set of tokens, interpreted as a type, the type <c>var</c>?
         /// </summary>
+        /// <summary>
+        /// True for the contextual keyword <c>var</c>, and for <c>val</c> when Sharper is enabled. Sharper's <c>val</c> is a
+        /// <c>var</c> that cannot be reassigned, so it also introduces deconstructions and tuple designations: <c>val (a, b) = e</c>
+        /// is a declaration even where a ref-returning method named <c>val</c> would make it an assignment in C# (an accepted
+        /// break, escaped as <c>@val</c> by the sharpener).
+        /// </summary>
+        private bool IsIdentifierVarOrSharperVal(SyntaxToken token)
+        {
+            return token.IsIdentifierVar() ||
+                (token.ContextualKind == SyntaxKind.IdentifierToken && token.Text == "val" && IsFeatureEnabled(MessageID.IDS_FeatureSharper));
+        }
+
         private bool IsVarType()
         {
-            if (!this.CurrentToken.IsIdentifierVar())
+            if (!IsIdentifierVarOrSharperVal(this.CurrentToken))
             {
                 return false;
             }
@@ -12230,7 +12242,7 @@ done:
         /// </summary>
         private bool IsPossibleDeconstructionLeft(Precedence precedence)
         {
-            if (precedence > Precedence.Assignment || !(this.CurrentToken.IsIdentifierVar() || IsPredefinedType(this.CurrentToken.Kind)))
+            if (precedence > Precedence.Assignment || !(IsIdentifierVarOrSharperVal(this.CurrentToken) || IsPredefinedType(this.CurrentToken.Kind)))
             {
                 return false;
             }

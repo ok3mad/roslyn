@@ -1308,7 +1308,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             if (collectionExprType.IsDynamic())
             {
                 builder.ElementTypeWithAnnotations = TypeWithAnnotations.Create(
-                    ((syntax as ForEachStatementSyntax)?.Type.IsVar == true) ?
+                    ((syntax as ForEachStatementSyntax)?.Type.IsVarOrVal == true) ?
                         (TypeSymbol)DynamicTypeSymbol.Instance :
                         GetSpecialType(SpecialType.System_Object, diagnostics, syntax));
             }
