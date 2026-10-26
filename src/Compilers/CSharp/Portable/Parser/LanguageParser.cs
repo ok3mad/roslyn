@@ -7339,6 +7339,20 @@ parse_member_name:;
                     case SyntaxKind.OpenBracketToken:
                         // Check for array types.
                         this.EatToken();
+                        if (IsSharperSequenceRankSpecifierRest())
+                        {
+                            // Sharper sequence type `T[..]`. `a[..]` and `a?[..]` are also element accesses, so unlike
+                            // `[]` it does not make this a definite type, and the caller decides from what follows.
+                            this.EatDotDotToken();
+                            lastTokenOfType = this.EatToken();
+                            if (result == ScanTypeFlags.NullableType)
+                            {
+                                result = ScanTypeFlags.NonGenericTypeOrExpression;
+                            }
+
+                            break;
+                        }
+
                         while (this.CurrentToken.Kind == SyntaxKind.CommaToken)
                         {
                             this.EatToken();
@@ -10119,6 +10133,18 @@ done:
         {
             return token.IsIdentifierVar() ||
                 (token.ContextualKind == SyntaxKind.ValKeyword && IsFeatureEnabled(MessageID.IDS_FeatureSharper));
+        }
+
+        /// <summary>
+        /// True after the <c>[</c> of a Sharper sequence type <c>T[..]</c> (<c>IEnumerable&lt;T&gt;</c>), when Sharper is
+        /// enabled. The type parses as an array type whose rank specifier holds a range with no operands; the binder
+        /// gives it its meaning.
+        /// </summary>
+        private bool IsSharperSequenceRankSpecifierRest()
+        {
+            return IsAtDotDotToken() &&
+                this.PeekToken(2).Kind == SyntaxKind.CloseBracketToken &&
+                IsFeatureEnabled(MessageID.IDS_FeatureSharper);
         }
 
         private bool IsVarType()
@@ -13146,7 +13172,7 @@ done:
                 return false;
             }
 
-            var type = this.ScanType(forPattern);
+            var type = this.ScanType(out var lastTokenOfType, forPattern);
             if (type == ScanTypeFlags.NotType)
             {
                 return false;
@@ -13228,6 +13254,14 @@ done:
                         this.PeekToken(1).Kind == SyntaxKind.CloseBracketToken)
                     {
                         return true;
+                    }
+
+                    if (lastTokenOfType.Kind == SyntaxKind.CloseBracketToken && IsFeatureEnabled(MessageID.IDS_FeatureSharper))
+                    {
+                        // Sharper `(a[..])`: an ambiguous type ends in `]` only with a sequence rank. It is also a C#
+                        // element access, which keeps its meaning wherever C# can continue it: `(a[..])(b)`,
+                        // `(a[..])!`, `(a[..]) with { }`. So it is a cast only of an identifier or a literal.
+                        return CanFollowSharperSequenceCast();
                     }
 
                     // check for ambiguous type or expression followed by disambiguating token.  i.e.
@@ -13401,6 +13435,12 @@ done:
 
             // Check whether looks like implicitly or explicitly typed lambda
             return ScanParenthesizedLambda(precedence);
+        }
+
+        private bool CanFollowSharperSequenceCast()
+        {
+            return (this.IsTrueIdentifier() && this.CurrentToken.ContextualKind != SyntaxKind.WithKeyword) ||
+                SyntaxFacts.GetLiteralExpression(this.CurrentToken.Kind) != SyntaxKind.None;
         }
 
         private static bool CanFollowCast(SyntaxKind kind)
