@@ -208,7 +208,8 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 
 - [x] Turn Sharper on for `.cx` files in the command-line compiler.
 - [x] Turn Sharper on for `.cx` documents in the IDE workspace.
-- [ ] Treat `.cx` files as C# in the language server.
+- [x] Treat `.cx` files as C# in the language server.
+- [ ] Support `dotnet run app.cx`. File-based apps live in the SDK and only accept `.cs` files, so this needs an SDK change; until then the language server treats a loose `.cx` file as a miscellaneous file, never a file-based app.
 - [x] Add `*.cx` to the default `Compile` items (the `Microsoft.Net.Compilers.Toolset` props).
 - [ ] Decide whether `dynamic` should choose range or spread at runtime, under the sharpening rules.
 - [ ] Decide whether async iterators should ever support spreads.

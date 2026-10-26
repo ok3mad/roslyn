@@ -136,6 +136,7 @@ internal sealed class FileBasedProgramsProjectSystem : LanguageServerProjectLoad
         }
 
         // Sharper: a .cx file is never a file-based app, since `dotnet run` only runs .cs files.
+        // PROTOTYPE(sharper): support `dotnet run app.cx` once the SDK's file-based apps accept .cx files.
         if (PathUtilities.GetExtension(filePath).Equals(".cx", StringComparison.OrdinalIgnoreCase))
             return LooseDocumentKind.MiscellaneousFileWithStandardReferences;
 
