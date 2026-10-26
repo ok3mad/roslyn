@@ -3357,6 +3357,11 @@
         <target state="translated">указатель</target>
         <note />
       </trans-unit>
+      <trans-unit id="IDS_VALLOCAL">
+        <source>val variable</source>
+        <target state="new">val variable</target>
+        <note />
+      </trans-unit>
       <trans-unit id="INF_TooManyBoundLambdas">
         <source>Compiling requires binding the lambda expression at least {0} times. Consider declaring the lambda expression with explicit parameter types, or if the containing method call is generic, consider using explicit type arguments.</source>
         <target state="translated">Компиляция требует по крайней мере {0}-кратной привязки лямбда-выражения. Рассмотрите возможность объявления лямбда-выражения с явными типами параметров или, если содержащий его вызов метода является универсальным, рассмотрите возможность использования аргументов явного типа.</target>
@@ -4110,6 +4115,16 @@
       <trans-unit id="WRN_SharperDynamicRangeNotSpread_Title">
         <source>'..' on a dynamic operand is a range, not a spread</source>
         <target state="new">'..' on a dynamic operand is a range, not a spread</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WRN_SharperValMemberCallOnCopy">
+        <source>Call to non-readonly member '{0}' on val variable '{1}' runs on a copy, so '{1}' is not changed.</source>
+        <target state="new">Call to non-readonly member '{0}' on val variable '{1}' runs on a copy, so '{1}' is not changed.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WRN_SharperValMemberCallOnCopy_Title">
+        <source>Call to a non-readonly member on a val variable runs on a copy</source>
+        <target state="new">Call to a non-readonly member on a val variable runs on a copy</target>
         <note />
       </trans-unit>
       <trans-unit id="WRN_SwitchExpressionNotExhaustiveWithUnnamedEnumValue">

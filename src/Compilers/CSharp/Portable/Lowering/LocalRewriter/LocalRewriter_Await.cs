@@ -17,7 +17,14 @@ namespace Microsoft.CodeAnalysis.CSharp
 
         public BoundExpression VisitAwaitExpression(BoundAwaitExpression node, bool used)
         {
-            return RewriteAwaitExpression((BoundExpression)base.VisitAwaitExpression(node)!, used);
+            var rewritten = (BoundAwaitExpression)base.VisitAwaitExpression(node)!;
+            if (Binder.IsSharperValValue(node.Expression))
+            {
+                // GetAwaiter may change its receiver; a val is awaited through a copy (the binder warns).
+                rewritten = rewritten.Update(RefAccessMustMakeCopy(rewritten.Expression), rewritten.AwaitableInfo, rewritten.DebugInfo, rewritten.Type);
+            }
+
+            return RewriteAwaitExpression(rewritten, used);
         }
 
         private BoundExpression RewriteAwaitExpression(SyntaxNode syntax, BoundExpression rewrittenExpression, BoundAwaitableInfo awaitableInfo, TypeSymbol type, BoundAwaitExpressionDebugInfo debugInfo, bool used)

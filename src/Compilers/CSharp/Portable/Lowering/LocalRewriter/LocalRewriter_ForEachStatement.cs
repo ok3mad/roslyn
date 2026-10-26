@@ -152,9 +152,9 @@ namespace Microsoft.CodeAnalysis.CSharp
             var forEachSyntax = (CSharpSyntaxNode)node.Syntax;
             bool isAsync = enumeratorInfo.MoveNextAwaitableInfo != null;
 
-            BoundExpression rewrittenExpression = VisitExpression(convertedCollection.Operand);
-
             MethodArgumentInfo getEnumeratorInfo = enumeratorInfo.GetEnumeratorInfo;
+            BoundExpression rewrittenExpression = CopyValReceiverIfNeeded(convertedCollection.Operand, VisitExpression(convertedCollection.Operand), getEnumeratorInfo.Method)!;
+
             TypeSymbol enumeratorType = getEnumeratorInfo.Method.ReturnType;
 
             // E e

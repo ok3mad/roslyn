@@ -316,6 +316,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         IDS_FeatureLabeledBreakContinue = MessageBase + 12864,
 
         IDS_FeatureSharper = MessageBase + 12865,
+        IDS_VALLOCAL = MessageBase + 12866,
     }
 
     // Message IDs may refer to strings that need to be localized.
