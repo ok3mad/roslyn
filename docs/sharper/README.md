@@ -51,12 +51,15 @@ plain C#. A compilation can mix the two, and each file says which language it is
 Sharper on for every file, `.cs` included. The code is `IsSharperFile` in
 `src/Compilers/CSharp/Portable/CommandLine/CSharpCompiler.cs`.
 
+In an SDK-style project, the compiler toolset package (`Microsoft.Net.Compilers.Toolset`, which bootstrap builds use)
+adds `**/*.cx` to the `Compile` items of C# projects, under the same conditions and excludes as the SDK's `**/*.cs`
+glob. `<EnableDefaultCompileItems>false</EnableDefaultCompileItems>` and `<Compile Remove="..." />` work as they do
+for `.cs` files. Do not also include `*.cx` in the project, or the SDK reports duplicate `Compile` items.
+
 Not done yet:
 
 - The IDE workspace and the language server parse `.cx` documents with the project's options, so Sharper syntax in
   them shows the C# errors unless the project sets `<Features>sharper</Features>`.
-- The SDK does not add `*.cx` to the `Compile` items. Add them in the project:
-  `<Compile Include="**/*.cx" />`.
 
 - No other .NET tool gives `.cx` a meaning. Outside .NET it is used by Cytoscape network files, CADMATIC exchange
   files and a few small hobby languages.
