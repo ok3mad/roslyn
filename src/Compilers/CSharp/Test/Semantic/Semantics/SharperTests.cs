@@ -2321,6 +2321,11 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 var g = new G();
                 Console.Write((g[..])(7));
                 Console.Write((g?[..])(8));
+                var h = new H();
+                int one = 1, two = 2;
+                Console.Write(F(h[..] ? one : two, 0));
+                var tuple = (h[..] ? one : two, h?[..] ? one : two);
+                Console.Write(tuple);
                 int F(int i, int j) => i + j;
 
                 class A
@@ -2333,8 +2338,13 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 {
                     public Func<int, int> this[Range r] => i => i * 10;
                 }
+
+                class H
+                {
+                    public bool this[Range r] => true;
+                }
                 """;
-            CompileAndVerify(source, parseOptions: sharper ? s_sharperOptions : TestOptions.Regular, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "652157080" : null).VerifyDiagnostics();
+            CompileAndVerify(source, parseOptions: sharper ? s_sharperOptions : TestOptions.Regular, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "6521570801(1, 1)" : null).VerifyDiagnostics();
         }
 
         [Fact]
