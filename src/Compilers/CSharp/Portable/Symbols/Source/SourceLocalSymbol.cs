@@ -365,7 +365,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         public bool IsVal => _typeSyntax is null ? IsDeclaredInValPattern(_identifierToken.Parent) : _typeSyntax.SkipScoped(out _).SkipRef().IsVal && IsVar;
 
         /// <summary>
-        /// Pattern variables have no type syntax; a <c>val x</c> or <c>val (a, b)</c> pattern is a var pattern whose keyword reads <c>val</c>.
+        /// Pattern variables have no type syntax; a <c>val x</c> or <c>val (a, b)</c> pattern is a var pattern with a <see cref="SyntaxKind.ValKeyword"/>.
         /// </summary>
         internal static bool IsDeclaredInValPattern(SyntaxNode designation)
         {
@@ -375,7 +375,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 node = node.Parent;
             }
 
-            return node is VarPatternSyntax { VarKeyword.Text: "val" };
+            return node is VarPatternSyntax { VarKeyword.RawKind: (int)SyntaxKind.ValKeyword };
         }
 
         internal override bool IsWritableVariable => base.IsWritableVariable && !IsVal;
