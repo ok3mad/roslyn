@@ -207,7 +207,8 @@ Sharper diagnostics were renumbered from `SharperErrorCodes.Base` (20000): CS940
 The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOTYPE(sharper)"`).
 
 - [x] Turn Sharper on for `.cx` files in the command-line compiler.
-- [ ] Turn Sharper on for `.cx` documents in the IDE workspace and the language server.
+- [x] Turn Sharper on for `.cx` documents in the IDE workspace.
+- [ ] Treat `.cx` files as C# in the language server.
 - [x] Add `*.cx` to the default `Compile` items (the `Microsoft.Net.Compilers.Toolset` props).
 - [ ] Decide whether `dynamic` should choose range or spread at runtime, under the sharpening rules.
 - [ ] Decide whether async iterators should ever support spreads.
