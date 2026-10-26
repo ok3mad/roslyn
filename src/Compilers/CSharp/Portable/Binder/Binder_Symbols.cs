@@ -645,10 +645,21 @@ namespace Microsoft.CodeAnalysis.CSharp
             bool disallowRestrictedTypes)
         {
             TypeWithAnnotations type = BindType(node.ElementType, diagnostics, basesBeingResolved);
+            if (HasSharperSequenceRank(node))
+            {
+                return BindSharperSequenceType(node, type, diagnostics, basesBeingResolved, disallowRestrictedTypes);
+            }
+
+            CheckArrayElementType(node.ElementType, type, diagnostics, disallowRestrictedTypes);
+            return BindArrayRanks(node, type, start: 0, end: node.RankSpecifiers.Count, permitDimensions, diagnostics);
+        }
+
+        private void CheckArrayElementType(TypeSyntax elementTypeSyntax, TypeWithAnnotations type, BindingDiagnosticBag diagnostics, bool disallowRestrictedTypes)
+        {
             if (type.IsStatic)
             {
                 // CS0719: '{0}': array elements cannot be of static type
-                Error(diagnostics, ErrorCode.ERR_ArrayOfStaticClass, node.ElementType, type.Type);
+                Error(diagnostics, ErrorCode.ERR_ArrayOfStaticClass, elementTypeSyntax, type.Type);
             }
 
             if (disallowRestrictedTypes)
@@ -659,16 +670,22 @@ namespace Microsoft.CodeAnalysis.CSharp
                     if (type.IsRestrictedType())
                     {
                         // CS0611: Array elements cannot be of type '{0}'
-                        Error(diagnostics, ErrorCode.ERR_ArrayElementCantBeRefAny, node.ElementType, type.Type);
+                        Error(diagnostics, ErrorCode.ERR_ArrayElementCantBeRefAny, elementTypeSyntax, type.Type);
                     }
                 }
                 else
                 {
-                    diagnostics.Add(new LazyArrayElementCantBeRefAnyDiagnosticInfo(type), node.ElementType.GetLocation());
+                    diagnostics.Add(new LazyArrayElementCantBeRefAnyDiagnosticInfo(type), elementTypeSyntax.GetLocation());
                 }
             }
+        }
 
-            for (int i = node.RankSpecifiers.Count - 1; i >= 0; i--)
+        /// <summary>
+        /// Wraps <paramref name="type"/> in the array ranks <c>[start, end)</c> of <paramref name="node"/>, the last one innermost.
+        /// </summary>
+        private TypeWithAnnotations BindArrayRanks(ArrayTypeSyntax node, TypeWithAnnotations type, int start, int end, bool permitDimensions, BindingDiagnosticBag diagnostics)
+        {
+            for (int i = end - 1; i >= start; i--)
             {
                 var rankSpecifier = node.RankSpecifiers[i];
                 var dimension = rankSpecifier.Sizes;

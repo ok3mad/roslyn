@@ -5,6 +5,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Microsoft.CodeAnalysis.CSharp.Symbols;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.CSharp.Test.Utilities;
 using Microsoft.CodeAnalysis.Test.Utilities;
@@ -2007,6 +2008,596 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             var rebuilt = ((VarPatternSyntax)parsed.Pattern).WithVarKeyword(SyntaxFactory.Token(((VarPatternSyntax)parsed.Pattern).VarKeyword.Kind()));
             Assert.Equal("val", rebuilt.VarKeyword.Text);
             Assert.Throws<ArgumentException>(() => SyntaxFactory.VarPattern(SyntaxFactory.Token(SyntaxKind.LetKeyword), SyntaxFactory.SingleVariableDesignation(SyntaxFactory.Identifier("x"))));
+        }
+
+        [Theory]
+        [InlineData("int[..]")]
+        [InlineData("IEnumerable<int>")]
+        public void SequenceType_Runtime(string sequence)
+        {
+            // int[..] is IEnumerable<int>; each test runs the Sharper form next to its C# twin.
+            var source = $$"""
+                using System;
+                using System.Collections.Generic;
+                using System.Linq;
+
+                {{sequence}} xs = new[] { 1, 2, 3, 4 };
+                Console.Write(string.Join(",", C.Evens(xs)));
+                Console.Write(C.Field.Count());
+                Console.Write(new List<{{sequence}}> { xs }.Count);
+                Func<{{sequence}}, int> sum = ({{sequence}} s) => s.Sum();
+                Console.Write(sum(xs));
+                Console.Write(C.Iterate().Last());
+
+                class C
+                {
+                    public static {{sequence}} Field = new List<int> { 5 };
+                    public static {{sequence}} Evens({{sequence}} xs) => xs.Where(x => x % 2 == 0);
+                    public static {{sequence}} Iterate()
+                    {
+                        yield return 6;
+                        yield return 7;
+                    }
+                }
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "2,411107" : null).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void SequenceType_FlagOff()
+        {
+            var source = """
+                class C
+                {
+                    int[..] F;
+                    int[..] M(int[..] xs)
+                    {
+                        int[..] local = xs;
+                        System.Func<int[..], int> f = null;
+                        return local;
+                    }
+                }
+                """;
+            // Without Sharper, the parser does not take a generic argument int[..] for a type, so the statement with
+            // Func<int[..], int> is not a declaration.
+            CreateCompilation(source, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (3,8): error CS0270: Array size cannot be specified in a variable declaration (try initializing with a 'new' expression)
+                //     int[..] F;
+                Diagnostic(ErrorCode.ERR_ArraySizeInDeclaration, "[..]").WithLocation(3, 8),
+                // (3,13): warning CS0169: The field 'C.F' is never used
+                //     int[..] F;
+                Diagnostic(ErrorCode.WRN_UnreferencedField, "F").WithArguments("C.F").WithLocation(3, 13),
+                // (4,8): error CS0270: Array size cannot be specified in a variable declaration (try initializing with a 'new' expression)
+                //     int[..] M(int[..] xs)
+                Diagnostic(ErrorCode.ERR_ArraySizeInDeclaration, "[..]").WithLocation(4, 8),
+                // (4,18): error CS0270: Array size cannot be specified in a variable declaration (try initializing with a 'new' expression)
+                //     int[..] M(int[..] xs)
+                Diagnostic(ErrorCode.ERR_ArraySizeInDeclaration, "[..]").WithLocation(4, 18),
+                // (6,12): error CS0270: Array size cannot be specified in a variable declaration (try initializing with a 'new' expression)
+                //         int[..] local = xs;
+                Diagnostic(ErrorCode.ERR_ArraySizeInDeclaration, "[..]").WithLocation(6, 12),
+                // (6,13): error CS0029: Cannot implicitly convert type 'System.Range' to 'int'
+                //         int[..] local = xs;
+                Diagnostic(ErrorCode.ERR_NoImplicitConv, "..").WithArguments("System.Range", "int").WithLocation(6, 13),
+                // (7,16): error CS0305: Using the generic type 'Func<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, TResult>' requires 17 type arguments
+                //         System.Func<int[..], int> f = null;
+                Diagnostic(ErrorCode.ERR_BadArity, "Func").WithArguments("System.Func<T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11, T12, T13, T14, T15, T16, TResult>", "type", "17").WithLocation(7, 16),
+                // (7,21): error CS1525: Invalid expression term 'int'
+                //         System.Func<int[..], int> f = null;
+                Diagnostic(ErrorCode.ERR_InvalidExprTerm, "int").WithArguments("int").WithLocation(7, 21),
+                // (7,28): error CS1002: ; expected
+                //         System.Func<int[..], int> f = null;
+                Diagnostic(ErrorCode.ERR_SemicolonExpected, ",").WithLocation(7, 28),
+                // (7,28): error CS1513: } expected
+                //         System.Func<int[..], int> f = null;
+                Diagnostic(ErrorCode.ERR_RbraceExpected, ",").WithLocation(7, 28),
+                // (7,33): error CS1001: Identifier expected
+                //         System.Func<int[..], int> f = null;
+                Diagnostic(ErrorCode.ERR_IdentifierExpected, ">").WithLocation(7, 33),
+                // (7,33): error CS1002: ; expected
+                //         System.Func<int[..], int> f = null;
+                Diagnostic(ErrorCode.ERR_SemicolonExpected, ">").WithLocation(7, 33),
+                // (7,33): error CS1525: Invalid expression term '>'
+                //         System.Func<int[..], int> f = null;
+                Diagnostic(ErrorCode.ERR_InvalidExprTerm, ">").WithArguments(">").WithLocation(7, 33),
+                // (7,35): error CS0103: The name 'f' does not exist in the current context
+                //         System.Func<int[..], int> f = null;
+                Diagnostic(ErrorCode.ERR_NameNotInContext, "f").WithArguments("f").WithLocation(7, 35));
+        }
+
+        [Fact]
+        public void SequenceType_Parsing()
+        {
+            // T[..] reuses the array type syntax: one rank whose size is a range with no operands. The parser change is
+            // only that a statement may start with it in a generic argument or a tuple element.
+            var statement = SyntaxFactory.ParseStatement("Func<A[..], (int, B[..])> f = null;", options: s_sharperOptions);
+            var declaration = Assert.IsType<LocalDeclarationStatementSyntax>(statement);
+            var arrayTypes = declaration.Declaration.Type.DescendantNodes().OfType<ArrayTypeSyntax>().ToArray();
+            Assert.Equal(["A[..]", "B[..]"], arrayTypes.Select(t => t.ToString()));
+            Assert.All(arrayTypes, t => Assert.IsType<RangeExpressionSyntax>(Assert.Single(Assert.Single(t.RankSpecifiers).Sizes)));
+            Assert.False(statement.ContainsDiagnostics);
+
+            Assert.IsNotType<LocalDeclarationStatementSyntax>(SyntaxFactory.ParseStatement("Func<A[..], (int, B[..])> f = null;", options: TestOptions.Regular));
+
+            // Expressions are unchanged: a[..] and a?[..] are still element accesses, also where a cast could start.
+            foreach (var options in new[] { s_sharperOptions, TestOptions.Regular })
+            {
+                Assert.IsType<BinaryExpressionSyntax>(SyntaxFactory.ParseExpression("(a[..]) - 1", options: options));
+                Assert.IsType<InvocationExpressionSyntax>(SyntaxFactory.ParseExpression("(a[..])(b)", options: options));
+                Assert.IsType<InvocationExpressionSyntax>(SyntaxFactory.ParseExpression("(a?[..])(b)", options: options));
+                Assert.IsType<PostfixUnaryExpressionSyntax>(SyntaxFactory.ParseExpression("(a[..])!", options: options));
+                Assert.IsType<MemberAccessExpressionSyntax>(SyntaxFactory.ParseExpression("(a?[..]).b", options: options));
+                Assert.IsType<WithExpressionSyntax>(SyntaxFactory.ParseExpression("(a[..]) with { }", options: options));
+                Assert.IsType<ParenthesizedExpressionSyntax>(SyntaxFactory.ParseExpression("(a?[..])", options: options));
+                Assert.IsType<ExpressionStatementSyntax>(SyntaxFactory.ParseStatement("a[..] = b;", options: options));
+            }
+
+            // Casts to a sequence type: definite for int[..], and for A[..] before an identifier or a literal.
+            Assert.IsType<CastExpressionSyntax>(SyntaxFactory.ParseExpression("(int[..])(a)", options: s_sharperOptions));
+            Assert.IsType<CastExpressionSyntax>(SyntaxFactory.ParseExpression("(A[..])b", options: s_sharperOptions));
+            Assert.IsType<CastExpressionSyntax>(SyntaxFactory.ParseExpression("(A[..])null", options: s_sharperOptions));
+            Assert.IsType<CastExpressionSyntax>(SyntaxFactory.ParseExpression("(int?[..])b", options: s_sharperOptions));
+        }
+
+        [Fact]
+        public void SequenceType_TypePositions()
+        {
+            // Every member signature reads the same as with IEnumerable<T> spelled out.
+            var template = """
+                #nullable enable
+                using System;
+                using System.Collections.Generic;
+                using System.Linq;
+                using Seq = {2};
+
+                delegate {0} D({0} xs);
+
+                interface I<T> where T : {0} {{ }}
+
+                class C<T> : List<{0}>
+                {{
+                    public {0} Field = null!;
+                    public {0} Property {{ get; set; }} = null!;
+                    public {0} this[{0} xs] => xs;
+                    public event Func<{0}>? Event;
+                    public {0}? Nullable = null;
+                    public {1} Generic = null!;
+                    public {0} Method({0} xs, out {0} o, ref {0} r, params {0}[] rest) {{ o = xs; return xs; }}
+                    public Seq Alias = null!;
+                    public void Body(object o)
+                    {{
+                        {0} local = Field;
+                        {1} generic = Generic;
+                        Func<{0}> g = {0} () => generic.Count() > 0 ? local : Field;
+                        (int, {0}) tuple = (1, local);
+                        _ = tuple;
+                        Func<{0}, {0}> f = ({0} s) => s;
+                        {0} Local({0} s) => s;
+                        _ = Local(local);
+                        _ = typeof({0});
+                        _ = default({0});
+                        _ = ({0})o;
+                        _ = o as {0};
+                        _ = o is {0} p;
+                        _ = o is {0};
+                        _ = GenericMethod<{0}>();
+                        _ = int.TryParse("1", out _) ? Field : null;
+                        foreach ({0} item in new List<{0}>()) {{ }}
+                        using var d = (IDisposable)null!;
+                        Event?.Invoke();
+                    }}
+                    T? GenericMethod<U>() => default;
+                }}
+                """;
+            var sharper = CreateCompilation(string.Format(template, "int[..]", "T[..]", "int[..]"), parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            var csharp = CreateCompilation(string.Format(template, "IEnumerable<int>", "IEnumerable<T>", "System.Collections.Generic.IEnumerable<int>"), targetFramework: TargetFramework.Net90);
+            sharper.VerifyDiagnostics();
+            csharp.VerifyDiagnostics();
+            Assert.Equal(describe(csharp), describe(sharper));
+
+            static string describe(CSharpCompilation comp)
+            {
+                var lines = new List<string?>();
+                foreach (var type in new[] { "D", "I`1", "C`1" }.Select(name => ((Compilation)comp).GetTypeByMetadataName(name)!))
+                {
+                    lines.Add(type.ToTestDisplayString());
+                    lines.Add(type.BaseType?.ToTestDisplayString());
+                    lines.AddRange(type.Interfaces.Select(i => i.ToTestDisplayString()));
+                    lines.AddRange(type.TypeParameters.SelectMany(t => t.ConstraintTypes).Select(t => t.ToTestDisplayString()));
+                    lines.AddRange(type.GetMembers().Select(m => m.ToTestDisplayString()));
+                }
+
+                var tree = comp.SyntaxTrees[0];
+                var model = comp.GetSemanticModel(tree);
+                var nodes = tree.GetRoot().DescendantNodes();
+                lines.AddRange(nodes
+                    .Where(n => n is VariableDeclaratorSyntax or SingleVariableDesignationSyntax or ForEachStatementSyntax or LocalFunctionStatementSyntax or ParameterSyntax)
+                    .Select(n => model.GetDeclaredSymbol(n)?.ToTestDisplayString()));
+                lines.AddRange(nodes.OfType<TypeOfExpressionSyntax>().Select(t => model.GetTypeInfo(t.Type).Type.ToTestDisplayString()));
+                lines.AddRange(nodes.OfType<CastExpressionSyntax>().Select(t => model.GetTypeInfo(t).Type.ToTestDisplayString()));
+                return string.Join(Environment.NewLine, lines);
+            }
+        }
+
+        [Fact]
+        public void SequenceType_Stacking()
+        {
+            // Sharper type suffixes stack left to right, innermost first: each [..] wraps everything to its left.
+            // Plain array ranks between two [..] keep their C# order. Each parameter is followed by its C# twin.
+            var source = """
+                #nullable enable
+                using System.Collections.Generic;
+                class C
+                {
+                    void M(
+                        int[..][] a, IEnumerable<int>[] a2,
+                        int[][..] b, IEnumerable<int[]> b2,
+                        int[..][..] c, IEnumerable<IEnumerable<int>> c2,
+                        int[,][..][][,] d, IEnumerable<int[,]>[][,] d2,
+                        int?[..] e, IEnumerable<int?> e2,
+                        int[..]? f, IEnumerable<int>? f2,
+                        string?[..] g, IEnumerable<string?> g2,
+                        string[..]?[] h, IEnumerable<string>?[] h2,
+                        (int, string)[..] i, IEnumerable<(int, string)> i2,
+                        List<int[..]>[..] j, IEnumerable<List<IEnumerable<int>>> j2)
+                    {
+                    }
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics();
+            var parameters = comp.GetMember<MethodSymbol>("C.M").Parameters.Select(p => p.TypeWithAnnotations.ToTestDisplayString(includeNonNullable: true)).ToArray();
+            for (int i = 0; i < parameters.Length; i += 2)
+            {
+                Assert.Equal(parameters[i + 1], parameters[i]);
+            }
+
+            AssertEx.Equal([
+                "System.Collections.Generic.IEnumerable<System.Int32>![]!",
+                "System.Collections.Generic.IEnumerable<System.Int32[]!>!",
+                "System.Collections.Generic.IEnumerable<System.Collections.Generic.IEnumerable<System.Int32>!>!",
+                "System.Collections.Generic.IEnumerable<System.Int32[,]!>![,]![]!",
+                "System.Collections.Generic.IEnumerable<System.Int32?>!",
+                "System.Collections.Generic.IEnumerable<System.Int32>?",
+                "System.Collections.Generic.IEnumerable<System.String?>!",
+                "System.Collections.Generic.IEnumerable<System.String!>?[]!",
+                "System.Collections.Generic.IEnumerable<(System.Int32, System.String!)>!",
+                "System.Collections.Generic.IEnumerable<System.Collections.Generic.List<System.Collections.Generic.IEnumerable<System.Int32>!>!>!",
+                ], parameters.Where((_, i) => i % 2 == 0));
+        }
+
+        [Fact]
+        public void SequenceType_IsIEnumerable()
+        {
+            // An alias, not a new type: it collides with an IEnumerable<T> overload and implements IEnumerable<T> members.
+            var source = """
+                using System.Collections.Generic;
+
+                interface I
+                {
+                    IEnumerable<int> Get(IEnumerable<string> s);
+                }
+
+                class C : I
+                {
+                    public int[..] Get(string[..] s) => [];
+                    void M(int[..] xs) { }
+                    void M(IEnumerable<int> xs) { }
+                }
+
+                class D : I
+                {
+                    IEnumerable<int> I.Get(string[..] s) => [];
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (12,10): error CS0111: Type 'C' already defines a member called 'M' with the same parameter types
+                //     void M(IEnumerable<int> xs) { }
+                Diagnostic(ErrorCode.ERR_MemberAlreadyExists, "M").WithArguments("M", "C").WithLocation(12, 10));
+        }
+
+        [Theory, CombinatorialData]
+        public void SequenceType_ElementAccessKeepsCSharpMeaning(bool sharper)
+        {
+            // a[..] is also an element access with a range, and keeps that meaning in expressions.
+            var source = """
+                using System;
+
+                var a = new A();
+                var x = (a[..]);
+                var y = (a[..]) - 1;
+                a[..] = 5;
+                Console.Write(F(a[..], 1));
+                Console.Write(a[..] is var z ? z : 0);
+                Console.Write($"{x}{y}");
+                A n = a;
+                Console.Write((n?[..]).ToString());
+                var g = new G();
+                Console.Write((g[..])(7));
+                Console.Write((g?[..])(8));
+                int F(int i, int j) => i + j;
+
+                class A
+                {
+                    public int Value = 2;
+                    public int this[Range r] { get => Value; set => Value = value; }
+                }
+
+                class G
+                {
+                    public Func<int, int> this[Range r] => i => i * 10;
+                }
+                """;
+            CompileAndVerify(source, parseOptions: sharper ? s_sharperOptions : TestOptions.Regular, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "652157080" : null).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void SequenceType_Errors()
+        {
+            var source = """
+                using System.Collections.Generic;
+                class C
+                {
+                    int[1..] A;
+                    int[..1] B;
+                    int[.., ..] C1;
+                    System.Console[..] D;
+                    IEnumerable<System.Console> D2;
+                    unsafe int*[..] E;
+                    unsafe IEnumerable<int*> E2;
+                    void[..] F;
+                    void[] F2;
+                    int[. .] G;
+                    void M()
+                    {
+                        _ = new int[..];
+                        _ = new int[3][..];
+                        System.Console[..] d = null;
+                        IEnumerable<System.Console> d2 = null;
+                    }
+                }
+                """;
+            // Sizes other than a lone `..` stay array sizes, and an array creation keeps its C# meaning. A sequence of
+            // an invalid element type reports what its IEnumerable<T> twin reports.
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, options: TestOptions.UnsafeDebugDll).VerifyDiagnostics(
+                // (4,8): error CS0270: Array size cannot be specified in a variable declaration (try initializing with a 'new' expression)
+                //     int[1..] A;
+                Diagnostic(ErrorCode.ERR_ArraySizeInDeclaration, "[1..]").WithLocation(4, 8),
+                // (4,14): warning CS0169: The field 'C.A' is never used
+                //     int[1..] A;
+                Diagnostic(ErrorCode.WRN_UnreferencedField, "A").WithArguments("C.A").WithLocation(4, 14),
+                // (5,8): error CS0270: Array size cannot be specified in a variable declaration (try initializing with a 'new' expression)
+                //     int[..1] B;
+                Diagnostic(ErrorCode.ERR_ArraySizeInDeclaration, "[..1]").WithLocation(5, 8),
+                // (5,14): warning CS0169: The field 'C.B' is never used
+                //     int[..1] B;
+                Diagnostic(ErrorCode.WRN_UnreferencedField, "B").WithArguments("C.B").WithLocation(5, 14),
+                // (6,8): error CS0270: Array size cannot be specified in a variable declaration (try initializing with a 'new' expression)
+                //     int[.., ..] C1;
+                Diagnostic(ErrorCode.ERR_ArraySizeInDeclaration, "[.., ..]").WithLocation(6, 8),
+                // (6,17): warning CS0169: The field 'C.C1' is never used
+                //     int[.., ..] C1;
+                Diagnostic(ErrorCode.WRN_UnreferencedField, "C1").WithArguments("C.C1").WithLocation(6, 17),
+                // (7,24): error CS0718: 'Console': static types cannot be used as type arguments
+                //     System.Console[..] D;
+                Diagnostic(ErrorCode.ERR_GenericArgIsStaticClass, "D").WithArguments("System.Console").WithLocation(7, 24),
+                // (7,24): warning CS0169: The field 'C.D' is never used
+                //     System.Console[..] D;
+                Diagnostic(ErrorCode.WRN_UnreferencedField, "D").WithArguments("C.D").WithLocation(7, 24),
+                // (8,33): error CS0718: 'Console': static types cannot be used as type arguments
+                //     IEnumerable<System.Console> D2;
+                Diagnostic(ErrorCode.ERR_GenericArgIsStaticClass, "D2").WithArguments("System.Console").WithLocation(8, 33),
+                // (8,33): warning CS0169: The field 'C.D2' is never used
+                //     IEnumerable<System.Console> D2;
+                Diagnostic(ErrorCode.WRN_UnreferencedField, "D2").WithArguments("C.D2").WithLocation(8, 33),
+                // (9,21): error CS0306: The type 'int*' may not be used as a type argument
+                //     unsafe int*[..] E;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "E").WithArguments("int*").WithLocation(9, 21),
+                // (9,21): warning CS0169: The field 'C.E' is never used
+                //     unsafe int*[..] E;
+                Diagnostic(ErrorCode.WRN_UnreferencedField, "E").WithArguments("C.E").WithLocation(9, 21),
+                // (10,30): error CS0306: The type 'int*' may not be used as a type argument
+                //     unsafe IEnumerable<int*> E2;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "E2").WithArguments("int*").WithLocation(10, 30),
+                // (10,30): warning CS0169: The field 'C.E2' is never used
+                //     unsafe IEnumerable<int*> E2;
+                Diagnostic(ErrorCode.WRN_UnreferencedField, "E2").WithArguments("C.E2").WithLocation(10, 30),
+                // (11,9): error CS1519: Invalid token '[' in a member declaration
+                //     void[..] F;
+                Diagnostic(ErrorCode.ERR_InvalidMemberDecl, "[").WithArguments("[").WithLocation(11, 9),
+                // (11,10): error CS1001: Identifier expected
+                //     void[..] F;
+                Diagnostic(ErrorCode.ERR_IdentifierExpected, ".").WithLocation(11, 10),
+                // (11,11): error CS1001: Identifier expected
+                //     void[..] F;
+                Diagnostic(ErrorCode.ERR_IdentifierExpected, ".").WithLocation(11, 11),
+                // (11,12): error CS1001: Identifier expected
+                //     void[..] F;
+                Diagnostic(ErrorCode.ERR_IdentifierExpected, "]").WithLocation(11, 12),
+                // (11,15): error CS1519: Invalid token ';' in a member declaration
+                //     void[..] F;
+                Diagnostic(ErrorCode.ERR_InvalidMemberDecl, ";").WithArguments(";").WithLocation(11, 15),
+                // (12,9): error CS1519: Invalid token '[' in a member declaration
+                //     void[] F2;
+                Diagnostic(ErrorCode.ERR_InvalidMemberDecl, "[").WithArguments("[").WithLocation(12, 9),
+                // (12,10): error CS1001: Identifier expected
+                //     void[] F2;
+                Diagnostic(ErrorCode.ERR_IdentifierExpected, "]").WithLocation(12, 10),
+                // (12,14): error CS1519: Invalid token ';' in a member declaration
+                //     void[] F2;
+                Diagnostic(ErrorCode.ERR_InvalidMemberDecl, ";").WithArguments(";").WithLocation(12, 14),
+                // (13,9): error CS1003: Syntax error, ',' expected
+                //     int[. .] G;
+                Diagnostic(ErrorCode.ERR_SyntaxError, ".").WithArguments(",").WithLocation(13, 9),
+                // (13,14): warning CS0169: The field 'C.G' is never used
+                //     int[. .] G;
+                Diagnostic(ErrorCode.WRN_UnreferencedField, "G").WithArguments("C.G").WithLocation(13, 14),
+                // (16,21): error CS0029: Cannot implicitly convert type 'System.Range' to 'int'
+                //         _ = new int[..];
+                Diagnostic(ErrorCode.ERR_NoImplicitConv, "..").WithArguments("System.Range", "int").WithLocation(16, 21),
+                // (17,24): error CS0178: Invalid rank specifier: expected ',' or ']'
+                //         _ = new int[3][..];
+                Diagnostic(ErrorCode.ERR_InvalidArray, "..").WithLocation(17, 24),
+                // (18,9): error CS0718: 'Console': static types cannot be used as type arguments
+                //         System.Console[..] d = null;
+                Diagnostic(ErrorCode.ERR_GenericArgIsStaticClass, "System.Console[..]").WithArguments("System.Console").WithLocation(18, 9),
+                // (18,28): warning CS0219: The variable 'd' is assigned but its value is never used
+                //         System.Console[..] d = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "d").WithArguments("d").WithLocation(18, 28),
+                // (19,21): error CS0718: 'Console': static types cannot be used as type arguments
+                //         IEnumerable<System.Console> d2 = null;
+                Diagnostic(ErrorCode.ERR_GenericArgIsStaticClass, "System.Console").WithArguments("System.Console").WithLocation(19, 21),
+                // (19,37): warning CS0219: The variable 'd2' is assigned but its value is never used
+                //         IEnumerable<System.Console> d2 = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "d2").WithArguments("d2").WithLocation(19, 37));
+        }
+
+        [Fact]
+        public void SequenceType_MissingIEnumerable()
+        {
+            var source = """
+                class C
+                {
+                    int[..] F;
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.MakeTypeMissing(SpecialType.System_Collections_Generic_IEnumerable_T);
+            comp.VerifyDiagnostics(
+                // (3,8): error CS0518: Predefined type 'System.Collections.Generic.IEnumerable`1' is not defined or imported
+                //     int[..] F;
+                Diagnostic(ErrorCode.ERR_PredefinedTypeNotFound, "[..]").WithArguments("System.Collections.Generic.IEnumerable`1").WithLocation(3, 8),
+                // (3,13): warning CS0169: The field 'C.F' is never used
+                //     int[..] F;
+                Diagnostic(ErrorCode.WRN_UnreferencedField, "F").WithArguments("C.F").WithLocation(3, 13));
+        }
+
+        [Fact]
+        public void SequenceType_Metadata()
+        {
+            // A C# caller sees IEnumerable<T>.
+            var library = """
+                #nullable enable
+                using System.Linq;
+
+                public static class Lib
+                {
+                    public static int[..] Evens(int[..] xs) => xs.Where(x => x % 2 == 0);
+                    public static string[..]? Maybe;
+                }
+                """;
+            var libraryComp = CreateCompilation(library, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            libraryComp.VerifyDiagnostics();
+
+            var source = """
+                using System;
+                using System.Collections.Generic;
+
+                IEnumerable<int> evens = Lib.Evens(new List<int> { 1, 2, 3, 4 });
+                Console.Write(string.Join(",", evens));
+                """;
+            foreach (var reference in new[] { libraryComp.ToMetadataReference(), libraryComp.EmitToImageReference() })
+            {
+                var comp = CreateCompilation(source, references: [reference], targetFramework: TargetFramework.Net90);
+                CompileAndVerify(comp, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "2,4" : null).VerifyDiagnostics();
+                Assert.Equal("System.Collections.Generic.IEnumerable<System.Int32> Lib.Evens(System.Collections.Generic.IEnumerable<System.Int32> xs)", comp.GetMember<MethodSymbol>("Lib.Evens").ToTestDisplayString());
+                Assert.Equal("System.Collections.Generic.IEnumerable<System.String!>? Lib.Maybe", comp.GetMember<FieldSymbol>("Lib.Maybe").ToTestDisplayString(includeNonNullable: true));
+            }
+        }
+
+        [Fact]
+        public void SequenceType_SemanticModel()
+        {
+            var source = """
+                class C
+                {
+                    void M()
+                    {
+                        int[..] xs = new[] { 1 };
+                        System.Collections.Generic.IEnumerable<int> ys = xs;
+                        _ = ys;
+                    }
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics();
+            var tree = comp.SyntaxTrees[0];
+            var model = comp.GetSemanticModel(tree);
+            var types = tree.GetRoot().DescendantNodes().OfType<VariableDeclarationSyntax>().Select(d => d.Type).ToArray();
+            var sharper = (ArrayTypeSyntax)types[0];
+            Assert.Equal(model.GetTypeInfo(types[1]).Type, model.GetTypeInfo(sharper).Type);
+            Assert.Equal(model.GetSymbolInfo(types[1]).Symbol, model.GetSymbolInfo(sharper).Symbol);
+            Assert.Equal("System.Collections.Generic.IEnumerable<System.Int32>", model.GetSymbolInfo(sharper).Symbol.ToTestDisplayString());
+            Assert.Equal("System.Int32", model.GetTypeInfo(sharper.ElementType).Type.ToTestDisplayString());
+            var range = sharper.RankSpecifiers[0].Sizes[0];
+            Assert.Null(model.GetSymbolInfo(range).Symbol);
+            Assert.Null(model.GetOperation(range));
+        }
+
+        [Fact]
+        public void SequenceType_IOperation()
+        {
+            var source = """
+                class C
+                {
+                    void M()
+                    {
+                        /*<bind>*/int[..] xs = new[] { 1 };/*</bind>*/
+                        _ = xs;
+                    }
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            var expectedOperationTree = """
+                IVariableDeclarationGroupOperation (1 declarations) (OperationKind.VariableDeclarationGroup, Type: null) (Syntax: 'int[..] xs  ... ew[] { 1 };')
+                  IVariableDeclarationOperation (1 declarators) (OperationKind.VariableDeclaration, Type: null) (Syntax: 'int[..] xs = new[] { 1 }')
+                    Declarators:
+                        IVariableDeclaratorOperation (Symbol: System.Collections.Generic.IEnumerable<System.Int32> xs) (OperationKind.VariableDeclarator, Type: null) (Syntax: 'xs = new[] { 1 }')
+                          Initializer:
+                            IVariableInitializerOperation (OperationKind.VariableInitializer, Type: null) (Syntax: '= new[] { 1 }')
+                              IConversionOperation (TryCast: False, Unchecked) (OperationKind.Conversion, Type: System.Collections.Generic.IEnumerable<System.Int32>, IsImplicit) (Syntax: 'new[] { 1 }')
+                                Conversion: CommonConversion (Exists: True, IsIdentity: False, IsNumeric: False, IsReference: True, IsUserDefined: False) (MethodSymbol: null)
+                                Operand:
+                                  IArrayCreationOperation (OperationKind.ArrayCreation, Type: System.Int32[]) (Syntax: 'new[] { 1 }')
+                                    Dimension Sizes(1):
+                                        ILiteralOperation (OperationKind.Literal, Type: System.Int32, Constant: 1, IsImplicit) (Syntax: 'new[] { 1 }')
+                                    Initializer:
+                                      IArrayInitializerOperation (1 elements) (OperationKind.ArrayInitializer, Type: null) (Syntax: '{ 1 }')
+                                        Element Values(1):
+                                            ILiteralOperation (OperationKind.Literal, Type: System.Int32, Constant: 1) (Syntax: '1')
+                    Initializer:
+                      null
+                """;
+            VerifyOperationTreeAndDiagnosticsForTest<LocalDeclarationStatementSyntax>(comp, expectedOperationTree, []);
+        }
+
+        [Fact]
+        public void SequenceType_Nullable()
+        {
+            var template = """
+                #nullable enable
+                class C
+                {
+                    {0} M({1} xs)
+                    {
+                        foreach (var x in xs) { _ = x.Length; }
+                        return null;
+                    }
+                }
+                """;
+            var sharper = CreateCompilation(template.Replace("{0}", "string[..]").Replace("{1}", "string?[..]"), parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            var csharp = CreateCompilation(template.Replace("{0}", "IEnumerable<string>").Replace("{1}", "IEnumerable<string?>").Replace("class C", "using System.Collections.Generic;\nclass C"), targetFramework: TargetFramework.Net90);
+            var expected = new[]
+            {
+                // (6,37): warning CS8602: Dereference of a possibly null reference.
+                //         foreach (var x in xs) { _ = x.Length; }
+                Diagnostic(ErrorCode.WRN_NullReferenceReceiver, "x").WithLocation(6, 37),
+                // (7,16): warning CS8603: Possible null reference return.
+                //         return null;
+                Diagnostic(ErrorCode.WRN_NullReferenceReturn, "null").WithLocation(7, 16)
+            };
+            sharper.VerifyDiagnostics(expected);
+            csharp.VerifyDiagnostics(expected.Select(d => d.WithLocation(d.LocationLine + 1, d.LocationCharacter)).ToArray());
         }
     }
 }
