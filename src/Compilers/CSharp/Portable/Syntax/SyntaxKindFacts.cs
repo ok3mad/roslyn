@@ -349,6 +349,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 case SyntaxKind.PredefinedType:
                 case SyntaxKind.TupleType:
                 case SyntaxKind.FunctionPointerType:
+                case SyntaxKind.FunctionType:
                     return true;
                 default:
                     return IsName(kind);

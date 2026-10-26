@@ -90,7 +90,7 @@ Inference keeps most types out of sight, but the wrapper types show up in public
 
 - **`T[..]`** is `IEnumerable<T>`: a lazy, unsized sequence, next to `T[]`, a real array.
 - **`T^`** (the hat) is `Task<T>`, and `void^` is the non-generic `Task`. It is the leading candidate, to be confirmed by trying it on real signatures. `Task<>` is at least about one percent of raw source in async-heavy code, so a short marker improves readability even without any other Sharper feature. It beat `~` (felt unsettling), `async T` (breaks the reading flow) and trailing dots (too close to `T[..]`).
-- **`(A, B) -> R`** is `Func<A, B, R>`, and `() -> T` is a thunk. `=>` stays reserved for bodies.
+- **`(A, B) -> R`** is `Func<A, B, R>`, and `() -> T` is a thunk. `=>` stays reserved for bodies, lambdas included: `->` is only a type arrow, because `x -> F(x)` is already a pointer member access in C#.
 - **Stacking** reads left to right, innermost first: `int[..]^` is `Task<IEnumerable<int>>`, `int^[..]` is `IEnumerable<Task<int>>`, and `(int) -> int^` is `Func<int, Task<int>>`.
 - **Parsing:** a postfix hat in a type position is resolved by lookahead, as C# does for `T? x`. The existing `^1` index-from-end is a prefix in expressions, so there is no clash.
 - **Not sugared:** `ValueTask<T>` is rare enough to stay spelled out, and `IAsyncEnumerable<T>` is avoided in practice. A stream is inferred in a pipeline when needed, and async streams are not a focus.
@@ -110,7 +110,7 @@ Sequences (`T[..]`) get two additions: spreading a whole sequence into an iterat
 
 Idiomatic C# passes interfaces where a functional style would pass functions, partly because spelling out function types is painful without inference. Sharper converts between the two, borrowing Java's single-method interface conversion.
 
-- **Lambda to interface.** `Render(user, id -> new Profile { Plan = "Pro" })` works where `IProfiles` is expected. It lowers to a generated sealed class implementing the interface. Eligible interfaces have exactly one abstract method, default members do not count, and generic methods are excluded.
+- **Lambda to interface.** `Render(user, id => new Profile { Plan = "Pro" })` works where `IProfiles` is expected. It lowers to a generated sealed class implementing the interface. Eligible interfaces have exactly one abstract method, default members do not count, and generic methods are excluded.
 - **Purely additive.** The conversion applies only where C# currently reports an error, so a lambda with a delegate overload still binds to the delegate. This keeps the no-semantic-breaking-changes rule, and the conversion never appears in sharpened code.
 - **Details.** Return types lift (a plain `Profile` where `(Profile | Unavailable)^` is expected), effects are checked against a `pure` contract on the interface method, captured variables become fields, non-capturing lambdas can be cached as singletons, and the generated class gets a readable name for stack traces.
 - **Reverse direction.** A single-method interface converts to the matching function type, and for a multi-method interface you name the method group, as in `profiles.Load`, which C# already converts to a delegate. With `Render` taking `(int) -> (Profile | Unavailable)^`, the call site becomes `users.Find(id) |> Render(it, profiles.Load)`, with no thunk.
@@ -433,7 +433,7 @@ Sharper with the same structure as the interface version, after sharpening and t
 interface IProfiles { (Profile | Unavailable)^ Load(int userId); }
 
 fun Render(User user, IProfiles profiles) =>
-    Retry(() -> profiles.Load(user.Id), times: 3, when: it is Unavailable)
+    Retry(() => profiles.Load(user.Id), times: 3, when: it is Unavailable)
         |> $"Hello, {user.Name} ({it.Plan})!";
 
 fun Hello(int id, IUsers users, IProfiles profiles) =>
@@ -459,7 +459,7 @@ fun Render(User user, () -> (Profile | Unavailable)^ load) =>
 
 fun Hello(int id, IUsers users, IProfiles profiles) =>
     users.Find(id)
-        |> Render(it, () -> profiles.Load(it.Id));
+        |> Render(it, () => profiles.Load(it.Id));
     // inferred: (string | NotFound | Unavailable)^
 
 [Fact]
@@ -634,6 +634,7 @@ What is settled so far, what was tried and dropped, and what waits for a later s
 - Exceptions are handled with `try expr catch { ... }`, and there is no `finally`; low-level code lives in C#.
 - Sorting and similar functions take an explicit comparator function instead of generic constraints.
 - Short type forms: `T[..]` for sequences, the hat (`T^`) for `Task<T>` as the leading candidate, and `() -> T` for functions.
+- `->` is only the arrow of function types; lambdas keep `=>`. A function type is `Func` or `Action`, never a synthesized delegate (see [function types](../features/function-types.md)).
 - Purity has three levels (impure, pure, total), and `total` is a checked assertion with inference for easy cases.
 - The sharpener is minimal and total, cleanup belongs to analyzers and fixers, and lowering undoes sharpening.
 - IL analysis is the baseline for bindings to existing CLR code, with a small hand-written overlay on top and three provenance levels (inferred, attested, declared).

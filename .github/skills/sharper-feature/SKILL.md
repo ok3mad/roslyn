@@ -109,6 +109,13 @@ Paths are under `src/Compilers/CSharp/Portable/`.
    to `EndOfFileToken`, so a new keyword kind must sit in the keyword range: take free slots from the top
    (`ValKeyword` = 8466, below `ElifKeyword`) and test that no other `SyntaxKind` has the value, because duplicate enum
    values compile silently. Diagnostics have no such limit: Sharper codes start at `SharperErrorCodes.Base` (CS20001).
+14. **A new syntax node is public API and hides in type switches.** When no existing node fits (function types), add it
+   to `Syntax.xml` with a `SyntaxKind` from 9900 up (Sharper node kinds count up from there, apart from upstream),
+   regenerate, and copy the build's RS0016 list into `PublicAPI.Unshipped.txt`. A new type node also needs
+   `SyntaxFacts.IsTypeSyntax`, `SyntaxFacts.IsInTypeOnlyContext` (for the semantic model) and
+   `SyntaxExtensions.VisitRankSpecifiers`, which throws on unknown type kinds. In the parser, gate every lookahead
+   change on Sharper and scan nested parentheses in one pass: trying a second scan after a failed one is exponential in
+   the nesting depth.
 
 ## Testing
 
