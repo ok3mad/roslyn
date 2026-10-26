@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for more information.
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -511,10 +512,10 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyEmitDiagnostics(
-                // (7,22): error CS9402: A spread 'yield return ..' cannot be used in an async iterator.
+                // (7,22): error CS20001: A spread 'yield return ..' cannot be used in an async iterator.
                 //         yield return ..xs;
                 Diagnostic(ErrorCode.ERR_SharperSpreadInAsyncIterator, "..xs").WithLocation(7, 22),
-                // (12,22): error CS9402: A spread 'yield return ..' cannot be used in an async iterator.
+                // (12,22): error CS20001: A spread 'yield return ..' cannot be used in an async iterator.
                 //         yield return ..xs;
                 Diagnostic(ErrorCode.ERR_SharperSpreadInAsyncIterator, "..xs").WithLocation(12, 22));
         }
@@ -576,7 +577,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
-                // (7,24): warning CS9403: '..d' is a range here, not a spread, because 'd' is dynamic. To yield each element, convert 'd' to a sequence type first.
+                // (7,24): warning CS20002: '..d' is a range here, not a spread, because 'd' is dynamic. To yield each element, convert 'd' to a sequence type first.
                 //         yield return ..d;
                 Diagnostic(ErrorCode.WRN_SharperDynamicRangeNotSpread, "d").WithArguments("d").WithLocation(7, 24));
         }
@@ -829,34 +830,34 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "00000False00;12;0" : null).VerifyDiagnostics(
-                // (6,1): warning CS9404: Call to non-readonly member 'S.Mutate()' on val variable 'v' runs on a copy, so 'v' is not changed.
+                // (6,1): warning CS20003: Call to non-readonly member 'S.Mutate()' on val variable 'v' runs on a copy, so 'v' is not changed.
                 // v.Mutate();
                 Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v").WithLocation(6, 1),
-                // (8,5): warning CS9404: Call to non-readonly member 'S.Getter.get' on val variable 'v' runs on a copy, so 'v' is not changed.
+                // (8,5): warning CS20003: Call to non-readonly member 'S.Getter.get' on val variable 'v' runs on a copy, so 'v' is not changed.
                 // _ = v.Getter;
                 Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Getter.get", "v").WithLocation(8, 5),
-                // (10,5): warning CS9404: Call to non-readonly member 'S.this[int].get' on val variable 'v' runs on a copy, so 'v' is not changed.
+                // (10,5): warning CS20003: Call to non-readonly member 'S.this[int].get' on val variable 'v' runs on a copy, so 'v' is not changed.
                 // _ = v[0];
                 Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.this[int].get", "v").WithLocation(10, 5),
-                // (12,19): warning CS9404: Call to non-readonly member 'S.GetEnumerator()' on val variable 'v' runs on a copy, so 'v' is not changed.
+                // (12,19): warning CS20003: Call to non-readonly member 'S.GetEnumerator()' on val variable 'v' runs on a copy, so 'v' is not changed.
                 // foreach (var x in v) { }
                 Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.GetEnumerator()", "v").WithLocation(12, 19),
-                // (14,14): warning CS9404: Call to non-readonly member 'S.Deconstruct(out int, out int)' on val variable 'v' runs on a copy, so 'v' is not changed.
+                // (14,14): warning CS20003: Call to non-readonly member 'S.Deconstruct(out int, out int)' on val variable 'v' runs on a copy, so 'v' is not changed.
                 // var (a, b) = v;
                 Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Deconstruct(out int, out int)", "v").WithLocation(14, 14),
-                // (16,1): warning CS9404: Call to non-readonly member 'S.E.add' on val variable 'v' runs on a copy, so 'v' is not changed.
+                // (16,1): warning CS20003: Call to non-readonly member 'S.E.add' on val variable 'v' runs on a copy, so 'v' is not changed.
                 // v.E += () => { };
                 Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.E.add", "v").WithLocation(16, 1),
-                // (21,20): warning CS9404: Call to non-readonly member 'S.Mutate()' on val variable 'v' runs on a copy, so 'v' is not changed.
+                // (21,20): warning CS20003: Call to non-readonly member 'S.Mutate()' on val variable 'v' runs on a copy, so 'v' is not changed.
                 // Action f = () => { v.Mutate(); Console.Write(v.F); };
                 Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v").WithLocation(21, 20),
-                // (24,1): warning CS9404: Call to non-readonly member 'S.Mutate()' on val variable 'v' runs on a copy, so 'v' is not changed.
+                // (24,1): warning CS20003: Call to non-readonly member 'S.Mutate()' on val variable 'v' runs on a copy, so 'v' is not changed.
                 // v.Mutate();
                 Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v").WithLocation(24, 1),
-                // (40,5): warning CS9404: Call to non-readonly member 'IMutable.Mutate()' on val variable 'g' runs on a copy, so 'g' is not changed.
+                // (40,5): warning CS20003: Call to non-readonly member 'IMutable.Mutate()' on val variable 'g' runs on a copy, so 'g' is not changed.
                 //     g.Mutate();
                 Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "g").WithArguments("IMutable.Mutate()", "g").WithLocation(40, 5),
-                // (41,19): warning CS9404: Call to non-readonly member 'IMutable.Get()' on val variable 'g' runs on a copy, so 'g' is not changed.
+                // (41,19): warning CS20003: Call to non-readonly member 'IMutable.Get()' on val variable 'g' runs on a copy, so 'g' is not changed.
                 //     Console.Write(g.Get());
                 Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "g").WithArguments("IMutable.Get()", "g").WithLocation(41, 19));
         }
@@ -906,25 +907,25 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "0000000" : null).VerifyDiagnostics(
-                // (6,7): warning CS9404: Call to non-readonly member 'S.GetAwaiter()' on val variable 'v' runs on a copy, so 'v' is not changed.
+                // (6,7): warning CS20003: Call to non-readonly member 'S.GetAwaiter()' on val variable 'v' runs on a copy, so 'v' is not changed.
                 // await v;
                 Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.GetAwaiter()", "v").WithLocation(6, 7),
-                // (8,5): warning CS9404: Call to non-readonly member 'S.Length.get' on val variable 'v' runs on a copy, so 'v' is not changed.
+                // (8,5): warning CS20003: Call to non-readonly member 'S.Length.get' on val variable 'v' runs on a copy, so 'v' is not changed.
                 // _ = v[^1];
                 Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Length.get", "v").WithLocation(8, 5),
-                // (8,5): warning CS9404: Call to non-readonly member 'S.this[int].get' on val variable 'v' runs on a copy, so 'v' is not changed.
+                // (8,5): warning CS20003: Call to non-readonly member 'S.this[int].get' on val variable 'v' runs on a copy, so 'v' is not changed.
                 // _ = v[^1];
                 Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.this[int].get", "v").WithLocation(8, 5),
-                // (10,5): warning CS9404: Call to non-readonly member 'S.Length.get' on val variable 'v' runs on a copy, so 'v' is not changed.
+                // (10,5): warning CS20003: Call to non-readonly member 'S.Length.get' on val variable 'v' runs on a copy, so 'v' is not changed.
                 // _ = v[1..];
                 Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Length.get", "v").WithLocation(10, 5),
-                // (10,5): warning CS9404: Call to non-readonly member 'S.Slice(int, int)' on val variable 'v' runs on a copy, so 'v' is not changed.
+                // (10,5): warning CS20003: Call to non-readonly member 'S.Slice(int, int)' on val variable 'v' runs on a copy, so 'v' is not changed.
                 // _ = v[1..];
                 Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Slice(int, int)", "v").WithLocation(10, 5),
-                // (12,5): warning CS9404: Call to non-readonly member 'S.Length.get' on val variable 'v' runs on a copy, so 'v' is not changed.
+                // (12,5): warning CS20003: Call to non-readonly member 'S.Length.get' on val variable 'v' runs on a copy, so 'v' is not changed.
                 // _ = v is [_, ..];
                 Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Length.get", "v").WithLocation(12, 5),
-                // (14,5): warning CS9404: Call to non-readonly member 'S.P.get' on val variable 'v' runs on a copy, so 'v' is not changed.
+                // (14,5): warning CS20003: Call to non-readonly member 'S.P.get' on val variable 'v' runs on a copy, so 'v' is not changed.
                 // _ = v is { P: 0 };
                 Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.P.get", "v").WithLocation(14, 5));
         }
@@ -1083,9 +1084,9 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
-                // (12,9): error CS1656: Cannot assign to 'r' because it is a 'val variable'
+                // (12,9): error CS20006: Cannot ref-assign 'r' because it is a ref val: it always refers to the same variable. Writes through 'r' are allowed.
                 //         r = ref j;
-                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "r").WithArguments("r", "val variable").WithLocation(12, 9),
+                Diagnostic(ErrorCode.ERR_SharperValRefReassignment, "r").WithArguments("r").WithLocation(12, 9),
                 // (16,9): error CS1656: Cannot assign to 's' because it is a 'val variable'
                 //         s = default;
                 Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "s").WithArguments("s", "val variable").WithLocation(16, 9));
@@ -1113,9 +1114,9 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
-                // (11,9): error CS1656: Cannot assign to 'd' because it is a 'using variable'
+                // (11,9): error CS1656: Cannot assign to 'd' because it is a 'val variable'
                 //         d = null;
-                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "d").WithArguments("d", "using variable").WithLocation(11, 9),
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "d").WithArguments("d", "val variable").WithLocation(11, 9),
                 // (12,9): error CS1656: Cannot assign to 'd2' because it is a 'using variable'
                 //         d2 = null;
                 Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "d2").WithArguments("d2", "using variable").WithLocation(12, 9),
@@ -1271,15 +1272,15 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (10,9): error CS1656: Cannot assign to 'c' because it is a 'val variable'
                 //         c = 3;
                 Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "c").WithArguments("c", "val variable").WithLocation(10, 9),
-                // (12,42): error CS1656: Cannot assign to 'x' because it is a 'foreach iteration variable'
+                // (12,42): error CS1656: Cannot assign to 'x' because it is a 'val variable'
                 //         foreach (val x in new[] { 1 }) { x = 2; }
-                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "foreach iteration variable").WithLocation(12, 42),
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "val variable").WithLocation(12, 42),
                 // (13,43): error CS1656: Cannot assign to 'x2' because it is a 'foreach iteration variable'
                 //         foreach (var x2 in new[] { 1 }) { x2 = 2; }
                 Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x2").WithArguments("x2", "foreach iteration variable").WithLocation(13, 43),
-                // (14,41): error CS1656: Cannot assign to 'k' because it is a 'foreach iteration variable'
+                // (14,41): error CS1656: Cannot assign to 'k' because it is a 'val variable'
                 //         foreach (val (k, v) in pairs) { k = 2; }
-                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "k").WithArguments("k", "foreach iteration variable").WithLocation(14, 41),
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "k").WithArguments("k", "val variable").WithLocation(14, 41),
                 // (15,43): error CS1656: Cannot assign to 'k2' because it is a 'foreach iteration variable'
                 //         foreach (var (k2, v2) in pairs) { k2 = 2; }
                 Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "k2").WithArguments("k2", "foreach iteration variable").WithLocation(15, 43),
@@ -1317,14 +1318,14 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             }
             else if (typeNamedVal)
             {
-                // A type named val keeps its C# meaning, with the same error var gets for `var (...)` when a type named var exists.
+                // A type named val keeps its C# meaning; `val (...)` then reports the val form of the error `var (...)` gets with a type named var.
                 comp.VerifyDiagnostics(sharper ? [
                 // (1,7): warning CS8981: The type name 'val' only contains lower-cased ascii characters. Such names may become reserved for the language.
                 // class val { }
                 Diagnostic(ErrorCode.WRN_LowerCaseTypeName, "val").WithArguments("val").WithLocation(1, 7),
-                // (6,13): error CS8136: Deconstruction 'var (...)' form disallows a specific type for 'var'.
+                // (6,13): error CS20005: Deconstruction 'val (...)' form disallows a specific type for 'val'. Use '@val' for the type.
                 //         val (a, b) = (1, 2);
-                Diagnostic(ErrorCode.ERR_DeconstructionVarFormDisallowsSpecificType, "(a, b)").WithLocation(6, 13),
+                Diagnostic(ErrorCode.ERR_SharperValDeconstructionDisallowsSpecificType, "(a, b)").WithLocation(6, 13),
                 // (6,23): error CS0029: Cannot implicitly convert type 'int' to 'val'
                 //         val (a, b) = (1, 2);
                 Diagnostic(ErrorCode.ERR_NoImplicitConv, "1").WithArguments("int", "val").WithLocation(6, 23),
@@ -1445,13 +1446,13 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "000" : null).VerifyDiagnostics(
-                // (5,5): warning CS9404: Call to non-readonly member 'S.Mutate()' on val variable 's' runs on a copy, so 's' is not changed.
+                // (5,5): warning CS20003: Call to non-readonly member 'S.Mutate()' on val variable 's' runs on a copy, so 's' is not changed.
                 //     s.Mutate();
                 Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "s").WithArguments("S.Mutate()", "s").WithLocation(5, 5),
-                // (9,1): warning CS9404: Call to non-readonly member 'S.Mutate()' on val variable 't' runs on a copy, so 't' is not changed.
+                // (9,1): warning CS20003: Call to non-readonly member 'S.Mutate()' on val variable 't' runs on a copy, so 't' is not changed.
                 // t.Mutate();
                 Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "t").WithArguments("S.Mutate()", "t").WithLocation(9, 1),
-                // (12,1): warning CS9404: Call to non-readonly member 'S.Mutate()' on val variable 'o' runs on a copy, so 'o' is not changed.
+                // (12,1): warning CS20003: Call to non-readonly member 'S.Mutate()' on val variable 'o' runs on a copy, so 'o' is not changed.
                 // o.Mutate();
                 Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "o").WithArguments("S.Mutate()", "o").WithLocation(12, 1));
         }
@@ -1648,9 +1649,9 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             if (sharper)
             {
                 CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
-                    // (4,20): error CS8508: The syntax 'var' for a pattern is not permitted to refer to a type, but 'val' is in scope here.
+                    // (4,20): error CS20004: The syntax 'val' for a pattern is not permitted to refer to a type, but 'val' is in scope here. Use '@val' for the type.
                     // Console.Write(o is val v ? v.GetType().Name : "-");
-                    Diagnostic(ErrorCode.ERR_VarMayNotBindToType, "val").WithArguments("val").WithLocation(4, 20),
+                    Diagnostic(ErrorCode.ERR_SharperValMayNotBindToType, "val").WithArguments("val").WithLocation(4, 20),
                     // (8,7): warning CS8981: The type name 'val' only contains lower-cased ascii characters. Such names may become reserved for the language.
                     // class val { }
                     Diagnostic(ErrorCode.WRN_LowerCaseTypeName, "val").WithArguments("val").WithLocation(8, 7));
@@ -1702,7 +1703,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "0" : null).VerifyDiagnostics(
-                // (6,5): warning CS9404: Call to non-readonly member 'S.Mutate()' on val variable 't' runs on a copy, so 't' is not changed.
+                // (6,5): warning CS20003: Call to non-readonly member 'S.Mutate()' on val variable 't' runs on a copy, so 't' is not changed.
                 //     t.Mutate();
                 Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "t").WithArguments("S.Mutate()", "t").WithLocation(6, 5));
         }
@@ -1739,7 +1740,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             if (sharper)
             {
                 var varPattern = (VarPatternSyntax)isPattern.Pattern;
-                Assert.Equal(SyntaxKind.VarKeyword, varPattern.VarKeyword.Kind());
+                Assert.Equal(SyntaxKind.ValKeyword, varPattern.VarKeyword.Kind());
                 Assert.Equal("val", varPattern.VarKeyword.Text);
                 Assert.Equal("o is val x", isPattern.ToFullString());
             }
@@ -1774,6 +1775,238 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                     IDeclarationPatternOperation (OperationKind.DeclarationPattern, Type: null) (Syntax: 'val x') (InputType: System.Object, NarrowedType: System.Object, DeclaredSymbol: System.Object? x, MatchesNull: True)
                 """;
             VerifyOperationTreeAndDiagnosticsForTest<IsPatternExpressionSyntax>(comp, expectedOperationTree, []);
+        }
+
+        [Fact]
+        public void ValPolish_TypeNamedValMessages()
+        {
+            var source = """
+                class val { }
+
+                class C
+                {
+                    void M(object o)
+                    {
+                        val (a, b) = (1, 2);
+                        _ = o is val x;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (1,7): warning CS8981: The type name 'val' only contains lower-cased ascii characters. Such names may become reserved for the language.
+                // class val { }
+                Diagnostic(ErrorCode.WRN_LowerCaseTypeName, "val").WithArguments("val").WithLocation(1, 7),
+                // (7,13): error CS20005: Deconstruction 'val (...)' form disallows a specific type for 'val'. Use '@val' for the type.
+                //         val (a, b) = (1, 2);
+                Diagnostic(ErrorCode.ERR_SharperValDeconstructionDisallowsSpecificType, "(a, b)").WithLocation(7, 13),
+                // (7,23): error CS0029: Cannot implicitly convert type 'int' to 'val'
+                //         val (a, b) = (1, 2);
+                Diagnostic(ErrorCode.ERR_NoImplicitConv, "1").WithArguments("int", "val").WithLocation(7, 23),
+                // (7,26): error CS0029: Cannot implicitly convert type 'int' to 'val'
+                //         val (a, b) = (1, 2);
+                Diagnostic(ErrorCode.ERR_NoImplicitConv, "2").WithArguments("int", "val").WithLocation(7, 26),
+                // (8,18): error CS20004: The syntax 'val' for a pattern is not permitted to refer to a type, but 'val' is in scope here. Use '@val' for the type.
+                //         _ = o is val x;
+                Diagnostic(ErrorCode.ERR_SharperValMayNotBindToType, "val").WithArguments("val").WithLocation(8, 18));
+        }
+
+        [Fact]
+        public void ValPolish_ForEachAndUsingCause()
+        {
+            var source = """
+                using System;
+
+                class D : IDisposable { public void Dispose() { } }
+
+                class C
+                {
+                    void M()
+                    {
+                        foreach (val x in new[] { 1 }) { x = 2; }
+                        foreach (var y in new[] { 1 }) { y = 2; }
+                        using val d = new D();
+                        using var e = new D();
+                        d = null;
+                        e = null;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (9,42): error CS1656: Cannot assign to 'x' because it is a 'val variable'
+                //         foreach (val x in new[] { 1 }) { x = 2; }
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "val variable").WithLocation(9, 42),
+                // (10,42): error CS1656: Cannot assign to 'y' because it is a 'foreach iteration variable'
+                //         foreach (var y in new[] { 1 }) { y = 2; }
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "y").WithArguments("y", "foreach iteration variable").WithLocation(10, 42),
+                // (13,9): error CS1656: Cannot assign to 'd' because it is a 'val variable'
+                //         d = null;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "d").WithArguments("d", "val variable").WithLocation(13, 9),
+                // (14,9): error CS1656: Cannot assign to 'e' because it is a 'using variable'
+                //         e = null;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "e").WithArguments("e", "using variable").WithLocation(14, 9));
+        }
+
+        [Fact]
+        public void ValPolish_RefReassignment()
+        {
+            var source = """
+                class C
+                {
+                    void M()
+                    {
+                        int i = 1, j = 2;
+                        ref val r = ref i;
+                        r = 3;
+                        r = ref j;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (8,9): error CS20006: Cannot ref-assign 'r' because it is a ref val: it always refers to the same variable. Writes through 'r' are allowed.
+                //         r = ref j;
+                Diagnostic(ErrorCode.ERR_SharperValRefReassignment, "r").WithArguments("r").WithLocation(8, 9));
+        }
+
+        private static readonly CSharpParseOptions s_sharperScriptOptions = TestOptions.Script.WithExperimental(MessageID.IDS_FeatureSharper);
+
+        [Fact]
+        public void ValScript_Fields()
+        {
+            // In a script, top-level declarations are fields. val is var plus read-only there too.
+            var source = """
+                val x = 1;
+                var y = 1;
+                x = 2;
+                y = 2;
+                x++;
+                int.TryParse("3", out val n);
+                int.TryParse("3", out var m);
+                n = 4;
+                m = 4;
+                val (a, b) = (5, 6);
+                var (c, d) = (5, 6);
+                a = 7;
+                c = 7;
+                object o = 8;
+                if (o is val p) { }
+                p = null;
+                """;
+            CreateCompilation(source, parseOptions: s_sharperScriptOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (3,1): error CS1656: Cannot assign to 'x' because it is a 'val variable'
+                // x = 2;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "val variable").WithLocation(3, 1),
+                // (5,1): error CS1656: Cannot assign to 'x' because it is a 'val variable'
+                // x++;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "val variable").WithLocation(5, 1),
+                // (8,1): error CS1656: Cannot assign to 'n' because it is a 'val variable'
+                // n = 4;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "n").WithArguments("n", "val variable").WithLocation(8, 1),
+                // (12,1): error CS1656: Cannot assign to 'a' because it is a 'val variable'
+                // a = 7;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "a").WithArguments("a", "val variable").WithLocation(12, 1),
+                // (16,1): error CS1656: Cannot assign to 'p' because it is a 'val variable'
+                // p = null;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "p").WithArguments("p", "val variable").WithLocation(16, 1));
+        }
+
+        [Fact]
+        public void ValScript_Runtime()
+        {
+            var source = """
+                using System;
+
+                val x = 1;
+                int.TryParse("2", out val n);
+                val (a, b) = (3, 4);
+                object o = 5;
+                if (o is val p) { }
+                val s = new S();
+                s.Mutate();
+                Console.Write($"{x}{n}{a}{b}{p}{s.F}");
+
+                struct S
+                {
+                    public int F;
+                    public void Mutate() { F++; }
+                }
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperScriptOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "123450" : null).VerifyDiagnostics(
+                // (9,1): warning CS20003: Call to non-readonly member 'S.Mutate()' on val variable 's' runs on a copy, so 's' is not changed.
+                // s.Mutate();
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "s").WithArguments("S.Mutate()", "s").WithLocation(9, 1));
+        }
+
+        [Fact]
+        public void ValScript_TypeNamedValWins()
+        {
+            var source = """
+                class val { }
+                val x = new val();
+                x = new val();
+                """;
+            CreateCompilation(source, parseOptions: s_sharperScriptOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (1,7): warning CS8981: The type name 'val' only contains lower-cased ascii characters. Such names may become reserved for the language.
+                // class val { }
+                Diagnostic(ErrorCode.WRN_LowerCaseTypeName, "val").WithArguments("val").WithLocation(1, 7));
+        }
+
+        [Fact]
+        public void SharperDiagnostics_NumberedFromBase()
+        {
+            Assert.Equal(20001, (int)ErrorCode.ERR_SharperSpreadInAsyncIterator);
+            Assert.Equal("CS20003", MessageProvider.Instance.GetIdForErrorCode((int)ErrorCode.WRN_SharperValMemberCallOnCopy));
+
+            // Five-digit IDs work with #pragma and the command-line warning options.
+            var source = """
+                S s = new S();
+                val v = s;
+                #pragma warning disable CS20003
+                v.Mutate();
+                #pragma warning restore CS20003
+                v.Mutate();
+
+                struct S { public void Mutate() { } }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (6,1): warning CS20003: Call to non-readonly member 'S.Mutate()' on val variable 'v' runs on a copy, so 'v' is not changed.
+                // v.Mutate();
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v").WithLocation(6, 1));
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90,
+                options: TestOptions.DebugExe.WithSpecificDiagnosticOptions("CS20003", ReportDiagnostic.Suppress)).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void ValKeyword_SyntaxKind()
+        {
+            // ValKeyword sits apart from the upstream contextual keywords; an upstream merge must not reuse its value
+            // (duplicate enum values compile silently).
+            Assert.Equal(8466, (int)SyntaxKind.ValKeyword);
+            Assert.Single(Enum.GetValues(typeof(SyntaxKind)).Cast<SyntaxKind>(), k => (int)k == (int)SyntaxKind.ValKeyword);
+            Assert.True(SyntaxKind.ValKeyword < SyntaxKind.ElifKeyword);
+
+            Assert.Equal("val", SyntaxFacts.GetText(SyntaxKind.ValKeyword));
+            Assert.True(SyntaxFacts.IsContextualKeyword(SyntaxKind.ValKeyword));
+            Assert.Contains(SyntaxKind.ValKeyword, SyntaxFacts.GetContextualKeywordKinds());
+            Assert.Equal(SyntaxKind.ValKeyword, SyntaxFacts.GetContextualKeywordKind("val"));
+
+            // Like var, an identifier spelled val reports the keyword as its contextual kind, with or without Sharper.
+            Assert.Equal(SyntaxKind.ValKeyword, SyntaxFactory.ParseToken("val").ContextualKind());
+            Assert.Equal(SyntaxKind.IdentifierToken, SyntaxFactory.ParseToken("@val").ContextualKind());
+        }
+
+        [Fact]
+        public void ValKeyword_FactoryRoundTrip()
+        {
+            // Rebuilding a val pattern from its kind keeps val (a VarKeyword token with the text val would come back as var).
+            var token = SyntaxFactory.Token(SyntaxKind.ValKeyword);
+            Assert.Equal("val", token.Text);
+            var pattern = SyntaxFactory.VarPattern(token, SyntaxFactory.SingleVariableDesignation(SyntaxFactory.Identifier("x")));
+            Assert.Equal("val x", pattern.NormalizeWhitespace().ToFullString());
+
+            var parsed = (IsPatternExpressionSyntax)SyntaxFactory.ParseExpression("o is val x", options: s_sharperOptions);
+            var rebuilt = ((VarPatternSyntax)parsed.Pattern).WithVarKeyword(SyntaxFactory.Token(((VarPatternSyntax)parsed.Pattern).VarKeyword.Kind()));
+            Assert.Equal("val", rebuilt.VarKeyword.Text);
+            Assert.Throws<ArgumentException>(() => SyntaxFactory.VarPattern(SyntaxFactory.Token(SyntaxKind.LetKeyword), SyntaxFactory.SingleVariableDesignation(SyntaxFactory.Identifier("x"))));
         }
     }
 }

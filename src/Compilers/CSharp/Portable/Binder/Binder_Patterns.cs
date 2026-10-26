@@ -1553,8 +1553,9 @@ namespace Microsoft.CodeAnalysis.CSharp
             Symbol foundSymbol = BindTypeOrAliasOrKeyword(node.VarKeyword, node, diagnostics, out bool isVar).Symbol;
             if (!isVar)
             {
-                // Give an error if there is a bindable type "var" in scope
-                diagnostics.Add(ErrorCode.ERR_VarMayNotBindToType, node.VarKeyword.GetLocation(), foundSymbol.ToDisplayString());
+                // Give an error if there is a bindable type "var" in scope (or "val", for Sharper's val pattern)
+                diagnostics.Add(node.VarKeyword.IsKind(SyntaxKind.ValKeyword) ? ErrorCode.ERR_SharperValMayNotBindToType : ErrorCode.ERR_VarMayNotBindToType,
+                    node.VarKeyword.GetLocation(), foundSymbol.ToDisplayString());
                 hasErrors = true;
             }
 

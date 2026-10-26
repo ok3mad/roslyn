@@ -1349,6 +1349,51 @@ public sealed class SolutionTests : TestBase
     }
 
     [Fact]
+    public async Task SharperFileExtension()
+    {
+        using var workspace = CreateWorkspace();
+
+        var projectId = ProjectId.CreateNewId();
+        var csId = DocumentId.CreateNewId(projectId);
+        var cxId = DocumentId.CreateNewId(projectId);
+
+        // The same text in both files, so a tree cached for one is never reused for the other.
+        var text = SourceText.From("file class C { static int M() { val x = 1; return x; } }", Encoding.UTF8, SourceHashAlgorithms.Default);
+
+        var solution = workspace.CurrentSolution
+            .AddProject(ProjectInfo.Create(projectId, VersionStamp.Default, "P", "P", LanguageNames.CSharp, Path.Combine(s_projectDir, "P.dll"), compilationOptions: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary), metadataReferences: [s_mscorlib]))
+            .AddDocument(csId, "a.cs", text, filePath: Path.Combine(s_projectDir, "a.cs"))
+            .AddDocument(cxId, "b.cx", text, filePath: Path.Combine(s_projectDir, "b.CX"));
+
+        await AssertSharperAsync(solution, csId, expected: false);
+        await AssertSharperAsync(solution, cxId, expected: true);
+
+        // Both trees are in one compilation; 'val' is an error only in the .cs file.
+        var compilation = await solution.GetRequiredProject(projectId).GetRequiredCompilationAsync(CancellationToken.None);
+        var csTree = await solution.GetRequiredDocument(csId).GetRequiredSyntaxTreeAsync(CancellationToken.None);
+        var errors = compilation.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).ToArray();
+        Assert.NotEmpty(errors);
+        Assert.All(errors, d => Assert.Same(csTree, d.Location.SourceTree));
+
+        // The extension still decides after the project's parse options change.
+        solution = solution.WithProjectParseOptions(projectId, CSharpParseOptions.Default.WithPreprocessorSymbols("DEBUG"));
+        await AssertSharperAsync(solution, cxId, expected: true);
+        await AssertSharperAsync(solution, csId, expected: false);
+
+        // Renaming the file changes its language.
+        solution = solution.WithDocumentFilePath(cxId, Path.Combine(s_projectDir, "b.cs"));
+        await AssertSharperAsync(solution, cxId, expected: false);
+        solution = solution.WithDocumentFilePath(csId, Path.Combine(s_projectDir, "a.cx"));
+        await AssertSharperAsync(solution, csId, expected: true);
+
+        static async Task AssertSharperAsync(Solution solution, DocumentId documentId, bool expected)
+        {
+            var tree = await solution.GetRequiredDocument(documentId).GetRequiredSyntaxTreeAsync(CancellationToken.None);
+            Assert.Equal(expected, tree.Options.Features.ContainsKey("sharper"));
+        }
+    }
+
+    [Fact]
     public void WithProjectInfo_Unsupported_RemovingCompilationOptions()
     {
         var projectId = ProjectId.CreateNewId();

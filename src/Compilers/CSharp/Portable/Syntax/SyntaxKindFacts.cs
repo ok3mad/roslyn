@@ -1248,6 +1248,9 @@ namespace Microsoft.CodeAnalysis.CSharp
                     yield return (SyntaxKind)i;
                 }
             }
+
+            // Sharper's contextual keywords sit apart from the upstream range (see SyntaxKind.ValKeyword).
+            yield return SyntaxKind.ValKeyword;
         }
 
         public static bool IsContextualKeyword(SyntaxKind kind)
@@ -1305,6 +1308,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 case SyntaxKind.UnionKeyword:
                 case SyntaxKind.ClosedKeyword:
                 case SyntaxKind.SafeKeyword:
+                case SyntaxKind.ValKeyword:
                     return true;
                 default:
                     return false;
@@ -1440,6 +1444,8 @@ namespace Microsoft.CodeAnalysis.CSharp
                     return SyntaxKind.ClosedKeyword;
                 case "safe":
                     return SyntaxKind.SafeKeyword;
+                case "val":
+                    return SyntaxKind.ValKeyword;
                 default:
                     return SyntaxKind.None;
             }
@@ -1863,6 +1869,8 @@ namespace Microsoft.CodeAnalysis.CSharp
                     return "_";
                 case SyntaxKind.VarKeyword:
                     return "var";
+                case SyntaxKind.ValKeyword:
+                    return "val";
                 case SyntaxKind.AndKeyword:
                     return "and";
                 case SyntaxKind.OrKeyword:

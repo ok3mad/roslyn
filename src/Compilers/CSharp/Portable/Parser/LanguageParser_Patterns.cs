@@ -291,12 +291,9 @@ namespace Microsoft.CodeAnalysis.CSharp.Syntax.InternalSyntax
                     (this.CurrentToken.Kind == SyntaxKind.OpenParenToken || this.IsValidPatternDesignation(inSwitchArmPattern)))
                 {
                     // we have a "var" pattern; "var" is not permitted to be a stand-in for a type (or a constant) in a pattern.
-                    // Sharper's "val" is a "var" pattern whose keyword reads "val": its variables cannot be reassigned. Like "var",
-                    // it is a keyword here even where a type named val exists (an accepted break, escaped as @val by the sharpener).
-                    // PROTOTYPE(sharper): A VarKeyword token with the text "val" avoids a new syntax node; revisit with the IDE work.
-                    var varToken = typeIdentifierToken.ContextualKind == SyntaxKind.VarKeyword
-                        ? ConvertToKeyword(typeIdentifierToken)
-                        : SyntaxFactory.Token(typeIdentifierToken.LeadingTrivia.Node, SyntaxKind.VarKeyword, typeIdentifierToken.Text, typeIdentifierToken.TrailingTrivia.Node);
+                    // Sharper's "val" is a var pattern with a ValKeyword token: its variables cannot be reassigned. Like "var", it is
+                    // a keyword here even where a type named val exists (an accepted break, escaped as @val by the sharpener).
+                    var varToken = ConvertToKeyword(typeIdentifierToken);
                     var varDesignation = ParseDesignation(forPattern: true);
                     return _syntaxFactory.VarPattern(varToken, varDesignation);
                 }

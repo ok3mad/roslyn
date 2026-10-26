@@ -2513,10 +2513,14 @@ namespace Microsoft.CodeAnalysis.CSharp
         ERR_BadCompilationOptionValueAccepted = 9400,
         ERR_IllegalUnsafeModifier = 9401,
 
-        // PROTOTYPE(sharper): Sharper diagnostics take the next free numbers on this branch and may clash with upstream.
-        ERR_SharperSpreadInAsyncIterator = 9402,
-        WRN_SharperDynamicRangeNotSpread = 9403,
-        WRN_SharperValMemberCallOnCopy = 9404,
+        // Sharper diagnostics are numbered from SharperErrorCodes.Base, far above the upstream numbers (CS9401 today), so
+        // upstream can keep adding codes without clashing. Add new Sharper codes at the end of this block.
+        ERR_SharperSpreadInAsyncIterator = SharperErrorCodes.Base + 1,
+        WRN_SharperDynamicRangeNotSpread = SharperErrorCodes.Base + 2,
+        WRN_SharperValMemberCallOnCopy = SharperErrorCodes.Base + 3,
+        ERR_SharperValMayNotBindToType = SharperErrorCodes.Base + 4,
+        ERR_SharperValDeconstructionDisallowsSpecificType = SharperErrorCodes.Base + 5,
+        ERR_SharperValRefReassignment = SharperErrorCodes.Base + 6,
 
         // Note: you will need to do the following after adding errors:
         //  1) Update ErrorFacts.IsBuildOnlyDiagnostic (src/Compilers/CSharp/Portable/Errors/ErrorFacts.cs)
@@ -2528,5 +2532,15 @@ namespace Microsoft.CodeAnalysis.CSharp
         //  3) Update ErrorFacts.GetWarningLevel (src/Compilers/CSharp/Portable/Errors/ErrorFacts.cs)
         //  4) Update DiagnosticTest.WarningLevel_2 (src/Compilers/CSharp/Test/Syntax/Diagnostics/DiagnosticTest.cs)
         //  5) Add message and '_Title' to CSharpResources.resx
+    }
+
+    /// <summary>
+    /// The numbering base for Sharper diagnostics: CS20001 and up. Upstream C# is at about CS9400 and adds roughly a
+    /// hundred codes a year, so the gap leaves room for decades of upstream codes; five-digit IDs work in
+    /// <c>#pragma warning</c>, <c>/nowarn</c> and <c>.editorconfig</c>.
+    /// </summary>
+    internal static class SharperErrorCodes
+    {
+        internal const int Base = 20000;
     }
 }

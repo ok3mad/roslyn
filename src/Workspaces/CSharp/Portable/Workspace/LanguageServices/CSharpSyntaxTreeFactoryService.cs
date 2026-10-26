@@ -6,6 +6,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Composition;
 using System.Text;
 using System.Threading;
@@ -55,12 +56,31 @@ internal sealed partial class CSharpSyntaxTreeFactoryService : AbstractSyntaxTre
 
     public override SyntaxTree CreateSyntaxTree(string filePath, ParseOptions options, SourceText text, Encoding encoding, SourceHashAlgorithm checksumAlgorithm, SyntaxNode root)
     {
-        options ??= GetDefaultParseOptions();
+        options = GetParseOptionsForFile(filePath, options ?? GetDefaultParseOptions());
         return new ParsedSyntaxTree(text, (CSharpSyntaxNode)root, (CSharpParseOptions)options, filePath, encoding, checksumAlgorithm);
     }
 
     protected override SyntaxTree ParseSyntaxTreeCore(string filePath, ParseOptions options, SourceText text, CancellationToken cancellationToken)
         => SyntaxFactory.ParseSyntaxTree(text, options, filePath, cancellationToken: cancellationToken);
+
+    /// <summary>
+    /// Sharper files (.cx) are parsed with the Sharper feature turned on, as the command-line compiler does
+    /// (<c>CSharpCompiler.IsSharperFile</c>; the extension and feature name are internal to the compiler).
+    /// </summary>
+    protected override ParseOptions GetParseOptionsForFile(string filePath, ParseOptions options)
+    {
+        if (filePath is null
+            || !filePath.EndsWith(SharperFileExtension, StringComparison.OrdinalIgnoreCase)
+            || options.Features.ContainsKey(SharperFeature))
+        {
+            return options;
+        }
+
+        return options.WithFeatures(options.Features.ToImmutableDictionary(StringComparer.OrdinalIgnoreCase).SetItem(SharperFeature, "true"));
+    }
+
+    private const string SharperFileExtension = ".cx";
+    private const string SharperFeature = "sharper";
 }
 
 [ExportLanguageServiceFactory(typeof(ISyntaxTreeFactoryService), LanguageNames.CSharp), Shared]

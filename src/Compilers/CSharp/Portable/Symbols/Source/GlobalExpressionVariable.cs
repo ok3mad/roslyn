@@ -52,7 +52,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             Debug.Assert(nodeToBind.Kind() == SyntaxKind.VariableDeclarator || nodeToBind is ExpressionSyntax);
 
             var syntaxReference = syntax.GetReference();
-            return (typeSyntax == null || typeSyntax.SkipScoped(out _).SkipRef().IsVar)
+            return (typeSyntax == null || typeSyntax.SkipScoped(out _).SkipRef().IsVarOrVal)
                 ? new InferrableGlobalExpressionVariable(containingType, modifiers, typeSyntax, name, syntaxReference, locationSpan, containingFieldOpt, nodeToBind)
                 : new GlobalExpressionVariable(containingType, modifiers, typeSyntax, name, syntaxReference, locationSpan);
         }

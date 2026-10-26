@@ -758,7 +758,9 @@ namespace Microsoft.CodeAnalysis.CSharp
                             if (!isVar)
                             {
                                 // An explicit type is not allowed with a parenthesized designation
-                                Error(diagnostics, ErrorCode.ERR_DeconstructionVarFormDisallowsSpecificType, component.Designation);
+                                Error(diagnostics,
+                                    component.Type.SkipScoped(out _).SkipRef().IsVal ? ErrorCode.ERR_SharperValDeconstructionDisallowsSpecificType : ErrorCode.ERR_DeconstructionVarFormDisallowsSpecificType,
+                                    component.Designation);
                             }
                             else if (node.Parent is not ArgumentSyntax)
                             {

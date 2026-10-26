@@ -9,7 +9,8 @@ experimental project; it has no team, review schedule or release process yet.
   whether the problem needs `/features:sharper`. A problem that also happens without the flag is an upstream bug:
   report it to [dotnet/roslyn](https://github.com/dotnet/roslyn/issues).
 - **Language features:** Sharper features are proposed and developed here, not in
-  [dotnet/csharplang](https://github.com/dotnet/csharplang). Read the [design rules](docs/sharper/README.md#design-rules)
+  [dotnet/csharplang](https://github.com/dotnet/csharplang). Each planned feature has an issue under the
+  [roadmap tracking issue #12](https://github.com/ok3mad/roslyn/issues/12); comment there, or open a new issue for a new idea. Read the [design rules](docs/sharper/README.md#design-rules)
   first: every feature is gated on `/features:sharper` and must not change the meaning of valid C#.
 - **Code:** develop features on a `sharper/<feature>` branch and send a pull request to `main`. Follow the
   [`sharper-feature` skill](.github/skills/sharper-feature/SKILL.md), which lists every compiler layer a feature
