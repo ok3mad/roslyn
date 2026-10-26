@@ -1,4 +1,8 @@
-# Roslyn (.NET Compiler Platform) — AI Agent Instructions
+# Sharper (fork of Roslyn) — AI Agent Instructions
+
+This repository is the **Sharper** fork of dotnet/roslyn: an experimental C# dialect built inside the C# compiler,
+gated on `/features:sharper`. Start with [`docs/sharper/README.md`](docs/sharper/README.md) for Sharper work, and use
+the [`sharper-feature` skill](.github/skills/sharper-feature/SKILL.md) to implement features.
 
 This file is intentionally thin. The canonical, repo-wide agent guidance lives in
 **[`.github/copilot-instructions.md`](.github/copilot-instructions.md)** — read it first.
