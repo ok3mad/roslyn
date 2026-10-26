@@ -1,3 +1,6 @@
+> [!NOTE]
+> **Sharper fork:** this document is inherited from upstream [dotnet/roslyn](https://github.com/dotnet/roslyn). It still describes the code this fork is built on, but its process, ownership, release and CI information belongs to dotnet/roslyn. Sharper's changes to the C# compiler are described in the [Sharper overview](../sharper/README.md).
+
 # Roslyn Compiler
 
 ## Specification

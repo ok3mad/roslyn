@@ -1,3 +1,6 @@
+> [!NOTE]
+> **Sharper fork:** this document is inherited from upstream [dotnet/roslyn](https://github.com/dotnet/roslyn). This review process is run by the .NET team for dotnet/roslyn. So far, Sharper adds no public API; see the [Sharper design rules](../sharper/README.md#design-rules).
+
 # API Review Process
 
 .NET has a long-standing history of taking API usability extremely seriously. Thus, we generally review every single API that is added to the product. This page discusses how we conduct design reviews for the Roslyn components.

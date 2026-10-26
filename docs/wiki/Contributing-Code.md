@@ -1,3 +1,6 @@
+> [!NOTE]
+> **Sharper fork:** this document is inherited from upstream [dotnet/roslyn](https://github.com/dotnet/roslyn). For contributing to Sharper, see [CONTRIBUTING.md](../../CONTRIBUTING.md).
+
 ### Contributing Code
 
 Before submitting a feature or substantial code contribution, please discuss it with the team and ensure it follows the product [roadmap](Roadmap.md). The team rigorously reviews and tests all code submissions. The submissions must meet an extremely high bar for quality, design, and roadmap appropriateness.

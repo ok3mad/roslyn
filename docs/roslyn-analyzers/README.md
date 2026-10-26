@@ -1,3 +1,6 @@
+> [!NOTE]
+> **Sharper fork:** this document is inherited from upstream [dotnet/roslyn](https://github.com/dotnet/roslyn). These analyzer packages are published by dotnet/roslyn.
+
 # Roslyn Analyzers
 
 ## Microsoft.CodeAnalysis.Analyzers

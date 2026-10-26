@@ -1,3 +1,6 @@
+> [!NOTE]
+> **Sharper fork:** this document is inherited from upstream [dotnet/roslyn](https://github.com/dotnet/roslyn). These labels are used in dotnet/roslyn and are not set up in this fork.
+
 This repo leverages a large set of labels to help the core team understand the priority of issues as well the area in which the issues apply.  Some of the labels are intended to be singular (for example, each issue can only have one priority), while others can overlap (an issue might involve both the Compilers team as well as the IDE team, at least initially).  It’s important to understand how these labels are used by the team at Microsoft to understand not only the state of issues, but also to verify that the issue you’ve encountered (or the feature you’re about to write) isn’t already in the database.
 
 ## Workflow

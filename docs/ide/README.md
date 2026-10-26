@@ -1,3 +1,6 @@
+> [!NOTE]
+> **Sharper fork:** this document is inherited from upstream [dotnet/roslyn](https://github.com/dotnet/roslyn). It lists IDE features shipped in Visual Studio. The IDE does not support Sharper syntax yet.
+
 # Recently added productivity features and links to release notes
 
 ## TOC

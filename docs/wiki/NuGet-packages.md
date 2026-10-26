@@ -1,3 +1,6 @@
+> [!NOTE]
+> **Sharper fork:** this document is inherited from upstream [dotnet/roslyn](https://github.com/dotnet/roslyn). These packages are published by dotnet/roslyn and contain the official compilers, without Sharper. Sharper is not published as a package yet.
+
 ## Overview
 
 A number of NuGet packages are published from the Roslyn repo:

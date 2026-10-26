@@ -1,3 +1,6 @@
+> [!NOTE]
+> **Sharper fork:** this document is inherited from upstream [dotnet/roslyn](https://github.com/dotnet/roslyn). It describes how C# and VB features are developed upstream (csharplang, LDM, feature branches). Sharper features follow the [Sharper design rules](../sharper/README.md#design-rules) and the [`sharper-feature` skill](../../.github/skills/sharper-feature/SKILL.md) instead.
+
 # Developing a Language Feature
 
 Adding a new feature to C# or VB is a very serious undertaking that often takes several iterations to complete for even the (seemingly) simplest of features. This is due to both the inherent complexity of changing languages and the need to consider the effects of new features in all layers of the Roslyn codebase: IDE, debugging, scripting, etc. As such, language work occurs in a separate branch until the feature reaches a point when we are ready to merge it into the main compiler.

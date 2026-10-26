@@ -1,3 +1,6 @@
+> [!NOTE]
+> **Sharper fork:** this document is inherited from upstream [dotnet/roslyn](https://github.com/dotnet/roslyn). It lists breaking changes in upstream Roslyn's public API. So far, Sharper does not change the public API.
+
 API Breaking Changes
 ====
 
