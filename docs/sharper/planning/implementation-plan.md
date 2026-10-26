@@ -84,58 +84,58 @@ A new construct's real cost is in the places that never mention it. Model it on 
 
 ## Syntax roadmap
 
-The brainstorm proposes 28 pieces of syntax (#28, discard arguments, is still to be discussed). One is done (`yield return ..xs`). The next feature is `val`: small, decided, and it reaches parts of the compiler the first PoC did not. Everything that depends on unions or purity waits for those designs.
+The brainstorm proposes 28 pieces of syntax (#28, discard arguments, is still to be discussed). Each row has a GitHub issue, collected under the tracking issue [#12](https://github.com/ok3mad/roslyn/issues/12). Four are done: `yield return ..xs` and `val` in locals, deconstruction and patterns. Everything that depends on unions or purity waits for those designs.
 
 - **Size**, relative to the `yield return ..xs` PoC. **S**: about that size (no parser change, one bound node, reused lowering). **M**: a gated parser change, or a new lowering with its own rules. **L**: new inference or binding rules that interact with overload resolution or signature binding. **XL**: a new checker layer (refinements, unions, effects).
 - **Certainty**. **High**: decided in the brainstorm, spelling stable. **Med**: the leading direction, details or spelling open. **Low**: only sketched in examples, contradicted elsewhere, or blocked on an open question.
 
 ### Phase 1: inference, immutability and short type forms
 
-| # | Syntax | Example | Lowers to | Parser change | Size | Certainty | Main risk or open point |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | Spread in iterators | `yield return ..xs` | `foreach` of yield returns | none | S | Done | Follow-ups below: async iterators, `dynamic`, Edit and Continue |
-| 2 | `val` immutable local | `val total = 0;` | `var` plus a no-reassignment check | none (`val` parses as a type name) | S | High | The only breaking keyword; trial binding plus a sharpener `@val` escape |
-| 3 | `val` deconstruction | `val (small, large) = ...;` | deconstruction plus the same check | small: accept `val` wherever the parser checks for `var` (`IsPossibleDeconstructionLeft`, statement disambiguation, `IsVarType`) | S | High | Comes with #2. Without the parser change, `val (a, b) = e` parses as an invocation; the same checks cover `foreach (val (a, b) in ...)` and `out val (a, b)` |
-| 4 | `readonly` locals | `readonly int x`, `readonly var x` | local plus the same check | likely none (modifier probably parses, with an error) | S | Med | Rarely written; completes the mutability grid |
-| 5 | `val` lambda parameter | `(val x) => ...` | lambda plus the same check | small | S | Med |  |
-| 6 | `val` in patterns | `is { Length: val n }` | `var n` pattern plus the same check | yes: in a pattern the parser turns `val` into a keyword, as it does `var` (`LanguageParser_Patterns.cs`) | S | Med–High | Decided: `val` is always a keyword in patterns, like `var`. Breaks a type pattern on a type named `val`, so the sharpener escapes it as `@val`. Still open: is `val i` in an arm a binding pattern or a parameter modifier? |
-| 7 | Sequence type | `int[..]` | `IEnumerable<int>` | small (reported today as ERR\_ArraySizeInDeclaration) | S | High | Small and decided: a good second feature |
-| 8 | Task hat | `T^`, `void^`, `int[..]^` | `Task<T>`, `Task` | yes (postfix lookahead, like `T?`) | S–M | Med | Leading candidate; to be confirmed on real signatures |
-| 9 | Function types | `(A, B) -> R`, `() -> T` | `Func<...>` | yes (`->` is an existing token) | M | Med–High | The examples also use `->` as a lambda arrow, against "`=>` stays reserved for bodies" |
-| 10 | Expression-bodied `fun` | `fun Hello(int id) => ...` | method with an inferred return type | none (`fun` parses as a return type) | L | Med | Return type inference needs ordering and cycle handling and affects metadata |
-| 11 | `mutable` parameter in `fun` | `fun F(mutable int x)` | plain parameter | small | S | Low | `mutable` versus `mut` is open |
+| # | Syntax | Example | Lowers to | Parser change | Size | Certainty | Main risk or open point | Issue |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | Spread in iterators | `yield return ..xs` | `foreach` of yield returns | none | S | Done | Follow-ups below: async iterators, `dynamic`, Edit and Continue | [#13](https://github.com/ok3mad/roslyn/issues/13) |
+| 2 | `val` immutable local | `val total = 0;` | `var` plus a no-reassignment check | none (`val` parses as a type name) | S | Done | The only breaking keyword; trial binding plus a sharpener `@val` escape | [#14](https://github.com/ok3mad/roslyn/issues/14) |
+| 3 | `val` deconstruction | `val (small, large) = ...;` | deconstruction plus the same check | small: accept `val` wherever the parser checks for `var` (`IsPossibleDeconstructionLeft`, statement disambiguation, `IsVarType`) | S | Done | Comes with #2. Without the parser change, `val (a, b) = e` parses as an invocation; the same checks cover `foreach (val (a, b) in ...)` and `out val (a, b)` | [#15](https://github.com/ok3mad/roslyn/issues/15) |
+| 4 | `readonly` locals | `readonly int x`, `readonly var x` | local plus the same check | likely none (modifier probably parses, with an error) | S | Med | Rarely written; completes the mutability grid | [#16](https://github.com/ok3mad/roslyn/issues/16) |
+| 5 | `val` lambda parameter | `(val x) => ...` | lambda plus the same check | small | S | Med |  | [#17](https://github.com/ok3mad/roslyn/issues/17) |
+| 6 | `val` in patterns | `is { Length: val n }` | `var n` pattern plus the same check | yes: in a pattern the parser turns `val` into a keyword, as it does `var` (`LanguageParser_Patterns.cs`) | S | Done | Decided: `val` is always a keyword in patterns, like `var`. Breaks a type pattern on a type named `val`, so the sharpener escapes it as `@val`. Still open: is `val i` in an arm a binding pattern or a parameter modifier? | [#18](https://github.com/ok3mad/roslyn/issues/18) |
+| 7 | Sequence type | `int[..]` | `IEnumerable<int>` | small (reported today as ERR\_ArraySizeInDeclaration) | S | High | Small and decided: a good second feature | [#19](https://github.com/ok3mad/roslyn/issues/19) |
+| 8 | Task hat | `T^`, `void^`, `int[..]^` | `Task<T>`, `Task` | yes (postfix lookahead, like `T?`) | S–M | Med | Leading candidate; to be confirmed on real signatures | [#20](https://github.com/ok3mad/roslyn/issues/20) |
+| 9 | Function types | `(A, B) -> R`, `() -> T` | `Func<...>` | yes (`->` is an existing token) | M | Med–High | The examples also use `->` as a lambda arrow, against "`=>` stays reserved for bodies" | [#21](https://github.com/ok3mad/roslyn/issues/21) |
+| 10 | Expression-bodied `fun` | `fun Hello(int id) => ...` | method with an inferred return type | none (`fun` parses as a return type) | L | Med | Return type inference needs ordering and cycle handling and affects metadata | [#22](https://github.com/ok3mad/roslyn/issues/22) |
+| 11 | `mutable` parameter in `fun` | `fun F(mutable int x)` | plain parameter | small | S | Low | `mutable` versus `mut` is open | [#23](https://github.com/ok3mad/roslyn/issues/23) |
 
 ### Phase 2: functional core
 
-| # | Syntax | Example | Lowers to | Parser change | Size | Certainty | Main risk or open point |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 12 | Implicit `it` | `xs.Select(Process(it, a))`, `when: it is X` | lambda `x => ...` | none | M–L | Med | Where the implicit lambda begins and ends without braces; innermost wins; an existing `it` keeps its C# meaning |
-| 13 | Pipe, without lifting | `x \|> F`, `x \|> F(it, y)` | nested call | yes (new `\|>` token) | M | Med–High | A bare stage versus a stage that uses `it` |
-| 14 | `fun` with ordered arms | `fun Fib(i) { 0 or 1 => 1, >=2 => ... }` | method with a switch expression | yes (new body form) | L | Med | Decided direction; switches over the parameter tuple; the lowered switch needs a final unreachable arm |
-| 15 | Untyped `fun` parameters | `fun Fib(i)` | parameter typed from the arms | yes | XL | Low | An inferred domain hides a missing arm; public `fun`s may need annotations |
-| 16 | `try` expression | `try F(url) catch { HttpRequestException { ... } => ..., }` | try/catch with spilling | yes (`try` in expression position) | M–L | Med | The result type needs unions (#19); no `finally` |
-| 17 | Lambda to single-method interface | `Render(user, id => new Profile())` | generated sealed class | none | M | Med | Only where C# reports an error today; the class needs a readable name for stack traces |
-| 18 | Interface initializer | `new IProfiles { Load = id => ... }`, `_ = Unexpected` | generated class | none (binder only) | M | Med | Builds on #17 |
+| # | Syntax | Example | Lowers to | Parser change | Size | Certainty | Main risk or open point | Issue |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 12 | Implicit `it` | `xs.Select(Process(it, a))`, `when: it is X` | lambda `x => ...` | none | M–L | Med | Where the implicit lambda begins and ends without braces; innermost wins; an existing `it` keeps its C# meaning | [#24](https://github.com/ok3mad/roslyn/issues/24) |
+| 13 | Pipe, without lifting | `x \|> F`, `x \|> F(it, y)` | nested call | yes (new `\|>` token) | M | Med–High | A bare stage versus a stage that uses `it` | [#25](https://github.com/ok3mad/roslyn/issues/25) |
+| 14 | `fun` with ordered arms | `fun Fib(i) { 0 or 1 => 1, >=2 => ... }` | method with a switch expression | yes (new body form) | L | Med | Decided direction; switches over the parameter tuple; the lowered switch needs a final unreachable arm | [#26](https://github.com/ok3mad/roslyn/issues/26) |
+| 15 | Untyped `fun` parameters | `fun Fib(i)` | parameter typed from the arms | yes | XL | Low | An inferred domain hides a missing arm; public `fun`s may need annotations | [#27](https://github.com/ok3mad/roslyn/issues/27) |
+| 16 | `try` expression | `try F(url) catch { HttpRequestException { ... } => ..., }` | try/catch with spilling | yes (`try` in expression position) | M–L | Med | The result type needs unions (#19); no `finally` | [#28](https://github.com/ok3mad/roslyn/issues/28) |
+| 17 | Lambda to single-method interface | `Render(user, id => new Profile())` | generated sealed class | none | M | Med | Only where C# reports an error today; the class needs a readable name for stack traces | [#29](https://github.com/ok3mad/roslyn/issues/29) |
+| 18 | Interface initializer | `new IProfiles { Load = id => ... }`, `_ = Unexpected` | generated class | none (binder only) | M | Med | Builds on #17 | [#30](https://github.com/ok3mad/roslyn/issues/30) |
 
 ### Phase 3 and later: type system and effects
 
-| # | Syntax | Example | Lowers to | Parser change | Size | Certainty | Main risk or open point |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 19 | Inferred or structural unions | `(Profile \| Unavailable)^` | not decided | yes | XL | Low | Spelling never discussed; CLR representation open (nominal, tagged or erased to `object`) |
-| 20 | Lifting in pipes and arguments | `users.Find(id) \|> Render(it, p)` | await, `Select` or union passthrough | none | XL | Low | Implicit versus an explicit marker; breaks down at generic and `object` parameters |
-| 21 | Refined types and members | `decimal Amount is >0`, `int is >=0` | plain type plus boundary checks | yes (pattern in a type position) | XL | Low–Med | Proof obligations at call sites; runtime guards for C# callers |
-| 22 | Opaque patterns | `is > 0 and <= max` | pattern plus a `when` guard | none (relational patterns already parse any expression) | M, plus purity | Med | Sound only with purity (#24) |
-| 23 | Extractor patterns | `s is Parse(val n and >0)` | call plus a sub-pattern | none | M–L | Low | Clashes with a positional pattern on a type named `Parse` |
-| 24 | `pure` and `total` modifiers | `total fun ...`, `pure(provider)` | erased, plus attributes | small | XL (syntax alone S) | Low | Needs the whole effect checker and bindings for existing .NET code |
-| 25 | Member declared on another type | `static fun Currency.Parse(string s)` | C# 14 extension block | yes | M | Low | Appears only in an example |
-| 26 | Arms as a lambda body | `{ 42 => ..., _ => ... }` | lambda with a switch expression | yes | M | Low | The brainstorm says it is not designed yet |
-| 27 | `assume` escape hatch | `assume x is >0` | runtime check | yes | S–M | Low | Only an open question so far |
+| # | Syntax | Example | Lowers to | Parser change | Size | Certainty | Main risk or open point | Issue |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 19 | Inferred or structural unions | `(Profile \| Unavailable)^` | not decided | yes | XL | Low | Spelling never discussed; CLR representation open (nominal, tagged or erased to `object`) | [#31](https://github.com/ok3mad/roslyn/issues/31) |
+| 20 | Lifting in pipes and arguments | `users.Find(id) \|> Render(it, p)` | await, `Select` or union passthrough | none | XL | Low | Implicit versus an explicit marker; breaks down at generic and `object` parameters | [#32](https://github.com/ok3mad/roslyn/issues/32) |
+| 21 | Refined types and members | `decimal Amount is >0`, `int is >=0` | plain type plus boundary checks | yes (pattern in a type position) | XL | Low–Med | Proof obligations at call sites; runtime guards for C# callers | [#33](https://github.com/ok3mad/roslyn/issues/33) |
+| 22 | Opaque patterns | `is > 0 and <= max` | pattern plus a `when` guard | none (relational patterns already parse any expression) | M, plus purity | Med | Sound only with purity (#24) | [#34](https://github.com/ok3mad/roslyn/issues/34) |
+| 23 | Extractor patterns | `s is Parse(val n and >0)` | call plus a sub-pattern | none | M–L | Low | Clashes with a positional pattern on a type named `Parse` | [#35](https://github.com/ok3mad/roslyn/issues/35) |
+| 24 | `pure` and `total` modifiers | `total fun ...`, `pure(provider)` | erased, plus attributes | small | XL (syntax alone S) | Low | Needs the whole effect checker and bindings for existing .NET code | [#36](https://github.com/ok3mad/roslyn/issues/36) |
+| 25 | Member declared on another type | `static fun Currency.Parse(string s)` | C# 14 extension block | yes | M | Low | Appears only in an example | [#37](https://github.com/ok3mad/roslyn/issues/37) |
+| 26 | Arms as a lambda body | `{ 42 => ..., _ => ... }` | lambda with a switch expression | yes | M | Low | The brainstorm says it is not designed yet | [#38](https://github.com/ok3mad/roslyn/issues/38) |
+| 27 | `assume` escape hatch | `assume x is >0` | runtime check | yes | S–M | Low | Only an open question so far | [#39](https://github.com/ok3mad/roslyn/issues/39) |
 
 ### Proposed, to be discussed
 
-| # | Syntax | Example | Lowers to | Parser change | Size | Certainty | Main risk or open point |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 28 | Discard arguments | `store.LoadAsync(_)` | the only fitting local or parameter in scope, such as the one `CancellationToken` | none (`_` parses as an identifier) | L | Low | Not yet discussed whether it is sound: implicit wiring, which candidates count, and interaction with overload resolution. See [Discard arguments](brainstorm.md#discard-arguments-proposed-not-yet-discussed) |
+| # | Syntax | Example | Lowers to | Parser change | Size | Certainty | Main risk or open point | Issue |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 28 | Discard arguments | `store.LoadAsync(_)` | the only fitting local or parameter in scope, such as the one `CancellationToken` | none (`_` parses as an identifier) | L | Low | Not yet discussed whether it is sound: implicit wiring, which candidates count, and interaction with overload resolution. See [Discard arguments](brainstorm.md#discard-arguments-proposed-not-yet-discussed) | [#40](https://github.com/ok3mad/roslyn/issues/40) |
 
 Not listed: `union Name(A, B)` comes from C# 15, and `collect`, `Retry` and `Unexpected` are library code.
 

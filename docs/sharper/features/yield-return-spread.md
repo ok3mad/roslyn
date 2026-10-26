@@ -1,6 +1,6 @@
 # Spread in `yield return`
 
-**Status:** Prototype, merged into `main`. Requires `/features:sharper`.
+**Status:** Prototype, merged into `main`. Requires `/features:sharper`. Issue: [#13](https://github.com/ok3mad/roslyn/issues/13).
 
 ## Summary
 
