@@ -234,7 +234,7 @@ machinery: the write checks, `ReportReadonlyLocalError` (cause 'readonly local')
 | Local functions | CS0106 kept | `readonly` does not apply to them |
 | Script top-level fields | Unchanged C# readonly fields | Already C#; the C# meaning wins |
 
-Tests: 19 `ReadonlyLocal_*` tests in `SharperTests.cs`; all 95 Sharper tests pass, also with `ROSLYN_TEST_IOPERATION=1`.
+Tests: 17 `ReadonlyLocal_*` tests (19 cases) in `SharperTests.cs`; all 95 Sharper tests pass, also with `ROSLYN_TEST_IOPERATION=1`.
 Regression run of the C# compiler tests (net10.0, Debug, 10 projects; WinRT not run): 88,398 passed, 0 failed.
 
 ## Follow-ups
