@@ -97,6 +97,7 @@ namespace Microsoft.CodeAnalysis
 
         protected static IReadOnlyDictionary<string, string> SyntaxTreeCommonFeatures(IEnumerable<SyntaxTree> trees)
         {
+            IReadOnlyDictionary<string, string>? firstTreeFeatures = null;
             IReadOnlyDictionary<string, string>? set = null;
 
             foreach (var tree in trees)
@@ -104,11 +105,12 @@ namespace Microsoft.CodeAnalysis
                 var treeFeatures = tree.Options.Features;
                 if (set == null)
                 {
-                    set = treeFeatures;
+                    firstTreeFeatures = treeFeatures;
+                    set = WithoutPerTreeFeatures(treeFeatures);
                 }
                 else
                 {
-                    if ((object)set != treeFeatures && !set.SetEquals(treeFeatures))
+                    if ((object)firstTreeFeatures! != treeFeatures && !set.SetEquals(WithoutPerTreeFeatures(treeFeatures)))
                     {
                         throw new ArgumentException(CodeAnalysisResources.InconsistentSyntaxTreeFeature, nameof(trees));
                     }
@@ -122,6 +124,22 @@ namespace Microsoft.CodeAnalysis
             }
 
             return set;
+        }
+
+        /// <summary>
+        /// Removes the features that may differ between the trees of one compilation. Sharper is turned on per tree
+        /// (by the .cx file extension), and is only ever checked on a tree's parse options.
+        /// </summary>
+        private static IReadOnlyDictionary<string, string> WithoutPerTreeFeatures(IReadOnlyDictionary<string, string> features)
+        {
+            if (!features.ContainsKey(Feature.Sharper))
+            {
+                return features;
+            }
+
+            return features is ImmutableDictionary<string, string> dictionary
+                ? dictionary.Remove(Feature.Sharper)
+                : features.Where(pair => !string.Equals(pair.Key, Feature.Sharper, StringComparison.OrdinalIgnoreCase)).ToImmutableDictionary(StringComparer.OrdinalIgnoreCase);
         }
 
         internal abstract AnalyzerDriver CreateAnalyzerDriver(ImmutableArray<DiagnosticAnalyzer> analyzers, AnalyzerManager analyzerManager, SeverityFilter severityFilter);
