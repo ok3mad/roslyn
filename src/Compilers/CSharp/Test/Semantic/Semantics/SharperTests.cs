@@ -1534,5 +1534,220 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             statement = (ExpressionStatementSyntax)SyntaxFactory.ParseStatement("@val (a, b) = e;", options: options);
             Assert.Equal(SyntaxKind.InvocationExpression, ((AssignmentExpressionSyntax)statement.Expression).Left.Kind());
         }
+
+        [Fact]
+        public void ValPattern_Basic()
+        {
+            var source = """
+                using System;
+
+                object o = 1;
+                if (o is val x)
+                    Console.Write(x);
+                switch (o)
+                {
+                    case val y:
+                        Console.Write(y);
+                        break;
+                }
+                Console.Write(o switch { val z => z });
+                if ((3, 4) is (val a, val b))
+                    Console.Write(a + b);
+                if ((5, 6) is val (c, d))
+                    Console.Write(c + d);
+                if (new P(8) is { X: val px })
+                    Console.Write(px);
+
+                record P(int X);
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "1117118" : null).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void ValPattern_Writes()
+        {
+            var source = """
+                class C
+                {
+                    void M(object o, (int, int) t)
+                    {
+                        if (o is val x) { x = null; }
+                        if (o is var x2) { x2 = null; }
+                        if (t is val (a, b)) { a = 1; }
+                        if (t is (val c, var d)) { c = 1; d = 1; }
+                        switch (o)
+                        {
+                            case val y:
+                                y = null;
+                                break;
+                        }
+                        _ = o switch { val z => z = null };
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (5,27): error CS1656: Cannot assign to 'x' because it is a 'val variable'
+                //         if (o is val x) { x = null; }
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "val variable").WithLocation(5, 27),
+                // (7,32): error CS1656: Cannot assign to 'a' because it is a 'val variable'
+                //         if (t is val (a, b)) { a = 1; }
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "a").WithArguments("a", "val variable").WithLocation(7, 32),
+                // (8,36): error CS1656: Cannot assign to 'c' because it is a 'val variable'
+                //         if (t is (val c, var d)) { c = 1; d = 1; }
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "c").WithArguments("c", "val variable").WithLocation(8, 36),
+                // (12,17): error CS1656: Cannot assign to 'y' because it is a 'val variable'
+                //                 y = null;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "y").WithArguments("y", "val variable").WithLocation(12, 17),
+                // (15,33): error CS1656: Cannot assign to 'z' because it is a 'val variable'
+                //         _ = o switch { val z => z = null };
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "z").WithArguments("z", "val variable").WithLocation(15, 33));
+        }
+
+        [Theory]
+        [CombinatorialData]
+        public void ValPattern_KeywordEvenWithTypeNamedVal(bool sharper)
+        {
+            // In a pattern, val is a keyword like var, even where a type named val exists (an accepted break). As for var,
+            // that is an error rather than a silent change of meaning. Without a designation, or as @val, it is still the type.
+            var source = """
+                using System;
+
+                object o = new val();
+                Console.Write(o is val v ? v.GetType().Name : "-");
+                Console.Write(o is val ? "T" : "F");
+                Console.Write(o is @val w ? w.GetType().Name : "-");
+
+                class val { }
+                """;
+            if (sharper)
+            {
+                CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                    // (4,20): error CS8508: The syntax 'var' for a pattern is not permitted to refer to a type, but 'val' is in scope here.
+                    // Console.Write(o is val v ? v.GetType().Name : "-");
+                    Diagnostic(ErrorCode.ERR_VarMayNotBindToType, "val").WithArguments("val").WithLocation(4, 20),
+                    // (8,7): warning CS8981: The type name 'val' only contains lower-cased ascii characters. Such names may become reserved for the language.
+                    // class val { }
+                    Diagnostic(ErrorCode.WRN_LowerCaseTypeName, "val").WithArguments("val").WithLocation(8, 7));
+            }
+            else
+            {
+                CompileAndVerify(source, parseOptions: TestOptions.Regular, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "valTval" : null).VerifyDiagnostics(
+                    // (8,7): warning CS8981: The type name 'val' only contains lower-cased ascii characters. Such names may become reserved for the language.
+                    // class val { }
+                    Diagnostic(ErrorCode.WRN_LowerCaseTypeName, "val").WithArguments("val").WithLocation(8, 7));
+            }
+        }
+
+        [Fact]
+        public void ValPattern_FeatureDisabled()
+        {
+            var source = """
+                class C
+                {
+                    void M(object o)
+                    {
+                        if (o is val x) { }
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: TestOptions.Regular, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (5,18): error CS0246: The type or namespace name 'val' could not be found (are you missing a using directive or an assembly reference?)
+                //         if (o is val x) { }
+                Diagnostic(ErrorCode.ERR_SingleTypeNameNotFound, "val").WithArguments("val").WithLocation(5, 18));
+        }
+
+        [Fact]
+        public void ValPattern_StructCopy()
+        {
+            var source = """
+                using System;
+
+                S s = new S();
+                if (s is val t)
+                {
+                    t.Mutate();
+                    Console.Write(t.F);
+                }
+
+                struct S
+                {
+                    public int F;
+                    public void Mutate() { F++; }
+                }
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "0" : null).VerifyDiagnostics(
+                // (6,5): warning CS9404: Call to non-readonly member 'S.Mutate()' on val variable 't' runs on a copy, so 't' is not changed.
+                //     t.Mutate();
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "t").WithArguments("S.Mutate()", "t").WithLocation(6, 5));
+        }
+
+        [Fact]
+        public void ValPattern_Nullable()
+        {
+            var source = """
+                #nullable enable
+                class C
+                {
+                    void M(string? maybe)
+                    {
+                        if (maybe is val v) { _ = v.Length; }
+                        if (maybe is var w) { _ = w.Length; }
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (6,35): warning CS8602: Dereference of a possibly null reference.
+                //         if (maybe is val v) { _ = v.Length; }
+                Diagnostic(ErrorCode.WRN_NullReferenceReceiver, "v").WithLocation(6, 35),
+                // (7,35): warning CS8602: Dereference of a possibly null reference.
+                //         if (maybe is var w) { _ = w.Length; }
+                Diagnostic(ErrorCode.WRN_NullReferenceReceiver, "w").WithLocation(7, 35));
+        }
+
+        [Theory]
+        [CombinatorialData]
+        public void ValPattern_Parsing(bool sharper)
+        {
+            var options = sharper ? s_sharperOptions : TestOptions.Regular;
+            var isPattern = (IsPatternExpressionSyntax)SyntaxFactory.ParseExpression("o is val x", options: options);
+            if (sharper)
+            {
+                var varPattern = (VarPatternSyntax)isPattern.Pattern;
+                Assert.Equal(SyntaxKind.VarKeyword, varPattern.VarKeyword.Kind());
+                Assert.Equal("val", varPattern.VarKeyword.Text);
+                Assert.Equal("o is val x", isPattern.ToFullString());
+            }
+            else
+            {
+                Assert.Equal(SyntaxKind.DeclarationPattern, isPattern.Pattern.Kind());
+            }
+
+            // Without a designation, or as @val, it is a type or constant pattern.
+            Assert.Equal(SyntaxKind.IsExpression, SyntaxFactory.ParseExpression("o is val", options: options).Kind());
+            Assert.Equal(SyntaxKind.DeclarationPattern, ((IsPatternExpressionSyntax)SyntaxFactory.ParseExpression("o is @val x", options: options)).Pattern.Kind());
+        }
+
+        [Fact]
+        public void ValPattern_IOperation()
+        {
+            var source = """
+                class C
+                {
+                    void M(object o)
+                    {
+                        _ = /*<bind>*/o is val x/*</bind>*/;
+                    }
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            var expectedOperationTree = """
+                IIsPatternOperation (OperationKind.IsPattern, Type: System.Boolean) (Syntax: 'o is val x')
+                  Value:
+                    IParameterReferenceOperation: o (OperationKind.ParameterReference, Type: System.Object) (Syntax: 'o')
+                  Pattern:
+                    IDeclarationPatternOperation (OperationKind.DeclarationPattern, Type: null) (Syntax: 'val x') (InputType: System.Object, NarrowedType: System.Object, DeclaredSymbol: System.Object? x, MatchesNull: True)
+                """;
+            VerifyOperationTreeAndDiagnosticsForTest<IsPatternExpressionSyntax>(comp, expectedOperationTree, []);
+        }
     }
 }

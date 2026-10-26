@@ -31,7 +31,11 @@ has the full implementation checklist.
    upstream, and Sharper syntax reports the usual C# errors.
 2. **No semantic breaking changes.** If Sharper syntax already means something in C#, the C# meaning wins. The
    compiler first binds the code as C#, and uses the Sharper meaning only where that reports an error. Turning the
-   flag on never changes what valid C# does.
+   flag on never changes what valid C# does, with one kind of exception: a new keyword may be accepted as a break when
+   the old meaning is rare and a sharpener can always rewrite it. So far that is `val` in patterns and in
+   `val (a, b) = e`, which code that uses `val` as an identifier there must spell `@val`. Each accepted break is listed
+   in the [implementation plan](planning/implementation-plan.md#follow-ups); the sharpener and the `.cx` extension will
+   make it safe to adopt.
 3. **Reuse the C# syntax.** Features reinterpret existing syntax in the binder where possible, instead of adding
    syntax nodes and public API.
 4. **Lower to C#.** Each feature lowers to constructs the compiler already emits, so debugging, PDBs and the runtime
@@ -61,7 +65,7 @@ which language it is.
 | Feature | Summary | Status |
 | --- | --- | --- |
 | [Spread in `yield return`](features/yield-return-spread.md) | `yield return ..xs;` yields every element of `xs`. | Prototype, merged into `main` |
-| [`val` locals](features/val-locals.md) | `val x = e;` declares an implicitly typed local that cannot be reassigned. | Prototype (local declarations), merged into `main` |
+| [`val` locals](features/val-locals.md) | `val x = e;` declares an implicitly typed local that cannot be reassigned, also in deconstructions, `foreach`, `out` and patterns. | Prototype, merged into `main` |
 
 "Prototype" means that the feature works end to end (binding, flow analysis, nullable analysis, lowering, tests) but
 has open questions. Those are tracked in the code as `// PROTOTYPE(sharper): ...` comments:
@@ -73,7 +77,8 @@ git grep -n "PROTOTYPE(sharper)"
 ## Branches
 
 - `main` is the integration branch. It holds upstream Roslyn plus the finished Sharper prototypes.
-- `sharper/<feature>` branches hold features in progress; `sharper/gating` and `sharper/val` are merged.
+- `sharper/<feature>` branches hold features in progress; `sharper/gating`, `sharper/val`,
+  `sharper/val-designations` and `sharper/val-patterns` are merged.
 
 ## Diagnostics
 

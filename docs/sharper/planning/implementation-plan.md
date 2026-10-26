@@ -192,6 +192,14 @@ Progress: rows 1 to 6 are done and pushed to `sharper/val` (commits `eae7a3b0` a
 3. **Look for an existing flag before writing an analysis.** Read-only locals already existed for foreach, using and fixed variables, so one writability flag and one message string covered every kind of write.
 4. **Probe after the smallest binding.** Before any binding, every probe just reports "type not found".
 
+## Feature 2, step 2: `val` in deconstruction, foreach and `out`
+
+Merged as #4. The first Sharper parser change: one helper (`IsIdentifierVarOrSharperVal`) accepts `val` in the three places the parser checked the spelling `var` (deconstruction declarations, statement disambiguation, tuple designations); `@val` stays an identifier. `val (a, b) = e`, `(val a, var b) = e`, `foreach (val x in xs)`, `foreach (val (k, v) in pairs)` and `out val n` infer like `var` and cannot be reassigned. A type named `val` keeps its C# meaning, with the error `var` gets in the same position (CS8136). Accepted break: `val (a, b) = e` is a declaration even where a ref-returning method named `val` makes it an assignment in C#. Regression run: 88,356 passed, 0 failed.
+
+## Feature 2, step 3: `val` in patterns
+
+`val` followed by a designation in a pattern (`is val x`, `case val x:`, `val x =>`, `val (a, b)`, `(val a, var b)`, `{ P: val p }`) is a var pattern whose keyword token has the kind `VarKeyword` and the text `val`, so `VarPatternSyntax` is reused and no syntax node or public API is added. Its variables cannot be reassigned. As for `var`, `val` is a keyword in patterns even where a type named `val` exists; that surfaces as the existing error CS8508 rather than a change of meaning. `is val` without a designation and `is @val x` keep their C# meaning.
+
 ## Follow-ups
 
 The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOTYPE(sharper)"`).
@@ -205,4 +213,6 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 - [ ] Re-number CS9402 and CS9403 if they clash with upstream.
 - [x] Full C# compiler regression run (net10.0, Debug): 88,327 tests passed and 0 failed across 10 test projects. WinRT was not run; it targets .NET Framework only.
 - [ ] Infer whether a struct member mutates `this`, and silence CS9404 for members that do not. Until then, every call to a non-`readonly` member of a `val` warns, including interface members on a generic `val` (`g.Get()`).
-- [ ] Copy and warn for the pattern-based members that bypass the shared check today: `using`/`Dispose`, `await`/`GetAwaiter`, implicit Index and Range indexers, list patterns and collection spreads.
+- [x] Copy and warn for the pattern-based members that bypassed the shared check: `await`/`GetAwaiter`, implicit Index and Range indexers, list patterns and property patterns. Collection spreads and `using` already copy their operand.
+- [ ] Build the sharpening infrastructure and move Sharper to the `.cx` extension. The accepted breaks need it: `val` as a keyword in patterns, and `val (a, b) = e` as a declaration. The sharpener rewrites those to `@val`, and the extension keeps plain `.cs` files on C# semantics.
+- [ ] Give `val` its own message for CS8508 (it says "The syntax 'var' for a pattern"), and teach the IDE that a `VarKeyword` token may read `val`.
