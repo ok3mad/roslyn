@@ -233,6 +233,9 @@ of which now also count a val parameter: the explicit-or-implicit check (`CheckP
 explicitly typed parameter list in `AnalyzeAnonymousFunction`, and the `params` check in
 `ParameterHelpers.CheckParameterModifiers`, which `Binder_Lambda.cs` repeats for val.
 
+Tests: 14 new Sharper tests (91 in all) pass, also with `ROSLYN_TEST_IOPERATION=1`. Regression run (net10.0, Debug) of
+the C# Semantic, Symbol, IOperation, Syntax and Emit test projects: 54,449 passed, 0 failed.
+
 ## Follow-ups
 
 Sharper diagnostics were renumbered from `SharperErrorCodes.Base` (20000): CS9402, CS9403 and CS9404 became CS20001, CS20002 and CS20003, and this document uses the new numbers throughout.
