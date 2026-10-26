@@ -70,6 +70,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 {
                     var sequenceRank = rankSpecifiers[end];
                     var definition = GetSpecialType(SpecialType.System_Collections_Generic_IEnumerable_T, diagnostics, sequenceRank);
+                    // PROTOTYPE(sharper): report an invalid element type on the element type, not the whole sequence type.
                     var sequence = BindSharperTypeAlias(definition, [type], node, basesBeingResolved, diagnostics);
                     type = TypeWithAnnotations.Create(AreNullableAnnotationsEnabled(sequenceRank.CloseBracketToken), sequence);
                 }

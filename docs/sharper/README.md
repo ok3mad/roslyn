@@ -35,7 +35,8 @@ has the full implementation checklist.
    the old meaning is rare and a sharpener can always rewrite it. So far that is `val` in patterns and in
    `val (a, b) = e`, which code that uses `val` as an identifier there must spell `@val`. Each accepted break is listed
    in the [implementation plan](planning/implementation-plan.md#follow-ups); the sharpener and the `.cx` extension will
-   make it safe to adopt.
+   make it safe to adopt. The sequence type adds a second, smaller one: `F<a[..]>(x)` is a generic call, where C#
+   reads two comparisons that only compile with user-defined operators.
 3. **Reuse the C# syntax.** Features reinterpret existing syntax in the binder where possible, instead of adding
    syntax nodes and public API.
 4. **Lower to C#.** Each feature lowers to constructs the compiler already emits, so debugging, PDBs and the runtime
@@ -85,6 +86,7 @@ Not done yet:
 | --- | --- | --- | --- |
 | [Spread in `yield return`](features/yield-return-spread.md) | `yield return ..xs;` yields every element of `xs`. | Prototype, merged into `main` | [#13](https://github.com/ok3mad/roslyn/issues/13) |
 | [`val` locals](features/val-locals.md) | `val x = e;` declares an implicitly typed local that cannot be reassigned, also in deconstructions, `foreach`, `out` and patterns. | Prototype, merged into `main` | [#14](https://github.com/ok3mad/roslyn/issues/14), [#15](https://github.com/ok3mad/roslyn/issues/15), [#18](https://github.com/ok3mad/roslyn/issues/18) |
+| [Sequence type](features/sequence-type.md) | `T[..]` is `IEnumerable<T>` in every type position. | Prototype, on `sharper/sequence-type` | [#19](https://github.com/ok3mad/roslyn/issues/19) |
 
 Every planned feature has an issue, one per row of the
 [syntax roadmap](planning/implementation-plan.md#syntax-roadmap), collected under the tracking issue
@@ -124,7 +126,8 @@ in `#pragma warning`, `/nowarn` and `.editorconfig`.
 | What | Where |
 | --- | --- |
 | Feature flag | `src/Compilers/CSharp/Portable/Errors/MessageID.cs` (`IDS_FeatureSharper`), `src/Compilers/Core/Portable/CommandLine/Feature.cs` (`Feature.Sharper`) |
-| Binding | `src/Compilers/CSharp/Portable/Binder/` (search for `IDS_FeatureSharper`) |
+| Parser | `src/Compilers/CSharp/Portable/Parser/LanguageParser.cs` (search for `IDS_FeatureSharper`) |
+| Binding | `src/Compilers/CSharp/Portable/Binder/` (search for `IDS_FeatureSharper`); short type forms such as `T[..]` in `Binder_SharperTypes.cs` |
 | Bound nodes | `src/Compilers/CSharp/Portable/BoundTree/BoundNodes.xml` |
 | Lowering | `src/Compilers/CSharp/Portable/Lowering/LocalRewriter/` |
 | Tests | `src/Compilers/CSharp/Test/Semantic/Semantics/SharperTests.cs` |

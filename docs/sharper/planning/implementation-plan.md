@@ -66,6 +66,8 @@ Each trap was probed before deciding how to handle it.
 | Async iterators | Not supported (CS20001). | Needs Edit and Continue work and a hidden `await`; may never be wanted. |
 | `dynamic` | Keep the range meaning, warn (CS20002). | A runtime decision changes the behavior of valid C#. |
 | val in patterns | A keyword in patterns, parsed like var (option 1). | Keeps val and var consistent. It breaks type patterns on a type named val, so the sharpener escapes those as @val. The alternative, reinterpreting a type pattern in the binder, kept C# meaning but diverged from var. |
+| Sequence type stacking | Left to right, innermost first: each `[..]` wraps everything to its left (`int[..][]` is `IEnumerable<int>[]`); plain array ranks between two `[..]` keep the C# order. | The brainstorm's rule for all type suffixes (`int[..]^`, `int^[..]`), and the reading order of `T?[]`. The C# array order would make `int[..][]` a sequence of arrays. |
+| Sequence type in a cast | `(A[..])` is a cast only before an identifier or a literal; `(int[..])` is always a cast. | `(a[..])(b)`, `(a[..])!`, `(a?[..]).b` and `(a[..]) with { }` are valid C# element accesses, which the usual "ambiguous type before `(`" rule would turn into casts. |
 | Non-readonly members on a val struct | Run on a copy, with warning CS20003 (option C). | The foreach behavior let a method change the val, which breaks immutability. A silent copy (the readonly field rule) makes mutations disappear without notice. The warning makes the copy visible; member mutation inference will later silence it for members that do not mutate. |
 
 ## Lessons for the next feature
@@ -84,7 +86,7 @@ A new construct's real cost is in the places that never mention it. Model it on 
 
 ## Syntax roadmap
 
-The brainstorm proposes 28 pieces of syntax (#28, discard arguments, is still to be discussed). Each row has a GitHub issue, collected under the tracking issue [#12](https://github.com/ok3mad/roslyn/issues/12). Four are done: `yield return ..xs` and `val` in locals, deconstruction and patterns. Everything that depends on unions or purity waits for those designs.
+The brainstorm proposes 28 pieces of syntax (#28, discard arguments, is still to be discussed). Each row has a GitHub issue, collected under the tracking issue [#12](https://github.com/ok3mad/roslyn/issues/12). Five are done: `yield return ..xs`, `val` in locals, deconstruction and patterns, and the sequence type `T[..]`. Everything that depends on unions or purity waits for those designs.
 
 - **Size**, relative to the `yield return ..xs` PoC. **S**: about that size (no parser change, one bound node, reused lowering). **M**: a gated parser change, or a new lowering with its own rules. **L**: new inference or binding rules that interact with overload resolution or signature binding. **XL**: a new checker layer (refinements, unions, effects).
 - **Certainty**. **High**: decided in the brainstorm, spelling stable. **Med**: the leading direction, details or spelling open. **Low**: only sketched in examples, contradicted elsewhere, or blocked on an open question.
@@ -99,7 +101,7 @@ The brainstorm proposes 28 pieces of syntax (#28, discard arguments, is still to
 | 4 | `readonly` locals | `readonly int x`, `readonly var x` | local plus the same check | likely none (modifier probably parses, with an error) | S | Med | Rarely written; completes the mutability grid | [#16](https://github.com/ok3mad/roslyn/issues/16) |
 | 5 | `val` lambda parameter | `(val x) => ...` | lambda plus the same check | small | S | Med |  | [#17](https://github.com/ok3mad/roslyn/issues/17) |
 | 6 | `val` in patterns | `is { Length: val n }` | `var n` pattern plus the same check | yes: in a pattern the parser turns `val` into a keyword, as it does `var` (`LanguageParser_Patterns.cs`) | S | Done | Decided: `val` is always a keyword in patterns, like `var`. Breaks a type pattern on a type named `val`, so the sharpener escapes it as `@val`. Still open: is `val i` in an arm a binding pattern or a parameter modifier? | [#18](https://github.com/ok3mad/roslyn/issues/18) |
-| 7 | Sequence type | `int[..]` | `IEnumerable<int>` | small (reported today as ERR\_ArraySizeInDeclaration) | S | High | Small and decided: a good second feature | [#19](https://github.com/ok3mad/roslyn/issues/19) |
+| 7 | Sequence type | `int[..]` | `IEnumerable<int>` | small: `ScanType` accepts `[..]`; `ScanCast` keeps `(a[..])` an element access | S | Done | `new T[..]` keeps its C# meaning; accepted break: `F<a[..]>(x)` is a generic call. See [Feature 3](#feature-3-sequence-type-t) | [#19](https://github.com/ok3mad/roslyn/issues/19) |
 | 8 | Task hat | `T^`, `void^`, `int[..]^` | `Task<T>`, `Task` | yes (postfix lookahead, like `T?`) | S–M | Med | Leading candidate; to be confirmed on real signatures | [#20](https://github.com/ok3mad/roslyn/issues/20) |
 | 9 | Function types | `(A, B) -> R`, `() -> T` | `Func<...>` | yes (`->` is an existing token) | M | Med–High | The examples also use `->` as a lambda arrow, against "`=>` stays reserved for bodies" | [#21](https://github.com/ok3mad/roslyn/issues/21) |
 | 10 | Expression-bodied `fun` | `fun Hello(int id) => ...` | method with an inferred return type | none (`fun` parses as a return type) | L | Med | Return type inference needs ordering and cycle handling and affects metadata | [#22](https://github.com/ok3mad/roslyn/issues/22) |
@@ -142,7 +144,7 @@ Not listed: `union Name(A, B)` comes from C# 15, and `collect`, `Retry` and `Une
 ### Suggested order
 
 1. `val` (#2, #3, #6), in three steps: `val x = e` locals (binder only), then deconstruction and designations (parser), then patterns (keyword). It exercises the gated parser, the first deliberate break with its `@val` escape, and new semantics on an existing symbol, none of which the first PoC touched. The no-reassignment check reuses the read-only local check behind CS1656.
-2. `T[..]` (#7). Useful, but it repeats the first PoC's lesson (a binder rewrite onto an existing type), so it teaches little.
+2. `T[..]` (#7), done. Its binder rewrite onto a BCL type is the pattern for the other short type forms (see [Feature 3](#feature-3-sequence-type-t)).
 3. `T^` and `->` function types (#8, #9).
 4. Expression-bodied `fun` (#10), the first real inference work.
 5. Rows 19 onward wait for the union representation and the purity design.
@@ -200,6 +202,52 @@ Merged as #4. The first Sharper parser change: one helper (`IsIdentifierVarOrSha
 
 `val` followed by a designation in a pattern (`is val x`, `case val x:`, `val x =>`, `val (a, b)`, `(val a, var b)`, `{ P: val p }`) is a var pattern whose keyword token is `SyntaxKind.ValKeyword` (first a `VarKeyword` token with the text `val`; replaced so code that rebuilds a token from its kind keeps `val`). `VarPatternSyntax` is reused, so no syntax node is added. Its variables cannot be reassigned. As for `var`, `val` is a keyword in patterns even where a type named `val` exists; that surfaces as the existing error CS8508 rather than a change of meaning. `is val` without a designation and `is @val x` keep their C# meaning.
 
+## Feature 3: sequence type `T[..]`
+
+`T[..]` is an alias for `IEnumerable<T>` in every type position, on branch `sharper/sequence-type`
+([feature page](../features/sequence-type.md)). It adds no syntax node, bound node or public API, and needs no
+lowering: the binder resolves the syntax to the constructed BCL type, so everything after binding sees
+`IEnumerable<T>`.
+
+### Rewriting a type form onto a BCL type
+
+This is the pattern for the other short type forms, `T^` (#20) and `(A, B) -> R` (#21).
+
+1. **Syntax.** Reuse a C# node that already parses the form, and give the Sharper reading one gated predicate on
+   it. `T[..]` is an `ArrayTypeSyntax` whose rank holds a range with no operands; `ArrayRankSpecifierSyntax.IsSharperSequence`
+   decides, and every other place (binder, semantic model, local declarations) asks it. A form with no C# parse (`T^`,
+   `->` in a type) needs a new node instead, and with it public API.
+2. **Parser.** `ParseType` usually parses the form already, but statements, casts, generic arguments in
+   expressions and tuple elements first scan with `ScanType`, which must accept the form too. Then check every
+   caller that turns a scanned type into a decision (`ScanCast`, `ScanPossibleTypeArgumentList`) for valid C#
+   expressions that would change meaning, and do not return `ScanTypeFlags.MustBeType` for a form that is also an
+   expression.
+3. **Binder.** Bind the type arguments as usual, get the generic definition with `GetSpecialType` or
+   `GetWellKnownType` (they report a missing type), then call `BindSharperTypeAlias` (`Binder_SharperTypes.cs`). It
+   constructs the type through `ConstructNamedType`, which checks constraints now or leaves them to the declaring
+   symbol where the binder suppresses checks (signatures), exactly as for the type written out. Set the nullable
+   annotation from the form's last token, as the C# form would.
+4. **Places that read the syntax directly.** Local declarations bind array sizes as "invalid dimensions" for the
+   semantic model (`Binder_Statements.cs`), and the semantic model would bind the `..` as `Range.All`
+   (`CSharpSemanticModel.CanGetSemanticInfo`). Both skip a sequence rank.
+5. **Tests.** Compare each Sharper form with its C# twin: member signatures and local symbols across all type
+   positions, diagnostics for invalid type arguments, nullable warnings, metadata seen from a C# compilation, and C#
+   expressions that the scan change must leave alone.
+
+### What it taught
+
+1. **The lexer has no `..` token.** It produces two `.` tokens, which the parser merges (`IsAtDotDotToken`,
+   `EatDotDotToken`). A check for `SyntaxKind.DotDotToken` on the current token never matches.
+2. **Declarations are decided by scanning, not parsing.** `int[..] x` already parsed in members and parameters, and
+   even as a local, but `Func<int[..], int> f` and `(int, int[..]) t` did not, because the statement scanner
+   rejected them. Test the form inside a generic argument and a tuple, not only at the top.
+3. **"Type or expression" ambiguities move.** Accepting a form in `ScanType` hands it to the cast heuristic, which
+   treats an ambiguous type before `(`, `!` or an identifier as a cast. Every expression form the type form overlaps
+   with (`a[..]`, `a?[..]`) needs a test with each token that can follow a parenthesized expression.
+4. **A small accepted break can come from the scanner.** `F<a[..]>(x)` follows the C# rule for `F<a>(x)` and becomes
+   a generic call. It only differs from C# with user-defined comparison operators, so it is accepted and listed
+   for the sharpener.
+
 ## Follow-ups
 
 Sharper diagnostics were renumbered from `SharperErrorCodes.Base` (20000): CS9402, CS9403 and CS9404 became CS20001, CS20002 and CS20003, and this document uses the new numbers throughout.
@@ -225,3 +273,5 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 - [x] Give `val` its own messages: CS20004 and CS20005 (the `val` forms of CS8508 and CS8136), CS20006 for ref reassignment, and the 'val variable' cause also for `foreach` and `using` variables.
 - [x] Script fields: `val` is a read-only inferred field, like `var` plus read-only.
 - [x] Give `val` its own token kind: `SyntaxKind.ValKeyword` (8466, the top free slot below `ElifKeyword`, guarded by a test), a contextual keyword like `var`, used by val patterns.
+- [ ] Sequence type: decide whether array creation should accept sequence elements (`new int[3][..]`, today CS0178, or `new int[..][3]`), and report an invalid element type on the element type rather than the whole sequence type.
+- [ ] Sharpener: rewrite `F<a[..]>(x)` (two comparisons in C#) as `F < (a[..]) > (x)`, the sequence type's accepted break, and offer `T[..]` for `IEnumerable<T>` in an analyzer with a fixer.

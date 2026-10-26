@@ -2132,6 +2132,12 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 Assert.IsType<ExpressionStatementSyntax>(SyntaxFactory.ParseStatement("a[..] = b;", options: options));
             }
 
+            // Accepted break: like F<a>(x), F<a[..]>(x) is a generic call, where C# reads two comparisons (valid only
+            // with user-defined operators). The sharpener will parenthesize: F < (a[..]) > (x).
+            Assert.IsType<GenericNameSyntax>(((InvocationExpressionSyntax)SyntaxFactory.ParseExpression("F<a[..]>(x)", options: s_sharperOptions)).Expression);
+            Assert.IsType<BinaryExpressionSyntax>(SyntaxFactory.ParseExpression("F<a[..]>(x)", options: TestOptions.Regular));
+            Assert.IsType<BinaryExpressionSyntax>(SyntaxFactory.ParseExpression("F < (a[..]) > (x)", options: s_sharperOptions));
+
             // Casts to a sequence type: definite for int[..], and for A[..] before an identifier or a literal.
             Assert.IsType<CastExpressionSyntax>(SyntaxFactory.ParseExpression("(int[..])(a)", options: s_sharperOptions));
             Assert.IsType<CastExpressionSyntax>(SyntaxFactory.ParseExpression("(A[..])b", options: s_sharperOptions));
