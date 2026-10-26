@@ -120,6 +120,8 @@ Idiomatic C# passes interfaces where a functional style would pass functions, pa
 
 ## Discard arguments (proposed, not yet discussed)
 
+Tracked in [#40](https://github.com/ok3mad/roslyn/issues/40).
+
 A `_` in argument position asks the compiler to fill in the argument from the caller's scope. The motivating case is
 `CancellationToken`: most async code receives exactly one token and forwards it to every call, so the name is
 repeated everywhere and is easy to forget.

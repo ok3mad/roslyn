@@ -1,7 +1,8 @@
 # `val` locals
 
 **Status:** Prototype, merged into `main`: local declarations (step 1, #2), deconstruction, `foreach` and `out`
-(step 2, #4), and patterns (step 3). Requires `/features:sharper`.
+(step 2, #4), and patterns (step 3). Requires `/features:sharper`. Issues: [#14](https://github.com/ok3mad/roslyn/issues/14) (locals),
+[#15](https://github.com/ok3mad/roslyn/issues/15) (deconstruction) and [#18](https://github.com/ok3mad/roslyn/issues/18) (patterns); `val` lambda parameters are [#17](https://github.com/ok3mad/roslyn/issues/17).
 
 ## Summary
 

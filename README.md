@@ -26,10 +26,13 @@ See **[docs/sharper](docs/sharper/README.md)** for the design rules, feature sta
 
 ## Features
 
-| Feature | Example | Status |
-| --- | --- | --- |
-| [Spread in `yield return`](docs/sharper/features/yield-return-spread.md) | `yield return ..xs;` | Prototype, merged into `main` |
-| [`val` locals](docs/sharper/features/val-locals.md) | `val x = Compute();` | Prototype (local declarations), merged into `main` |
+| Feature | Example | Status | Issue |
+| --- | --- | --- | --- |
+| [Spread in `yield return`](docs/sharper/features/yield-return-spread.md) | `yield return ..xs;` | Prototype, merged into `main` | [#13](https://github.com/ok3mad/roslyn/issues/13) |
+| [`val` locals](docs/sharper/features/val-locals.md) | `val x = Compute();` | Prototype, merged into `main` | [#14](https://github.com/ok3mad/roslyn/issues/14), [#15](https://github.com/ok3mad/roslyn/issues/15), [#18](https://github.com/ok3mad/roslyn/issues/18) |
+
+The planned features, from `readonly` locals to effect tracking, each have an issue under the
+[roadmap tracking issue #12](https://github.com/ok3mad/roslyn/issues/12).
 
 ```csharp
 // csc /features:sharper

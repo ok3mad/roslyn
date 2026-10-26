@@ -70,10 +70,14 @@ Not done yet:
 
 ## Features
 
-| Feature | Summary | Status |
-| --- | --- | --- |
-| [Spread in `yield return`](features/yield-return-spread.md) | `yield return ..xs;` yields every element of `xs`. | Prototype, merged into `main` |
-| [`val` locals](features/val-locals.md) | `val x = e;` declares an implicitly typed local that cannot be reassigned, also in deconstructions, `foreach`, `out` and patterns. | Prototype, merged into `main` |
+| Feature | Summary | Status | Issue |
+| --- | --- | --- | --- |
+| [Spread in `yield return`](features/yield-return-spread.md) | `yield return ..xs;` yields every element of `xs`. | Prototype, merged into `main` | [#13](https://github.com/ok3mad/roslyn/issues/13) |
+| [`val` locals](features/val-locals.md) | `val x = e;` declares an implicitly typed local that cannot be reassigned, also in deconstructions, `foreach`, `out` and patterns. | Prototype, merged into `main` | [#14](https://github.com/ok3mad/roslyn/issues/14), [#15](https://github.com/ok3mad/roslyn/issues/15), [#18](https://github.com/ok3mad/roslyn/issues/18) |
+
+Every planned feature has an issue, one per row of the
+[syntax roadmap](planning/implementation-plan.md#syntax-roadmap), collected under the tracking issue
+[#12](https://github.com/ok3mad/roslyn/issues/12). Labels give each issue's phase, size and design certainty.
 
 "Prototype" means that the feature works end to end (binding, flow analysis, nullable analysis, lowering, tests) but
 has open questions. Those are tracked in the code as `// PROTOTYPE(sharper): ...` comments:
