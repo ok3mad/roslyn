@@ -80,8 +80,13 @@ Paths are under `src/Compilers/CSharp/Portable/`.
 5. **Do not copy the precedent blindly.** A foreach iteration variable gets an explicit cast (`forCast: true`); a
    yielded or assigned value must convert implicitly.
 6. **Synthesized `try` blocks carry syntax.** The async rewriter and Edit and Continue accept only certain syntax for
-   a `try` (`SyntaxBindingUtilities.BindsToTryStatement`). Lowering a new construct into try/finally inside a state
-   machine needs care, and an Edit and Continue check.
+   a `try` (`SyntaxBindingUtilities.BindsToTryStatement`). Edit and Continue maps state machine states by syntax
+   offset and relative ordinal (`AwaitDebugId`), so two states on one node need distinct ordinals: the spread's `try`
+   has the yield's syntax, and `IteratorMethodToStateMachineRewriter.PushFrame` gives its finalize state ordinal 1.
+   Also check the IDE's matcher (`SyntaxComparer` in `src/Features/CSharp/Portable/EditAndContinue`): a construct
+   with its own states or hoisted variables must not match the plain statement it reinterprets. Write emit-difference
+   tests (`EditAndContinueSharperTests.cs`, Emit2) for edits before, after and inside the construct, and for adding
+   and removing it.
 7. **`dynamic` defers errors to runtime**, so a "C# wins unless it errors" rule rarely fires for a dynamic operand.
    Decide what Sharper does there explicitly.
 8. **A keyword's spelling is checked far from its binder.** `var` is tested syntactically (`TypeSyntax.IsVar`,
