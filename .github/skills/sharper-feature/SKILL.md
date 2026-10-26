@@ -67,7 +67,7 @@ Paths are under `src/Compilers/CSharp/Portable/`.
 
 ## Short Type Forms (Aliases onto a BCL Type)
 
-`T[..]` is `IEnumerable<T>`; `T^` (`Task<T>`) and `(A) -> R` (`Func<A, R>`) will follow the same pattern. Such a form
+`T[..]` is `IEnumerable<T>` and `(A) -> R` is `Func<A, R>`; the task type (#20) follows the same pattern. Such a form
 needs no bound node and no lowering: the binder resolves it to the constructed BCL type, so metadata, the semantic
 model and IOperation see only the BCL type. The steps, with `T[..]` as the worked example (details in the
 implementation plan, "Feature 3"):
@@ -132,13 +132,20 @@ implementation plan, "Feature 3"):
    to `EndOfFileToken`, so a new keyword kind must sit in the keyword range: take free slots from the top
    (`ValKeyword` = 8466, below `ElifKeyword`) and test that no other `SyntaxKind` has the value, because duplicate enum
    values compile silently. Diagnostics have no such limit: Sharper codes start at `SharperErrorCodes.Base` (CS20001).
+14. **A new syntax node is public API and hides in type switches.** When no existing node fits (function types), add it
+   to `Syntax.xml` with a `SyntaxKind` from 9900 up (Sharper node kinds count up from there, apart from upstream),
+   regenerate, and copy the build's RS0016 list into `PublicAPI.Unshipped.txt`. A new type node also needs
+   `SyntaxFacts.IsTypeSyntax`, `SyntaxFacts.IsInTypeOnlyContext` (for the semantic model) and
+   `SyntaxExtensions.VisitRankSpecifiers`, which throws on unknown type kinds. In the parser, gate every lookahead
+   change on Sharper and scan nested parentheses in one pass: trying a second scan after a failed one is exponential in
+   the nesting depth.
 
-14. **The lexer has no `..` token.** It produces two `.` tokens that the parser merges (`IsAtDotDotToken`,
+15. **The lexer has no `..` token.** It produces two `.` tokens that the parser merges (`IsAtDotDotToken`,
    `EatDotDotToken`); `CurrentToken.Kind == SyntaxKind.DotDotToken` never matches.
-15. **Accepting a type form in `ScanType` moves ambiguities.** The cast heuristic reads an ambiguous type before `(`,
+16. **Accepting a type form in `ScanType` moves ambiguities.** The cast heuristic reads an ambiguous type before `(`,
    `!` or an identifier as a cast, which would turn the valid element accesses `(a[..])(b)` and `(a?[..])` into casts.
    The type argument rule makes `F<a[..]>(x)` a generic call (accepted: in C# it needs user-defined comparisons).
-16. **`GetTypeInfo` on a type syntax drops the top-level nullable annotation.** Compare
+17. **`GetTypeInfo` on a type syntax drops the top-level nullable annotation.** Compare
    `TypeWithAnnotations` of the declared symbols (`ToTestDisplayString(includeNonNullable: true)`), and compare
    with a C# twin rather than guess the display order of mixed array ranks.
 

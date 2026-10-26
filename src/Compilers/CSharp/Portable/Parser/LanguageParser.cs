@@ -7275,7 +7275,9 @@ parse_member_name:;
             {
                 lastTokenOfType = this.EatToken();
 
-                result = this.ScanTupleType(out lastTokenOfType);
+                result = IsFeatureEnabled(MessageID.IDS_FeatureSharper)
+                    ? this.ScanTupleOrSharperFunctionType(out lastTokenOfType)
+                    : this.ScanTupleType(out lastTokenOfType);
                 if (result == ScanTypeFlags.NotType || mode == ParseTypeMode.DefinitePattern && this.CurrentToken.Kind != SyntaxKind.OpenBracketToken)
                 {
                     // A tuple type can appear in a pattern only if it is the element type of an array type.
@@ -7420,6 +7422,90 @@ done:
             // Can't be a type!
             lastTokenOfType = null;
             return ScanTypeFlags.NotType;
+        }
+
+        /// <summary>
+        /// Sharper: scans the rest of a tuple type or of a function type, <c>(A, B) -> R</c>, in one pass, so that nested
+        /// parentheses are not scanned twice. The caller is expected to have consumed the opening paren.
+        /// </summary>
+        /// <remarks>
+        /// <c>(p)->F</c> is also a pointer member access, so a function type with one parameter that may be an expression,
+        /// followed by a name, returns the flags of its return type, as for the qualified name <c>p.F</c>. The callers
+        /// then keep C#'s meaning wherever it is valid. Any other function type must be a type.
+        /// </remarks>
+        private ScanTypeFlags ScanTupleOrSharperFunctionType(out SyntaxToken lastTokenOfType)
+        {
+            int count = 0;
+            bool hasModifiers = false;
+            bool hasNames = false;
+            var firstElementType = ScanTypeFlags.NotType;
+
+            if (this.CurrentToken.Kind != SyntaxKind.CloseParenToken)
+            {
+                while (true)
+                {
+                    while (IsParameterModifierExcludingScoped(this.CurrentToken))
+                    {
+                        this.EatToken();
+                        hasModifiers = true;
+                    }
+
+                    var elementType = ScanType(out lastTokenOfType);
+                    if (elementType == ScanTypeFlags.NotType)
+                    {
+                        lastTokenOfType = null;
+                        return ScanTypeFlags.NotType;
+                    }
+
+                    if (count == 0)
+                    {
+                        firstElementType = elementType;
+                    }
+
+                    count++;
+                    if (IsTrueIdentifier())
+                    {
+                        lastTokenOfType = this.EatToken();
+                        hasNames = true;
+                    }
+
+                    if (this.CurrentToken.Kind != SyntaxKind.CommaToken)
+                    {
+                        break;
+                    }
+
+                    this.EatToken();
+                }
+            }
+
+            if (this.CurrentToken.Kind != SyntaxKind.CloseParenToken)
+            {
+                lastTokenOfType = null;
+                return ScanTypeFlags.NotType;
+            }
+
+            lastTokenOfType = this.EatToken();
+            if (this.CurrentToken.Kind != SyntaxKind.MinusGreaterThanToken)
+            {
+                // Tuple element names are allowed; modifiers are not.
+                return count >= 2 && !hasModifiers
+                    ? ScanTypeFlags.TupleType
+                    : ScanTypeFlags.NotType;
+            }
+
+            this.EatToken();
+            var returnStartsWithName = this.CurrentToken.Kind == SyntaxKind.IdentifierToken;
+            var returnType = ScanType(out lastTokenOfType);
+            if (returnType == ScanTypeFlags.NotType)
+            {
+                lastTokenOfType = null;
+                return ScanTypeFlags.NotType;
+            }
+
+            return count == 1 && !hasModifiers && !hasNames && returnStartsWithName &&
+                firstElementType is ScanTypeFlags.NonGenericTypeOrExpression or ScanTypeFlags.AliasQualifiedName
+                ? returnType
+                : ScanTypeFlags.MustBeType;
         }
 
 #nullable enable
@@ -7965,6 +8051,119 @@ done:
                 this.EatToken(SyntaxKind.CloseParenToken));
         }
 
+        /// <summary>
+        /// Sharper: true at <c>( [modifiers] type, ... ) -></c>, the start of a function type.
+        /// </summary>
+        private bool IsSharperFunctionTypeStart()
+        {
+            Debug.Assert(this.CurrentToken.Kind == SyntaxKind.OpenParenToken);
+
+            using var _ = this.GetDisposableResetPoint(resetOnDispose: true);
+            this.EatToken();
+
+            if (this.CurrentToken.Kind != SyntaxKind.CloseParenToken)
+            {
+                while (true)
+                {
+                    while (IsParameterModifierExcludingScoped(this.CurrentToken))
+                    {
+                        this.EatToken();
+                    }
+
+                    if (ScanType() == ScanTypeFlags.NotType)
+                    {
+                        return false;
+                    }
+
+                    if (IsTrueIdentifier())
+                    {
+                        this.EatToken();
+                    }
+
+                    if (this.CurrentToken.Kind != SyntaxKind.CommaToken)
+                    {
+                        break;
+                    }
+
+                    this.EatToken();
+                }
+            }
+
+            return this.CurrentToken.Kind == SyntaxKind.CloseParenToken &&
+                this.PeekToken(1).Kind == SyntaxKind.MinusGreaterThanToken;
+        }
+
+        /// <summary>
+        /// Sharper: true at <c>((name) -> name</c>, which C# also parses as a parenthesized pointer member access, such as
+        /// the invocation <c>((p)->F)(x)</c>. The caller is expected to have consumed the outer opening paren.
+        /// </summary>
+        private bool IsAmbiguousSharperFunctionType()
+        {
+            if (this.CurrentToken.Kind != SyntaxKind.OpenParenToken)
+            {
+                return false;
+            }
+
+            using var _ = this.GetDisposableResetPoint(resetOnDispose: true);
+            this.EatToken();
+
+            return ScanType() is ScanTypeFlags.NonGenericTypeOrExpression or ScanTypeFlags.AliasQualifiedName &&
+                this.CurrentToken.Kind == SyntaxKind.CloseParenToken &&
+                this.PeekToken(1).Kind == SyntaxKind.MinusGreaterThanToken &&
+                this.PeekToken(2).Kind == SyntaxKind.IdentifierToken;
+        }
+
+        /// <summary>
+        /// Sharper: parses a function type, <c>(A, B) -> R</c>. Parameter modifiers are kept for the binder to report;
+        /// parameter names are skipped with an error.
+        /// </summary>
+        private FunctionTypeSyntax ParseSharperFunctionType()
+        {
+            var open = this.EatToken(SyntaxKind.OpenParenToken);
+            var parameters = _pool.AllocateSeparated<FunctionPointerParameterSyntax>();
+
+            if (this.CurrentToken.Kind != SyntaxKind.CloseParenToken)
+            {
+                while (true)
+                {
+                    var modifiers = _pool.Allocate<SyntaxToken>();
+                    ParseParameterModifiers(modifiers, isFunctionPointerParameter: true, isLambdaParameter: false);
+
+                    TypeSyntax type = this.ParseType(ParseTypeMode.Parameter);
+                    if (IsTrueIdentifier())
+                    {
+                        // PROTOTYPE(sharper): parameter names are not supported yet (https://github.com/ok3mad/roslyn/issues/57).
+                        var name = this.EatToken();
+                        type = AddTrailingSkippedSyntax(type, this.AddError(name, ErrorCode.ERR_SharperFunctionTypeParameterName, name.ValueText));
+                    }
+
+                    parameters.Add(_syntaxFactory.FunctionPointerParameter(
+                        attributeLists: default,
+                        _pool.ToTokenListAndFree(modifiers),
+                        type));
+
+                    if (this.CurrentToken.Kind != SyntaxKind.CommaToken)
+                    {
+                        break;
+                    }
+
+                    parameters.AddSeparator(this.EatToken());
+                }
+            }
+
+            var close = this.EatToken(SyntaxKind.CloseParenToken);
+            var arrow = this.EatToken(SyntaxKind.MinusGreaterThanToken);
+
+            // PROTOTYPE(sharper): a suffix applies to the return type; there is no parenthesized form that applies one to the
+            // function type itself (https://github.com/ok3mad/roslyn/issues/58).
+            return _syntaxFactory.FunctionType(
+                open,
+                _pool.ToListAndFree(parameters),
+                close,
+                arrow,
+                this.ParseTypeOrVoid());
+        }
+
         private TupleElementSyntax ParseTupleElement()
         {
             return _syntaxFactory.TupleElement(
@@ -8002,6 +8201,11 @@ done:
 
             if (this.CurrentToken.Kind == SyntaxKind.OpenParenToken)
             {
+                if (IsFeatureEnabled(MessageID.IDS_FeatureSharper) && IsSharperFunctionTypeStart())
+                {
+                    return this.ParseSharperFunctionType();
+                }
+
                 return this.ParseTupleType();
             }
             else if (IsFunctionPointerStart())
@@ -12961,6 +13165,12 @@ done:
             }
 
             this.EatToken();
+
+            // Sharper: in C#, `((p)->F)(x)` invokes F through a pointer member access, so it is never a cast to a function type.
+            if (IsFeatureEnabled(MessageID.IDS_FeatureSharper) && IsAmbiguousSharperFunctionType())
+            {
+                return false;
+            }
 
             var type = this.ScanType(out var lastTokenOfType, forPattern);
             if (type == ScanTypeFlags.NotType)

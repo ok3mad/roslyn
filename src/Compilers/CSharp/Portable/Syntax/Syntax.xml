@@ -366,6 +366,44 @@
       <summary>Creates a TupleTypeSyntax node.</summary>
     </FactoryComment>
   </Node>
+  <Node Name="FunctionTypeSyntax" Base="TypeSyntax">
+    <!-- Sharper's function type, (A, B) -> R. It binds to System.Func or System.Action. -->
+    <Kind Name="FunctionType"/>
+    <Field Name="OpenParenToken" Type="SyntaxToken">
+      <Kind Name="OpenParenToken"/>
+      <PropertyComment>
+        <summary>SyntaxToken representing the open parenthesis.</summary>
+      </PropertyComment>
+    </Field>
+    <Field Name="Parameters" Type="SeparatedSyntaxList&lt;FunctionPointerParameterSyntax&gt;">
+      <PropertyComment>
+        <summary>SeparatedSyntaxList of the parameter types.</summary>
+      </PropertyComment>
+    </Field>
+    <Field Name="CloseParenToken" Type="SyntaxToken">
+      <Kind Name="CloseParenToken"/>
+      <PropertyComment>
+        <summary>SyntaxToken representing the close parenthesis.</summary>
+      </PropertyComment>
+    </Field>
+    <Field Name="ArrowToken" Type="SyntaxToken">
+      <Kind Name="MinusGreaterThanToken"/>
+      <PropertyComment>
+        <summary>SyntaxToken representing the arrow.</summary>
+      </PropertyComment>
+    </Field>
+    <Field Name="ReturnType" Type="TypeSyntax">
+      <PropertyComment>
+        <summary>TypeSyntax node representing the return type, which may be void.</summary>
+      </PropertyComment>
+    </Field>
+    <TypeComment>
+      <summary>Class which represents the syntax node for a Sharper function type, such as (int, int) -> int.</summary>
+    </TypeComment>
+    <FactoryComment>
+      <summary>Creates a FunctionTypeSyntax node.</summary>
+    </FactoryComment>
+  </Node>
   <Node Name="TupleElementSyntax" Base="CSharpSyntaxNode">
     <TypeComment>
       <summary>Tuple type element.</summary>
