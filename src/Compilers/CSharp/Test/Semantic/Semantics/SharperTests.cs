@@ -2324,7 +2324,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 var h = new H();
                 int one = 1, two = 2;
                 Console.Write(F(h[..] ? one : two, 0));
-                var tuple = (h[..] ? one : two, h?[..] ? one : two);
+                var tuple = (h[..] ? one : two, h?[..] is true ? one : two);
                 Console.Write(tuple);
                 int F(int i, int j) => i + j;
 
