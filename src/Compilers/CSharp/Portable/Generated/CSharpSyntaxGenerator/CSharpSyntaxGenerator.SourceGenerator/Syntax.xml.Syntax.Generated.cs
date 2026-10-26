@@ -889,6 +889,85 @@ public sealed partial class TupleTypeSyntax : TypeSyntax
     public TupleTypeSyntax AddElements(params TupleElementSyntax[] items) => WithElements(this.Elements.AddRange(items));
 }
 
+/// <summary>Class which represents the syntax node for a Sharper function type, such as (int, int) -&gt; int.</summary>
+/// <remarks>
+/// <para>This node is associated with the following syntax kinds:</para>
+/// <list type="bullet">
+/// <item><description><see cref="SyntaxKind.FunctionType"/></description></item>
+/// </list>
+/// </remarks>
+public sealed partial class FunctionTypeSyntax : TypeSyntax
+{
+    private SyntaxNode? parameters;
+    private TypeSyntax? returnType;
+
+    internal FunctionTypeSyntax(InternalSyntax.CSharpSyntaxNode green, SyntaxNode? parent, int position)
+      : base(green, parent, position)
+    {
+    }
+
+    /// <summary>SyntaxToken representing the open parenthesis.</summary>
+    public SyntaxToken OpenParenToken => new SyntaxToken(this, ((InternalSyntax.FunctionTypeSyntax)this.Green).openParenToken, Position, 0);
+
+    /// <summary>SeparatedSyntaxList of the parameter types.</summary>
+    public SeparatedSyntaxList<FunctionPointerParameterSyntax> Parameters
+    {
+        get
+        {
+            var red = GetRed(ref this.parameters, 1);
+            return red != null ? new SeparatedSyntaxList<FunctionPointerParameterSyntax>(red, GetChildIndex(1)) : default;
+        }
+    }
+
+    /// <summary>SyntaxToken representing the close parenthesis.</summary>
+    public SyntaxToken CloseParenToken => new SyntaxToken(this, ((InternalSyntax.FunctionTypeSyntax)this.Green).closeParenToken, GetChildPosition(2), GetChildIndex(2));
+
+    /// <summary>SyntaxToken representing the arrow.</summary>
+    public SyntaxToken ArrowToken => new SyntaxToken(this, ((InternalSyntax.FunctionTypeSyntax)this.Green).arrowToken, GetChildPosition(3), GetChildIndex(3));
+
+    /// <summary>TypeSyntax node representing the return type, which may be void.</summary>
+    public TypeSyntax ReturnType => GetRed(ref this.returnType, 4)!;
+
+    internal override SyntaxNode? GetNodeSlot(int index)
+        => index switch
+        {
+            1 => GetRed(ref this.parameters, 1)!,
+            4 => GetRed(ref this.returnType, 4)!,
+            _ => null,
+        };
+
+    internal override SyntaxNode? GetCachedSlot(int index)
+        => index switch
+        {
+            1 => this.parameters,
+            4 => this.returnType,
+            _ => null,
+        };
+
+    public override void Accept(CSharpSyntaxVisitor visitor) => visitor.VisitFunctionType(this);
+    public override TResult? Accept<TResult>(CSharpSyntaxVisitor<TResult> visitor) where TResult : default => visitor.VisitFunctionType(this);
+
+    public FunctionTypeSyntax Update(SyntaxToken openParenToken, SeparatedSyntaxList<FunctionPointerParameterSyntax> parameters, SyntaxToken closeParenToken, SyntaxToken arrowToken, TypeSyntax returnType)
+    {
+        if (openParenToken != this.OpenParenToken || parameters != this.Parameters || closeParenToken != this.CloseParenToken || arrowToken != this.ArrowToken || returnType != this.ReturnType)
+        {
+            var newNode = SyntaxFactory.FunctionType(openParenToken, parameters, closeParenToken, arrowToken, returnType);
+            var annotations = GetAnnotations();
+            return annotations?.Length > 0 ? newNode.WithAnnotations(annotations) : newNode;
+        }
+
+        return this;
+    }
+
+    public FunctionTypeSyntax WithOpenParenToken(SyntaxToken openParenToken) => Update(openParenToken, this.Parameters, this.CloseParenToken, this.ArrowToken, this.ReturnType);
+    public FunctionTypeSyntax WithParameters(SeparatedSyntaxList<FunctionPointerParameterSyntax> parameters) => Update(this.OpenParenToken, parameters, this.CloseParenToken, this.ArrowToken, this.ReturnType);
+    public FunctionTypeSyntax WithCloseParenToken(SyntaxToken closeParenToken) => Update(this.OpenParenToken, this.Parameters, closeParenToken, this.ArrowToken, this.ReturnType);
+    public FunctionTypeSyntax WithArrowToken(SyntaxToken arrowToken) => Update(this.OpenParenToken, this.Parameters, this.CloseParenToken, arrowToken, this.ReturnType);
+    public FunctionTypeSyntax WithReturnType(TypeSyntax returnType) => Update(this.OpenParenToken, this.Parameters, this.CloseParenToken, this.ArrowToken, returnType);
+
+    public FunctionTypeSyntax AddParameters(params FunctionPointerParameterSyntax[] items) => WithParameters(this.Parameters.AddRange(items));
+}
+
 /// <summary>Tuple type element.</summary>
 /// <remarks>
 /// <para>This node is associated with the following syntax kinds:</para>

@@ -1976,6 +1976,441 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         }
 
         [Fact]
+        public void FunctionType_Basic()
+        {
+            var source = """
+                using System;
+
+                (int, int) -> int add = (a, b) => a + b;
+                () -> string thunk = () => "thunk";
+                (string) -> void print = s => Console.Write(s);
+                (int) -> (int) -> int adder = a => b => a + b;
+                (int) -> (int, string) pair = i => (i, i.ToString());
+
+                print(add(1, 2).ToString());
+                print(" " + thunk());
+                print(" " + adder(3)(4));
+                print(" " + pair(5));
+                print(" " + Twice(i => i * 10, 6));
+                print(" " + Compose(i => i + 1, i => i * 2)(7));
+
+                // Each function type is the Func or Action it stands for.
+                Console.Write(" " + (typeof((int, int) -> int) == typeof(Func<int, int, int>)));
+                Console.Write(" " + (typeof(() -> void) == typeof(Action)));
+                Console.Write(" " + (typeof((string) -> void) == typeof(Action<string>)));
+                Console.Write(" " + (typeof((int) -> (int) -> int) == typeof(Func<int, Func<int, int>>)));
+
+                static int Twice((int) -> int f, int x) => f(f(x));
+                static (int) -> int Compose((int) -> int f, (int) -> int g) => x => g(f(x));
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90,
+                expectedOutput: ExecutionConditionUtil.IsCoreClr ? "3 thunk 7 (5, 5) 600 16 True True True True" : null).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void FunctionType_TypePositions()
+        {
+            var source = """
+                using System;
+                using System.Collections.Generic;
+                using Adder = (int, int) -> int;
+
+                var c = new C();
+                c.Field = i => i + 1;
+                c.Property = () => "p";
+                var list = new List<(int) -> int> { i => i * 2, c.Field };
+                Adder add = (a, b) => a + b;
+                var cast = ((int) -> int)(i => -i);
+                object o = cast;
+                var asFunc = o as (int) -> int;
+                var defaultFunc = default((int) -> int);
+                var apply = ((int) -> int f, int x) => f(x);
+                (int) -> int Local((int) -> int f) => f;
+
+                Console.Write(c.Field(1));
+                Console.Write(" " + c.Property());
+                Console.Write(" " + list[0](2) + list[1](2));
+                Console.Write(" " + add(1, 2));
+                Console.Write(" " + cast(3));
+                Console.Write(" " + asFunc!(4));
+                Console.Write(" " + (defaultFunc is null));
+                Console.Write(" " + apply(i => i * 3, 5));
+                Console.Write(" " + Local(i => i)(6));
+                Console.Write(" " + C.Generic<string, int>(s => s.Length)("seven"));
+
+                class C
+                {
+                    public (int) -> int Field = i => i;
+                    public () -> string Property { get; set; } = () => "";
+                    public static (T) -> R Generic<T, R>((T) -> R f) => f;
+                }
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90,
+                expectedOutput: ExecutionConditionUtil.IsCoreClr ? "2 p 43 3 -3 -4 True 15 6 5" : null).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void FunctionType_IdentityWithFunc()
+        {
+            // A function type is its Func or Action, so the two spellings convert both ways and clash as overloads.
+            var source = """
+                using System;
+
+                class C
+                {
+                    void M((int) -> int f) { Func<int, int> g = f; f = g; }
+                    void M(Func<int, int> f) { }
+                    void N(() -> void a) { Action b = a; a = b; }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (6,10): error CS0111: Type 'C' already defines a member called 'M' with the same parameter types
+                //     void M(Func<int, int> f) { }
+                Diagnostic(ErrorCode.ERR_MemberAlreadyExists, "M").WithArguments("M", "C").WithLocation(6, 10));
+        }
+
+        [Fact]
+        public void FunctionType_Variance()
+        {
+            var source = """
+                using System;
+
+                (object) -> string f = o => o.ToString()!;
+                (string) -> object g = f;
+                Func<string, object> h = f;
+                Console.Write(g("a") + (string)h("b"));
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90,
+                expectedOutput: ExecutionConditionUtil.IsCoreClr ? "ab" : null).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void FunctionType_Suffixes()
+        {
+            // A suffix applies to the return type: (int) -> int? is Func<int, int?>.
+            var source = """
+                #nullable enable
+                using System;
+
+                (int) -> int? nullable = i => i > 0 ? i : null;
+                (int) -> int[] array = i => [i, i];
+                (int) -> int[]? both = i => null;
+                Console.Write(typeof((int) -> int?) == typeof(Func<int, int?>));
+                Console.Write(" " + (typeof((int) -> int[]) == typeof(Func<int, int[]>)));
+                Console.Write(" " + (nullable(0) is null) + array(1).Length + (both(2) is null));
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90,
+                expectedOutput: ExecutionConditionUtil.IsCoreClr ? "True True True2True" : null).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void FunctionType_Nullable()
+        {
+            var source = """
+                #nullable enable
+                using System;
+
+                (string?) -> string f = s => s;
+                Func<string?, string> g = s => s;
+                (string) -> string? h = s => null;
+                string x = h("a");
+                Func<string, string?> i = s => null;
+                string y = i("a");
+                """;
+            // The same warnings as for the Func twins.
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (4,30): warning CS8603: Possible null reference return.
+                // (string?) -> string f = s => s;
+                Diagnostic(ErrorCode.WRN_NullReferenceReturn, "s").WithLocation(4, 30),
+                // (5,32): warning CS8603: Possible null reference return.
+                // Func<string?, string> g = s => s;
+                Diagnostic(ErrorCode.WRN_NullReferenceReturn, "s").WithLocation(5, 32),
+                // (7,12): warning CS8600: Converting null literal or possible null value to non-nullable type.
+                // string x = h("a");
+                Diagnostic(ErrorCode.WRN_ConvertingNullableToNonNullable, @"h(""a"")").WithLocation(7, 12),
+                // (9,12): warning CS8600: Converting null literal or possible null value to non-nullable type.
+                // string y = i("a");
+                Diagnostic(ErrorCode.WRN_ConvertingNullableToNonNullable, @"i(""a"")").WithLocation(9, 12));
+        }
+
+        [Fact]
+        public void FunctionType_Errors()
+        {
+            var source = """
+                #pragma warning disable CS0169 // The field is never used
+                unsafe class C
+                {
+                    (ref int, out string, in long) -> bool modifiers;
+                    (int x, int y) -> int names;
+                    (int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int) -> int tooMany;
+                    (int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int) -> int sixteen;
+                    (void) -> int voidParameter;
+                    (int*) -> int pointer;
+                    System.Func<int*, int> pointerTwin;
+                    (int) -> System.Span<int> span;
+                    (int) -> System.Console staticReturn;
+                    System.Func<int, System.Console> staticReturnTwin;
+                    void M()
+                    {
+                        (int*) -> int local = null;
+                        System.Func<int*, int> localTwin = null;
+                    }
+                }
+                """;
+            // Constraint errors are the same as for the Func twins; in a local, they span the whole function type.
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, options: TestOptions.UnsafeReleaseDll).VerifyDiagnostics(
+                // (4,6): error CS20008: A function type parameter cannot be 'ref', because a function type is a 'System.Func' or 'System.Action' delegate.
+                //     (ref int, out string, in long) -> bool modifiers;
+                Diagnostic(ErrorCode.ERR_SharperFunctionTypeParameterModifier, "ref").WithArguments("ref").WithLocation(4, 6),
+                // (4,15): error CS20008: A function type parameter cannot be 'out', because a function type is a 'System.Func' or 'System.Action' delegate.
+                //     (ref int, out string, in long) -> bool modifiers;
+                Diagnostic(ErrorCode.ERR_SharperFunctionTypeParameterModifier, "out").WithArguments("out").WithLocation(4, 15),
+                // (4,27): error CS20008: A function type parameter cannot be 'in', because a function type is a 'System.Func' or 'System.Action' delegate.
+                //     (ref int, out string, in long) -> bool modifiers;
+                Diagnostic(ErrorCode.ERR_SharperFunctionTypeParameterModifier, "in").WithArguments("in").WithLocation(4, 27),
+                // (5,10): error CS20007: A function type cannot name its parameters. Remove the name 'x'.
+                //     (int x, int y) -> int names;
+                Diagnostic(ErrorCode.ERR_SharperFunctionTypeParameterName, "x").WithArguments("x").WithLocation(5, 10),
+                // (5,17): error CS20007: A function type cannot name its parameters. Remove the name 'y'.
+                //     (int x, int y) -> int names;
+                Diagnostic(ErrorCode.ERR_SharperFunctionTypeParameterName, "y").WithArguments("y").WithLocation(5, 17),
+                // (6,5): error CS20009: A function type cannot have more than 16 parameters, because no 'System.Func' or 'System.Action' delegate has more.
+                //     (int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int) -> int tooMany;
+                Diagnostic(ErrorCode.ERR_SharperFunctionTypeTooManyParameters, "(int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int) -> int").WithArguments("16").WithLocation(6, 5),
+                // (8,6): error CS1536: Invalid parameter type 'void'
+                //     (void) -> int voidParameter;
+                Diagnostic(ErrorCode.ERR_NoVoidParameter, "void").WithLocation(8, 6),
+                // (8,19): error CS0306: The type 'void' may not be used as a type argument
+                //     (void) -> int voidParameter;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "voidParameter").WithArguments("void").WithLocation(8, 19),
+                // (9,19): error CS0306: The type 'int*' may not be used as a type argument
+                //     (int*) -> int pointer;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "pointer").WithArguments("int*").WithLocation(9, 19),
+                // (10,28): error CS0306: The type 'int*' may not be used as a type argument
+                //     System.Func<int*, int> pointerTwin;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "pointerTwin").WithArguments("int*").WithLocation(10, 28),
+                // (12,29): error CS0718: 'Console': static types cannot be used as type arguments
+                //     (int) -> System.Console staticReturn;
+                Diagnostic(ErrorCode.ERR_GenericArgIsStaticClass, "staticReturn").WithArguments("System.Console").WithLocation(12, 29),
+                // (13,38): error CS0718: 'Console': static types cannot be used as type arguments
+                //     System.Func<int, System.Console> staticReturnTwin;
+                Diagnostic(ErrorCode.ERR_GenericArgIsStaticClass, "staticReturnTwin").WithArguments("System.Console").WithLocation(13, 38),
+                // (16,9): error CS0306: The type 'int*' may not be used as a type argument
+                //         (int*) -> int local = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "(int*) -> int").WithArguments("int*").WithLocation(16, 9),
+                // (16,23): warning CS0219: The variable 'local' is assigned but its value is never used
+                //         (int*) -> int local = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "local").WithArguments("local").WithLocation(16, 23),
+                // (17,21): error CS0306: The type 'int*' may not be used as a type argument
+                //         System.Func<int*, int> localTwin = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(17, 21),
+                // (17,32): warning CS0219: The variable 'localTwin' is assigned but its value is never used
+                //         System.Func<int*, int> localTwin = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "localTwin").WithArguments("localTwin").WithLocation(17, 32));
+        }
+
+        [Fact]
+        public void FunctionType_Disabled()
+        {
+            // Without Sharper, the function type reports the usual C# errors.
+            var source = """
+                class C
+                {
+                    void M()
+                    {
+                        (int, int) -> int add = null;
+                        () -> int thunk = null;
+                    }
+                }
+                """;
+            CreateCompilation(source, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (5,10): error CS1525: Invalid expression term 'int'
+                //         (int, int) -> int add = null;
+                Diagnostic(ErrorCode.ERR_InvalidExprTerm, "int").WithArguments("int").WithLocation(5, 10),
+                // (5,15): error CS1525: Invalid expression term 'int'
+                //         (int, int) -> int add = null;
+                Diagnostic(ErrorCode.ERR_InvalidExprTerm, "int").WithArguments("int").WithLocation(5, 15),
+                // (5,23): error CS1001: Identifier expected
+                //         (int, int) -> int add = null;
+                Diagnostic(ErrorCode.ERR_IdentifierExpected, "int").WithLocation(5, 23),
+                // (5,23): error CS1002: ; expected
+                //         (int, int) -> int add = null;
+                Diagnostic(ErrorCode.ERR_SemicolonExpected, "int").WithLocation(5, 23),
+                // (5,33): error CS0037: Cannot convert null to 'int' because it is a non-nullable value type
+                //         (int, int) -> int add = null;
+                Diagnostic(ErrorCode.ERR_ValueCantBeNull, "null").WithArguments("int").WithLocation(5, 33),
+                // (6,10): error CS1525: Invalid expression term ')'
+                //         () -> int thunk = null;
+                Diagnostic(ErrorCode.ERR_InvalidExprTerm, ")").WithArguments(")").WithLocation(6, 10),
+                // (6,15): error CS1001: Identifier expected
+                //         () -> int thunk = null;
+                Diagnostic(ErrorCode.ERR_IdentifierExpected, "int").WithLocation(6, 15),
+                // (6,15): error CS1002: ; expected
+                //         () -> int thunk = null;
+                Diagnostic(ErrorCode.ERR_SemicolonExpected, "int").WithLocation(6, 15),
+                // (6,27): error CS0037: Cannot convert null to 'int' because it is a non-nullable value type
+                //         () -> int thunk = null;
+                Diagnostic(ErrorCode.ERR_ValueCantBeNull, "null").WithArguments("int").WithLocation(6, 27));
+        }
+
+        [Fact]
+        public void FunctionType_FactoryWithoutSharper()
+        {
+            // A function type built with SyntaxFactory in a C# tree reports that Sharper is not enabled.
+            var tree = SyntaxFactory.ParseSyntaxTree("class C { (int) -> int F; }", s_sharperOptions);
+            var csharpTree = tree.WithRootAndOptions(tree.GetRoot(), TestOptions.Regular);
+            CreateCompilation(csharpTree, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (1,17): error CS8058: Feature 'Sharper' is experimental and unsupported; use '/features:sharper' to enable.
+                // class C { (int) -> int F; }
+                Diagnostic(ErrorCode.ERR_FeatureIsExperimental, "->").WithArguments("Sharper", "sharper").WithLocation(1, 17),
+                // (1,24): warning CS0169: The field 'C.F' is never used
+                // class C { (int) -> int F; }
+                Diagnostic(ErrorCode.WRN_UnreferencedField, "F").WithArguments("C.F").WithLocation(1, 24));
+        }
+
+        [Theory]
+        [CombinatorialData]
+        public void FunctionType_Parsing(bool sharper)
+        {
+            var options = sharper ? s_sharperOptions : TestOptions.Regular;
+
+            var statement = SyntaxFactory.ParseStatement("(int, int) -> int add = null;", options: options);
+            Assert.Equal(sharper ? SyntaxKind.LocalDeclarationStatement : SyntaxKind.ExpressionStatement, statement.Kind());
+            if (sharper)
+            {
+                var type = (FunctionTypeSyntax)((LocalDeclarationStatementSyntax)statement).Declaration.Type;
+                Assert.Equal(2, type.Parameters.Count);
+                Assert.Equal("int", type.ReturnType.ToString());
+                Assert.False(statement.ContainsDiagnostics);
+            }
+
+            // The arrow is right-associative, and a suffix applies to the return type.
+            statement = SyntaxFactory.ParseStatement("(int) -> (int) -> int? f;", options: options);
+            if (sharper)
+            {
+                var type = (FunctionTypeSyntax)((LocalDeclarationStatementSyntax)statement).Declaration.Type;
+                var inner = (FunctionTypeSyntax)type.ReturnType;
+                Assert.Equal(SyntaxKind.NullableType, inner.ReturnType.Kind());
+            }
+
+            // `(p) -> F x` is never valid C#, so it is a declaration, like `p.F x`.
+            statement = SyntaxFactory.ParseStatement("(p) -> F x;", options: options);
+            Assert.Equal(sharper ? SyntaxKind.LocalDeclarationStatement : SyntaxKind.ExpressionStatement, statement.Kind());
+
+            // A tuple of function types, and a function type taking a tuple.
+            statement = SyntaxFactory.ParseStatement("((int) -> int, string) t;", options: options);
+            Assert.Equal(sharper ? SyntaxKind.LocalDeclarationStatement : SyntaxKind.ExpressionStatement, statement.Kind());
+            if (sharper)
+            {
+                var tuple = (TupleTypeSyntax)((LocalDeclarationStatementSyntax)statement).Declaration.Type;
+                Assert.Equal(SyntaxKind.FunctionType, tuple.Elements[0].Type.Kind());
+            }
+
+            statement = SyntaxFactory.ParseStatement("((int, int)) -> int f;", options: options);
+            if (sharper)
+            {
+                var type = (FunctionTypeSyntax)((LocalDeclarationStatementSyntax)statement).Declaration.Type;
+                Assert.Equal(SyntaxKind.TupleType, type.Parameters.Single().Type.Kind());
+            }
+
+            // A generic argument list.
+            var expression = SyntaxFactory.ParseExpression("F<(int) -> int>(x)", options: options);
+            Assert.Equal(sharper, expression is InvocationExpressionSyntax { Expression: GenericNameSyntax });
+        }
+
+        [Theory]
+        [CombinatorialData]
+        public void FunctionType_Parsing_PointerMemberAccess(bool sharper)
+        {
+            // `->` keeps its C# meaning in expressions, with or without Sharper.
+            var options = sharper ? s_sharperOptions : TestOptions.Regular;
+            foreach (var text in new[] { "(p)->F(x);", "((p)->F)(x);", "(p)->F = 1;", "x = (p)->F;", "(p)->F<int>(x);", "(a.b)->F(x);", "p->F(x);", "M((p)->F);" })
+            {
+                var statement = SyntaxFactory.ParseStatement(text, options: options);
+                Assert.Equal(SyntaxKind.ExpressionStatement, statement.Kind());
+                Assert.False(statement.ContainsDiagnostics, text);
+                Assert.Empty(statement.DescendantNodes().OfType<FunctionTypeSyntax>());
+                Assert.Empty(statement.DescendantNodes().OfType<CastExpressionSyntax>());
+            }
+        }
+
+        [Fact]
+        public void FunctionType_Parsing_DeeplyNestedParentheses()
+        {
+            // Tuples and function types are scanned in one pass, so nested parentheses do not take exponential time.
+            var depth = 200;
+            var text = new string('(', depth) + "a" + new string(')', depth) + ";";
+            var statement = SyntaxFactory.ParseStatement(text, options: s_sharperOptions);
+            Assert.Equal(SyntaxKind.ExpressionStatement, statement.Kind());
+            Assert.False(statement.ContainsDiagnostics);
+        }
+
+        [Theory]
+        [CombinatorialData]
+        public void FunctionType_PointerMemberAccess_KeepsCSharpMeaning(bool sharper)
+        {
+            var source = """
+                using System;
+
+                unsafe
+                {
+                    var s = new S { F = i => i * 10 };
+                    S* p = &s;
+                    Console.Write(p->F(1));
+                    Console.Write((p)->F(2));
+                    Console.Write(((p)->F)(3));
+                    (p)->F = i => i;
+                    Console.Write(p->F(4));
+                }
+
+                struct S { public Func<int, int> F; }
+                """;
+            CompileAndVerify(source, parseOptions: sharper ? s_sharperOptions : TestOptions.Regular, targetFramework: TargetFramework.Net90,
+                options: TestOptions.UnsafeReleaseExe, verify: Verification.Skipped,
+                expectedOutput: ExecutionConditionUtil.IsCoreClr ? "1020304" : null).VerifyDiagnostics(
+                // (6,5): warning CS8500: This takes the address of, gets the size of, or declares a pointer to a managed type ('S')
+                //     S* p = &s;
+                Diagnostic(ErrorCode.WRN_ManagedAddr, "S*").WithArguments("S").WithLocation(6, 5),
+                // (6,12): warning CS8500: This takes the address of, gets the size of, or declares a pointer to a managed type ('S')
+                //     S* p = &s;
+                Diagnostic(ErrorCode.WRN_ManagedAddr, "&s").WithArguments("S").WithLocation(6, 12));
+        }
+
+        [Fact]
+        public void FunctionType_SemanticModel()
+        {
+            var source = """
+                class C
+                {
+                    (int, string) -> bool F;
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics(
+                // (3,27): warning CS0169: The field 'C.F' is never used
+                //     (int, string) -> bool F;
+                Diagnostic(ErrorCode.WRN_UnreferencedField, "F").WithArguments("C.F").WithLocation(3, 27));
+
+            var tree = comp.SyntaxTrees.Single();
+            var model = comp.GetSemanticModel(tree);
+            var functionType = tree.GetRoot().DescendantNodes().OfType<FunctionTypeSyntax>().Single();
+            Assert.Equal("System.Func<System.Int32, System.String, System.Boolean>", model.GetTypeInfo(functionType).Type.ToTestDisplayString());
+            Assert.Equal("System.Func<System.Int32, System.String, System.Boolean>", model.GetSymbolInfo(functionType).Symbol.ToTestDisplayString());
+            Assert.Equal("System.String", model.GetTypeInfo(functionType.Parameters[1].Type).Type.ToTestDisplayString());
+            Assert.Equal("System.Boolean", model.GetTypeInfo(functionType.ReturnType).Type.ToTestDisplayString());
+            Assert.True(SyntaxFacts.IsInTypeOnlyContext(functionType.ReturnType));
+            Assert.True(SyntaxFacts.IsTypeSyntax(SyntaxKind.FunctionType));
+        }
+
+        [Fact]
+        public void FunctionType_SyntaxKind()
+        {
+            // Sharper syntax nodes sit apart from the upstream ones; an upstream merge must not reuse the value.
+            Assert.Equal(9900, (int)SyntaxKind.FunctionType);
+            Assert.Single(Enum.GetValues(typeof(SyntaxKind)).Cast<SyntaxKind>(), k => (int)k == (int)SyntaxKind.FunctionType);
+        }
+
+        [Fact]
         public void ValKeyword_SyntaxKind()
         {
             // ValKeyword sits apart from the upstream contextual keywords; an upstream merge must not reuse its value

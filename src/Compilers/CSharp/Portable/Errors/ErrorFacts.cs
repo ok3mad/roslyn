@@ -2612,6 +2612,9 @@ namespace Microsoft.CodeAnalysis.CSharp
                 or ErrorCode.ERR_SharperValMayNotBindToType
                 or ErrorCode.ERR_SharperValDeconstructionDisallowsSpecificType
                 or ErrorCode.ERR_SharperValRefReassignment
+                or ErrorCode.ERR_SharperFunctionTypeParameterName
+                or ErrorCode.ERR_SharperFunctionTypeParameterModifier
+                or ErrorCode.ERR_SharperFunctionTypeTooManyParameters
                     => false,
             };
 #pragma warning restore CS8524 // The switch expression does not handle some values of its input type (it is not exhaustive) involving an unnamed enum value.

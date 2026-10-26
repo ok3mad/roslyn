@@ -444,6 +444,14 @@ namespace Microsoft.CodeAnalysis.CSharp
                             stack.Push(paramType);
                         }
                         break;
+                    case SyntaxKind.FunctionType:
+                        var functionTypeSyntax = (FunctionTypeSyntax)type;
+                        stack.Push(functionTypeSyntax.ReturnType);
+                        for (int i = functionTypeSyntax.Parameters.Count - 1; i >= 0; i--)
+                        {
+                            stack.Push(functionTypeSyntax.Parameters[i].Type);
+                        }
+                        break;
                     case SyntaxKind.TupleType:
                         var tupleTypeSyntax = (TupleTypeSyntax)type;
                         for (int i = tupleTypeSyntax.Elements.Count - 1; i >= 0; i--)
