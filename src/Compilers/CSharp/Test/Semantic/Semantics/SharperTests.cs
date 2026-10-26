@@ -43,6 +43,32 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         private static readonly CSharpParseOptions s_sharperOptions = TestOptions.Regular.WithExperimental(MessageID.IDS_FeatureSharper);
 
         [Fact]
+        public void Gating_PerTree()
+        {
+            // A compilation can mix Sharper trees (.cx files) and C# trees; other features must still agree.
+            var source = """
+                class C
+                {
+                    static int M()
+                    {
+                        val x = 1;
+                        return x;
+                    }
+                }
+                """;
+            var csharpTree = SyntaxFactory.ParseSyntaxTree(source, TestOptions.Regular, path: "a.cs");
+            var sharperTree = SyntaxFactory.ParseSyntaxTree(source.Replace("class C", "class D"), s_sharperOptions, path: "b.cx");
+
+            var comp = CreateCompilation([csharpTree, sharperTree]);
+            Assert.Null(comp.Feature(Feature.Sharper));
+            Assert.All(comp.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error), d => Assert.Same(csharpTree, d.Location.SourceTree));
+            Assert.NotEmpty(comp.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+
+            var otherTree = SyntaxFactory.ParseSyntaxTree("class E { }", s_sharperOptions.WithFeatures([new KeyValuePair<string, string>(Feature.Sharper, "true"), new KeyValuePair<string, string>(Feature.Test, "true")]));
+            Assert.Throws<System.ArgumentException>(() => CreateCompilation([csharpTree, otherTree]));
+        }
+
+        [Fact]
         public void YieldReturnSpread_Basic()
         {
             var source = """

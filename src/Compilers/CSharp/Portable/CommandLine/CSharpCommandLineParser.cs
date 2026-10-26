@@ -36,6 +36,11 @@ namespace Microsoft.CodeAnalysis.CSharp
         protected override string RegularFileExtension { get { return ".cs"; } }
         protected override string ScriptFileExtension { get { return ".csx"; } }
 
+        /// <summary>
+        /// Source files with this extension are Sharper files: they are parsed with the Sharper feature turned on.
+        /// </summary>
+        internal const string SharperFileExtension = ".cx";
+
         internal sealed override CommandLineArguments CommonParse(IEnumerable<string> args, string baseDirectory, string? sdkDirectory, string? additionalReferenceDirectories)
         {
             return Parse(args, baseDirectory, sdkDirectory, additionalReferenceDirectories);
