@@ -1962,7 +1962,8 @@ namespace Microsoft.CodeAnalysis.CSharp
         /// </summary>
         internal static bool IsSharperValValue(BoundExpression expression)
         {
-            return expression is BoundLocal { LocalSymbol: SourceLocalSymbol { IsVal: true, RefKind: RefKind.None } } &&
+            return expression is BoundLocal { LocalSymbol: SourceLocalSymbol { IsVal: true, RefKind: RefKind.None } } or
+                    BoundFieldAccess { FieldSymbol: SourceMemberFieldSymbol { IsSharperVal: true } } &&
                 expression.Type is { IsReferenceType: false };
         }
 
@@ -1979,7 +1980,8 @@ namespace Microsoft.CodeAnalysis.CSharp
 
             // PROTOTYPE(sharper): Silence the warning for members inferred not to mutate 'this', once member mutation is inferred.
             var local = receiver is BoundImplicitIndexerReceiverPlaceholder placeholder ? placeholder.Receiver : receiver;
-            Error(diagnostics, ErrorCode.WRN_SharperValMemberCallOnCopy, local.Syntax, method, ((BoundLocal)local).LocalSymbol);
+            Symbol variable = local is BoundFieldAccess field ? field.FieldSymbol : ((BoundLocal)local).LocalSymbol;
+            Error(diagnostics, ErrorCode.WRN_SharperValMemberCallOnCopy, local.Syntax, method, variable);
             return true;
         }
 

@@ -37,7 +37,7 @@ In pipeline order. Paths are under `src/Compilers/CSharp/Portable` unless noted.
 | Nullable | `FlowAnalysis/NullableWalker.cs` | Collection analyzed like foreach (CS8602), elements like a yield return (CS8603). Placeholder-based fields are checked, never visited. |
 | IOperation | `Operations/CSharpOperationFactory.cs`, `BoundTree/Statement.cs` | `OperationKind.None` with xs as its child, the documented feature-branch approach. A real shape is an API decision. |
 | Lowering | `Lowering/LocalRewriter/LocalRewriter_Yield.cs`, `_ForStatement.cs`, `_WhileStatement.cs` | Expanded with the shared foreach helpers into a loop of plain yield returns. The loop helpers have node-kind allowlists. |
-| Diagnostics | `Errors/ErrorCode.cs`, `ErrorFacts.cs`, `CSharpResources.resx` + `.xlf` | CS9402 (async) and CS9403 (dynamic). A checklist at the end of `ErrorCode.cs` lists every place to update. |
+| Diagnostics | `Errors/ErrorCode.cs`, `ErrorFacts.cs`, `CSharpResources.resx` + `.xlf` | CS20001 (async) and CS20002 (dynamic). A checklist at the end of `ErrorCode.cs` lists every place to update. |
 | Tests | `Test/Semantic/Semantics/SharperTests.cs` | Diagnostics, runtime output, nullable, IOperation, flow graph, region analysis. |
 
 ## Known traps
@@ -47,10 +47,10 @@ Each trap was probed before deciding how to handle it.
 | Trap | What the probe showed | How the PoC handles it |
 | --- | --- | --- |
 | Range ambiguity | `..i` is valid C# in iterators of `Range` and of `object` (boxed). | C# is tried first and wins; covered by tests for both element types. |
-| Async iterator, sync source | Compiler crash: the async rewriter only accepts `try` blocks with certain syntax, for Edit and Continue. | Error CS9402. May never be supported. |
-| Async iterator, async source | Misleading "foreach statement cannot operate…" error; would need an implicit `await foreach`. | Same CS9402. |
+| Async iterator, sync source | Compiler crash: the async rewriter only accepts `try` blocks with certain syntax, for Edit and Continue. | Error CS20001. May never be supported. |
+| Async iterator, async source | Misleading "foreach statement cannot operate…" error; would need an implicit `await foreach`. | Same CS20001. |
 | Ref-struct sources (spans, inline arrays) | Rejected with CS4007 about `Span<int>.Enumerator`, which the user never wrote. | Kept as is; a clearer error is a follow-up. |
-| `dynamic` | In an iterator of `object`, `..d` is valid C# (d converts to `Index` at runtime), so it stays a range and throws when d holds a sequence. In an iterator of `int` it spreads. | Warning CS9403. Deciding at runtime is the correct long-term semantics, but changes what valid C# does today. |
+| `dynamic` | In an iterator of `object`, `..d` is valid C# (d converts to `Index` at runtime), so it stays a range and throws when d holds a sequence. In an iterator of `int` it spreads. | Warning CS20002. Deciding at runtime is the correct long-term semantics, but changes what valid C# does today. |
 | Both bindings fail (`..5`) | The spread error (CS9212) explains it better than the range error. | Spread error wins. |
 
 ## Decisions
@@ -63,10 +63,10 @@ Each trap was probed before deciding how to handle it.
 | Element conversion | Implicit, like `yield return x`. | A foreach-style explicit cast would silently accept `..objects` in an `IEnumerable<int>` iterator. |
 | Nullable warnings | CS8602 for a maybe-null source, CS8603 for maybe-null elements. | Same warnings as the C# the spread stands for; CS8619 was too generic. |
 | IOperation | `OperationKind.None` for now. | A real shape is public API; wait until the syntax settles. |
-| Async iterators | Not supported (CS9402). | Needs Edit and Continue work and a hidden `await`; may never be wanted. |
-| `dynamic` | Keep the range meaning, warn (CS9403). | A runtime decision changes the behavior of valid C#. |
+| Async iterators | Not supported (CS20001). | Needs Edit and Continue work and a hidden `await`; may never be wanted. |
+| `dynamic` | Keep the range meaning, warn (CS20002). | A runtime decision changes the behavior of valid C#. |
 | val in patterns | A keyword in patterns, parsed like var (option 1). | Keeps val and var consistent. It breaks type patterns on a type named val, so the sharpener escapes those as @val. The alternative, reinterpreting a type pattern in the binder, kept C# meaning but diverged from var. |
-| Non-readonly members on a val struct | Run on a copy, with warning CS9404 (option C). | The foreach behavior let a method change the val, which breaks immutability. A silent copy (the readonly field rule) makes mutations disappear without notice. The warning makes the copy visible; member mutation inference will later silence it for members that do not mutate. |
+| Non-readonly members on a val struct | Run on a copy, with warning CS20003 (option C). | The foreach behavior let a method change the val, which breaks immutability. A silent copy (the readonly field rule) makes mutations disappear without notice. The warning makes the copy visible; member mutation inference will later silence it for members that do not mutate. |
 
 ## Lessons for the next feature
 
@@ -161,7 +161,7 @@ In scope: `val` in local declaration statements, including top-level statements,
 | --- | --- | --- |
 | Meaning | `var` inference, plus the local is not a writable variable (`IsWritableVariable` false, as for foreach and using locals) | Decided |
 | Writes | Reuse CS1656 and CS1657 with a new cause: "Cannot assign to 'x' because it is a 'val variable'". `=`, `+=`, `++`, `ref`/`out` arguments and writes from lambdas all go through the same check | Decided |
-| Struct values | A struct's fields are part of the variable, so assigning one is an error (CS1654). A non-readonly member (method, getter, indexer, `GetEnumerator`, `Deconstruct`, event accessor) runs on a copy and warns (CS9404), also when the val is captured or hoisted. Readonly members, readonly structs and `ref val` are unaffected | Decided |
+| Struct values | A struct's fields are part of the variable, so assigning one is an error (CS1654). A non-readonly member (method, getter, indexer, `GetEnumerator`, `Deconstruct`, event accessor) runs on a copy and warns (CS20003), also when the val is captured or hoisted. Readonly members, readonly structs and `ref val` are unaffected | Decided |
 | A type named `val` in scope | The type wins, exactly as for `var`; no warning yet | Decided |
 | Initializer, several declarators, `null`, `const` | Same errors as `var` (CS0818, CS0819, CS0815, CS0822) | Decided |
 | `ref val x = ref y` | Allowed, with no extra code: writes through the ref compile, and `r = ref j` is CS1656 "because it is a 'val variable'" | Decided |
@@ -183,7 +183,7 @@ One commit per row, tests first. Paths are under `src/Compilers/CSharp/Portable`
 | 6 | Decide `ref val` and `scoped val` from the probe; allow them or report an error | Binder | Covered by tests |
 | 7 | Regression run of the C# compiler tests, then update this doc and the sharper-feature skill with what step 1 taught | `.github/skills/sharper-feature/SKILL.md` | No failures; lessons recorded |
 
-Progress: rows 1 to 6 are done and pushed to `sharper/val` (commits `eae7a3b0` and `5a0bdb9d`). The compiler change is about a dozen lines plus one message string: `val` joins `var` at the binder chokepoint (`BindTypeOrAliasOrVarKeyword`), and `SourceLocalSymbol.IsWritableVariable` is false for it. All 40 Sharper tests pass, also with `ROSLYN_TEST_IOPERATION=1`. Struct members on a copy with CS9404: commit 7d38072c, regression run in progress. Row 7 is done: the C# compiler regression run (net10.0, Debug) passed 88,340 tests with 0 failures across 10 projects, and the skill records the lessons below.
+Progress: rows 1 to 6 are done and pushed to `sharper/val` (commits `eae7a3b0` and `5a0bdb9d`). The compiler change is about a dozen lines plus one message string: `val` joins `var` at the binder chokepoint (`BindTypeOrAliasOrVarKeyword`), and `SourceLocalSymbol.IsWritableVariable` is false for it. All 40 Sharper tests pass, also with `ROSLYN_TEST_IOPERATION=1`. Struct members on a copy with CS20003: commit 7d38072c, regression run in progress. Row 7 is done: the C# compiler regression run (net10.0, Debug) passed 88,340 tests with 0 failures across 10 projects, and the skill records the lessons below.
 
 ### What step 1 taught
 
@@ -202,6 +202,8 @@ Merged as #4. The first Sharper parser change: one helper (`IsIdentifierVarOrSha
 
 ## Follow-ups
 
+Sharper diagnostics were renumbered from `SharperErrorCodes.Base` (20000): CS9402, CS9403 and CS9404 became CS20001, CS20002 and CS20003, and this document uses the new numbers throughout.
+
 The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOTYPE(sharper)"`).
 
 - [x] Turn Sharper on for `.cx` files in the command-line compiler.
@@ -212,9 +214,11 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 - [ ] Give ref-struct sources a spread-specific error instead of CS4007.
 - [ ] Verify the spread with Edit and Continue: the generated try/finally and the yield share one syntax offset.
 - [ ] Design a real IOperation shape once the syntax settles.
-- [ ] Re-number CS9402 and CS9403 if they clash with upstream.
+- [x] Number Sharper diagnostics from their own base, `SharperErrorCodes.Base` = 20000 (CS20001 and up), far from upstream.
 - [x] Full C# compiler regression run (net10.0, Debug): 88,327 tests passed and 0 failed across 10 test projects. WinRT was not run; it targets .NET Framework only.
-- [ ] Infer whether a struct member mutates `this`, and silence CS9404 for members that do not. Until then, every call to a non-`readonly` member of a `val` warns, including interface members on a generic `val` (`g.Get()`).
+- [ ] Infer whether a struct member mutates `this`, and silence CS20003 for members that do not. Until then, every call to a non-`readonly` member of a `val` warns, including interface members on a generic `val` (`g.Get()`).
 - [x] Copy and warn for the pattern-based members that bypassed the shared check: `await`/`GetAwaiter`, implicit Index and Range indexers, list patterns and property patterns. Collection spreads and `using` already copy their operand.
 - [ ] Build the sharpening infrastructure and move Sharper to the `.cx` extension. The accepted breaks need it: `val` as a keyword in patterns, and `val (a, b) = e` as a declaration. The sharpener rewrites those to `@val`, and the extension keeps plain `.cs` files on C# semantics.
-- [ ] Give `val` its own message for CS8508 (it says "The syntax 'var' for a pattern"), and teach the IDE that a `VarKeyword` token may read `val`.
+- [x] Give `val` its own messages: CS20004 and CS20005 (the `val` forms of CS8508 and CS8136), CS20006 for ref reassignment, and the 'val variable' cause also for `foreach` and `using` variables.
+- [x] Script fields: `val` is a read-only inferred field, like `var` plus read-only.
+- [ ] Teach the IDE that a `VarKeyword` token may read `val` (or give `val` its own token kind).

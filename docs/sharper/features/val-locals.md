@@ -19,11 +19,12 @@ It is `var` plus the read-only rule that C# already applies to `foreach` and `us
 - **C# wins.** If a type named `val` is in scope, `val` means that type, just as a type named `var` takes precedence
   over the `var` keyword.
 - Every write is an error: assignment, compound assignment, `++`/`--`, passing as `ref` or `out`, ref reassignment,
-  and writes to fields of a struct local (CS1656, CS1657, CS1654).
+  and writes to fields of a struct local (CS1656, CS1657, CS1654, all naming the 'val variable').
 - A non-readonly member of a struct `val` (a method, getter, indexer, `GetEnumerator`, `Deconstruct` or event
-  accessor) runs on a copy, so it cannot change the `val`, and warns (CS9404). Readonly members, readonly structs and
+  accessor) runs on a copy, so it cannot change the `val`, and warns (CS20003). Readonly members, readonly structs and
   `ref val` are unaffected.
 - `ref val` and `scoped val` are allowed: the local cannot be reassigned, but writes through the ref still work.
+  Pointing a `ref val` at another variable is CS20006.
 - A `val` local reports the same errors as `var` where `var` cannot be used: no initializer, a `null` initializer,
   several declarators, or `const`.
 - `val` works in `using` declarations and `for` initializers.
@@ -41,23 +42,29 @@ int.TryParse(s, out val n);        // out variable
 if (o is val y) { }                // pattern, also case val y:, val y =>, (val p, val q), { P: val p }
 ```
 
-Every one of these locals cannot be reassigned. A `foreach` variable keeps its existing message ("foreach iteration
-variable").
+Every one of these locals cannot be reassigned, and the error names the 'val variable', also for `foreach` and
+`using` variables.
+
+## Scripts
+
+In a script, top-level declarations are fields, and `var` there declares a field whose type is inferred. `val` is the
+same plus read-only: `val x = e;`, and `out val`, `val (a, b)` and `val` pattern variables in top-level statements,
+cannot be reassigned after their declaration, and non-readonly struct members run on a copy, as for locals.
 
 ## Accepted breaks
 
 `val` is a keyword in two places even where `val` already has a C# meaning, as `var` is:
 
 - `val (a, b) = e` is a declaration, even where a ref-returning method named `val` makes it an assignment in C#.
-- `val x` in a pattern is a `val` pattern. If a type named `val` is in scope, that is error CS8508, as for a `var`
-  pattern when a type named `var` exists, so the meaning never changes silently.
+- `val x` in a pattern is a `val` pattern. If a type named `val` is in scope, that is error CS20004 (the `val` form of
+  CS8508, which a `var` pattern gets when a type named `var` exists), so the meaning never changes silently. With a
+  type named `val`, `val (a, b) = e` reports CS20005.
 
 Code that means the method or the type writes `@val`. The sharpener will do that rewrite once it exists. `is val`
 without a designation is still a type test.
 
 ## Not covered yet
 
-Script fields still treat `val` as a type name, and every non-readonly member of a struct `val` warns, even one that
-does not mutate (inferring which members mutate is a follow-up). The editor does not classify `val` as a keyword yet.
+Every non-readonly member of a struct `val` warns, even one that does not mutate (inferring which members mutate is a follow-up). The editor does not classify `val` as a keyword yet.
 These are tracked as `PROTOTYPE(sharper)` comments and in the
 [implementation plan](../planning/implementation-plan.md#follow-ups).
