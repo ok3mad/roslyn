@@ -84,6 +84,10 @@ namespace Microsoft.CodeAnalysis.CSharp
             // Rewrite the receiver.
             BoundExpression? rewrittenReceiver = VisitExpression(node.ReceiverOpt);
             Debug.Assert(rewrittenReceiver is { });
+            if (!isLeftOfAssignment || indexer.RefKind != RefKind.None)
+            {
+                rewrittenReceiver = CopyValReceiverIfNeeded(node.ReceiverOpt, rewrittenReceiver, indexer.GetOwnOrInheritedGetMethod())!;
+            }
 
             return MakeIndexerAccess(
                 node.Syntax,

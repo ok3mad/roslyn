@@ -1939,10 +1939,34 @@ namespace Microsoft.CodeAnalysis.CSharp
 #nullable disable
 
         /// <summary>
+        /// True if <paramref name="method"/> is a non-readonly instance member invoked on a Sharper <c>val</c> local of a type
+        /// that may be a value type. The member could change the local, so it runs on a copy instead.
+        /// </summary>
+        internal static bool IsSharperValReceiverCopy(BoundExpression receiver, MethodSymbol method)
+        {
+            return receiver is BoundLocal { LocalSymbol: SourceLocalSymbol { IsVal: true, RefKind: RefKind.None } } &&
+                receiver.Type is { IsReferenceType: false } &&
+                method.RequiresInstanceReceiver &&
+                !method.IsEffectivelyReadOnly &&
+                // Members of classes (object.ToString on a struct) box the receiver, which already copies it.
+                method.ContainingType.TypeKind is TypeKind.Struct or TypeKind.Interface or TypeKind.TypeParameter;
+        }
+
+        /// <summary>
         /// Returns false if an implicit 'this' copy will occur due to an instance member invocation in a readonly member.
         /// </summary>
         internal bool CheckImplicitThisCopyInReadOnlyMember(BoundExpression receiver, MethodSymbol method, BindingDiagnosticBag diagnostics)
         {
+            if (IsSharperValReceiverCopy(receiver, method))
+            {
+                // Lowering runs the member on a copy (LocalRewriter.CopyValReceiverIfNeeded), so the val local is not changed.
+                // PROTOTYPE(sharper): Silence the warning for members inferred not to mutate 'this', once member mutation is inferred.
+                // PROTOTYPE(sharper): Pattern-based members that bypass this check (using/Dispose, await/GetAwaiter, implicit Index
+                // and Range indexers, list patterns, collection spreads) neither warn nor copy yet.
+                Error(diagnostics, ErrorCode.WRN_SharperValMemberCallOnCopy, receiver.Syntax, method, ((BoundLocal)receiver).LocalSymbol);
+                return false;
+            }
+
             // For now we are warning only in implicit copy scenarios that are only possible with readonly members.
             // Eventually we will warn on implicit value copies in more scenarios. See https://github.com/dotnet/roslyn/issues/33968.
             if (receiver?.IsEquivalentToThisReference == true &&

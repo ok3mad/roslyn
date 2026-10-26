@@ -20,6 +20,11 @@ namespace Microsoft.CodeAnalysis.CSharp
         private BoundExpression VisitPropertyAccess(BoundPropertyAccess node, bool isLeftOfAssignment)
         {
             var rewrittenReceiverOpt = VisitExpression(node.ReceiverOpt);
+            if (!isLeftOfAssignment || node.PropertySymbol.RefKind != RefKind.None)
+            {
+                rewrittenReceiverOpt = CopyValReceiverIfNeeded(node.ReceiverOpt, rewrittenReceiverOpt, node.PropertySymbol.GetOwnOrInheritedGetMethod());
+            }
+
             return MakePropertyAccess(node.Syntax, rewrittenReceiverOpt, node.PropertySymbol, node.ResultKind, node.Type, isLeftOfAssignment, node);
         }
 

@@ -299,6 +299,18 @@ namespace Microsoft.CodeAnalysis.CSharp
             return visited;
         }
 
+        /// <summary>
+        /// A non-readonly member invoked on a Sharper <c>val</c> local runs on a copy, so it cannot change the local
+        /// (the binder warns, see <see cref="Binder.IsSharperValReceiverCopy"/>). The copy is made here, before closure
+        /// and state machine lowering turn a captured or hoisted local into a writable field.
+        /// </summary>
+        private static BoundExpression? CopyValReceiverIfNeeded(BoundExpression? originalReceiver, BoundExpression? rewrittenReceiver, MethodSymbol? method)
+        {
+            return rewrittenReceiver is not null && originalReceiver is not null && method is not null && Binder.IsSharperValReceiverCopy(originalReceiver, method)
+                ? RefAccessMustMakeCopy(rewrittenReceiver)
+                : rewrittenReceiver;
+        }
+
         private static BoundExpression RefAccessMustMakeCopy(BoundExpression visited)
         {
             visited = new BoundPassByCopy(

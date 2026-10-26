@@ -701,14 +701,14 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         }
 
         [Fact]
-        public void Val_StructField()
+        public void Val_StructFieldAssignment()
         {
+            // The fields of a struct are part of the variable, so assigning one reassigns part of the val.
             var source = """
                 struct S
                 {
                     public int F;
                     public int P { get; set; }
-                    public void Mutate() { F++; }
                 }
 
                 class C
@@ -721,43 +721,118 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                         w.F = 1;
                         v.P = 1;
                         w.P = 1;
-                        v.Mutate();
-                        w.Mutate();
                     }
                 }
                 """;
             CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
-                // (14,9): error CS1654: Cannot modify members of 'v' because it is a 'val variable'
+                // (13,9): error CS1654: Cannot modify members of 'v' because it is a 'val variable'
                 //         v.F = 1;
-                Diagnostic(ErrorCode.ERR_AssgReadonlyLocal2Cause, "v.F").WithArguments("v", "val variable").WithLocation(14, 9),
-                // (16,9): error CS1654: Cannot modify members of 'v' because it is a 'val variable'
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocal2Cause, "v.F").WithArguments("v", "val variable").WithLocation(13, 9),
+                // (15,9): error CS1654: Cannot modify members of 'v' because it is a 'val variable'
                 //         v.P = 1;
-                Diagnostic(ErrorCode.ERR_AssgReadonlyLocal2Cause, "v.P").WithArguments("v", "val variable").WithLocation(16, 9));
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocal2Cause, "v.P").WithArguments("v", "val variable").WithLocation(15, 9));
         }
 
         [Fact]
-        public void Val_StructMutatingMethod()
+        public void Val_StructMemberCallOnCopy()
         {
-            // val is binding immutability only: like a foreach variable, a mutating method changes the local itself.
+            // A non-readonly member called on a val struct runs on a copy and warns, so the val is never changed.
             var source = """
                 using System;
+                using System.Collections.Generic;
+                using System.Threading.Tasks;
 
                 val v = new S();
                 v.Mutate();
                 Console.Write(v.F);
-                foreach (var w in new[] { new S() })
+                _ = v.Getter;
+                Console.Write(v.F);
+                _ = v[0];
+                Console.Write(v.F);
+                foreach (var x in v) { }
+                Console.Write(v.F);
+                var (a, b) = v;
+                Console.Write(v.F);
+                v.E += () => { };
+                Console.Write(v.HasHandler);
+                v.ReadOnlyMethod();
+                _ = v.Auto;
+                _ = v.ToString();
+                Action f = () => { v.Mutate(); Console.Write(v.F); };
+                f();
+                await Task.Yield();
+                v.Mutate();
+                Console.Write(v.F);
+                Console.Write(";");
+
+                var w = new S();
+                w.Mutate();
+                Console.Write(w.F);
+                ref val r = ref w;
+                r.Mutate();
+                Console.Write(w.F);
+                Console.Write(";");
+                Generic(new S());
+
+                static void Generic<T>(T t) where T : IMutable
                 {
-                    w.Mutate();
-                    Console.Write(w.F);
+                    val g = t;
+                    g.Mutate();
+                    Console.Write(g.Get());
                 }
 
-                struct S
+                interface IMutable
+                {
+                    void Mutate();
+                    int Get();
+                }
+
+                struct S : IMutable
                 {
                     public int F;
                     public void Mutate() { F++; }
+                    public int Get() => F;
+                    public int Getter { get { F++; return F; } }
+                    public int this[int i] { get { F++; return F; } }
+                    public readonly void ReadOnlyMethod() { }
+                    public int Auto { get; set; }
+                    public IEnumerator<int> GetEnumerator() { F++; return new List<int>().GetEnumerator(); }
+                    public void Deconstruct(out int a, out int b) { F++; a = F; b = F; }
+                    public event Action E;
+                    public readonly bool HasHandler => E is not null;
                 }
                 """;
-            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "11" : null).VerifyDiagnostics();
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "00000False00;12;0" : null).VerifyDiagnostics(
+                // (6,1): warning CS9404: Call to non-readonly member 'S.Mutate()' on val variable 'v' runs on a copy, so 'v' is not changed.
+                // v.Mutate();
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v").WithLocation(6, 1),
+                // (8,5): warning CS9404: Call to non-readonly member 'S.Getter.get' on val variable 'v' runs on a copy, so 'v' is not changed.
+                // _ = v.Getter;
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Getter.get", "v").WithLocation(8, 5),
+                // (10,5): warning CS9404: Call to non-readonly member 'S.this[int].get' on val variable 'v' runs on a copy, so 'v' is not changed.
+                // _ = v[0];
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.this[int].get", "v").WithLocation(10, 5),
+                // (12,19): warning CS9404: Call to non-readonly member 'S.GetEnumerator()' on val variable 'v' runs on a copy, so 'v' is not changed.
+                // foreach (var x in v) { }
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.GetEnumerator()", "v").WithLocation(12, 19),
+                // (14,14): warning CS9404: Call to non-readonly member 'S.Deconstruct(out int, out int)' on val variable 'v' runs on a copy, so 'v' is not changed.
+                // var (a, b) = v;
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Deconstruct(out int, out int)", "v").WithLocation(14, 14),
+                // (16,1): warning CS9404: Call to non-readonly member 'S.E.add' on val variable 'v' runs on a copy, so 'v' is not changed.
+                // v.E += () => { };
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.E.add", "v").WithLocation(16, 1),
+                // (21,20): warning CS9404: Call to non-readonly member 'S.Mutate()' on val variable 'v' runs on a copy, so 'v' is not changed.
+                // Action f = () => { v.Mutate(); Console.Write(v.F); };
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v").WithLocation(21, 20),
+                // (24,1): warning CS9404: Call to non-readonly member 'S.Mutate()' on val variable 'v' runs on a copy, so 'v' is not changed.
+                // v.Mutate();
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v").WithLocation(24, 1),
+                // (40,5): warning CS9404: Call to non-readonly member 'IMutable.Mutate()' on val variable 'g' runs on a copy, so 'g' is not changed.
+                //     g.Mutate();
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "g").WithArguments("IMutable.Mutate()", "g").WithLocation(40, 5),
+                // (41,19): warning CS9404: Call to non-readonly member 'IMutable.Get()' on val variable 'g' runs on a copy, so 'g' is not changed.
+                //     Console.Write(g.Get());
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "g").WithArguments("IMutable.Get()", "g").WithLocation(41, 19));
         }
 
         [Theory]

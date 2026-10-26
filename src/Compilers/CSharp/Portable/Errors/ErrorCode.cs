@@ -2516,6 +2516,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         // PROTOTYPE(sharper): Sharper diagnostics take the next free numbers on this branch and may clash with upstream.
         ERR_SharperSpreadInAsyncIterator = 9402,
         WRN_SharperDynamicRangeNotSpread = 9403,
+        WRN_SharperValMemberCallOnCopy = 9404,
 
         // Note: you will need to do the following after adding errors:
         //  1) Update ErrorFacts.IsBuildOnlyDiagnostic (src/Compilers/CSharp/Portable/Errors/ErrorFacts.cs)

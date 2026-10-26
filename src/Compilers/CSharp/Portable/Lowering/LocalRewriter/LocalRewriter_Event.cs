@@ -18,7 +18,7 @@ namespace Microsoft.CodeAnalysis.CSharp
     {
         public override BoundNode VisitEventAssignmentOperator(BoundEventAssignmentOperator node)
         {
-            BoundExpression? rewrittenReceiverOpt = VisitExpression(node.ReceiverOpt);
+            BoundExpression? rewrittenReceiverOpt = CopyValReceiverIfNeeded(node.ReceiverOpt, VisitExpression(node.ReceiverOpt), node.IsAddition ? node.Event.AddMethod : node.Event.RemoveMethod);
             BoundExpression rewrittenArgument = VisitExpression(node.Argument);
 
             if (rewrittenReceiverOpt != null && node.Event.ContainingAssembly.IsLinked && node.Event.ContainingType.IsInterfaceType())

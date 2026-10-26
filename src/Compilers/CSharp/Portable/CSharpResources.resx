@@ -8251,6 +8251,12 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
   <data name="WRN_SharperDynamicRangeNotSpread_Title" xml:space="preserve">
     <value>'..' on a dynamic operand is a range, not a spread</value>
   </data>
+  <data name="WRN_SharperValMemberCallOnCopy" xml:space="preserve">
+    <value>Call to non-readonly member '{0}' on val variable '{1}' runs on a copy, so '{1}' is not changed.</value>
+  </data>
+  <data name="WRN_SharperValMemberCallOnCopy_Title" xml:space="preserve">
+    <value>Call to a non-readonly member on a val variable runs on a copy</value>
+  </data>
   <data name="WRN_RedundantPattern" xml:space="preserve">
     <value>The pattern is redundant.</value>
   </data>
