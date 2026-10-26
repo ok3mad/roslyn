@@ -8257,6 +8257,15 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
   <data name="WRN_SharperValMemberCallOnCopy_Title" xml:space="preserve">
     <value>Call to a non-readonly member on a val variable runs on a copy</value>
   </data>
+  <data name="ERR_SharperValMayNotBindToType" xml:space="preserve">
+    <value>The syntax 'val' for a pattern is not permitted to refer to a type, but '{0}' is in scope here. Use '@val' for the type.</value>
+  </data>
+  <data name="ERR_SharperValDeconstructionDisallowsSpecificType" xml:space="preserve">
+    <value>Deconstruction 'val (...)' form disallows a specific type for 'val'. Use '@val' for the type.</value>
+  </data>
+  <data name="ERR_SharperValRefReassignment" xml:space="preserve">
+    <value>Cannot ref-assign '{0}' because it is a ref val: it always refers to the same variable. Writes through '{0}' are allowed.</value>
+  </data>
   <data name="WRN_RedundantPattern" xml:space="preserve">
     <value>The pattern is redundant.</value>
   </data>

@@ -51,10 +51,10 @@ IEnumerable<T> Walk(Node<T> node)
 
 ## Limitations
 
-- **Async iterators:** not supported (CS9402), whether the source is synchronous or asynchronous. An async source
+- **Async iterators:** not supported (CS20001), whether the source is synchronous or asynchronous. An async source
   would mean a hidden `await foreach`.
 - **`dynamic` operands:** `..d` converts `d` to `Index` at runtime, so it is valid C# and stays a range. The compiler
-  warns (CS9403); convert `d` to a sequence type to spread it. Where a range is not valid (for example an iterator of
+  warns (CS20002); convert `d` to a sequence type to spread it. Where a range is not valid (for example an iterator of
   `int`), `..d` spreads and enumerates `d` dynamically.
 - **Ref struct sources** such as spans are rejected, with an error about the span's enumerator (CS4007).
 - **Edit and Continue** has not been verified with spreads.

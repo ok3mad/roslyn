@@ -3344,7 +3344,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                     typeSyntax = refType.Type;
                 }
 
-                if (typeSyntax.IsVar)
+                if (typeSyntax.IsVarOrVal)
                 {
                     BindTypeOrAliasOrVarKeyword(typeSyntax, BindingDiagnosticBag.Discarded, out isVar);
 

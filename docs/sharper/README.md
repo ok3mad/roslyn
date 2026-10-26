@@ -90,14 +90,19 @@ git grep -n "PROTOTYPE(sharper)"
 
 ## Diagnostics
 
-Sharper diagnostics are ordinary C# compiler diagnostics (`CSxxxx`). They currently take the next free numbers in
-`ErrorCode.cs`, which may clash with codes upstream adds later.
+Sharper diagnostics are ordinary C# compiler diagnostics, numbered from `SharperErrorCodes.Base` (20000) in
+`ErrorCode.cs`: CS20001 and up. Upstream C# is at about CS9400 and adds roughly a hundred codes a year, so the gap
+leaves room for decades of upstream codes. New Sharper codes go at the end of the Sharper block. Five-digit IDs work
+in `#pragma warning`, `/nowarn` and `.editorconfig`.
 
 | Code | Severity | Message |
 | --- | --- | --- |
-| CS9402 | Error | A spread 'yield return ..' cannot be used in an async iterator. |
-| CS9403 | Warning | '..{0}' is a range here, not a spread, because '{0}' is dynamic. |
-| CS9404 | Warning | Call to non-readonly member '{0}' on val variable '{1}' runs on a copy, so '{1}' is not changed. |
+| CS20001 | Error | A spread 'yield return ..' cannot be used in an async iterator. |
+| CS20002 | Warning | '..{0}' is a range here, not a spread, because '{0}' is dynamic. |
+| CS20003 | Warning | Call to non-readonly member '{0}' on val variable '{1}' runs on a copy, so '{1}' is not changed. |
+| CS20004 | Error | The syntax 'val' for a pattern is not permitted to refer to a type, but '{0}' is in scope here. Use '@val' for the type. |
+| CS20005 | Error | Deconstruction 'val (...)' form disallows a specific type for 'val'. Use '@val' for the type. |
+| CS20006 | Error | Cannot ref-assign '{0}' because it is a ref val: it always refers to the same variable. Writes through '{0}' are allowed. |
 
 ## Where the code is
 

@@ -362,14 +362,14 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         /// <summary>
         /// True if the local is declared with Sharper's <c>val</c> keyword (not a type named <c>val</c>), so it cannot be reassigned.
         /// </summary>
-        public bool IsVal => _typeSyntax is null ? IsDeclaredInValPattern() : _typeSyntax.SkipScoped(out _).SkipRef().IsVal && IsVar;
+        public bool IsVal => _typeSyntax is null ? IsDeclaredInValPattern(_identifierToken.Parent) : _typeSyntax.SkipScoped(out _).SkipRef().IsVal && IsVar;
 
         /// <summary>
         /// Pattern variables have no type syntax; a <c>val x</c> or <c>val (a, b)</c> pattern is a var pattern whose keyword reads <c>val</c>.
         /// </summary>
-        private bool IsDeclaredInValPattern()
+        internal static bool IsDeclaredInValPattern(SyntaxNode designation)
         {
-            SyntaxNode node = _identifierToken.Parent;
+            SyntaxNode node = designation;
             while (node is VariableDesignationSyntax)
             {
                 node = node.Parent;

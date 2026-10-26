@@ -1596,6 +1596,13 @@ namespace Microsoft.CodeAnalysis.CSharp
         {
             var fieldSymbol = fieldAccess.FieldSymbol;
 
+            // A script field declared with val is assigned only by its declaration, like a val local.
+            if (!fieldAccess.IsDeclaration && RequiresAssignableVariable(valueKind) && fieldSymbol is SourceMemberFieldSymbol { IsSharperVal: true })
+            {
+                ReportReadonlyVariableError(node, fieldSymbol, MessageID.IDS_VALLOCAL, valueKind, checkingReceiver, diagnostics);
+                return false;
+            }
+
             if (fieldSymbol.IsReadOnly)
             {
                 // A field is writeable unless 
@@ -3422,7 +3429,18 @@ namespace Microsoft.CodeAnalysis.CSharp
             Debug.Assert(kind != BindValueKind.RValue);
 
             MessageID cause;
-            if (local.IsForEach)
+            if (local is SourceLocalSymbol { IsVal: true })
+            {
+                // A val local declared in a foreach or using names val, the reason the user wrote.
+                if (kind == BindValueKind.RefAssignable)
+                {
+                    Error(diagnostics, ErrorCode.ERR_SharperValRefReassignment, node, local);
+                    return;
+                }
+
+                cause = MessageID.IDS_VALLOCAL;
+            }
+            else if (local.IsForEach)
             {
                 cause = MessageID.IDS_FOREACHLOCAL;
             }
@@ -3434,16 +3452,17 @@ namespace Microsoft.CodeAnalysis.CSharp
             {
                 cause = MessageID.IDS_FIXEDLOCAL;
             }
-            else if (local is SourceLocalSymbol { IsVal: true })
-            {
-                cause = MessageID.IDS_VALLOCAL;
-            }
             else
             {
                 Error(diagnostics, GetStandardLvalueError(kind), node);
                 return;
             }
 
+            ReportReadonlyVariableError(node, local, cause, kind, checkingReceiver, diagnostics);
+        }
+
+        private static void ReportReadonlyVariableError(SyntaxNode node, Symbol variable, MessageID cause, BindValueKind kind, bool checkingReceiver, BindingDiagnosticBag diagnostics)
+        {
             ErrorCode[] ReadOnlyLocalErrors =
             {
                 ErrorCode.ERR_RefReadonlyLocalCause,
@@ -3455,7 +3474,7 @@ namespace Microsoft.CodeAnalysis.CSharp
 
             int index = (checkingReceiver ? 2 : 0) + (RequiresRefOrOut(kind) ? 0 : 1);
 
-            Error(diagnostics, ReadOnlyLocalErrors[index], node, local, cause.Localize());
+            Error(diagnostics, ReadOnlyLocalErrors[index], node, variable, cause.Localize());
         }
 
         private static ErrorCode GetThisLvalueError(BindValueKind kind, bool isValueType, bool isPrimaryConstructorParameter)

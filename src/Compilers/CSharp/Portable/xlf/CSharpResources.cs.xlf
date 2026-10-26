@@ -2602,6 +2602,21 @@
         <target state="new">A spread 'yield return ..' cannot be used in an async iterator.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperValDeconstructionDisallowsSpecificType">
+        <source>Deconstruction 'val (...)' form disallows a specific type for 'val'. Use '@val' for the type.</source>
+        <target state="new">Deconstruction 'val (...)' form disallows a specific type for 'val'. Use '@val' for the type.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperValMayNotBindToType">
+        <source>The syntax 'val' for a pattern is not permitted to refer to a type, but '{0}' is in scope here. Use '@val' for the type.</source>
+        <target state="new">The syntax 'val' for a pattern is not permitted to refer to a type, but '{0}' is in scope here. Use '@val' for the type.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperValRefReassignment">
+        <source>Cannot ref-assign '{0}' because it is a ref val: it always refers to the same variable. Writes through '{0}' are allowed.</source>
+        <target state="new">Cannot ref-assign '{0}' because it is a ref val: it always refers to the same variable. Writes through '{0}' are allowed.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SignatureMismatchInRecord">
         <source>Record member '{0}' must return '{1}'.</source>
         <target state="translated">Člen záznamu {0} musí vracet {1}.</target>
