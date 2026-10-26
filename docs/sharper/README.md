@@ -61,7 +61,7 @@ which language it is.
 | Feature | Summary | Status |
 | --- | --- | --- |
 | [Spread in `yield return`](features/yield-return-spread.md) | `yield return ..xs;` yields every element of `xs`. | Prototype, merged into `main` |
-| [`val` locals](features/val-locals.md) | `val x = e;` declares an implicitly typed local that cannot be reassigned. | In progress on `sharper/val` |
+| [`val` locals](features/val-locals.md) | `val x = e;` declares an implicitly typed local that cannot be reassigned. | Prototype (local declarations), merged into `main` |
 
 "Prototype" means that the feature works end to end (binding, flow analysis, nullable analysis, lowering, tests) but
 has open questions. Those are tracked in the code as `// PROTOTYPE(sharper): ...` comments:
@@ -73,7 +73,7 @@ git grep -n "PROTOTYPE(sharper)"
 ## Branches
 
 - `main` is the integration branch. It holds upstream Roslyn plus the finished Sharper prototypes.
-- `sharper/<feature>` branches hold features in progress, for example `sharper/val`.
+- `sharper/<feature>` branches hold features in progress; `sharper/gating` and `sharper/val` are merged.
 
 ## Diagnostics
 
@@ -84,7 +84,7 @@ Sharper diagnostics are ordinary C# compiler diagnostics (`CSxxxx`). They curren
 | --- | --- | --- |
 | CS9402 | Error | A spread 'yield return ..' cannot be used in an async iterator. |
 | CS9403 | Warning | '..{0}' is a range here, not a spread, because '{0}' is dynamic. |
-| CS9404 | Warning | Call to non-readonly member '{0}' on val variable '{1}' runs on a copy, so '{1}' is not changed. (`sharper/val` only) |
+| CS9404 | Warning | Call to non-readonly member '{0}' on val variable '{1}' runs on a copy, so '{1}' is not changed. |
 
 ## Where the code is
 

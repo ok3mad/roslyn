@@ -356,7 +356,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 }
 
                 // Rewrite the receiver
-                BoundExpression? rewrittenReceiver = VisitExpression(node.ReceiverOpt);
+                BoundExpression? rewrittenReceiver = CopyValReceiverIfNeeded(node.ReceiverOpt, VisitExpression(node.ReceiverOpt), node.Method);
 
                 do
                 {
@@ -370,7 +370,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             else
             {
                 // Rewrite the receiver
-                BoundExpression? rewrittenReceiver = VisitExpression(node.ReceiverOpt);
+                BoundExpression? rewrittenReceiver = CopyValReceiverIfNeeded(node.ReceiverOpt, VisitExpression(node.ReceiverOpt), node.Method);
                 rewrittenCall = visitArgumentsAndFinishRewrite(node, rewrittenReceiver);
             }
 

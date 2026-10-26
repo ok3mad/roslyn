@@ -427,6 +427,7 @@ class X
                         case ErrorCode.WRN_AccessorDoesNotUseBackingField:
                         case ErrorCode.WRN_RedundantPattern:
                         case ErrorCode.WRN_SharperDynamicRangeNotSpread:
+                        case ErrorCode.WRN_SharperValMemberCallOnCopy:
                             Assert.Equal(1, ErrorFacts.GetWarningLevel(errorCode));
                             break;
                         case ErrorCode.WRN_MainIgnored:

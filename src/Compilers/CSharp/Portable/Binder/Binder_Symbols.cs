@@ -108,7 +108,10 @@ namespace Microsoft.CodeAnalysis.CSharp
         /// </returns>
         private NamespaceOrTypeOrAliasSymbolWithAnnotations BindTypeOrAliasOrVarKeyword(TypeSyntax syntax, BindingDiagnosticBag diagnostics, out bool isVar)
         {
-            if (syntax.IsVar)
+            // Sharper's `val` is a `var` that cannot be reassigned, so it binds the same way; the local symbol makes it read-only.
+            // PROTOTYPE(sharper): Only local declarations are covered. The other syntactic `IsVar` checks (deconstruction,
+            // `out var`, foreach, designations, script fields) do not recognize `val` yet; steps 2 and 3 of the val plan.
+            if (syntax.IsVar || syntax.IsVal)
             {
                 var symbol = BindTypeOrAliasOrKeyword((IdentifierNameSyntax)syntax, diagnostics, out isVar);
 

@@ -1,6 +1,6 @@
 # `val` locals
 
-**Status:** In progress on the `sharper/val` branch. Requires `/features:sharper`.
+**Status:** Prototype for local declarations (step 1), merged into `main` in #2. Requires `/features:sharper`.
 
 ## Summary
 
@@ -31,5 +31,5 @@ It is `var` plus the read-only rule that C# already applies to `foreach` and `us
 
 Only local declarations recognize `val` so far. Deconstruction (`val (a, b) = ...`), `out val`, `foreach (val x in
 ...)`, pattern designations and script fields still treat it as an identifier. Those are tracked as
-`PROTOTYPE(sharper)` comments on the branch. The design decisions and the remaining steps are in the
+`PROTOTYPE(sharper)` comments. The design decisions and the remaining steps are in the
 [implementation plan](../planning/implementation-plan.md#feature-2-step-1-val-locals).

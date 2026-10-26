@@ -348,7 +348,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
                 TypeSyntax typeSyntax = _typeSyntax.SkipScoped(out _).SkipRef();
 
-                if (typeSyntax.IsVar)
+                if (typeSyntax.IsVar || typeSyntax.IsVal)
                 {
                     bool isVar;
                     TypeWithAnnotations declType = this.TypeSyntaxBinder.BindTypeOrVarKeyword(typeSyntax, BindingDiagnosticBag.Discarded, out isVar);
@@ -358,6 +358,13 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 return false;
             }
         }
+
+        /// <summary>
+        /// True if the local is declared with Sharper's <c>val</c> keyword (not a type named <c>val</c>), so it cannot be reassigned.
+        /// </summary>
+        public bool IsVal => _typeSyntax?.SkipScoped(out _).SkipRef().IsVal == true && IsVar;
+
+        internal override bool IsWritableVariable => base.IsWritableVariable && !IsVal;
 
 #nullable enable
         public override TypeWithAnnotations GetTypeWithAnnotations(SyntaxNode reference, BindingDiagnosticBag diagnostics)

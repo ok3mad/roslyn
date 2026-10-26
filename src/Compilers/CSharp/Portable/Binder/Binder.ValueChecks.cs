@@ -3434,6 +3434,10 @@ namespace Microsoft.CodeAnalysis.CSharp
             {
                 cause = MessageID.IDS_FIXEDLOCAL;
             }
+            else if (local is SourceLocalSymbol { IsVal: true })
+            {
+                cause = MessageID.IDS_VALLOCAL;
+            }
             else
             {
                 Error(diagnostics, GetStandardLvalueError(kind), node);

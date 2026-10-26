@@ -1939,10 +1939,60 @@ namespace Microsoft.CodeAnalysis.CSharp
 #nullable disable
 
         /// <summary>
+        /// True if <paramref name="method"/> is a non-readonly instance member invoked on a Sharper <c>val</c> local of a type
+        /// that may be a value type. The member could change the local, so it runs on a copy instead.
+        /// </summary>
+        internal static bool IsSharperValReceiverCopy(BoundExpression receiver, MethodSymbol method)
+        {
+            // The Length, indexer and Slice members of an implicit Index or Range indexer are bound on a placeholder for the receiver.
+            if (receiver is BoundImplicitIndexerReceiverPlaceholder placeholder)
+            {
+                receiver = placeholder.Receiver;
+            }
+
+            return IsSharperValValue(receiver) &&
+                method.RequiresInstanceReceiver &&
+                !method.IsEffectivelyReadOnly &&
+                // Members of classes (object.ToString on a struct) box the receiver, which already copies it.
+                method.ContainingType.TypeKind is TypeKind.Struct or TypeKind.Interface or TypeKind.TypeParameter;
+        }
+
+        /// <summary>
+        /// True if <paramref name="expression"/> is a Sharper <c>val</c> local (not a <c>ref val</c>) of a type that may be a value type.
+        /// </summary>
+        internal static bool IsSharperValValue(BoundExpression expression)
+        {
+            return expression is BoundLocal { LocalSymbol: SourceLocalSymbol { IsVal: true, RefKind: RefKind.None } } &&
+                expression.Type is { IsReferenceType: false };
+        }
+
+        /// <summary>
+        /// Reports <see cref="ErrorCode.WRN_SharperValMemberCallOnCopy"/> if <paramref name="method"/> runs on a copy of a val receiver.
+        /// Lowering makes the copy (LocalRewriter.CopyValReceiverIfNeeded, or a copied input for await and patterns).
+        /// </summary>
+        internal static bool ReportSharperValReceiverCopy(BoundExpression receiver, MethodSymbol method, BindingDiagnosticBag diagnostics)
+        {
+            if (!IsSharperValReceiverCopy(receiver, method))
+            {
+                return false;
+            }
+
+            // PROTOTYPE(sharper): Silence the warning for members inferred not to mutate 'this', once member mutation is inferred.
+            var local = receiver is BoundImplicitIndexerReceiverPlaceholder placeholder ? placeholder.Receiver : receiver;
+            Error(diagnostics, ErrorCode.WRN_SharperValMemberCallOnCopy, local.Syntax, method, ((BoundLocal)local).LocalSymbol);
+            return true;
+        }
+
+        /// <summary>
         /// Returns false if an implicit 'this' copy will occur due to an instance member invocation in a readonly member.
         /// </summary>
         internal bool CheckImplicitThisCopyInReadOnlyMember(BoundExpression receiver, MethodSymbol method, BindingDiagnosticBag diagnostics)
         {
+            if (ReportSharperValReceiverCopy(receiver, method, diagnostics))
+            {
+                return false;
+            }
+
             // For now we are warning only in implicit copy scenarios that are only possible with readonly members.
             // Eventually we will warn on implicit value copies in more scenarios. See https://github.com/dotnet/roslyn/issues/33968.
             if (receiver?.IsEquivalentToThisReference == true &&

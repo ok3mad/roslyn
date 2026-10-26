@@ -8,6 +8,13 @@ namespace Microsoft.CodeAnalysis.CSharp.Syntax
     {
         public bool IsVar => ((InternalSyntax.TypeSyntax)this.Green).IsVar;
 
+        /// <summary>
+        /// True if this is the identifier <c>val</c> and Sharper is enabled, so that it may stand for the Sharper
+        /// <c>val</c> keyword: an implicitly typed local that cannot be reassigned. Like <see cref="IsVar"/>, it
+        /// still binds to a type named <c>val</c> when one is in scope.
+        /// </summary>
+        internal bool IsVal => ((InternalSyntax.TypeSyntax)this.Green).IsVal && this.IsFeatureEnabled(MessageID.IDS_FeatureSharper);
+
         public bool IsUnmanaged => ((InternalSyntax.TypeSyntax)this.Green).IsUnmanaged;
 
         public bool IsNotNull => ((InternalSyntax.TypeSyntax)this.Green).IsNotNull;

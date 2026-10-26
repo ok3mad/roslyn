@@ -347,6 +347,7 @@
                 case ErrorCode.WRN_InterceptsLocationAttributeUnsupportedSignature:
                 case ErrorCode.WRN_RedundantPattern:
                 case ErrorCode.WRN_SharperDynamicRangeNotSpread:
+                case ErrorCode.WRN_SharperValMemberCallOnCopy:
                     return true;
                 default:
                     return false;

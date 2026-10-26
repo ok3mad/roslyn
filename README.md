@@ -29,7 +29,7 @@ See **[docs/sharper](docs/sharper/README.md)** for the design rules, feature sta
 | Feature | Example | Status |
 | --- | --- | --- |
 | [Spread in `yield return`](docs/sharper/features/yield-return-spread.md) | `yield return ..xs;` | Prototype, merged into `main` |
-| [`val` locals](docs/sharper/features/val-locals.md) | `val x = Compute();` | In progress on `sharper/val` |
+| [`val` locals](docs/sharper/features/val-locals.md) | `val x = Compute();` | Prototype (local declarations), merged into `main` |
 
 ```csharp
 // csc /features:sharper

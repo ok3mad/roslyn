@@ -89,7 +89,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             bool forLowering = false)
         {
             var builder = new DecisionDagBuilder(compilation, defaultLabel, forLowering, diagnostics);
-            return builder.CreateDecisionDagForSwitchStatement(syntax, switchGoverningExpression, switchSections);
+            return ReportSharperValInputCopies(switchGoverningExpression, builder.CreateDecisionDagForSwitchStatement(syntax, switchGoverningExpression, switchSections), forLowering, diagnostics);
         }
 
         /// <summary>
@@ -105,7 +105,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             bool forLowering = false)
         {
             var builder = new DecisionDagBuilder(compilation, defaultLabel, forLowering, diagnostics);
-            return builder.CreateDecisionDagForSwitchExpression(syntax, switchExpressionInput, switchArms);
+            return ReportSharperValInputCopies(switchExpressionInput, builder.CreateDecisionDagForSwitchExpression(syntax, switchExpressionInput, switchArms), forLowering, diagnostics);
         }
 
         /// <summary>
@@ -123,7 +123,70 @@ namespace Microsoft.CodeAnalysis.CSharp
             bool forLowering = false)
         {
             var builder = new DecisionDagBuilder(compilation, defaultLabel: whenFalseLabel, forLowering, diagnostics);
-            return builder.CreateDecisionDagForIsPattern(syntax, inputExpression, pattern, hasUnionMatching, whenTrueLabel);
+            return ReportSharperValInputCopies(inputExpression, builder.CreateDecisionDagForIsPattern(syntax, inputExpression, pattern, hasUnionMatching, whenTrueLabel), forLowering, diagnostics);
+        }
+
+        /// <summary>
+        /// Patterns match a Sharper <c>val</c> through a copy (see LocalRewriter's pattern input sharing), so warn for each
+        /// non-readonly member the patterns run on the input itself: Deconstruct, property getters (including Length and Count),
+        /// and the indexer or Slice of a list pattern. Members of nested patterns run on values already copied out of the input.
+        /// </summary>
+        private static BoundDecisionDag ReportSharperValInputCopies(BoundExpression input, BoundDecisionDag dag, bool forLowering, BindingDiagnosticBag diagnostics)
+        {
+            if (forLowering || !Binder.IsSharperValValue(input))
+            {
+                return dag;
+            }
+
+            var reported = PooledHashSet<MethodSymbol>.GetInstance();
+            foreach (BoundDecisionDagNode node in dag.TopologicallySortedNodes)
+            {
+                if (node is BoundEvaluationDecisionDagNode { Evaluation: { Input.IsOriginalInput: true } evaluation })
+                {
+                    switch (evaluation)
+                    {
+                        case BoundDagDeconstructEvaluation deconstruct:
+                            report(deconstruct.DeconstructMethod);
+                            break;
+                        case BoundDagPropertyEvaluation property:
+                            report(property.Property.GetOwnOrInheritedGetMethod());
+                            break;
+                        case BoundDagIndexerEvaluation indexer:
+                            reportAccess(indexer.IndexerAccess);
+                            break;
+                        case BoundDagSliceEvaluation slice:
+                            reportAccess(slice.IndexerAccess);
+                            break;
+                    }
+                }
+            }
+
+            reported.Free();
+            return dag;
+
+            void reportAccess(BoundExpression access)
+            {
+                switch (access)
+                {
+                    case BoundIndexerAccess indexerAccess:
+                        report(indexerAccess.Indexer.GetOwnOrInheritedGetMethod());
+                        break;
+                    case BoundImplicitIndexerAccess implicitAccess:
+                        reportAccess(implicitAccess.IndexerOrSliceAccess);
+                        break;
+                    case BoundCall call:
+                        report(call.Method);
+                        break;
+                }
+            }
+
+            void report(MethodSymbol? method)
+            {
+                if (method is not null && reported.Add(method))
+                {
+                    Binder.ReportSharperValReceiverCopy(input, method, diagnostics);
+                }
+            }
         }
 
         private BoundDecisionDag CreateDecisionDagForIsPattern(

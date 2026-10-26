@@ -553,7 +553,9 @@ namespace Microsoft.CodeAnalysis.CSharp
                 var inputDagTemp = BoundDagTemp.ForOriginalInput(loweredInput);
                 if ((loweredInput.Kind == BoundKind.Local || loweredInput.Kind == BoundKind.Parameter)
                     && loweredInput.GetRefKind() == RefKind.None &&
-                    !anyWhenClause)
+                    !anyWhenClause &&
+                    // Members run by the pattern may change their input; a val is matched through a copy (the binder warns).
+                    !Binder.IsSharperValValue(loweredInput))
                 {
                     // If we're switching on a local variable and there is no when clause,
                     // we assume the value of the local variable does not change during the execution of the
@@ -676,7 +678,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 {
                     Debug.Assert(!IsCapturedPrimaryConstructorParameter(expr));
 
-                    if (canShareInputs && (expr.Kind == BoundKind.Parameter || expr.Kind == BoundKind.Local) && _tempAllocator.TrySetTemp(temp, expr))
+                    if (canShareInputs && (expr.Kind == BoundKind.Parameter || expr.Kind == BoundKind.Local) && !Binder.IsSharperValValue(expr) && _tempAllocator.TrySetTemp(temp, expr))
                     {
                         // we've arranged to use the input value from the variable it is already stored in
                     }
