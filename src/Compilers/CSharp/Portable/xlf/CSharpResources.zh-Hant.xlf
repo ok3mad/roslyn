@@ -2597,6 +2597,11 @@
         <target state="translated">因為未密封內含的記錄，所以無法密封 '{0}'。</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperReadOnlyLocalWithNoInitializer">
+        <source>A readonly local must be initialized in its declaration, because it cannot be assigned later.</source>
+        <target state="new">A readonly local must be initialized in its declaration, because it cannot be assigned later.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperSpreadInAsyncIterator">
         <source>A spread 'yield return ..' cannot be used in an async iterator.</source>
         <target state="new">A spread 'yield return ..' cannot be used in an async iterator.</target>
@@ -3350,6 +3355,11 @@
       <trans-unit id="IDS_PointerElementAccess">
         <source>pointer element access</source>
         <target state="translated">指標元素存取</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_READONLYLOCAL">
+        <source>readonly local</source>
+        <target state="new">readonly local</target>
         <note />
       </trans-unit>
       <trans-unit id="IDS_SK_ARRAY">
@@ -4130,6 +4140,16 @@
       <trans-unit id="WRN_SharperDynamicRangeNotSpread_Title">
         <source>'..' on a dynamic operand is a range, not a spread</source>
         <target state="new">'..' on a dynamic operand is a range, not a spread</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WRN_SharperReadOnlyLocalMemberCallOnCopy">
+        <source>Call to non-readonly member '{0}' on readonly local '{1}' runs on a copy, so '{1}' is not changed.</source>
+        <target state="new">Call to non-readonly member '{0}' on readonly local '{1}' runs on a copy, so '{1}' is not changed.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WRN_SharperReadOnlyLocalMemberCallOnCopy_Title">
+        <source>Call to a non-readonly member on a readonly local runs on a copy</source>
+        <target state="new">Call to a non-readonly member on a readonly local runs on a copy</target>
         <note />
       </trans-unit>
       <trans-unit id="WRN_SharperValMemberCallOnCopy">

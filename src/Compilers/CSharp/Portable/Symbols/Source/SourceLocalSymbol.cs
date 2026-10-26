@@ -378,7 +378,21 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             return node is VarPatternSyntax { VarKeyword.RawKind: (int)SyntaxKind.ValKeyword };
         }
 
-        internal override bool IsWritableVariable => base.IsWritableVariable && !IsVal;
+        /// <summary>
+        /// True if the local is declared with Sharper's <c>readonly</c> modifier (<c>readonly int x = e;</c>, <c>using readonly var x = e;</c>),
+        /// so it cannot be reassigned. <c>readonly var x</c> is the same as <c>val x</c>.
+        /// </summary>
+        public bool IsSharperReadOnly =>
+            _identifierToken.Parent is VariableDeclaratorSyntax { Parent: VariableDeclarationSyntax { Parent: LocalDeclarationStatementSyntax declaration } } &&
+            declaration.Modifiers.Any(SyntaxKind.ReadOnlyKeyword) &&
+            declaration.IsFeatureEnabled(MessageID.IDS_FeatureSharper);
+
+        /// <summary>
+        /// True if the local is a Sharper local that cannot be reassigned: <see cref="IsVal"/> or <see cref="IsSharperReadOnly"/>.
+        /// </summary>
+        public bool IsValOrSharperReadOnly => IsVal || IsSharperReadOnly;
+
+        internal override bool IsWritableVariable => base.IsWritableVariable && !IsValOrSharperReadOnly;
 
 #nullable enable
         public override TypeWithAnnotations GetTypeWithAnnotations(SyntaxNode reference, BindingDiagnosticBag diagnostics)

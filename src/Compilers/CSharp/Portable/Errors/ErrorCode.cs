@@ -2521,6 +2521,8 @@ namespace Microsoft.CodeAnalysis.CSharp
         ERR_SharperValMayNotBindToType = SharperErrorCodes.Base + 4,
         ERR_SharperValDeconstructionDisallowsSpecificType = SharperErrorCodes.Base + 5,
         ERR_SharperValRefReassignment = SharperErrorCodes.Base + 6,
+        WRN_SharperReadOnlyLocalMemberCallOnCopy = SharperErrorCodes.Base + 7,
+        ERR_SharperReadOnlyLocalWithNoInitializer = SharperErrorCodes.Base + 8,
 
         // Note: you will need to do the following after adding errors:
         //  1) Update ErrorFacts.IsBuildOnlyDiagnostic (src/Compilers/CSharp/Portable/Errors/ErrorFacts.cs)

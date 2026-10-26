@@ -10574,6 +10574,11 @@ done:
                         {
                             mods[i] = this.AddError(mod, ErrorCode.ERR_BadMemberFlag, mod.Text);
                         }
+                        else if (mod.Kind == SyntaxKind.ReadOnlyKeyword && !mod.ContainsDiagnostics && containsConst(mods))
+                        {
+                            // Sharper: a const local is already read-only, so 'const readonly' reports 'readonly' as C# does.
+                            mods[i] = this.AddError(mod, ErrorCode.ERR_BadMemberFlag, mod.Text);
+                        }
                     }
                 }
 
@@ -10589,6 +10594,19 @@ done:
             {
                 _pool.Free(variables);
                 _pool.Free(mods);
+            }
+
+            static bool containsConst(SyntaxListBuilder mods)
+            {
+                for (int i = 0; i < mods.Count; i++)
+                {
+                    if (mods[i].RawKind == (int)SyntaxKind.ConstKeyword)
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
             }
         }
 
@@ -10830,11 +10848,17 @@ done:
                     mod = this.EatToken();
                 }
 
+                // Sharper: 'readonly int x = ...' and 'using readonly var x = ...' declare locals that cannot be reassigned.
+                // A local function still reports 'readonly' (TryParseLocalFunctionStatementBody), and so does 'const readonly'.
+                bool isSharperReadOnly = k == SyntaxKind.ReadOnlyKeyword && IsFeatureEnabled(MessageID.IDS_FeatureSharper);
                 if (isUsingDeclaration)
                 {
-                    mod = this.AddError(mod, ErrorCode.ERR_NoModifiersOnUsing);
+                    if (!isSharperReadOnly)
+                    {
+                        mod = this.AddError(mod, ErrorCode.ERR_NoModifiersOnUsing);
+                    }
                 }
-                else if (k is SyntaxKind.ReadOnlyKeyword or SyntaxKind.VolatileKeyword)
+                else if (k is SyntaxKind.ReadOnlyKeyword or SyntaxKind.VolatileKeyword && !isSharperReadOnly)
                 {
                     mod = this.AddError(mod, ErrorCode.ERR_BadMemberFlag, mod.Text);
                 }
@@ -10969,6 +10993,10 @@ done:
                     case SyntaxKind.SafeKeyword:
                         forceLocalFunc = true;
                         continue;
+                    case SyntaxKind.ReadOnlyKeyword when IsFeatureEnabled(MessageID.IDS_FeatureSharper):
+                        // Sharper skipped the earlier report, since 'readonly' is valid on a local but not on a local function.
+                        modifier = this.AddError(modifier, ErrorCode.ERR_BadMemberFlag, modifier.Text);
+                        break;
                     case SyntaxKind.ReadOnlyKeyword:
                     case SyntaxKind.VolatileKeyword:
                         continue; // already reported earlier, no need to report again

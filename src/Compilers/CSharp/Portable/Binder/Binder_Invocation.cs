@@ -1958,11 +1958,12 @@ namespace Microsoft.CodeAnalysis.CSharp
         }
 
         /// <summary>
-        /// True if <paramref name="expression"/> is a Sharper <c>val</c> local (not a <c>ref val</c>) of a type that may be a value type.
+        /// True if <paramref name="expression"/> is a Sharper <c>val</c> or <c>readonly</c> local (not a <c>ref val</c> or <c>readonly ref</c>)
+        /// of a type that may be a value type.
         /// </summary>
         internal static bool IsSharperValValue(BoundExpression expression)
         {
-            return expression is BoundLocal { LocalSymbol: SourceLocalSymbol { IsVal: true, RefKind: RefKind.None } } or
+            return expression is BoundLocal { LocalSymbol: SourceLocalSymbol { IsValOrSharperReadOnly: true, RefKind: RefKind.None } } or
                     BoundFieldAccess { FieldSymbol: SourceMemberFieldSymbol { IsSharperVal: true } } &&
                 expression.Type is { IsReferenceType: false };
         }
@@ -1981,7 +1982,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             // PROTOTYPE(sharper): Silence the warning for members inferred not to mutate 'this', once member mutation is inferred.
             var local = receiver is BoundImplicitIndexerReceiverPlaceholder placeholder ? placeholder.Receiver : receiver;
             Symbol variable = local is BoundFieldAccess field ? field.FieldSymbol : ((BoundLocal)local).LocalSymbol;
-            Error(diagnostics, ErrorCode.WRN_SharperValMemberCallOnCopy, local.Syntax, method, variable);
+            Error(diagnostics, variable is SourceLocalSymbol { IsVal: false } ? ErrorCode.WRN_SharperReadOnlyLocalMemberCallOnCopy : ErrorCode.WRN_SharperValMemberCallOnCopy, local.Syntax, method, variable);
             return true;
         }
 
