@@ -322,6 +322,11 @@ namespace Microsoft.CodeAnalysis.CSharp
                 return false;
             }
 
+            if (getAwaiter is BoundCall { Method: var getAwaiterMethod })
+            {
+                ReportSharperValReceiverCopy(expression, getAwaiterMethod, diagnostics);
+            }
+
             TypeSymbol awaiterType = getAwaiter.Type!;
             return GetIsCompletedProperty(awaiterType, node, expression.Type!, diagnostics, out isCompleted)
                 && AwaiterImplementsINotifyCompletion(awaiterType, node, diagnostics)

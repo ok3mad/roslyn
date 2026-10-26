@@ -879,7 +879,28 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                     public void OnCompleted(Action continuation) { }
                 }
                 """;
-            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "" : null).VerifyDiagnostics();
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "0000000" : null).VerifyDiagnostics(
+                // (6,7): warning CS9404: Call to non-readonly member 'S.GetAwaiter()' on val variable 'v' runs on a copy, so 'v' is not changed.
+                // await v;
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.GetAwaiter()", "v").WithLocation(6, 7),
+                // (8,5): warning CS9404: Call to non-readonly member 'S.Length.get' on val variable 'v' runs on a copy, so 'v' is not changed.
+                // _ = v[^1];
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Length.get", "v").WithLocation(8, 5),
+                // (8,5): warning CS9404: Call to non-readonly member 'S.this[int].get' on val variable 'v' runs on a copy, so 'v' is not changed.
+                // _ = v[^1];
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.this[int].get", "v").WithLocation(8, 5),
+                // (10,5): warning CS9404: Call to non-readonly member 'S.Length.get' on val variable 'v' runs on a copy, so 'v' is not changed.
+                // _ = v[1..];
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Length.get", "v").WithLocation(10, 5),
+                // (10,5): warning CS9404: Call to non-readonly member 'S.Slice(int, int)' on val variable 'v' runs on a copy, so 'v' is not changed.
+                // _ = v[1..];
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Slice(int, int)", "v").WithLocation(10, 5),
+                // (12,5): warning CS9404: Call to non-readonly member 'S.Length.get' on val variable 'v' runs on a copy, so 'v' is not changed.
+                // _ = v is [_, ..];
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Length.get", "v").WithLocation(12, 5),
+                // (14,5): warning CS9404: Call to non-readonly member 'S.P.get' on val variable 'v' runs on a copy, so 'v' is not changed.
+                // _ = v is { P: 0 };
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.P.get", "v").WithLocation(14, 5));
         }
 
         [Fact]
@@ -908,7 +929,10 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                     }
                 }
                 """;
-            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics();
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (16,9): error CS1657: Cannot use 'v' as a ref or out value because it is a 'val variable'
+                //         v.ByRef();
+                Diagnostic(ErrorCode.ERR_RefReadonlyLocalCause, "v").WithArguments("v", "val variable").WithLocation(16, 9));
         }
 
         [Theory]
