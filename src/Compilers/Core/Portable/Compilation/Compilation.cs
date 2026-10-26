@@ -132,14 +132,14 @@ namespace Microsoft.CodeAnalysis
         /// </summary>
         private static IReadOnlyDictionary<string, string> WithoutPerTreeFeatures(IReadOnlyDictionary<string, string> features)
         {
-            if (!features.ContainsKey(Feature.Sharper))
+            if (!features.ContainsKey(CodeAnalysis.Feature.Sharper))
             {
                 return features;
             }
 
             return features is ImmutableDictionary<string, string> dictionary
-                ? dictionary.Remove(Feature.Sharper)
-                : features.Where(pair => !string.Equals(pair.Key, Feature.Sharper, StringComparison.OrdinalIgnoreCase)).ToImmutableDictionary(StringComparer.OrdinalIgnoreCase);
+                ? dictionary.Remove(CodeAnalysis.Feature.Sharper)
+                : features.Where(pair => !string.Equals(pair.Key, CodeAnalysis.Feature.Sharper, StringComparison.OrdinalIgnoreCase)).ToImmutableDictionary(StringComparer.OrdinalIgnoreCase);
         }
 
         internal abstract AnalyzerDriver CreateAnalyzerDriver(ImmutableArray<DiagnosticAnalyzer> analyzers, AnalyzerManager analyzerManager, SeverityFilter severityFilter);
