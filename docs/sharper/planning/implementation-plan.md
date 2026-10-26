@@ -234,6 +234,9 @@ machinery: the write checks, `ReportReadonlyLocalError` (cause 'readonly local')
 | Local functions | CS0106 kept | `readonly` does not apply to them |
 | Script top-level fields | Unchanged C# readonly fields | Already C#; the C# meaning wins |
 
+Tests: 19 `ReadonlyLocal_*` tests in `SharperTests.cs`; all 95 Sharper tests pass, also with `ROSLYN_TEST_IOPERATION=1`.
+Regression run of the C# compiler tests (net10.0, Debug, 10 projects; WinRT not run): 88,398 passed, 0 failed.
+
 ## Follow-ups
 
 Sharper diagnostics were renumbered from `SharperErrorCodes.Base` (20000): CS9402, CS9403 and CS9404 became CS20001, CS20002 and CS20003, and this document uses the new numbers throughout.
