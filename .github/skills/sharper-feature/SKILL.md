@@ -90,6 +90,14 @@ Paths are under `src/Compilers/CSharp/Portable/`.
 9. **Look for an existing flag before writing an analysis.** Read-only locals already existed for foreach, using
    and fixed variables: `LocalSymbol.IsWritableVariable` plus a cause in `ReportReadonlyLocalError` covered every
    write (`=`, `+=`, `++`, `ref`/`out`, ref reassignment, struct members, lambdas) with no new analysis.
+10. **Lower before closures and state machines see it.** A local captured by a lambda or hoisted across `await` or
+   `yield` becomes a writable field before codegen, so a rule that codegen applies to locals (a defensive copy in
+   `CodeGenerator.HasHome`) silently stops applying. Make such copies in `LocalRewriter` (`BoundPassByCopy`).
+11. **Pattern-based members are bound on placeholders.** `await`, implicit Index and Range indexers, list and property
+   patterns bind their members against a placeholder, not the real receiver, so a check on the receiver misses them.
+   `BoundImplicitIndexerReceiverPlaceholder.Receiver` points back to it; for patterns, walk the decision DAG for
+   evaluations whose `Input.IsOriginalInput`. Pattern lowering also reuses a plain local as its input, assuming members
+   do not mutate it.
 
 ## Testing
 
