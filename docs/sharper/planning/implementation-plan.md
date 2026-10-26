@@ -66,6 +66,7 @@ Each trap was probed before deciding how to handle it.
 | Async iterators | Not supported (CS20001). | Needs Edit and Continue work and a hidden `await`; may never be wanted. |
 | `dynamic` | Keep the range meaning, warn (CS20002). | A runtime decision changes the behavior of valid C#. |
 | val in patterns | A keyword in patterns, parsed like var (option 1). | Keeps val and var consistent. It breaks type patterns on a type named val, so the sharpener escapes those as @val. The alternative, reinterpreting a type pattern in the binder, kept C# meaning but diverged from var. |
+| `(val x) => ...` | An implicitly typed lambda parameter that cannot be reassigned, decided in the binder. | `val x` already parses as a parameter of type `val`; binding it like `var` (a type named `val` wins) keeps the C# meaning without a parser change. |
 | Non-readonly members on a val struct | Run on a copy, with warning CS20003 (option C). | The foreach behavior let a method change the val, which breaks immutability. A silent copy (the readonly field rule) makes mutations disappear without notice. The warning makes the copy visible; member mutation inference will later silence it for members that do not mutate. |
 
 ## Lessons for the next feature
@@ -84,7 +85,7 @@ A new construct's real cost is in the places that never mention it. Model it on 
 
 ## Syntax roadmap
 
-The brainstorm proposes 28 pieces of syntax (#28, discard arguments, is still to be discussed). Each row has a GitHub issue, collected under the tracking issue [#12](https://github.com/ok3mad/roslyn/issues/12). Four are done: `yield return ..xs` and `val` in locals, deconstruction and patterns. Everything that depends on unions or purity waits for those designs.
+The brainstorm proposes 28 pieces of syntax (#28, discard arguments, is still to be discussed). Each row has a GitHub issue, collected under the tracking issue [#12](https://github.com/ok3mad/roslyn/issues/12). Five are done: `yield return ..xs` and `val` in locals, deconstruction, patterns and lambda parameters. Everything that depends on unions or purity waits for those designs.
 
 - **Size**, relative to the `yield return ..xs` PoC. **S**: about that size (no parser change, one bound node, reused lowering). **M**: a gated parser change, or a new lowering with its own rules. **L**: new inference or binding rules that interact with overload resolution or signature binding. **XL**: a new checker layer (refinements, unions, effects).
 - **Certainty**. **High**: decided in the brainstorm, spelling stable. **Med**: the leading direction, details or spelling open. **Low**: only sketched in examples, contradicted elsewhere, or blocked on an open question.
@@ -97,7 +98,7 @@ The brainstorm proposes 28 pieces of syntax (#28, discard arguments, is still to
 | 2 | `val` immutable local | `val total = 0;` | `var` plus a no-reassignment check | none (`val` parses as a type name) | S | Done | The only breaking keyword; trial binding plus a sharpener `@val` escape | [#14](https://github.com/ok3mad/roslyn/issues/14) |
 | 3 | `val` deconstruction | `val (small, large) = ...;` | deconstruction plus the same check | small: accept `val` wherever the parser checks for `var` (`IsPossibleDeconstructionLeft`, statement disambiguation, `IsVarType`) | S | Done | Comes with #2. Without the parser change, `val (a, b) = e` parses as an invocation; the same checks cover `foreach (val (a, b) in ...)` and `out val (a, b)` | [#15](https://github.com/ok3mad/roslyn/issues/15) |
 | 4 | `readonly` locals | `readonly int x`, `readonly var x` | local plus the same check | likely none (modifier probably parses, with an error) | S | Med | Rarely written; completes the mutability grid | [#16](https://github.com/ok3mad/roslyn/issues/16) |
-| 5 | `val` lambda parameter | `(val x) => ...` | lambda plus the same check | small | S | Med |  | [#17](https://github.com/ok3mad/roslyn/issues/17) |
+| 5 | `val` lambda parameter | `(val x) => ...` | lambda plus the same check | none (`val x` already parses as a typed parameter) | S | Done | A type named `val` keeps the C# meaning; anonymous methods and local functions are out of scope (see [step 4](#feature-2-step-4-val-lambda-parameters)) | [#17](https://github.com/ok3mad/roslyn/issues/17) |
 | 6 | `val` in patterns | `is { Length: val n }` | `var n` pattern plus the same check | yes: in a pattern the parser turns `val` into a keyword, as it does `var` (`LanguageParser_Patterns.cs`) | S | Done | Decided: `val` is always a keyword in patterns, like `var`. Breaks a type pattern on a type named `val`, so the sharpener escapes it as `@val`. Still open: is `val i` in an arm a binding pattern or a parameter modifier? | [#18](https://github.com/ok3mad/roslyn/issues/18) |
 | 7 | Sequence type | `int[..]` | `IEnumerable<int>` | small (reported today as ERR\_ArraySizeInDeclaration) | S | High | Small and decided: a good second feature | [#19](https://github.com/ok3mad/roslyn/issues/19) |
 | 8 | Task hat | `T^`, `void^`, `int[..]^` | `Task<T>`, `Task` | yes (postfix lookahead, like `T?`) | S–M | Med | Leading candidate; to be confirmed on real signatures | [#20](https://github.com/ok3mad/roslyn/issues/20) |
@@ -199,6 +200,38 @@ Merged as #4. The first Sharper parser change: one helper (`IsIdentifierVarOrSha
 ## Feature 2, step 3: `val` in patterns
 
 `val` followed by a designation in a pattern (`is val x`, `case val x:`, `val x =>`, `val (a, b)`, `(val a, var b)`, `{ P: val p }`) is a var pattern whose keyword token is `SyntaxKind.ValKeyword` (first a `VarKeyword` token with the text `val`; replaced so code that rebuilds a token from its kind keeps `val`). `VarPatternSyntax` is reused, so no syntax node is added. Its variables cannot be reassigned. As for `var`, `val` is a keyword in patterns even where a type named `val` exists; that surfaces as the existing error CS8508 rather than a change of meaning. `is val` without a designation and `is @val x` keep their C# meaning.
+
+## Feature 2, step 4: `val` lambda parameters
+
+`(val x) => ...` declares an implicitly typed lambda parameter that cannot be reassigned (issue #17). No parser change:
+with the flag on or off, `val x` parses as a parameter whose type is the identifier `val`, in every lambda form. The
+binder (`GetSharperValLambdaParameters` in `Binder_Lambda.cs`) looks `val` up as `var` locals do: if no type named `val`
+binds, the parameter counts as implicitly typed, so it is inferred from the target delegate like `(x) => ...`, and
+`LambdaParameterSymbol.IsSharperVal` makes it read-only. Writes go through the shared value check
+(`CheckParameterValueKind`), and struct copies through `IsSharperValValue`, so a val parameter reuses every rule of a val
+local.
+
+| Question | Decision |
+| --- | --- |
+| A type named `val` in scope | C# wins: `(val x)` is an explicitly typed parameter of that type, as without the flag. |
+| Writes | CS1656 and CS1657 with the 'val variable' cause, CS1654 for struct fields, also from nested lambdas. |
+| Struct members | A non-readonly member runs on a copy and warns (CS20003), also when captured, after `await` and in patterns. |
+| `(val a, b)` | Allowed: both are implicitly typed. |
+| `(val a, int b)`, `(int a, val b)` | CS0748, as for `(a, int b)`: C# does not mix implicit and explicit parameters. |
+| `async`, `static`, an explicit return type (`long (val x) => ...`), expression trees | Allowed, as for `(x) => ...`. |
+| `var f = (val x) => x` | CS8917, as for `(x) => x`: a natural type needs explicit parameter types. |
+| `(ref val x)`, `(out val x)` | Allowed: writes through the ref work. `x = ref y` on a `ref val` parameter is CS20006, as for a `ref val` local. |
+| `(in val x)` | Allowed; writes are CS8331, as for `(in x)`. |
+| `(scoped val x)` | Allowed: a scoped parameter that cannot be reassigned. |
+| `(params val x)` | CS9272, as for `(params x)`. |
+| `(val x = 1)` | CS9098, as for `(x = 1)`: implicitly typed parameters cannot have default values. |
+| `delegate (val x) { }`, `void Local(val x)` | Out of scope: their parameters are always explicitly typed, so `val` is a type name there (CS0246), as in C#. |
+| Semantic model and IOperation | The parameter is an ordinary `IParameterSymbol`; `GetTypeInfo` and `GetSymbolInfo` on `val` give the inferred type, as for `var`. IOperation is unchanged. |
+
+Implicitly typed lambda parameters were detected by their missing type syntax (`p.Type == null`) in three places, all
+of which now also count a val parameter: the explicit-or-implicit check (`CheckParenthesizedLambdaParameters`), the
+explicitly typed parameter list in `AnalyzeAnonymousFunction`, and the `params` check in
+`ParameterHelpers.CheckParameterModifiers`, which `Binder_Lambda.cs` repeats for val.
 
 ## Follow-ups
 
