@@ -30726,7 +30726,12 @@ internal partial class ContextAwareSyntax
     {
 #if DEBUG
         if (varKeyword == null) throw new ArgumentNullException(nameof(varKeyword));
-        if (varKeyword.Kind != SyntaxKind.VarKeyword) throw new ArgumentException(nameof(varKeyword));
+        switch (varKeyword.Kind)
+        {
+            case SyntaxKind.VarKeyword:
+            case SyntaxKind.ValKeyword: break;
+            default: throw new ArgumentException(nameof(varKeyword));
+        }
         if (designation == null) throw new ArgumentNullException(nameof(designation));
 #endif
 
@@ -36148,7 +36153,12 @@ internal static partial class SyntaxFactory
     {
 #if DEBUG
         if (varKeyword == null) throw new ArgumentNullException(nameof(varKeyword));
-        if (varKeyword.Kind != SyntaxKind.VarKeyword) throw new ArgumentException(nameof(varKeyword));
+        switch (varKeyword.Kind)
+        {
+            case SyntaxKind.VarKeyword:
+            case SyntaxKind.ValKeyword: break;
+            default: throw new ArgumentException(nameof(varKeyword));
+        }
         if (designation == null) throw new ArgumentNullException(nameof(designation));
 #endif
 

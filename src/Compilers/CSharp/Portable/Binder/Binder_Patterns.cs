@@ -1554,7 +1554,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             if (!isVar)
             {
                 // Give an error if there is a bindable type "var" in scope (or "val", for Sharper's val pattern)
-                diagnostics.Add(node.VarKeyword.Text == "val" ? ErrorCode.ERR_SharperValMayNotBindToType : ErrorCode.ERR_VarMayNotBindToType,
+                diagnostics.Add(node.VarKeyword.IsKind(SyntaxKind.ValKeyword) ? ErrorCode.ERR_SharperValMayNotBindToType : ErrorCode.ERR_VarMayNotBindToType,
                     node.VarKeyword.GetLocation(), foundSymbol.ToDisplayString());
                 hasErrors = true;
             }

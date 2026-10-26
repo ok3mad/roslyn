@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for more information.
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -1739,7 +1740,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             if (sharper)
             {
                 var varPattern = (VarPatternSyntax)isPattern.Pattern;
-                Assert.Equal(SyntaxKind.VarKeyword, varPattern.VarKeyword.Kind());
+                Assert.Equal(SyntaxKind.ValKeyword, varPattern.VarKeyword.Kind());
                 Assert.Equal("val", varPattern.VarKeyword.Text);
                 Assert.Equal("o is val x", isPattern.ToFullString());
             }
@@ -1972,6 +1973,40 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v").WithLocation(6, 1));
             CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90,
                 options: TestOptions.DebugExe.WithSpecificDiagnosticOptions("CS20003", ReportDiagnostic.Suppress)).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void ValKeyword_SyntaxKind()
+        {
+            // ValKeyword sits apart from the upstream contextual keywords; an upstream merge must not reuse its value
+            // (duplicate enum values compile silently).
+            Assert.Equal(8466, (int)SyntaxKind.ValKeyword);
+            Assert.Single(Enum.GetValues(typeof(SyntaxKind)).Cast<SyntaxKind>(), k => (int)k == (int)SyntaxKind.ValKeyword);
+            Assert.True(SyntaxKind.ValKeyword < SyntaxKind.ElifKeyword);
+
+            Assert.Equal("val", SyntaxFacts.GetText(SyntaxKind.ValKeyword));
+            Assert.True(SyntaxFacts.IsContextualKeyword(SyntaxKind.ValKeyword));
+            Assert.Contains(SyntaxKind.ValKeyword, SyntaxFacts.GetContextualKeywordKinds());
+            Assert.Equal(SyntaxKind.ValKeyword, SyntaxFacts.GetContextualKeywordKind("val"));
+
+            // Like var, an identifier spelled val reports the keyword as its contextual kind, with or without Sharper.
+            Assert.Equal(SyntaxKind.ValKeyword, SyntaxFactory.ParseToken("val").ContextualKind());
+            Assert.Equal(SyntaxKind.IdentifierToken, SyntaxFactory.ParseToken("@val").ContextualKind());
+        }
+
+        [Fact]
+        public void ValKeyword_FactoryRoundTrip()
+        {
+            // Rebuilding a val pattern from its kind keeps val (a VarKeyword token with the text val would come back as var).
+            var token = SyntaxFactory.Token(SyntaxKind.ValKeyword);
+            Assert.Equal("val", token.Text);
+            var pattern = SyntaxFactory.VarPattern(token, SyntaxFactory.SingleVariableDesignation(SyntaxFactory.Identifier("x")));
+            Assert.Equal("val x", pattern.NormalizeWhitespace().ToFullString());
+
+            var parsed = (IsPatternExpressionSyntax)SyntaxFactory.ParseExpression("o is val x", options: s_sharperOptions);
+            var rebuilt = ((VarPatternSyntax)parsed.Pattern).WithVarKeyword(SyntaxFactory.Token(((VarPatternSyntax)parsed.Pattern).VarKeyword.Kind()));
+            Assert.Equal("val", rebuilt.VarKeyword.Text);
+            Assert.Throws<ArgumentException>(() => SyntaxFactory.VarPattern(SyntaxFactory.Token(SyntaxKind.LetKeyword), SyntaxFactory.SingleVariableDesignation(SyntaxFactory.Identifier("x"))));
         }
     }
 }
