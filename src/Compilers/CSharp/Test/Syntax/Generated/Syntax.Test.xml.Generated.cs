@@ -58,6 +58,9 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         private static Syntax.InternalSyntax.TupleTypeSyntax GenerateTupleType()
             => InternalSyntaxFactory.TupleType(InternalSyntaxFactory.Token(SyntaxKind.OpenParenToken), new Microsoft.CodeAnalysis.Syntax.InternalSyntax.SeparatedSyntaxList<Syntax.InternalSyntax.TupleElementSyntax>(), InternalSyntaxFactory.Token(SyntaxKind.CloseParenToken));
 
+        private static Syntax.InternalSyntax.FunctionTypeSyntax GenerateFunctionType()
+            => InternalSyntaxFactory.FunctionType(InternalSyntaxFactory.Token(SyntaxKind.OpenParenToken), new Microsoft.CodeAnalysis.Syntax.InternalSyntax.SeparatedSyntaxList<Syntax.InternalSyntax.FunctionPointerParameterSyntax>(), InternalSyntaxFactory.Token(SyntaxKind.CloseParenToken), InternalSyntaxFactory.Token(SyntaxKind.MinusGreaterThanToken), GenerateIdentifierName());
+
         private static Syntax.InternalSyntax.TupleElementSyntax GenerateTupleElement()
             => InternalSyntaxFactory.TupleElement(GenerateIdentifierName(), null);
 
@@ -940,6 +943,20 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             Assert.Equal(SyntaxKind.OpenParenToken, node.OpenParenToken.Kind);
             Assert.Equal(default, node.Elements);
             Assert.Equal(SyntaxKind.CloseParenToken, node.CloseParenToken.Kind);
+
+            AttachAndCheckDiagnostics(node);
+        }
+
+        [Fact]
+        public void TestFunctionTypeFactoryAndProperties()
+        {
+            var node = GenerateFunctionType();
+
+            Assert.Equal(SyntaxKind.OpenParenToken, node.OpenParenToken.Kind);
+            Assert.Equal(default, node.Parameters);
+            Assert.Equal(SyntaxKind.CloseParenToken, node.CloseParenToken.Kind);
+            Assert.Equal(SyntaxKind.MinusGreaterThanToken, node.ArrowToken.Kind);
+            Assert.NotNull(node.ReturnType);
 
             AttachAndCheckDiagnostics(node);
         }
@@ -4399,6 +4416,32 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         public void TestTupleTypeIdentityRewriter()
         {
             var oldNode = GenerateTupleType();
+            var rewriter = new IdentityRewriter();
+            var newNode = rewriter.Visit(oldNode);
+
+            Assert.Same(oldNode, newNode);
+        }
+
+        [Fact]
+        public void TestFunctionTypeTokenDeleteRewriter()
+        {
+            var oldNode = GenerateFunctionType();
+            var rewriter = new TokenDeleteRewriter();
+            var newNode = rewriter.Visit(oldNode);
+
+            if(!oldNode.IsMissing)
+            {
+                Assert.NotEqual(oldNode, newNode);
+            }
+
+            Assert.NotNull(newNode);
+            Assert.True(newNode.IsMissing, "No tokens => missing");
+        }
+
+        [Fact]
+        public void TestFunctionTypeIdentityRewriter()
+        {
+            var oldNode = GenerateFunctionType();
             var rewriter = new IdentityRewriter();
             var newNode = rewriter.Visit(oldNode);
 
@@ -10542,6 +10585,9 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         private static TupleTypeSyntax GenerateTupleType()
             => SyntaxFactory.TupleType(SyntaxFactory.Token(SyntaxKind.OpenParenToken), new SeparatedSyntaxList<TupleElementSyntax>(), SyntaxFactory.Token(SyntaxKind.CloseParenToken));
 
+        private static FunctionTypeSyntax GenerateFunctionType()
+            => SyntaxFactory.FunctionType(SyntaxFactory.Token(SyntaxKind.OpenParenToken), new SeparatedSyntaxList<FunctionPointerParameterSyntax>(), SyntaxFactory.Token(SyntaxKind.CloseParenToken), SyntaxFactory.Token(SyntaxKind.MinusGreaterThanToken), GenerateIdentifierName());
+
         private static TupleElementSyntax GenerateTupleElement()
             => SyntaxFactory.TupleElement(GenerateIdentifierName(), default(SyntaxToken));
 
@@ -11425,6 +11471,20 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             Assert.Equal(default, node.Elements);
             Assert.Equal(SyntaxKind.CloseParenToken, node.CloseParenToken.Kind());
             var newNode = node.WithOpenParenToken(node.OpenParenToken).WithElements(node.Elements).WithCloseParenToken(node.CloseParenToken);
+            Assert.Equal(node, newNode);
+        }
+
+        [Fact]
+        public void TestFunctionTypeFactoryAndProperties()
+        {
+            var node = GenerateFunctionType();
+
+            Assert.Equal(SyntaxKind.OpenParenToken, node.OpenParenToken.Kind());
+            Assert.Equal(default, node.Parameters);
+            Assert.Equal(SyntaxKind.CloseParenToken, node.CloseParenToken.Kind());
+            Assert.Equal(SyntaxKind.MinusGreaterThanToken, node.ArrowToken.Kind());
+            Assert.NotNull(node.ReturnType);
+            var newNode = node.WithOpenParenToken(node.OpenParenToken).WithParameters(node.Parameters).WithCloseParenToken(node.CloseParenToken).WithArrowToken(node.ArrowToken).WithReturnType(node.ReturnType);
             Assert.Equal(node, newNode);
         }
 
@@ -14883,6 +14943,32 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         public void TestTupleTypeIdentityRewriter()
         {
             var oldNode = GenerateTupleType();
+            var rewriter = new IdentityRewriter();
+            var newNode = rewriter.Visit(oldNode);
+
+            Assert.Same(oldNode, newNode);
+        }
+
+        [Fact]
+        public void TestFunctionTypeTokenDeleteRewriter()
+        {
+            var oldNode = GenerateFunctionType();
+            var rewriter = new TokenDeleteRewriter();
+            var newNode = rewriter.Visit(oldNode);
+
+            if(!oldNode.IsMissing)
+            {
+                Assert.NotEqual(oldNode, newNode);
+            }
+
+            Assert.NotNull(newNode);
+            Assert.True(newNode.IsMissing, "No tokens => missing");
+        }
+
+        [Fact]
+        public void TestFunctionTypeIdentityRewriter()
+        {
+            var oldNode = GenerateFunctionType();
             var rewriter = new IdentityRewriter();
             var newNode = rewriter.Visit(oldNode);
 

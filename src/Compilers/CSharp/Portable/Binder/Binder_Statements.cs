@@ -1256,6 +1256,12 @@ namespace Microsoft.CodeAnalysis.CSharp
 
                 typeSyntax.VisitRankSpecifiers((rankSpecifier, args) =>
                 {
+                    if (rankSpecifier.IsSharperSequence)
+                    {
+                        // The `..` of a Sharper sequence type `T[..]` is part of the type, not a dimension.
+                        return;
+                    }
+
                     bool _ = false;
                     foreach (var expressionSyntax in rankSpecifier.Sizes)
                     {

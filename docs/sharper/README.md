@@ -35,7 +35,8 @@ has the full implementation checklist.
    the old meaning is rare and a sharpener can always rewrite it. So far that is `val` in patterns and in
    `val (a, b) = e`, which code that uses `val` as an identifier there must spell `@val`. Each accepted break is listed
    in the [implementation plan](planning/implementation-plan.md#follow-ups); the sharpener and the `.cx` extension will
-   make it safe to adopt.
+   make it safe to adopt. The sequence type adds a second, smaller one: `F<a[..]>(x)` is a generic call, where C#
+   reads two comparisons that only compile with user-defined operators.
 3. **Reuse the C# syntax.** Features reinterpret existing syntax in the binder where possible, instead of adding
    syntax nodes and public API.
 4. **Lower to C#.** Each feature lowers to constructs the compiler already emits, so debugging, PDBs and the runtime
@@ -84,7 +85,9 @@ Not done yet:
 | Feature | Summary | Status | Issue |
 | --- | --- | --- | --- |
 | [Spread in `yield return`](features/yield-return-spread.md) | `yield return ..xs;` yields every element of `xs`. | Prototype, merged into `main` | [#13](https://github.com/ok3mad/roslyn/issues/13) |
+| [Function types](features/function-types.md) | `(A, B) -> R` is `Func<A, B, R>`, and `(A) -> void` is `Action<A>`. | Prototype, merged into `main` | [#21](https://github.com/ok3mad/roslyn/issues/21) |
 | [`val` locals](features/val-locals.md) | `val x = e;` declares an implicitly typed local that cannot be reassigned, also in deconstructions, `foreach`, `out` and patterns. | Prototype, merged into `main` | [#14](https://github.com/ok3mad/roslyn/issues/14), [#15](https://github.com/ok3mad/roslyn/issues/15), [#18](https://github.com/ok3mad/roslyn/issues/18) |
+| [Sequence type](features/sequence-type.md) | `T[..]` is `IEnumerable<T>` in every type position. | Prototype, merged into `main` | [#19](https://github.com/ok3mad/roslyn/issues/19) |
 
 Every planned feature has an issue, one per row of the
 [syntax roadmap](planning/implementation-plan.md#syntax-roadmap), collected under the tracking issue
@@ -101,7 +104,7 @@ git grep -n "PROTOTYPE(sharper)"
 
 - `main` is the integration branch. It holds upstream Roslyn plus the finished Sharper prototypes.
 - `sharper/<feature>` branches hold features in progress; `sharper/gating`, `sharper/val`,
-  `sharper/val-designations` and `sharper/val-patterns` are merged.
+  `sharper/val-designations`, `sharper/val-patterns` and `sharper/function-types` are merged.
 
 ## Diagnostics
 
@@ -118,13 +121,18 @@ in `#pragma warning`, `/nowarn` and `.editorconfig`.
 | CS20004 | Error | The syntax 'val' for a pattern is not permitted to refer to a type, but '{0}' is in scope here. Use '@val' for the type. |
 | CS20005 | Error | Deconstruction 'val (...)' form disallows a specific type for 'val'. Use '@val' for the type. |
 | CS20006 | Error | Cannot ref-assign '{0}' because it is a ref val: it always refers to the same variable. Writes through '{0}' are allowed. |
+| CS20007 | Error | A function type cannot name its parameters. Remove the name '{0}'. |
+| CS20008 | Error | A function type parameter cannot be '{0}', because a function type is a 'System.Func' or 'System.Action' delegate. |
+| CS20009 | Error | A function type cannot have more than {0} parameters, because no 'System.Func' or 'System.Action' delegate has more. |
 
 ## Where the code is
 
 | What | Where |
 | --- | --- |
 | Feature flag | `src/Compilers/CSharp/Portable/Errors/MessageID.cs` (`IDS_FeatureSharper`), `src/Compilers/Core/Portable/CommandLine/Feature.cs` (`Feature.Sharper`) |
-| Binding | `src/Compilers/CSharp/Portable/Binder/` (search for `IDS_FeatureSharper`) |
+| Parser | `src/Compilers/CSharp/Portable/Parser/LanguageParser.cs` (search for `IDS_FeatureSharper`) |
+| Binding | `src/Compilers/CSharp/Portable/Binder/` (search for `IDS_FeatureSharper`); short type forms such as `T[..]` in `Binder_SharperTypes.cs` |
+| Syntax nodes | `src/Compilers/CSharp/Portable/Syntax/Syntax.xml` (`FunctionTypeSyntax`); Sharper kinds in `SyntaxKind.cs` count up from 9900 |
 | Bound nodes | `src/Compilers/CSharp/Portable/BoundTree/BoundNodes.xml` |
 | Lowering | `src/Compilers/CSharp/Portable/Lowering/LocalRewriter/` |
 | Tests | `src/Compilers/CSharp/Test/Semantic/Semantics/SharperTests.cs` |

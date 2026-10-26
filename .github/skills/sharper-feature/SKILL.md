@@ -8,9 +8,10 @@ description: "Implement a Sharper language feature (or any new construct) in the
 Sharper is a stricter C# dialect built inside Roslyn in this fork: `main` holds the merged features and `sharper/*`
 branches the ones in progress (overview and feature status in `docs/sharper/README.md`). Its features are compiled
 by the C# compiler itself: new syntax binds to bound nodes and lowers to ordinary constructs. This skill is the
-checklist distilled from the first two features: `yield return ..xs` (a new bound node; the commits merged from
-`sharper/gating`) and `val` locals (a contextual keyword on an existing symbol; merged from `sharper/val`). See
-`SharperTests.cs` for both.
+checklist distilled from the first features: `yield return ..xs` (a new bound node; the commits merged from
+`sharper/gating`), `val` locals (a contextual keyword on an existing symbol; merged from `sharper/val`) and the
+sequence type `T[..]` (a type form that binds to a BCL type; `sharper/sequence-type`). See `SharperTests.cs` for all
+three.
 
 ## When to Use
 
@@ -64,6 +65,28 @@ Paths are under `src/Compilers/CSharp/Portable/`.
 | Lowering | `Lowering/LocalRewriter/` | Rewrite into existing nodes with the shared helpers (e.g. `RewriteForEachEnumerator`). Add the kind to the helpers' node-kind asserts and instrumentation switches, as the precedent does. |
 | Diagnostics | `Errors/ErrorCode.cs` (a new cause string for an existing error: a `MessageID` plus a `.resx` entry and `UpdateXlf`, no `ErrorCode`) | Follow the checklist comment at the end of `ErrorCode.cs` (`ErrorFacts.IsBuildOnlyDiagnostic`, `GetWarningLevel` and `DiagnosticTest.WarningLevel_2` for warnings, `.resx` message and `_Title`), then regenerate code and run `dotnet msbuild src/Compilers/CSharp/Portable/Microsoft.CodeAnalysis.CSharp.csproj /t:UpdateXlf`. A warning only new syntax can trigger gets level 1. |
 
+## Short Type Forms (Aliases onto a BCL Type)
+
+`T[..]` is `IEnumerable<T>` and `(A) -> R` is `Func<A, R>`; the task type (#20) follows the same pattern. Such a form
+needs no bound node and no lowering: the binder resolves it to the constructed BCL type, so metadata, the semantic
+model and IOperation see only the BCL type. The steps, with `T[..]` as the worked example (details in the
+implementation plan, "Feature 3"):
+
+1. **One gated syntax predicate.** Reuse a C# node that already parses the form and decide the Sharper reading in one
+   place (`ArrayRankSpecifierSyntax.IsSharperSequence`). Exclude positions that must keep their C# meaning (array
+   creation).
+2. **Make `ScanType` accept it**, since statements, casts and generic arguments in expressions are decided by
+   scanning. Do not return `ScanTypeFlags.MustBeType` if the form is also an expression, and check `ScanCast` and
+   `ScanPossibleTypeArgumentList` for valid C# that would change meaning.
+3. **Bind through `BindSharperTypeAlias`** (`Binder/Binder_SharperTypes.cs`), with the definition from
+   `GetSpecialType` or `GetWellKnownType`. It constructs the type through `ConstructNamedType`, so constraint checks
+   and their suppression in signatures behave as for the type written out.
+4. **Find the code that reads the syntax directly**: `VisitRankSpecifiers` callers that bind sizes, and
+   `CSharpSemanticModel.CanGetSemanticInfo` for sub-expressions that are now part of a type.
+5. **Test against the C# twin** in every type position (compare member and local symbols), including inside a
+   generic argument and a tuple element in a statement, and the overlapping C# expressions with every token that can
+   follow them.
+
 ## Traps Found So Far
 
 1. **Kind lists outside the visitors.** `ExitPointsWalker` throws on unknown pending-branch kinds, and the lowering
@@ -109,6 +132,22 @@ Paths are under `src/Compilers/CSharp/Portable/`.
    to `EndOfFileToken`, so a new keyword kind must sit in the keyword range: take free slots from the top
    (`ValKeyword` = 8466, below `ElifKeyword`) and test that no other `SyntaxKind` has the value, because duplicate enum
    values compile silently. Diagnostics have no such limit: Sharper codes start at `SharperErrorCodes.Base` (CS20001).
+14. **A new syntax node is public API and hides in type switches.** When no existing node fits (function types), add it
+   to `Syntax.xml` with a `SyntaxKind` from 9900 up (Sharper node kinds count up from there, apart from upstream),
+   regenerate, and copy the build's RS0016 list into `PublicAPI.Unshipped.txt`. A new type node also needs
+   `SyntaxFacts.IsTypeSyntax`, `SyntaxFacts.IsInTypeOnlyContext` (for the semantic model) and
+   `SyntaxExtensions.VisitRankSpecifiers`, which throws on unknown type kinds. In the parser, gate every lookahead
+   change on Sharper and scan nested parentheses in one pass: trying a second scan after a failed one is exponential in
+   the nesting depth.
+
+15. **The lexer has no `..` token.** It produces two `.` tokens that the parser merges (`IsAtDotDotToken`,
+   `EatDotDotToken`); `CurrentToken.Kind == SyntaxKind.DotDotToken` never matches.
+16. **Accepting a type form in `ScanType` moves ambiguities.** The cast heuristic reads an ambiguous type before `(`,
+   `!` or an identifier as a cast, which would turn the valid element accesses `(a[..])(b)` and `(a?[..])` into casts.
+   The type argument rule makes `F<a[..]>(x)` a generic call (accepted: in C# it needs user-defined comparisons).
+17. **`GetTypeInfo` on a type syntax drops the top-level nullable annotation.** Compare
+   `TypeWithAnnotations` of the declared symbols (`ToTestDisplayString(includeNonNullable: true)`), and compare
+   with a C# twin rather than guess the display order of mixed array ranks.
 
 ## Testing
 

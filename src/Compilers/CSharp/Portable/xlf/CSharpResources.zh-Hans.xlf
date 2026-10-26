@@ -2597,6 +2597,21 @@
         <target state="translated">“{0}”不能密封，因为包含的记录未密封。</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperFunctionTypeParameterModifier">
+        <source>A function type parameter cannot be '{0}', because a function type is a 'System.Func' or 'System.Action' delegate.</source>
+        <target state="new">A function type parameter cannot be '{0}', because a function type is a 'System.Func' or 'System.Action' delegate.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperFunctionTypeParameterName">
+        <source>A function type cannot name its parameters. Remove the name '{0}'.</source>
+        <target state="new">A function type cannot name its parameters. Remove the name '{0}'.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperFunctionTypeTooManyParameters">
+        <source>A function type cannot have more than {0} parameters, because no 'System.Func' or 'System.Action' delegate has more.</source>
+        <target state="new">A function type cannot have more than {0} parameters, because no 'System.Func' or 'System.Action' delegate has more.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperSpreadInAsyncIterator">
         <source>A spread 'yield return ..' cannot be used in an async iterator.</source>
         <target state="new">A spread 'yield return ..' cannot be used in an async iterator.</target>

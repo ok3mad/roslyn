@@ -371,6 +371,7 @@ incomplete_member
 type
   : array_type
   | function_pointer_type
+  | function_type
   | name
   | nullable_type
   | omitted_type_argument
@@ -412,6 +413,10 @@ function_pointer_parameter_list
 
 function_pointer_parameter
   : attribute_list* modifier* type
+  ;
+
+function_type
+  : '(' (function_pointer_parameter (',' function_pointer_parameter)*)? ')' '->' type
   ;
 
 nullable_type
@@ -687,7 +692,8 @@ unary_pattern
   ;
 
 var_pattern
-  : 'var' variable_designation
+  : 'val' variable_designation
+  | 'var' variable_designation
   ;
 
 when_clause
