@@ -135,6 +135,10 @@ internal sealed class FileBasedProgramsProjectSystem : LanguageServerProjectLoad
             return LooseDocumentKind.MiscellaneousFileWithNoReferences;
         }
 
+        // Sharper: a .cx file is never a file-based app, since `dotnet run` only runs .cs files.
+        if (PathUtilities.GetExtension(filePath).Equals(".cx", StringComparison.OrdinalIgnoreCase))
+            return LooseDocumentKind.MiscellaneousFileWithStandardReferences;
+
         // 4. Does the file have an absolute path and exist on disk? (i.e. it is not a "virtual document" created for a new, not-yet-saved file, or similar.)
         // - Yes → Go to (5)
         // - No → Classify as Miscellaneous File With Standard References

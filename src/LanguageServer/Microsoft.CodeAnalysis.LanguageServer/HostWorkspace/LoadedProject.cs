@@ -70,7 +70,7 @@ internal sealed partial class LoadedProject : IAsyncDisposable
             Contract.ThrowIfNull(_projectDirectory, "If the project has an absolute path, then the project directory should exist.");
 
             // We'll watch the directory for all source file changes
-            _sourceFileCreatedOrDeletedChangeContext = fileWatcher.CreateContext([new(_projectDirectory, [".cs", ".cshtml", ".razor"])]);
+            _sourceFileCreatedOrDeletedChangeContext = fileWatcher.CreateContext([new(_projectDirectory, [".cs", ".cx", ".cshtml", ".razor"])]);
             _sourceFileCreatedOrDeletedChangeContext.FileChanged += SourceFileCreatedOrDeletedChangeContext_FileChanged;
         }
     }

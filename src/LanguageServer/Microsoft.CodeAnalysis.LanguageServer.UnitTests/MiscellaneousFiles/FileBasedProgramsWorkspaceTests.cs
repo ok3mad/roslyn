@@ -944,6 +944,29 @@ public sealed class FileBasedProgramsWorkspaceTests(ITestOutputHelper testOutput
         }
     }
 
+    [Theory, CombinatorialData]
+    public async Task TestSharperFileIsCSharpButNeverFileBasedProgram(bool mutatingLspWorkspace)
+    {
+        // A Sharper (.cx) file is a C# document, but 'dotnet run' only runs .cs files, so it is never a file-based app.
+        await using var testLspServer = await CreateTestLspServerAsync(string.Empty, mutatingLspWorkspace, new InitializationOptions { ServerKind = WellKnownLspServerKinds.CSharpVisualBasicLspServer });
+        var globalOptions = testLspServer.TestWorkspace.ExportProvider.GetExportedValue<IGlobalOptionService>();
+        globalOptions.SetGlobalOption(LanguageServerProjectSystemOptionsStorage.EnableFileBasedPrograms, true);
+
+        Assert.Null(await GetMiscellaneousDocumentAsync(testLspServer));
+        var looseFileUri = CreateAbsoluteDocumentUri("SomeFile.cx");
+        await testLspServer.OpenDocumentAsync(looseFileUri, """
+            #:sdk Microsoft.NET.Sdk
+            Console.WriteLine("Hello World!");
+            """).ConfigureAwait(false);
+        await WaitForProjectLoad(looseFileUri, testLspServer);
+
+        var (workspace, document) = await GetRequiredLspWorkspaceAndDocumentAsync(looseFileUri, testLspServer).ConfigureAwait(false);
+        Assert.Equal(WorkspaceKind.MiscellaneousFiles, workspace.Kind);
+        Assert.Equal(LanguageNames.CSharp, document.Project.Language);
+        Assert.Equal(SourceCodeKind.Regular, document.SourceCodeKind);
+        Assert.False(document.Project.State.HasAllInformation);
+    }
+
     [ConditionalTheory(typeof(WindowsOnly), Reason = "FileSystemWatcher (inotify) does not reliably detect file changes on Linux")]
     [CombinatorialData]
     public async Task TestFileBecomesFileBasedProgramWhenDirectiveAdded(bool mutatingLspWorkspace)
