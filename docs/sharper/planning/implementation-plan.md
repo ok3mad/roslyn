@@ -105,8 +105,9 @@ The brainstorm proposes 28 pieces of syntax (#28, discard arguments, is still to
 | 7 | Sequence type | `int[..]` | `IEnumerable<int>` | small (reported today as ERR\_ArraySizeInDeclaration) | S | High | Small and decided: a good second feature | [#19](https://github.com/ok3mad/roslyn/issues/19) |
 | 8 | Task hat | `T^`, `void^`, `int[..]^` | `Task<T>`, `Task` | yes (postfix lookahead, like `T?`) | S–M | Med | Leading candidate; to be confirmed on real signatures | [#20](https://github.com/ok3mad/roslyn/issues/20) |
 | 9 | Function types | `(A, B) -> R`, `() -> T` | `Func<...>`, `Action<...>` | yes: a new syntax node, `FunctionTypeSyntax`, and a one-pass tuple-or-function lookahead | M | Prototype | Decided: `->` only in types, lambdas keep `=>`. Follow-ups: `ref` parameters [#56](https://github.com/ok3mad/roslyn/issues/56), names [#57](https://github.com/ok3mad/roslyn/issues/57), `((F))?` [#58](https://github.com/ok3mad/roslyn/issues/58), patterns [#59](https://github.com/ok3mad/roslyn/issues/59) | [#21](https://github.com/ok3mad/roslyn/issues/21) |
-| 10 | Inferred return type | `static var Hello(int id) => ...` | method with the inferred return type | none (`var` parses as a return type; C# reports CS0825) | L | Med | Ordering and cycles (recursion needs an explicit type); public members may need an explicit type because the body changes the metadata. Replaces the expression-bodied `fun` | [#22](https://github.com/ok3mad/roslyn/issues/22) |
+| 10 | Inferred return type | `static infer Hello(int id) => ...` | method with the inferred return type | none (`infer` parses as a type name) | L, in steps R1 to R5 | Med | Ordering and cycles; the rule for public members is open. Replaces the expression-bodied `fun` | [#22](https://github.com/ok3mad/roslyn/issues/22) |
 | 11 | `readonly` parameters | `void F(readonly int x)` | plain parameter plus the `val` no-reassignment check | none (`readonly` already parses as a parameter modifier, and C# reports an error without `ref`) | S | Med | Completes the mutability grid with #4 and #5. Replaces the `mutable` parameter in `fun`: immutable-by-default parameters and a `mutable` marker are a strictness ladder setting now, not syntax | [#23](https://github.com/ok3mad/roslyn/issues/23) |
+| 15 | Inferred parameter types | `public infer Load(infer userId) => ...`, `infer timeout = TimeSpan.FromSeconds(5)` | method with the inferred types | none (`infer x` parses as a typed parameter) | S to XL, in steps P1 to P8 | Med | Copied from an overridden member, a default value, a function type or a call that pins one type, never from shape. Generic by default is open. Replaces untyped `fun` parameters inferred from arms | [#27](https://github.com/ok3mad/roslyn/issues/27) |
 
 ### Phase 2: functional core
 
@@ -123,14 +124,13 @@ The brainstorm proposes 28 pieces of syntax (#28, discard arguments, is still to
 
 | # | Syntax | Example | Lowers to | Parser change | Size | Certainty | Main risk or open point | Issue |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 15 | Inferred parameter domains | `static int Fib(i) => switch { 0 or 1 => 1, >=2 => ... };` | parameter of the CLR type plus the refinement | yes | XL | Low | Refinement inference: needs #14 and #21. An inferred domain hides a missing arm; public members may need annotations. Moved from phase 2 | [#27](https://github.com/ok3mad/roslyn/issues/27) |
 | 19 | Inferred or structural unions | `(Profile \| Unavailable)^` | not decided | yes | XL | Low | Spelling never discussed; CLR representation open (nominal, tagged or erased to `object`) | [#31](https://github.com/ok3mad/roslyn/issues/31) |
 | 20 | Lifting in pipes and arguments | `users.Find(id) \|> Render(it, p)` | await, `Select` or union passthrough | none | XL | Low | Implicit versus an explicit marker; breaks down at generic and `object` parameters | [#32](https://github.com/ok3mad/roslyn/issues/32) |
 | 21 | Refined types and members | `decimal Amount is >0`, `int is >=0` | plain type plus boundary checks | yes (pattern in a type position) | XL | Low–Med | Proof obligations at call sites; runtime guards for C# callers | [#33](https://github.com/ok3mad/roslyn/issues/33) |
 | 22 | Opaque patterns | `is > 0 and <= max` | pattern plus a `when` guard | none (relational patterns already parse any expression) | M, plus purity | Med | Sound only with purity (#24) | [#34](https://github.com/ok3mad/roslyn/issues/34) |
 | 23 | Extractor patterns | `s is Parse(val n and >0)` | call plus a sub-pattern | none | M–L | Low | Clashes with a positional pattern on a type named `Parse` | [#35](https://github.com/ok3mad/roslyn/issues/35) |
 | 24 | `pure` and `total` modifiers | `total int Fib(...)`, `pure(provider)` | erased, plus attributes | small | XL (syntax alone S) | Low | Needs the whole effect checker and bindings for existing .NET code | [#36](https://github.com/ok3mad/roslyn/issues/36) |
-| 25 | Member declared on another type | `static var Currency.Parse(string s)` | C# 14 extension block | yes | M | Low | Appears only in an example; without `fun` it is spelled like an explicit interface implementation | [#37](https://github.com/ok3mad/roslyn/issues/37) |
+| 25 | Member declared on another type | `static infer Currency.Parse(string s)` | C# 14 extension block | yes | M | Low | Appears only in an example; without `fun` it is spelled like an explicit interface implementation | [#37](https://github.com/ok3mad/roslyn/issues/37) |
 | 26 | Switch body on a lambda | `id => switch { 42 => ..., _ => ... }` | lambda with a switch expression | yes (shared with #14) | S once #14 exists | Med | The parameter switch body applied to lambdas | [#38](https://github.com/ok3mad/roslyn/issues/38) |
 | 27 | `assume` escape hatch | `assume x is >0` | runtime check | yes | S–M | Low | Only an open question so far | [#39](https://github.com/ok3mad/roslyn/issues/39) |
 
@@ -148,12 +148,48 @@ Not listed: `union Name(A, B)` comes from C# 15, and `collect`, `Retry` and `Une
 2. `T[..]` (#7). Useful, but it repeats the first PoC's lesson (a binder rewrite onto an existing type), so it teaches little.
 3. `T^` and `->` function types (#8, #9).
 4. `readonly` parameters (#11), small, and the parameter switch body (#14, with #26), which needs no inference.
-5. Inferred return types (#10), the first real inference work.
-6. Row 15 and rows 19 onward wait for the union representation, refined types and the purity design.
+5. Type inference (#10 and #15), the first real inference work, in the steps of the
+   [work breakdown](#type-inference-work-breakdown).
+6. Rows 19 onward wait for the union representation and the purity design.
 
 Decided before the type-syntax rows: `->` is not a lambda arrow, only the arrow of function types (see Decisions).
 
-Rows 10, 11, 14 and 15 used to be parts of one `fun` declaration, and rows 24 and 25 used its keyword. They are separate features on ordinary methods now, and each can be built alone; see [Functions as separate elements](brainstorm.md#functions-as-separate-elements).
+Rows 10, 11, 14 and 15 used to be parts of one `fun` declaration, and rows 24 and 25 used its keyword. They are separate features on ordinary methods now, and each can be built alone; see [Functions as separate elements](brainstorm.md#functions-as-separate-elements). `fun` itself is parked for a later "functional all in" mode, whose meaning is decided once these pieces have settled.
+
+### Type inference work breakdown
+
+Rows 10 and 15 are split into steps that each fit one branch and one PR, like the three `val` steps. The design is in
+the brainstorm: [`infer`](brainstorm.md#infer-the-type-is-inferred),
+[Inferred return type](brainstorm.md#inferred-return-type) and
+[Inferred parameter types](brainstorm.md#inferred-parameter-types), whose sources 1 to 5 the parameter steps refer to.
+Every step covers binding, the semantic model (the declared symbol shows the inferred type), IOperation, nullable
+analysis of the inferred type, and tests next to the C# with the type written out.
+
+Return type (#10):
+
+| Step | Scope | Size | Open point |
+| --- | --- | --- | --- |
+| R1 | `infer` as a return type: gating, a type named `infer` wins, CS0246 with the flag off. Expression bodies of private methods and local functions that call only methods with written return types | S–M | The error when nothing can be inferred (`null`, a method group) |
+| R2 | Block bodies: several `return` statements with the best common type, no return value as `void`, iterators, `async` | M | Nullable annotation of the result when one `return` is maybe-null |
+| R3 | Methods with inferred return types calling each other: binding order across members, cycle and recursion errors | L | Whether a recursive method with a non-recursive `return` is allowed later |
+| R4 | Every member kind and accessibility: public and protected members, `virtual`, `partial`, operators, metadata emission, Edit and Continue (a body edit that changes the type is a signature change) | M | The rule for public members: must write the type, warning, or strict-file error |
+| R5 | IDE: Quick Info and inlay hints show the inferred type, a fixer writes it out | M | |
+
+Parameter types (#15):
+
+| Step | Scope | Size | Open point |
+| --- | --- | --- | --- |
+| P1 | `infer` as a parameter type, with source 2: the default value's type. `null`, `default` and target-typed values give an error | S | |
+| P2 | Source 1: the overridden or implemented member gives the parameter and return types. Members are matched by name and parameter count before their types are known; more than one candidate is an error | M | Explicit interface implementations; a partial `infer` signature where some types are written |
+| P3 | `readonly infer x` | S | Whether `val x` is its shorthand on method parameters |
+| P4 | Source 4, first cut: the parameter passed directly as an argument to a call with exactly one candidate (method, constructor, delegate). Needs binding the body with a placeholder type | L | How the placeholder interacts with lambdas and local functions in the body |
+| P5 | Source 4 with overloads: every applicable candidate takes the same type at that position, including generic methods whose type arguments come from other arguments | L | |
+| P6 | Source 4, other pinning uses: assignment to a typed local, field or property, `return x` from a method with a written return type, `ref` and `out` arguments. Several uses must agree, and the error names each one | M | |
+| P7 | Source 3: a function type the method is converted to, local functions first, then private methods | L | Conversions that appear after the declaration in the same method |
+| P8 | Source 5: decide generic by default or an error, then build it | M if generic | Undecided; see the brainstorm |
+
+Suggested order: R1, P1, P2, P3, R2, R3, P4, P5, P6, P7, R4, R5, and P8 once it is decided. P4 to P6 are the
+expensive core; everything before them needs no change to how bodies are bound.
 
 ## Feature 2, step 1: `val` locals
 
