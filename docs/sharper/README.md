@@ -26,7 +26,8 @@ Every Sharper feature follows these rules. The [`sharper-feature` skill](../../.
 has the full implementation checklist.
 
 1. **Gated on one flag.** All features sit behind `MessageID.IDS_FeatureSharper`, which is enabled with
-   `/features:sharper` (`<Features>sharper</Features>` in a project). With the flag off, the compiler behaves like
+   `/features:sharper` (`<Features>sharper</Features>` in a project). Later, `.cx` files will turn it on per file
+   (see [File extension](#file-extension)). With the flag off, the compiler behaves like
    upstream, and Sharper syntax reports the usual C# errors.
 2. **No semantic breaking changes.** If Sharper syntax already means something in C#, the C# meaning wins. The
    compiler first binds the code as C#, and uses the Sharper meaning only where that reports an error. Turning the
@@ -37,6 +38,23 @@ has the full implementation checklist.
    need no changes.
 5. **Tested against C#.** Each Sharper test sits next to the plain C# it stands for, so the diagnostics and
    behavior can be compared (`src/Compilers/CSharp/Test/Semantic/Semantics/SharperTests.cs`).
+
+## File extension
+
+Sharper source files use the **`.cx`** extension. The compiler does not recognize it yet: until it does, Sharper
+code lives in `.cs` files and is enabled with `/features:sharper`. The plan is to treat `.cx` files the way `.csx`
+scripts are treated, with their own parse options, so a project can mix `.cs` and `.cx` files and each file says
+which language it is.
+
+- No other .NET tool gives `.cx` a meaning. Outside .NET it is used by Cytoscape network files, CADMATIC exchange
+  files and a few small hobby languages.
+- GitHub Linguist does not map `.cx` to any language, so GitHub shows such files as plain text. Until Sharper is
+  common enough to get its own Linguist entry, a repository can have them highlighted and counted as C# with this
+  line in `.gitattributes`:
+
+  ```
+  *.cx linguist-language=C#
+  ```
 
 ## Features
 

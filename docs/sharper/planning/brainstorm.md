@@ -224,7 +224,7 @@ Sharpening turns a `.cs` file into Sharper source and lowering turns it back. Th
 - **No semantic breaking changes, only new keywords.** Checked arithmetic by default was dropped as slower and not pragmatic. Checked arithmetic in Debug and test builds stays a possible later option.
 - **The guarantee is one-way.** Only `cs` to Sharper to `cs` is guaranteed; Sharper-only constructs such as pipes and parameter patterns collapse into plain C# when lowered.
 - **Testing:** run the round trip over large corpora (Roslyn, the runtime repo, popular NuGet packages) and compare the compiled IL. Each breaking change ships with its sharpener and a property test.
-- **Files:** Sharper-only syntax needs its own extension. `.csx` is already the C# script extension, so the name is a placeholder. Strictness could follow a per-file or per-project ladder (off, warnings, errors), like nullable reference types.
+- **Files:** Sharper-only syntax needs its own extension, and it is `.cx` (decided; `.csx` is already the C# script extension). No other .NET tool uses `.cx`, and GitHub Linguist does not map it to any language. Strictness could follow a per-file or per-project ladder (off, warnings, errors), like nullable reference types.
 
 ## Examples
 

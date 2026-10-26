@@ -57,7 +57,7 @@ Each trap was probed before deciding how to handle it.
 
 | Decision | Outcome | Why |
 | --- | --- | --- |
-| How Sharper is gated | Feature flag now; file extension later. | Flags live on each syntax tree's parse options, so binder checks stay the same. The extension switch is a per-file parse-options variant, like `.csx` scripts in `CSharpCompiler.cs`, plus per-document options in the IDE workspace. |
+| How Sharper is gated | Feature flag now; the `.cx` file extension later. | Flags live on each syntax tree's parse options, so binder checks stay the same. The extension switch is a per-file parse-options variant, like `.csx` scripts in `CSharpCompiler.cs`, plus per-document options in the IDE workspace. `.cx` is one letter from `.cs`, is used by no other .NET tool, and is unknown to GitHub Linguist (see [File extension](../README.md#file-extension)). |
 | Range node or dedicated spread node | Reuse the range node. | No parser, `Syntax.xml` or public API change; C# precedence comes for free. |
 | Spread versus range | Spread only where binding as C# reports an error (trial binding). | Matches the no-breaking-changes rule by construction; a hand-written rule missed the `object` case. |
 | Element conversion | Implicit, like `yield return x`. | A foreach-style explicit cast would silently accept `..objects` in an `IEnumerable<int>` iterator. |
@@ -196,7 +196,7 @@ Progress: rows 1 to 6 are done and pushed to `sharper/val` (commits `eae7a3b0` a
 
 The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOTYPE(sharper)"`).
 
-- [ ] Switch gating from the feature flag to a file extension, in both the command-line compiler and the IDE workspace.
+- [ ] Switch gating from the feature flag to the `.cx` file extension, in both the command-line compiler and the IDE workspace.
 - [ ] Decide whether `dynamic` should choose range or spread at runtime, under the sharpening rules.
 - [ ] Decide whether async iterators should ever support spreads.
 - [ ] Give ref-struct sources a spread-specific error instead of CS4007.

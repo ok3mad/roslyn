@@ -50,6 +50,7 @@ Sharper is not published as a package yet. Build it from source:
 dotnet build Compilers.slnf                  # compilers only
 ```
 
+Sharper files will use the `.cx` extension; until the compiler recognizes it, write Sharper code in `.cs` files.
 Then compile with the built `csc` and pass `/features:sharper`. In an SDK-style project, set
 `<Features>sharper</Features>` and point the build at the locally built compiler (see
 [Bootstrap Builds](docs/contributing/Bootstrap%20Builds.md)).
