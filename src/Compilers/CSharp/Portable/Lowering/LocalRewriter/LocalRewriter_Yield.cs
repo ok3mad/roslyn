@@ -69,9 +69,9 @@ namespace Microsoft.CodeAnalysis.CSharp
             var iterationVariables = ImmutableArray.Create(iterationVariable);
 
             // Not compiler-generated, so it gets a sequence point on the `yield return ..xs;` statement for each element.
-            // PROTOTYPE(sharper): The generated try/finally (disposing the enumerator) and the yield return both use the
-            // `yield return ..xs` syntax, so two iterator states share one syntax offset. Edit and Continue maps states
-            // by syntax offset; verify the spread with Edit and Continue before relying on it. Tracked in #45.
+            // The generated try/finally (disposing the enumerator) and the yield return both use the `yield return ..xs`
+            // syntax, so both of their iterator states belong to that syntax node. Edit and Continue tells them apart by
+            // their relative ordinal (IteratorMethodToStateMachineRewriter.PushFrame).
             var body = (BoundStatement)VisitYieldReturnStatement(new BoundYieldReturnStatement(node.Syntax, _factory.Local(iterationVariable)));
             var breakLabel = new GeneratedLabelSymbol("break");
             var continueLabel = new GeneratedLabelSymbol("continue");
