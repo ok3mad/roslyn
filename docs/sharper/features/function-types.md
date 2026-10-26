@@ -1,6 +1,6 @@
 # Function types
 
-**Status:** Prototype, on branch `sharper/function-types`. Requires `/features:sharper`. Issue:
+**Status:** Prototype, merged into `main`. Requires `/features:sharper`. Issue:
 [#21](https://github.com/ok3mad/roslyn/issues/21).
 
 ## Summary
