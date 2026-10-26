@@ -379,6 +379,7 @@ type
   | predefined_type
   | ref_type
   | scoped_type
+  | task_type
   | tuple_type
   ;
 
@@ -456,6 +457,10 @@ ref_type
 
 scoped_type
   : 'scoped' type
+  ;
+
+task_type
+  : type '~'
   ;
 
 tuple_type

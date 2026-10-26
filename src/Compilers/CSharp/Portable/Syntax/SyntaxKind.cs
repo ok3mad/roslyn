@@ -958,5 +958,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         // checks that no other SyntaxKind takes these values.
         /// <summary>Represents Sharper's function type, such as <c>(int, int) -> int</c>.</summary>
         FunctionType = 9900,
+        /// <summary>Represents Sharper's task type, such as <c>int~</c> or <c>void~</c>.</summary>
+        TaskType = 9901,
     }
 }

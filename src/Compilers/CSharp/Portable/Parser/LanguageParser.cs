@@ -7367,6 +7367,17 @@ parse_member_name:;
                         lastTokenOfType = this.EatToken();
                         result = ScanTypeFlags.MustBeType;
                         break;
+                    case SyntaxKind.TildeToken when IsSharperTaskTypeSuffix(mode, result):
+                        // Sharper task type `T~`. `~` is only a prefix operator in C#, so no expression continues with
+                        // it after an operand. After `T?` it stays ambiguous with a conditional whose branch starts
+                        // with a complement (`c ? ~x : y`), so the nullable flag is kept for the caller to decide.
+                        lastTokenOfType = this.EatToken();
+                        if (result != ScanTypeFlags.NullableType)
+                        {
+                            result = ScanTypeFlags.MustBeType;
+                        }
+
+                        break;
                     default:
                         goto done;
                 }
@@ -7374,6 +7385,23 @@ parse_member_name:;
 
 done:
             return result;
+        }
+
+        /// <summary>
+        /// True when the <c>~</c> after a scanned type is the suffix of a Sharper task type <c>T~</c>
+        /// (<c>Task&lt;T&gt;</c>), when Sharper is enabled. A declaration in a tuple, <c>(A&lt;B&gt;~ c, d)</c>, would
+        /// change the meaning of the valid tuple of comparisons <c>(A &lt; B &gt; ~c, d)</c>, so a possibly generic
+        /// name takes no <c>~</c> there.
+        /// </summary>
+        private bool IsSharperTaskTypeSuffix(ParseTypeMode mode, ScanTypeFlags result)
+        {
+            if (!IsFeatureEnabled(MessageID.IDS_FeatureSharper))
+            {
+                return false;
+            }
+
+            return mode is not (ParseTypeMode.FirstElementOfPossibleTupleLiteral or ParseTypeMode.AfterTupleComma) ||
+                result != ScanTypeFlags.GenericTypeOrExpression;
         }
 
         /// <summary>
@@ -7638,9 +7666,18 @@ done:
             return ParseType();
         }
 
+        /// <summary>
+        /// True when <paramref name="tokenAfterVoid"/> makes <c>void</c> the Sharper task type <c>void~</c>
+        /// (<c>Task</c>), which, like <c>void*</c>, is allowed wherever a type is.
+        /// </summary>
+        private bool IsSharperVoidTask(SyntaxToken tokenAfterVoid)
+        {
+            return tokenAfterVoid.Kind == SyntaxKind.TildeToken && IsFeatureEnabled(MessageID.IDS_FeatureSharper);
+        }
+
         private TypeSyntax ParseTypeOrVoid()
         {
-            if (this.CurrentToken.Kind == SyntaxKind.VoidKeyword && this.PeekToken(1).Kind != SyntaxKind.AsteriskToken)
+            if (this.CurrentToken.Kind == SyntaxKind.VoidKeyword && this.PeekToken(1).Kind != SyntaxKind.AsteriskToken && !IsSharperVoidTask(this.PeekToken(1)))
             {
                 // Must be 'void' type, so create such a type node and return it.
                 return _syntaxFactory.PredefinedType(this.EatToken());
@@ -7766,6 +7803,11 @@ done:
                             type = _syntaxFactory.ArrayType(type, _pool.ToListAndFree(ranks));
                             continue;
                         }
+                    case SyntaxKind.TildeToken when IsFeatureEnabled(MessageID.IDS_FeatureSharper):
+                        // Sharper task type `T~`. Where `~` could start an expression instead, the caller has already
+                        // decided from scanning (see IsSharperTaskTypeSuffix).
+                        type = _syntaxFactory.TaskType(type, this.EatToken());
+                        continue;
                     default:
                         // token not consumed
                         break;
@@ -8185,7 +8227,7 @@ done:
             {
                 // This is a predefined type
                 var token = this.EatToken();
-                if (token.Kind == SyntaxKind.VoidKeyword && this.CurrentToken.Kind != SyntaxKind.AsteriskToken)
+                if (token.Kind == SyntaxKind.VoidKeyword && this.CurrentToken.Kind != SyntaxKind.AsteriskToken && !IsSharperVoidTask(this.CurrentToken))
                 {
                     token = this.AddError(token, mode == ParseTypeMode.Parameter ? ErrorCode.ERR_NoVoidParameter : ErrorCode.ERR_NoVoidHere);
                 }
@@ -9237,6 +9279,10 @@ done:
                     case SyntaxKind.OpenBracketToken:
                     case SyntaxKind.LessThanToken:
                     case SyntaxKind.ColonColonToken:
+                        return null;
+
+                    case SyntaxKind.TildeToken when IsFeatureEnabled(MessageID.IDS_FeatureSharper):
+                        // Sharper task type `T~`.
                         return null;
 
                     case SyntaxKind.OpenParenToken:

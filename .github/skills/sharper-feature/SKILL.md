@@ -67,7 +67,7 @@ Paths are under `src/Compilers/CSharp/Portable/`.
 
 ## Short Type Forms (Aliases onto a BCL Type)
 
-`T[..]` is `IEnumerable<T>` and `(A) -> R` is `Func<A, R>`; the task type (#20) follows the same pattern. Such a form
+`T[..]` is `IEnumerable<T>`, `(A) -> R` is `Func<A, R>` and `T~` is `Task<T>`; all three follow this pattern. Such a form
 needs no bound node and no lowering: the binder resolves it to the constructed BCL type, so metadata, the semantic
 model and IOperation see only the BCL type. The steps, with `T[..]` as the worked example (details in the
 implementation plan, "Feature 3"):
@@ -145,7 +145,11 @@ implementation plan, "Feature 3"):
 16. **Accepting a type form in `ScanType` moves ambiguities.** The cast heuristic reads an ambiguous type before `(`,
    `!` or an identifier as a cast, which would turn the valid element accesses `(a[..])(b)` and `(a?[..])` into casts.
    The type argument rule makes `F<a[..]>(x)` a generic call (accepted: in C# it needs user-defined comparisons).
-17. **`GetTypeInfo` on a type syntax drops the top-level nullable annotation.** Compare
+17. **A suffix with no expression meaning still meets the generic-name ambiguity.** `~` is only a prefix operator, so
+   `T~` needs no disambiguation, except after a possibly generic name in a tuple: `(A<B>~ c, d)` would turn the valid
+   tuple of comparisons `(A < B > ~c, d)` into a declaration. The scan refuses the suffix there
+   (`IsSharperTaskTypeSuffix`), and `IsPossibleTypedIdentifierStart` must not stop at `name ~` before scanning.
+18. **`GetTypeInfo` on a type syntax drops the top-level nullable annotation.** Compare
    `TypeWithAnnotations` of the declared symbols (`ToTestDisplayString(includeNonNullable: true)`), and compare
    with a C# twin rather than guess the display order of mixed array ranks.
 

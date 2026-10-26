@@ -344,6 +344,27 @@
       <summary>Creates a NullableTypeSyntax node.</summary>
     </FactoryComment>
   </Node>
+  <Node Name="TaskTypeSyntax" Base="TypeSyntax">
+    <!-- Sharper's task type, T~. It binds to System.Threading.Tasks.Task<T>, or to Task when T is void. -->
+    <Kind Name="TaskType"/>
+    <Field Name="ElementType" Type="TypeSyntax">
+      <PropertyComment>
+        <summary>TypeSyntax node representing the result type of the task, which may be void.</summary>
+      </PropertyComment>
+    </Field>
+    <Field Name="TildeToken" Type="SyntaxToken">
+      <Kind Name="TildeToken"/>
+      <PropertyComment>
+        <summary>SyntaxToken representing the tilde.</summary>
+      </PropertyComment>
+    </Field>
+    <TypeComment>
+      <summary>Class which represents the syntax node for a Sharper task type, such as int~.</summary>
+    </TypeComment>
+    <FactoryComment>
+      <summary>Creates a TaskTypeSyntax node.</summary>
+    </FactoryComment>
+  </Node>
   <Node Name="TupleTypeSyntax" Base="TypeSyntax">
     <Kind Name="TupleType"/>
     <Field Name="OpenParenToken" Type="SyntaxToken">
