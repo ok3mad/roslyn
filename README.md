@@ -26,10 +26,13 @@ See **[docs/sharper](docs/sharper/README.md)** for the design rules, feature sta
 
 ## Features
 
-| Feature | Example | Status |
-| --- | --- | --- |
-| [Spread in `yield return`](docs/sharper/features/yield-return-spread.md) | `yield return ..xs;` | Prototype, merged into `main` |
-| [`val` locals](docs/sharper/features/val-locals.md) | `val x = Compute();` | Prototype (local declarations), merged into `main` |
+| Feature | Example | Status | Issue |
+| --- | --- | --- | --- |
+| [Spread in `yield return`](docs/sharper/features/yield-return-spread.md) | `yield return ..xs;` | Prototype, merged into `main` | [#13](https://github.com/ok3mad/roslyn/issues/13) |
+| [`val` locals](docs/sharper/features/val-locals.md) | `val x = Compute();` | Prototype, merged into `main` | [#14](https://github.com/ok3mad/roslyn/issues/14), [#15](https://github.com/ok3mad/roslyn/issues/15), [#18](https://github.com/ok3mad/roslyn/issues/18) |
+
+The planned features, from `readonly` locals to effect tracking, each have an issue under the
+[roadmap tracking issue #12](https://github.com/ok3mad/roslyn/issues/12).
 
 ```csharp
 // csc /features:sharper
@@ -51,9 +54,9 @@ dotnet build Compilers.slnf                  # compilers only
 ```
 
 Sharper files use the `.cx` extension: the built `csc` parses them with Sharper turned on. To use Sharper in `.cs`
-files too, pass `/features:sharper`. In an SDK-style project, add `<Compile Include="**/*.cx" />` (or set
-`<Features>sharper</Features>` for `.cs` files) and point the build at the locally built compiler (see
-[Bootstrap Builds](docs/contributing/Bootstrap%20Builds.md)).
+files too, pass `/features:sharper`. In an SDK-style project, point the build at the locally built compiler (see
+[Bootstrap Builds](docs/contributing/bootstrap-builds.md)): it includes `**/*.cx` in the `Compile` items, next to
+the SDK's `**/*.cs`. Set `<Features>sharper</Features>` to use Sharper in `.cs` files too.
 
 To run the Sharper tests:
 

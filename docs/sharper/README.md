@@ -56,11 +56,14 @@ The IDE workspace does the same for documents whose path ends in `.cx`, in
 `ParseOptions` stay the project's; only its syntax tree gets the Sharper feature. Renaming a document between `.cs`
 and `.cx` reparses it.
 
+In an SDK-style project, the compiler toolset package (`Microsoft.Net.Compilers.Toolset`, which bootstrap builds use)
+adds `**/*.cx` to the `Compile` items of C# projects, under the same conditions and excludes as the SDK's `**/*.cs`
+glob. `<EnableDefaultCompileItems>false</EnableDefaultCompileItems>` and `<Compile Remove="..." />` work as they do
+for `.cs` files. Do not also include `*.cx` in the project, or the SDK reports duplicate `Compile` items.
+
 Not done yet:
 
 - The language server does not treat `.cx` files as C#.
-- The SDK does not add `*.cx` to the `Compile` items. Add them in the project:
-  `<Compile Include="**/*.cx" />`.
 
 - No other .NET tool gives `.cx` a meaning. Outside .NET it is used by Cytoscape network files, CADMATIC exchange
   files and a few small hobby languages.
@@ -74,10 +77,14 @@ Not done yet:
 
 ## Features
 
-| Feature | Summary | Status |
-| --- | --- | --- |
-| [Spread in `yield return`](features/yield-return-spread.md) | `yield return ..xs;` yields every element of `xs`. | Prototype, merged into `main` |
-| [`val` locals](features/val-locals.md) | `val x = e;` declares an implicitly typed local that cannot be reassigned, also in deconstructions, `foreach`, `out` and patterns. | Prototype, merged into `main` |
+| Feature | Summary | Status | Issue |
+| --- | --- | --- | --- |
+| [Spread in `yield return`](features/yield-return-spread.md) | `yield return ..xs;` yields every element of `xs`. | Prototype, merged into `main` | [#13](https://github.com/ok3mad/roslyn/issues/13) |
+| [`val` locals](features/val-locals.md) | `val x = e;` declares an implicitly typed local that cannot be reassigned, also in deconstructions, `foreach`, `out` and patterns. | Prototype, merged into `main` | [#14](https://github.com/ok3mad/roslyn/issues/14), [#15](https://github.com/ok3mad/roslyn/issues/15), [#18](https://github.com/ok3mad/roslyn/issues/18) |
+
+Every planned feature has an issue, one per row of the
+[syntax roadmap](planning/implementation-plan.md#syntax-roadmap), collected under the tracking issue
+[#12](https://github.com/ok3mad/roslyn/issues/12). Labels give each issue's phase, size and design certainty.
 
 "Prototype" means that the feature works end to end (binding, flow analysis, nullable analysis, lowering, tests) but
 has open questions. Those are tracked in the code as `// PROTOTYPE(sharper): ...` comments:
@@ -94,14 +101,19 @@ git grep -n "PROTOTYPE(sharper)"
 
 ## Diagnostics
 
-Sharper diagnostics are ordinary C# compiler diagnostics (`CSxxxx`). They currently take the next free numbers in
-`ErrorCode.cs`, which may clash with codes upstream adds later.
+Sharper diagnostics are ordinary C# compiler diagnostics, numbered from `SharperErrorCodes.Base` (20000) in
+`ErrorCode.cs`: CS20001 and up. Upstream C# is at about CS9400 and adds roughly a hundred codes a year, so the gap
+leaves room for decades of upstream codes. New Sharper codes go at the end of the Sharper block. Five-digit IDs work
+in `#pragma warning`, `/nowarn` and `.editorconfig`.
 
 | Code | Severity | Message |
 | --- | --- | --- |
-| CS9402 | Error | A spread 'yield return ..' cannot be used in an async iterator. |
-| CS9403 | Warning | '..{0}' is a range here, not a spread, because '{0}' is dynamic. |
-| CS9404 | Warning | Call to non-readonly member '{0}' on val variable '{1}' runs on a copy, so '{1}' is not changed. |
+| CS20001 | Error | A spread 'yield return ..' cannot be used in an async iterator. |
+| CS20002 | Warning | '..{0}' is a range here, not a spread, because '{0}' is dynamic. |
+| CS20003 | Warning | Call to non-readonly member '{0}' on val variable '{1}' runs on a copy, so '{1}' is not changed. |
+| CS20004 | Error | The syntax 'val' for a pattern is not permitted to refer to a type, but '{0}' is in scope here. Use '@val' for the type. |
+| CS20005 | Error | Deconstruction 'val (...)' form disallows a specific type for 'val'. Use '@val' for the type. |
+| CS20006 | Error | Cannot ref-assign '{0}' because it is a ref val: it always refers to the same variable. Writes through '{0}' are allowed. |
 
 ## Where the code is
 

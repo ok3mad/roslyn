@@ -43,6 +43,37 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
         protected abstract TypeSyntax TypeSyntax { get; }
 
+        /// <summary>
+        /// True for a script field declared with Sharper's <c>val</c> keyword (not a type named <c>val</c>): a top-level
+        /// <c>val x = e;</c>, or an <c>out val</c>, <c>val (a, b)</c> or <c>val</c> pattern variable in a top-level statement.
+        /// Like a val local, it cannot be reassigned after its declaration (see <c>Binder.CheckFieldValueKind</c>).
+        /// </summary>
+        internal bool IsSharperVal
+        {
+            get
+            {
+                if (!ContainingType.IsScriptClass)
+                {
+                    return false;
+                }
+
+                var typeSyntax = TypeSyntax;
+                if (typeSyntax is null)
+                {
+                    return SourceLocalSymbol.IsDeclaredInValPattern(SyntaxNode);
+                }
+
+                typeSyntax = typeSyntax.SkipScoped(out _).SkipRef();
+                if (!typeSyntax.IsVal)
+                {
+                    return false;
+                }
+
+                DeclaringCompilation.GetBinderFactory(typeSyntax.SyntaxTree).GetBinder(typeSyntax).BindTypeOrVarKeyword(typeSyntax, BindingDiagnosticBag.Discarded, out bool isVar);
+                return isVar;
+            }
+        }
+
         internal abstract SyntaxTokenList ModifiersTokenList { get; }
 
         protected void TypeChecks(TypeSymbol type, BindingDiagnosticBag diagnostics)

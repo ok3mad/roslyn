@@ -9914,7 +9914,7 @@ done:
         private bool IsIdentifierVarOrSharperVal(SyntaxToken token)
         {
             return token.IsIdentifierVar() ||
-                (token.ContextualKind == SyntaxKind.IdentifierToken && token.Text == "val" && IsFeatureEnabled(MessageID.IDS_FeatureSharper));
+                (token.ContextualKind == SyntaxKind.ValKeyword && IsFeatureEnabled(MessageID.IDS_FeatureSharper));
         }
 
         private bool IsVarType()
