@@ -7,6 +7,7 @@ This repository is the **Sharper** fork of [dotnet/roslyn](https://github.com/do
 
 - [Sharper overview](sharper/README.md): goals, design rules, feature status, and where the code is.
 - [Features](sharper/features/): one document per Sharper feature.
+- [Planning](sharper/planning/): the language design brainstorm and the implementation plan.
 
 ## Inherited from Roslyn
 

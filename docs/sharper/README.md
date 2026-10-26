@@ -12,6 +12,14 @@ that is being turned into the Sharper compiler. This folder is the home of Sharp
 
 Sharper is not a fork of the language specification, a replacement for C#, or a supported product.
 
+## Planning
+
+- [Brainstorm](planning/brainstorm.md): the language design draft. It covers the motivation (a stricter C# for coding
+  agents), the proposed syntax, immutability, effects and purity, bindings for existing .NET code, and sharpening
+  (converting C# to Sharper).
+- [Implementation plan](planning/implementation-plan.md): how features get built inside Roslyn. It has the map of
+  compiler areas touched, known traps, decisions, the syntax roadmap with its suggested order, and follow-ups.
+
 ## Design rules
 
 Every Sharper feature follows these rules. The [`sharper-feature` skill](../../.github/skills/sharper-feature/SKILL.md)
@@ -58,6 +66,7 @@ Sharper diagnostics are ordinary C# compiler diagnostics (`CSxxxx`). They curren
 | --- | --- | --- |
 | CS9402 | Error | A spread 'yield return ..' cannot be used in an async iterator. |
 | CS9403 | Warning | '..{0}' is a range here, not a spread, because '{0}' is dynamic. |
+| CS9404 | Warning | Call to non-readonly member '{0}' on val variable '{1}' runs on a copy, so '{1}' is not changed. (`sharper/val` only) |
 
 ## Where the code is
 
