@@ -28,7 +28,7 @@ internal abstract partial class AbstractSyntaxTreeFactoryService : ISyntaxTreeFa
 
     public SyntaxTree ParseSyntaxTree(string filePath, ParseOptions options, SourceText text, CancellationToken cancellationToken)
     {
-        options ??= GetDefaultParseOptions();
+        options = GetParseOptionsForFile(filePath, options ?? GetDefaultParseOptions());
 
         if (_syntaxTreeCache is null)
             return ParseSyntaxTreeCore(filePath, options, text, cancellationToken);
@@ -45,4 +45,11 @@ internal abstract partial class AbstractSyntaxTreeFactoryService : ISyntaxTreeFa
     }
 
     protected abstract SyntaxTree ParseSyntaxTreeCore(string filePath, ParseOptions options, SourceText text, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Returns the options a file is parsed with, given the options of its project. Called before the syntax tree cache
+    /// is consulted, so trees parsed with different options are never shared. Sharper turns on by the .cx extension.
+    /// </summary>
+    protected virtual ParseOptions GetParseOptionsForFile(string filePath, ParseOptions options)
+        => options;
 }
