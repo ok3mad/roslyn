@@ -61,9 +61,13 @@ adds `**/*.cx` to the `Compile` items of C# projects, under the same conditions 
 glob. `<EnableDefaultCompileItems>false</EnableDefaultCompileItems>` and `<Compile Remove="..." />` work as they do
 for `.cs` files. Do not also include `*.cx` in the project, or the SDK reports duplicate `Compile` items.
 
+The language server treats `.cx` files as C# (`LanguageInfoProvider`), and reloads a project when a `.cx` file is
+added to or removed from its directory.
+
 Not done yet:
 
-- The language server does not treat `.cx` files as C#.
+- `dotnet run app.cx`: the SDK's file-based apps only run `.cs` files, so the language server never treats a loose
+  `.cx` file as a file-based app.
 
 - No other .NET tool gives `.cx` a meaning. Outside .NET it is used by Cytoscape network files, CADMATIC exchange
   files and a few small hobby languages.

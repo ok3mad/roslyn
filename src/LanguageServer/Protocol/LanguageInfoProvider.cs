@@ -26,6 +26,8 @@ internal sealed class LanguageInfoProvider : ILanguageInfoProvider
     {
         { ".cs", s_csharpLanguageInformation },
         { ".csx", s_csharpLanguageInformation },
+        // Sharper files are C# documents; the workspace parses them with the Sharper feature turned on.
+        { ".cx", s_csharpLanguageInformation },
         { ".fs", s_fsharpLanguageInformation },
         { ".fsx", s_fsharpLanguageInformation },
         { ".vb", s_vbLanguageInformation },
