@@ -7449,6 +7449,45 @@ public class C
         }
 
         [Fact]
+        public void SharperFileExtension()
+        {
+            string source = """
+class C
+{
+    static int M()
+    {
+        val x = 1;
+        return x;
+    }
+}
+""";
+
+            var dir = Temp.CreateDirectory();
+            dir.CreateFile("a.cs").WriteAllText(source.Replace("class C", "class A"));
+            dir.CreateFile("b.cx").WriteAllText(source.Replace("class C", "class B"));
+            dir.CreateFile("c.CX").WriteAllText(source.Replace("class C", "class D"));
+
+            var cmd = CreateCSharpCompiler(null, dir.Path, new[] { "/t:library", "a.cs", "b.cx", "c.CX" });
+            var comp = (CSharpCompilation)cmd.CreateCompilation(TextWriter.Null, new TouchedFileLogger(), NullErrorLogger.Instance);
+
+            var trees = comp.SyntaxTrees.ToDictionary(t => PathUtilities.GetFileName(t.FilePath));
+            Assert.False(trees["a.cs"].Options.HasFeature(Feature.Sharper));
+            Assert.True(trees["b.cx"].Options.HasFeature(Feature.Sharper));
+            Assert.True(trees["c.CX"].Options.HasFeature(Feature.Sharper));
+
+            // The .cs file reports the usual C# errors for 'val'; the .cx files compile.
+            var errors = comp.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).ToArray();
+            Assert.NotEmpty(errors);
+            Assert.All(errors, d => Assert.Equal("a.cs", PathUtilities.GetFileName(d.Location.SourceTree.FilePath)));
+
+            // With /features:sharper, every file is a Sharper file.
+            cmd = CreateCSharpCompiler(null, dir.Path, new[] { "/t:library", "/features:sharper", "a.cs", "b.cx" });
+            comp = (CSharpCompilation)cmd.CreateCompilation(TextWriter.Null, new TouchedFileLogger(), NullErrorLogger.Instance);
+            Assert.All(comp.SyntaxTrees, t => Assert.True(t.Options.HasFeature(Feature.Sharper)));
+            Assert.Empty(comp.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+        }
+
+        [Fact]
         public void CreateCompilation_MainAndTargetIncompatibilities()
         {
             string source = @"
