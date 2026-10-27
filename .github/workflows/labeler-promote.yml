@@ -7,6 +7,7 @@
 name: "Labeler: Promotion"
 
 on:
+  # Sharper: triggers other than workflow_dispatch are turned off (.github/skills/sync-upstream).
   # Dispatched via the Actions UI, promotes the staged models from
   # a staged slot into the prediction environment
   workflow_dispatch:

@@ -1,10 +1,12 @@
 name: Backport PR to branch
 on:
-  issue_comment:
-    types: [created]
-  schedule:
+  # Sharper: triggers other than workflow_dispatch are turned off (.github/skills/sync-upstream).
+  workflow_dispatch:
+  # sharper-off: issue_comment:
+  # sharper-off:   types: [created]
+  # sharper-off: schedule:
     # once a day at 13:00 UTC to cleanup old runs
-    - cron: '0 13 * * *'
+  # sharper-off:   - cron: '0 13 * * *'
 
 permissions:
   contents: write

@@ -60,9 +60,10 @@
 
 name: "Build Failure Analysis"
 on:
-  check_run:
-    types:
-      - completed
+  # Sharper: triggers other than workflow_dispatch are turned off (.github/skills/sync-upstream).
+  # sharper-off: check_run:
+  # sharper-off:   types:
+  # sharper-off:     - completed
   # roles: all # Roles processed as role check in pre-activation job
   workflow_dispatch:
     inputs:

@@ -7,6 +7,7 @@
 name: "Labeler: Training"
 
 on:
+  # Sharper: triggers other than workflow_dispatch are turned off (.github/skills/sync-upstream).
   workflow_dispatch:
     inputs:
       type:
