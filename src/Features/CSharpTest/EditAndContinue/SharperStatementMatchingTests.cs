@@ -22,19 +22,21 @@ public sealed class SharperStatementMatchingTests : EditingTestBase
 {
     private static readonly CSharpParseOptions s_sharperParseOptions = CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.Preview).WithFeatures([new("sharper", "true")]);
 
-    private static Match<SyntaxNode> GetIteratorMatch(string body1, string body2, CSharpParseOptions parseOptions)
+    private static Match<SyntaxNode> GetIteratorMatch(string body1, string body2, CSharpParseOptions parseOptions, bool isAsync = false)
     {
-        var oldBody = GetIteratorBody(body1, parseOptions);
-        var newBody = GetIteratorBody(body2, parseOptions);
+        var oldBody = GetIteratorBody(body1, parseOptions, isAsync);
+        var newBody = GetIteratorBody(body2, parseOptions, isAsync);
 
         var match = oldBody.ComputeSingleRootMatch(newBody, knownMatches: null);
         Contract.ThrowIfNull(match);
         return match;
     }
 
-    private static MemberBody GetIteratorBody(string body, CSharpParseOptions parseOptions)
+    private static MemberBody GetIteratorBody(string body, CSharpParseOptions parseOptions, bool isAsync)
     {
-        var source = WrapMethodBodyWithClass(body.NormalizeLineEndings(), MethodKind.Iterator);
+        var source = isAsync
+            ? "class C { async System.Collections.Generic.IAsyncEnumerable<int> F() {" + body.NormalizeLineEndings() + "} }"
+            : WrapMethodBodyWithClass(body.NormalizeLineEndings(), MethodKind.Iterator);
         var tree = SyntaxFactory.ParseSyntaxTree(source, parseOptions);
         tree.GetDiagnostics().Verify();
 
@@ -111,6 +113,35 @@ public sealed class SharperStatementMatchingTests : EditingTestBase
         var expected = new MatchingPairs
         {
             { "A();", "A();" }
+        };
+
+        expected.AssertEqual(actual);
+    }
+
+    [Fact]
+    public void YieldReturnSpread_AsyncIterator_MatchesSpread()
+    {
+        var src1 = """
+            await A();
+            yield return ..xs;
+            yield return x;
+            """;
+        var src2 = """
+            await A();
+            yield return xs;
+            yield return ..ys;
+            yield return x;
+            """;
+
+        var actual = ToMatchingPairs(GetIteratorMatch(src1, src2, s_sharperParseOptions, isAsync: true));
+
+        // As in a synchronous iterator, a spread over a synchronous source matches only a spread.
+        var expected = new MatchingPairs
+        {
+            { "await A();", "await A();" },
+            { "await A()", "await A()" },
+            { "yield return ..xs;", "yield return ..ys;" },
+            { "yield return x;", "yield return x;" }
         };
 
         expected.AssertEqual(actual);

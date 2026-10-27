@@ -52,9 +52,14 @@ IEnumerable<T> Walk(Node<T> node)
 
 ## Limitations
 
-- **Async iterators:** not supported yet (CS20001), whether the source is synchronous or asynchronous. A synchronous
-  source is to be supported ([#49](https://github.com/ok3mad/roslyn/issues/49)). An asynchronous source never will be,
-  because it would insert an `await` the user never wrote ([#43](https://github.com/ok3mad/roslyn/issues/43)).
+- **Async iterators** spread a synchronous source (an array, `IEnumerable<T>`, `T[..]`, a string, a `GetEnumerator`
+  pattern) like a `foreach` without `await` ([#49](https://github.com/ok3mad/roslyn/issues/49)). An asynchronous source
+  (`IAsyncEnumerable<T>`, a `GetAsyncEnumerator` pattern) is error CS20001, and always will be, because spreading it
+  would insert an `await` the user never wrote ([#43](https://github.com/ok3mad/roslyn/issues/43)); write
+  `await foreach (var x in xs) yield return x;` instead. A source that is both synchronous and asynchronous is
+  enumerated synchronously, as by `foreach`. The spread itself never awaits, so it does not observe the
+  `[EnumeratorCancellation]` token; the source's enumerator is disposed when the consumer stops early
+  (`break` in `await foreach`, `DisposeAsync`).
 - **`dynamic` operands:** `..d` converts `d` to `Index` at runtime, so it is valid C# and stays a range. The compiler
   warns (CS20002); convert `d` to a sequence type to spread it. Where a range is not valid (for example an iterator of
   `int`), `..d` spreads and enumerates `d` dynamically. Deciding at runtime instead is [#42](https://github.com/ok3mad/roslyn/issues/42).
@@ -77,6 +82,8 @@ The binder (`Binder_Statements.cs`, `BindYieldReturnStatement`) trial-binds the 
 `foreach` of plain yield returns before the iterator state machine is built. The generated `try`/`finally` and the
 yield return share the statement's syntax, so the iterator rewriter (`IteratorMethodToStateMachineRewriter.PushFrame`)
 gives the finalize state the second relative ordinal of that syntax node, which Edit and Continue uses to map states.
+In an async iterator the `try`/`finally` has no state of its own; `SyntaxBindingUtilities.BindsToTryStatement`, which
+the async rewriter asserts on, accepts the spread's syntax.
 The IDE's Edit and Continue matcher (`SyntaxComparer` in `src/Features/CSharp/Portable/EditAndContinue`) never matches
 a spread with a yield return of a single value. Tests are the `YieldReturnSpread_*` tests in `SharperTests.cs`,
 `EditAndContinueSharperTests.cs` (`src/Compilers/CSharp/Test/Emit2`) and `SharperStatementMatchingTests.cs`

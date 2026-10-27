@@ -2515,7 +2515,7 @@ namespace Microsoft.CodeAnalysis.CSharp
 
         // Sharper diagnostics are numbered from SharperErrorCodes.Base, far above the upstream numbers (CS9401 today), so
         // upstream can keep adding codes without clashing. Add new Sharper codes at the end of this block.
-        ERR_SharperSpreadInAsyncIterator = SharperErrorCodes.Base + 1,
+        ERR_SharperSpreadOfAsyncSequence = SharperErrorCodes.Base + 1,
         WRN_SharperDynamicRangeNotSpread = SharperErrorCodes.Base + 2,
         WRN_SharperValMemberCallOnCopy = SharperErrorCodes.Base + 3,
         ERR_SharperValMayNotBindToType = SharperErrorCodes.Base + 4,

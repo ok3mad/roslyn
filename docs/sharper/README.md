@@ -121,7 +121,7 @@ in `#pragma warning`, `/nowarn` and `.editorconfig`.
 
 | Code | Severity | Message |
 | --- | --- | --- |
-| CS20001 | Error | A spread 'yield return ..' cannot be used in an async iterator. |
+| CS20001 | Error | A spread 'yield return ..' cannot enumerate the asynchronous sequence '{0}', because that would need an 'await' that is not written. Use 'await foreach' with 'yield return' instead. |
 | CS20002 | Warning | '..{0}' is a range here, not a spread, because '{0}' is dynamic. |
 | CS20003 | Warning | Call to non-readonly member '{0}' on val variable '{1}' runs on a copy, so '{1}' is not changed. |
 | CS20004 | Error | The syntax 'val' for a pattern is not permitted to refer to a type, but '{0}' is in scope here. Use '@val' for the type. |
