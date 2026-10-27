@@ -1979,6 +1979,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             }
 
             // PROTOTYPE(sharper): Silence the warning for members inferred not to mutate 'this', once member mutation is inferred.
+            // Tracked in #84; the warning's default severity until then is #85.
             var local = receiver is BoundImplicitIndexerReceiverPlaceholder placeholder ? placeholder.Receiver : receiver;
             Symbol variable = local is BoundFieldAccess field ? field.FieldSymbol : ((BoundLocal)local).LocalSymbol;
             Error(diagnostics, ErrorCode.WRN_SharperValMemberCallOnCopy, local.Syntax, method, variable);
