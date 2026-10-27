@@ -161,6 +161,11 @@ dotnet test src/Compilers/CSharp/Test/Semantic/Microsoft.CodeAnalysis.CSharp.Sem
 Also run them with `ROSLYN_TEST_IOPERATION=1`, which checks IOperation, the semantic model and the control flow graph
 for every compilation.
 
+To check that Sharper leaves existing C# alone, build the whole repository with its own compiler and
+`/features:sharper`, then run the unit tests on the result. The
+[`sharper-self-build`](../../.github/skills/sharper-self-build/SKILL.md) skill has the commands and shows how to tell
+failures Sharper causes from the rest.
+
 ## Not covered yet
 
 Sharper currently changes only the C# compiler. The IDE (completion, classification, refactorings), the language
