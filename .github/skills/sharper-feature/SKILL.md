@@ -50,6 +50,9 @@ three.
    Kind checks (`BoundKind.X`, `is BoundX`) hide in flow analysis, lowering helpers and region analysis, and
    several of them throw or assert on unknown kinds.
 4. Implement layer by layer (below), re-running the tests after each one. The next failure names the next layer.
+5. **Before merging, make the analyzer build clean** (see Testing). Test runs and plain builds skip the analyzers, so
+   public API changes (RS0016, RS0017) show up only there. An error that is already on `main` still blocks: fix it or
+   link its issue in the PR.
 
 ## Layer Checklist
 
@@ -139,10 +142,11 @@ implementation plan, "Feature 3"):
    values compile silently. Diagnostics have no such limit: Sharper codes start at `SharperErrorCodes.Base` (CS20001).
    Giving a token field a second kind in `Syntax.xml` silently drops the generated convenience overload that fills in
    the token (`SyntaxFactory.VarPattern(designation)`), a shipped public API and a binary break (#61). Only the
-   analyzer build reports it (RS0017); restore such overloads by hand.
+   analyzer build reports it (RS0017); restore such overloads by hand at the end of `Syntax/SyntaxFactory.cs`.
 14. **A new syntax node is public API and hides in type switches.** When no existing node fits (function types), add it
    to `Syntax.xml` with a `SyntaxKind` from 9900 up (Sharper node kinds count up from there, apart from upstream),
-   regenerate, and copy the build's RS0016 list into `PublicAPI.Unshipped.txt`. A new type node also needs
+   regenerate, and copy the RS0016 list of the analyzer build (`-p:RunAnalyzersDuringBuild=true`; a plain build reports
+   nothing) into `PublicAPI.Unshipped.txt`. A new type node also needs
    `SyntaxFacts.IsTypeSyntax`, `SyntaxFacts.IsInTypeOnlyContext` (for the semantic model) and
    `SyntaxExtensions.VisitRankSpecifiers`, which throws on unknown type kinds. In the parser, gate every lookahead
    change on Sharper and scan nested parentheses in one pass: trying a second scan after a failed one is exponential in
