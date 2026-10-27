@@ -103,4 +103,3 @@ without a designation is still a type test.
 - **Edit and Continue** has not been verified with `val` ([#90](https://github.com/ok3mad/roslyn/issues/90)).
 - **Deeper immutability:** `val` makes the binding read-only, and a struct value with it, but not the object behind a
   reference. A type-level marker is an open question ([#92](https://github.com/ok3mad/roslyn/issues/92)).
-- **Not started:** `readonly` locals ([#16](https://github.com/ok3mad/roslyn/issues/16)).
