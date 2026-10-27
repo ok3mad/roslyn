@@ -290,7 +290,7 @@ lowering: the binder resolves the syntax to the constructed BCL type, so everyth
 
 ### Rewriting a type form onto a BCL type
 
-This is the pattern for Sharper's short type forms. Function types (#21) were built in parallel and follow it with a new syntax node: `BindFunctionType` constructs `Func` or `Action` with the same `ConstructNamedType` call. The task type (#20) follows it too, with the syntax node `TaskTypeSyntax` and `BindSharperTaskType`.
+This is the pattern for Sharper's short type forms. Function types (#21) were built in parallel and follow it with a new syntax node: `BindFunctionType` constructs `Func` or `Action` with the same `BindSharperTypeAlias` call. The task type (#20) follows it too, with the syntax node `TaskTypeSyntax` and `BindSharperTaskType`.
 
 1. **Syntax.** Reuse a C# node that already parses the form, and give the Sharper reading one gated predicate on
    it. `T[..]` is an `ArrayTypeSyntax` whose rank holds a range with no operands; `ArrayRankSpecifierSyntax.IsSharperSequence`
@@ -303,9 +303,11 @@ This is the pattern for Sharper's short type forms. Function types (#21) were bu
    expression.
 3. **Binder.** Bind the type arguments as usual, get the generic definition with `GetSpecialType` or
    `GetWellKnownType` (they report a missing type), then call `BindSharperTypeAlias` (`Binder_SharperTypes.cs`). It
-   constructs the type through `ConstructNamedType`, which checks constraints now or leaves them to the declaring
-   symbol where the binder suppresses checks (signatures), exactly as for the type written out. Set the nullable
-   annotation from the form's last token, as the C# form would.
+   constructs the type and checks constraints now, or leaves them to the declaring symbol where the binder suppresses
+   checks (signatures), exactly as for the type written out. Pass it one location per type argument, the part of the
+   form that stands for it (a function type's parameter and return types, the element of `T[..]` or `T~`), so that a
+   constraint error lands where the C# form reports it. Set the nullable annotation from the form's last token, as
+   the C# form would.
 4. **Places that read the syntax directly.** Local declarations bind array sizes as "invalid dimensions" for the
    semantic model (`Binder_Statements.cs`), and the semantic model would bind the `..` as `Range.All`
    (`CSharpSemanticModel.CanGetSemanticInfo`). Both skip a sequence rank.
@@ -399,7 +401,7 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 - [ ] Sequence type: decide whether array creation should accept sequence elements (`new int[3][..]`, today CS0178, or `new int[..][3]`). [#64](https://github.com/ok3mad/roslyn/issues/64)
 - [x] Function types: parentheses apply a suffix to the whole function type, `((int) -> int)?`, `((int) -> int)[]` and `((int) -> int)~`, with the new node `ParenthesizedTypeSyntax`. `((p)->F)[i]`, `((p)->F)?.X`, `((p)->F) ? a : b` and `(((p)->F))(x)` keep their C# meaning. [#58](https://github.com/ok3mad/roslyn/issues/58)
 - [x] Function types in patterns: declaration, type, recursive, list and property patterns, `switch` statements and expressions (`x is (int) -> int f`, `case () -> void a:`). In C#, `e is (p)->F` is a syntax error (the pattern parser stops at `->`), so there was no C# meaning to keep; `e is p->F` keeps its meaning. [#59](https://github.com/ok3mad/roslyn/issues/59)
-- [ ] Sequence type: report an invalid element type on the element type rather than the whole sequence type (same cause as #62 for function types). [#65](https://github.com/ok3mad/roslyn/issues/65)
+- [x] Report constraint errors of the short type forms where their C# twins do: on a function type's parameter or return type ([#62](https://github.com/ok3mad/roslyn/issues/62)), and on the element of `T[..]` ([#65](https://github.com/ok3mad/roslyn/issues/65)) and `T~`.
 - [ ] Sharpener: rewrite `F<a[..]>(x)` (two comparisons in C#) as `F < (a[..]) > (x)`, the sequence type's accepted break. [#66](https://github.com/ok3mad/roslyn/issues/66)
 - [ ] `readonly` locals: decide `readonly` in `for` initializers, `foreach`, deconstruction and `out` (no modifier slot; a public syntax change). [#95](https://github.com/ok3mad/roslyn/issues/95)
 - [ ] `readonly` locals: IDE support (completion, refactorings that drop or break `readonly`). [#96](https://github.com/ok3mad/roslyn/issues/96)

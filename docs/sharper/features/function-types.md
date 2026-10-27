@@ -42,7 +42,8 @@ var name = o switch { () -> void => "action", (int) -> int f => "f" + f(1), _ =>
 - **Parameters are types,** without names or modifiers. A parameter of tuple type needs its own parentheses:
   `((int, int)) -> int`.
 - **Constraints are those of `Func` and `Action`:** a pointer or a static type cannot be a parameter or return type
-  (CS0306, CS0718), and a ref struct can only be one where `Func` allows it (.NET 9 and later).
+  (CS0306, CS0718), and a ref struct can only be one where `Func` allows it (.NET 9 and later). The error is reported
+  where the `Func` spelling reports it: on the offending parameter or return type.
 - **Nullable annotations** flow into the type arguments, with the same warnings as the `Func` spelling.
 
 ### Parsing
@@ -79,7 +80,6 @@ var name = o switch { () -> void => "action", (int) -> int f => "f" + f(1), _ =>
   cannot appear in a public signature. What to do instead is [#56](https://github.com/ok3mad/roslyn/issues/56).
 - **Parameter names** such as `(int width, int height) -> int` are not supported (CS20007), because `Func` cannot
   carry them ([#57](https://github.com/ok3mad/roslyn/issues/57)).
-- **Constraint errors in a local** span the whole function type instead of the offending parameter type.
 - **IDE:** the editor knows nothing about Sharper yet, so completion and formatting may not handle function types.
 
 ## Implementation
@@ -105,5 +105,6 @@ The parser (`LanguageParser.cs`) changes only when Sharper is on:
   while a tuple or parenthesized type ends at its own `)` or suffix.
 
 The binder (`Binder_Symbols.cs`, `BindFunctionType`) binds the parameter and return types and constructs the
-well-known `Func` or `Action`, checking constraints as for any generic type. There is no bound node, so flow
+well-known `Func` or `Action` through `BindSharperTypeAlias` (`Binder_SharperTypes.cs`), checking constraints as for
+any generic type, with each parameter and return type as the location of its type argument. There is no bound node, so flow
 analysis, lowering and IOperation need no changes. Tests are the `FunctionType_*` tests in `SharperTests.cs`.

@@ -83,8 +83,9 @@ implementation plan, "Feature 3"):
    scanning. Do not return `ScanTypeFlags.MustBeType` if the form is also an expression, and check `ScanCast` and
    `ScanPossibleTypeArgumentList` for valid C# that would change meaning.
 3. **Bind through `BindSharperTypeAlias`** (`Binder/Binder_SharperTypes.cs`), with the definition from
-   `GetSpecialType` or `GetWellKnownType`. It constructs the type through `ConstructNamedType`, so constraint checks
-   and their suppression in signatures behave as for the type written out.
+   `GetSpecialType` or `GetWellKnownType`, and one location per type argument (the part of the form that stands for
+   it). Constraint checks, their suppression in signatures, and the location of a constraint error then behave as for
+   the type written out.
 4. **Find the code that reads the syntax directly**: `VisitRankSpecifiers` callers that bind sizes, and
    `CSharpSemanticModel.CanGetSemanticInfo` for sub-expressions that are now part of a type.
 5. **Test against the C# twin** in every type position (compare member and local symbols), including inside a
