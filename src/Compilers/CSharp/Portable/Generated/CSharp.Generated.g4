@@ -375,6 +375,7 @@ type
   | name
   | nullable_type
   | omitted_type_argument
+  | parenthesized_type
   | pointer_type
   | predefined_type
   | ref_type
@@ -426,6 +427,10 @@ nullable_type
 
 omitted_type_argument
   : /* epsilon */
+  ;
+
+parenthesized_type
+  : '(' type ')'
   ;
 
 pointer_type

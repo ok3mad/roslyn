@@ -1013,6 +1013,55 @@ public sealed partial class FunctionTypeSyntax : TypeSyntax
     public FunctionTypeSyntax AddParameters(params FunctionPointerParameterSyntax[] items) => WithParameters(this.Parameters.AddRange(items));
 }
 
+/// <summary>Class which represents the syntax node for a Sharper parenthesized type, such as ((int) -&gt; int).</summary>
+/// <remarks>
+/// <para>This node is associated with the following syntax kinds:</para>
+/// <list type="bullet">
+/// <item><description><see cref="SyntaxKind.ParenthesizedType"/></description></item>
+/// </list>
+/// </remarks>
+public sealed partial class ParenthesizedTypeSyntax : TypeSyntax
+{
+    private TypeSyntax? type;
+
+    internal ParenthesizedTypeSyntax(InternalSyntax.CSharpSyntaxNode green, SyntaxNode? parent, int position)
+      : base(green, parent, position)
+    {
+    }
+
+    /// <summary>SyntaxToken representing the open parenthesis.</summary>
+    public SyntaxToken OpenParenToken => new SyntaxToken(this, ((InternalSyntax.ParenthesizedTypeSyntax)this.Green).openParenToken, Position, 0);
+
+    /// <summary>TypeSyntax node representing the enclosed type, a function type.</summary>
+    public TypeSyntax Type => GetRed(ref this.type, 1)!;
+
+    /// <summary>SyntaxToken representing the close parenthesis.</summary>
+    public SyntaxToken CloseParenToken => new SyntaxToken(this, ((InternalSyntax.ParenthesizedTypeSyntax)this.Green).closeParenToken, GetChildPosition(2), GetChildIndex(2));
+
+    internal override SyntaxNode? GetNodeSlot(int index) => index == 1 ? GetRed(ref this.type, 1)! : null;
+
+    internal override SyntaxNode? GetCachedSlot(int index) => index == 1 ? this.type : null;
+
+    public override void Accept(CSharpSyntaxVisitor visitor) => visitor.VisitParenthesizedType(this);
+    public override TResult? Accept<TResult>(CSharpSyntaxVisitor<TResult> visitor) where TResult : default => visitor.VisitParenthesizedType(this);
+
+    public ParenthesizedTypeSyntax Update(SyntaxToken openParenToken, TypeSyntax type, SyntaxToken closeParenToken)
+    {
+        if (openParenToken != this.OpenParenToken || type != this.Type || closeParenToken != this.CloseParenToken)
+        {
+            var newNode = SyntaxFactory.ParenthesizedType(openParenToken, type, closeParenToken);
+            var annotations = GetAnnotations();
+            return annotations?.Length > 0 ? newNode.WithAnnotations(annotations) : newNode;
+        }
+
+        return this;
+    }
+
+    public ParenthesizedTypeSyntax WithOpenParenToken(SyntaxToken openParenToken) => Update(openParenToken, this.Type, this.CloseParenToken);
+    public ParenthesizedTypeSyntax WithType(TypeSyntax type) => Update(this.OpenParenToken, type, this.CloseParenToken);
+    public ParenthesizedTypeSyntax WithCloseParenToken(SyntaxToken closeParenToken) => Update(this.OpenParenToken, this.Type, closeParenToken);
+}
+
 /// <summary>Tuple type element.</summary>
 /// <remarks>
 /// <para>This node is associated with the following syntax kinds:</para>

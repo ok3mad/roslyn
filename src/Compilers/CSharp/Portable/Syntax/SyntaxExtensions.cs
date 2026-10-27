@@ -448,6 +448,10 @@ namespace Microsoft.CodeAnalysis.CSharp
                         var taskTypeSyntax = (TaskTypeSyntax)type;
                         stack.Push(taskTypeSyntax.ElementType);
                         break;
+                    case SyntaxKind.ParenthesizedType:
+                        var parenthesizedTypeSyntax = (ParenthesizedTypeSyntax)type;
+                        stack.Push(parenthesizedTypeSyntax.Type);
+                        break;
                     case SyntaxKind.FunctionType:
                         var functionTypeSyntax = (FunctionTypeSyntax)type;
                         stack.Push(functionTypeSyntax.ReturnType);

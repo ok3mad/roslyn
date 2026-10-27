@@ -1,0 +1,2 @@
+# Keeps the Roslyn repository's code style rules out of the playground.
+root = true

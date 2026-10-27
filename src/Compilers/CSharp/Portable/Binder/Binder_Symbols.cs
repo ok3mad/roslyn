@@ -500,6 +500,14 @@ namespace Microsoft.CodeAnalysis.CSharp
                         return TypeWithAnnotations.Create(AreNullableAnnotationsEnabled(taskTypeSyntax.TildeToken), BindSharperTaskType(taskTypeSyntax, diagnostics, basesBeingResolved));
                     }
 
+                case SyntaxKind.ParenthesizedType:
+                    {
+                        // Sharper: `((A) -> R)` is the function type it encloses; the parentheses only let a suffix apply to it.
+                        var parenthesizedTypeSyntax = (ParenthesizedTypeSyntax)syntax;
+                        MessageID.IDS_FeatureSharper.CheckFeatureAvailability(diagnostics, parenthesizedTypeSyntax.OpenParenToken);
+                        return BindType(parenthesizedTypeSyntax.Type, diagnostics, basesBeingResolved, suppressUseSiteDiagnostics);
+                    }
+
                 case SyntaxKind.RefType:
                     {
                         // ref needs to be handled by the caller
@@ -724,6 +732,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             MessageID.IDS_FeatureSharper.CheckFeatureAvailability(diagnostics, syntax.ArrowToken);
 
             var typeArguments = ArrayBuilder<TypeWithAnnotations>.GetInstance(syntax.Parameters.Count + 1);
+            var typeArgumentLocations = ArrayBuilder<Location>.GetInstance(syntax.Parameters.Count + 1);
             foreach (var parameter in syntax.Parameters)
             {
                 // PROTOTYPE(sharper): ref, out and in parameters need a delegate other than Func and Action
@@ -735,6 +744,7 @@ namespace Microsoft.CodeAnalysis.CSharp
 
                 Debug.Assert(parameter.Type is { });
                 typeArguments.Add(BindTypeArgument(parameter.Type, diagnostics, basesBeingResolved));
+                typeArgumentLocations.Add(parameter.Type.Location);
             }
 
             // The parser reports void anywhere but in the return type.
@@ -743,6 +753,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             if (!returnsVoid)
             {
                 typeArguments.Add(returnType);
+                typeArgumentLocations.Add(syntax.ReturnType.Location);
             }
 
             var wellKnownType = returnsVoid
@@ -756,6 +767,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 Debug.Assert(syntax.Parameters.Count > 16);
                 diagnostics.Add(ErrorCode.ERR_SharperFunctionTypeTooManyParameters, syntax.Location, 16);
                 typeArguments.Free();
+                typeArgumentLocations.Free();
                 return new ExtendedErrorTypeSymbol(this.Compilation, name: "", arity: 0, errorInfo: null, unreported: false);
             }
 
@@ -763,11 +775,11 @@ namespace Microsoft.CodeAnalysis.CSharp
             if (typeArguments.Count == 0)
             {
                 typeArguments.Free();
+                typeArgumentLocations.Free();
                 return delegateType;
             }
 
-            // Constraint errors, such as a pointer type argument, are reported on the whole function type.
-            return ConstructNamedType(delegateType, syntax, typeArgumentsSyntax: default, typeArguments.ToImmutableAndFree(), basesBeingResolved, diagnostics);
+            return BindSharperTypeAlias(delegateType, typeArguments.ToImmutableAndFree(), typeArgumentLocations.ToImmutableAndFree(), syntax, basesBeingResolved, diagnostics);
         }
 
         private TypeSymbol BindTupleType(TupleTypeSyntax syntax, BindingDiagnosticBag diagnostics, ConsList<TypeSymbol> basesBeingResolved)

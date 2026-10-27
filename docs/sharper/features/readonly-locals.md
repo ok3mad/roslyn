@@ -66,8 +66,8 @@ Whether to support them is [#95](https://github.com/ok3mad/roslyn/issues/95).
 - `readonly var (a, b) = e` and `(readonly int a, readonly var b) = e`: use `val (a, b) = e`.
 - `out readonly int n`: use `out val n`.
 
-The IDE does not know `readonly` locals yet ([#96](https://github.com/ok3mad/roslyn/issues/96)), and parameters have no
-`readonly` form ([#97](https://github.com/ok3mad/roslyn/issues/97)). CS20010 warns for every non-readonly member, like
+The IDE does not know `readonly` locals yet ([#96](https://github.com/ok3mad/roslyn/issues/96)). Parameters have their
+own page: [`readonly` parameters](readonly-parameters.md). CS20010 warns for every non-readonly member, like
 CS20003 ([#84](https://github.com/ok3mad/roslyn/issues/84)).
 
 ## Code

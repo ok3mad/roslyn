@@ -1,0 +1,6 @@
+<!-- Turns off the Roslyn repository's central package management for the playground. -->
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+</Project>

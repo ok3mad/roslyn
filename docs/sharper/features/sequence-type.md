@@ -42,8 +42,9 @@ IEnumerable<int> Evens(IEnumerable<int> xs) => xs.Where(x => x % 2 == 0);
 
 - **Only a lone `..`.** `int[1..]`, `int[..1]` and `int[.., ..]` are array sizes, with the C# error CS0270. So is
   `int[. .]`, with a space between the dots.
-- **Invalid elements** report what `IEnumerable<T>` reports: CS0718 for a static class, CS0306 for a pointer. A
-  missing `IEnumerable<T>` is CS0518.
+- **Invalid elements** report what `IEnumerable<T>` reports: CS0718 for a static class, CS0306 for a pointer. The error
+  is on the element, everything to the left of the `[..]` (`System.Console` in `System.Console[..] x`), where the
+  `IEnumerable<T>` spelling reports it. A missing `IEnumerable<T>` is CS0518.
 - **C# wins in expressions.** `a[..]` and `a?[..]` are also element accesses with a range, and keep that meaning:
   `(a[..])`, `(a[..]) - 1`, `(a[..])(b)`, `(a?[..]).b`, `(a[..])!`, `(a[..]) with { }` and `a[..] = b` are unchanged.
   A parenthesized `(A[..])` is a cast only before an identifier or a literal: `(A[..])b` is a cast.
@@ -61,9 +62,6 @@ IEnumerable<int> Evens(IEnumerable<int> xs) => xs.Where(x => x % 2 == 0);
 - **Accepted break:** `F<a[..]>(x)` is a generic call, as `F<a>(x)` already is in C#. In C# it is two comparisons,
   which compile only with user-defined comparison operators. The sharpener will parenthesize it as
   `F < (a[..]) > (x)` ([#66](https://github.com/ok3mad/roslyn/issues/66)).
-- **Diagnostic locations:** an invalid element type is reported on the whole sequence type (`System.Console[..]`), not
-  on the element type, because the type argument has no syntax of its own
-  ([#65](https://github.com/ok3mad/roslyn/issues/65)).
 - **IDE:** completion, classification, Quick Info and refactorings know nothing about `T[..]`. Symbol display shows
   `IEnumerable<T>`.
 
