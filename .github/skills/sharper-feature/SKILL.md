@@ -11,7 +11,7 @@ by the C# compiler itself: new syntax binds to bound nodes and lowers to ordinar
 checklist distilled from the first features: `yield return ..xs` (a new bound node; the commits merged from
 `sharper/gating`), `val` locals (a contextual keyword on an existing symbol; merged from `sharper/val`, later extended to
 deconstruction, patterns and lambda parameters), `readonly`
-locals (a modifier C# rejected, reusing the `val` checks) and the sequence type `T[..]` (a type form that binds to a
+locals and parameters (a modifier C# rejected, reusing the `val` checks) and the sequence type `T[..]` (a type form that binds to a
 BCL type; `sharper/sequence-type`). See `SharperTests.cs` for all of them.
 
 ## When to Use
@@ -176,7 +176,8 @@ implementation plan, "Feature 3"):
    to the token, so no binder change can lift it. Gate the error in the parser, then add it back wherever the same
    modifier list builds another construct (`readonly` locals: the local function path and `const readonly`). Check that
    every position the feature should cover has a slot for the modifier: a `for` initializer has none, and adding one
-   is a public syntax API change.
+   is a public syntax API change. Other modifiers are rejected by the binder instead: `readonly` on a parameter parses
+   (for `ref readonly`), and `ParameterHelpers.CheckParameterModifiers` reports CS9190.
 21. **A type form that wraps an ambiguous one inherits its ambiguity, and C# has more than one tuple scan.** The
    parenthesized function type `((p)->F)` returns the flags of `(p)->F` from `ScanType`, so callers treat it like a
    name and `((p)->F)[i]`, `((p)->F)?.X` and `((p)->F) ? a : b` keep their C# meaning. The cast heuristic is the
@@ -188,6 +189,10 @@ implementation plan, "Feature 3"):
    `e is (p)->F` turned out to be a C# syntax error, which left function types free to take that place in patterns.
    Patterns parse their type in their own mode (`AfterIs`, `DefinitePattern`), which is what keeps `x is T ? a : b` a
    conditional; a type form that parses a nested type (the function type's return type) must pass that mode on.
+22. **Simple symbols keep no syntax.** A rule read from a parameter's syntax needs the syntax on the symbol, but
+   `SourceParameterSymbol.Create` makes a parameter with no modifiers, attributes or default a
+   `SourceSimpleParameterSymbol`, which drops it. Add the condition there so such parameters stay complex
+   (`readonly` parameters), or carry the decision in a flag, as `LambdaParameterSymbol.IsSharperVal` does.
 
 ## Testing
 

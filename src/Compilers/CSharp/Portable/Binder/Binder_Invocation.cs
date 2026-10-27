@@ -1958,14 +1958,15 @@ namespace Microsoft.CodeAnalysis.CSharp
         }
 
         /// <summary>
-        /// True if <paramref name="expression"/> is a Sharper <c>val</c> or <c>readonly</c> local, a <c>val</c> script field or lambda parameter (not a <c>ref val</c> or <c>readonly ref</c>)
-        /// of a type that may be a value type.
+        /// True if <paramref name="expression"/> is a Sharper <c>val</c> or <c>readonly</c> local, a <c>val</c> script field, a <c>val</c> lambda parameter
+        /// or a <c>readonly</c> parameter (not a <c>ref val</c> or <c>readonly ref</c>) of a type that may be a value type.
         /// </summary>
         internal static bool IsSharperValValue(BoundExpression expression)
         {
             return expression is BoundLocal { LocalSymbol: SourceLocalSymbol { IsValOrSharperReadOnly: true, RefKind: RefKind.None } } or
                     BoundFieldAccess { FieldSymbol: SourceMemberFieldSymbol { IsSharperVal: true } } or
-                    BoundParameter { ParameterSymbol: LambdaParameterSymbol { IsSharperVal: true, RefKind: RefKind.None } } &&
+                    BoundParameter { ParameterSymbol: LambdaParameterSymbol { IsSharperVal: true, RefKind: RefKind.None } } or
+                    BoundParameter { ParameterSymbol: SourceComplexParameterSymbolBase { IsSharperReadOnly: true, RefKind: RefKind.None } } &&
                 expression.Type is { IsReferenceType: false };
         }
 
@@ -1989,7 +1990,13 @@ namespace Microsoft.CodeAnalysis.CSharp
                 BoundParameter parameter => parameter.ParameterSymbol.Name,
                 _ => ((BoundLocal)local).LocalSymbol,
             };
-            Error(diagnostics, variable is SourceLocalSymbol { IsVal: false } ? ErrorCode.WRN_SharperReadOnlyLocalMemberCallOnCopy : ErrorCode.WRN_SharperValMemberCallOnCopy, local.Syntax, method, variable);
+            ErrorCode code = local switch
+            {
+                BoundLocal { LocalSymbol: SourceLocalSymbol { IsVal: false } } => ErrorCode.WRN_SharperReadOnlyLocalMemberCallOnCopy,
+                BoundParameter { ParameterSymbol: SourceComplexParameterSymbolBase { IsSharperReadOnly: true } } => ErrorCode.WRN_SharperReadOnlyParameterMemberCallOnCopy,
+                _ => ErrorCode.WRN_SharperValMemberCallOnCopy,
+            };
+            Error(diagnostics, code, local.Syntax, method, variable);
             return true;
         }
 

@@ -89,6 +89,7 @@ Not done yet:
 | [Function types](features/function-types.md) | `(A, B) -> R` is `Func<A, B, R>`, and `(A) -> void` is `Action<A>`. | Prototype, merged into `main` | [#21](https://github.com/ok3mad/roslyn/issues/21) |
 | [`val` locals](features/val-locals.md) | `val x = e;` declares an implicitly typed local that cannot be reassigned, also in deconstructions, `foreach`, `out`, patterns and lambda parameters (`(val x) => ...`). | Prototype, merged into `main` | [#14](https://github.com/ok3mad/roslyn/issues/14), [#15](https://github.com/ok3mad/roslyn/issues/15), [#18](https://github.com/ok3mad/roslyn/issues/18), [#17](https://github.com/ok3mad/roslyn/issues/17) |
 | [`readonly` locals](features/readonly-locals.md) | `readonly int x = e;` and `readonly var x = e;` declare locals that cannot be reassigned; `readonly var` is `val`. | Prototype, merged into `main` | [#16](https://github.com/ok3mad/roslyn/issues/16) |
+| [`readonly` parameters](features/readonly-parameters.md) | `void F(readonly int x)` declares a parameter that cannot be reassigned; it is not part of the signature. | Prototype | [#23](https://github.com/ok3mad/roslyn/issues/23), [#97](https://github.com/ok3mad/roslyn/issues/97) |
 | [Sequence type](features/sequence-type.md) | `T[..]` is `IEnumerable<T>` in every type position. | Prototype, merged into `main` | [#19](https://github.com/ok3mad/roslyn/issues/19) |
 | [Task type](features/task-type.md) | `T~` is `Task<T>`, and `void~` is `Task`. | Prototype, merged into `main` | [#20](https://github.com/ok3mad/roslyn/issues/20) |
 
@@ -111,7 +112,7 @@ git grep -n "PROTOTYPE(sharper)"
   `sharper-*.yml`.
 - `sharper/<feature>` branches hold features in progress; `sharper/gating`, `sharper/val`,
   `sharper/val-designations`, `sharper/val-patterns`, `sharper/function-types`, `sharper/task-type`, `sharper/val-lambda-parameters` and
-  `sharper/readonly-locals` are merged.
+  `sharper/readonly-locals` are merged. `sharper/readonly-parameters` is in progress.
 
 ## Diagnostics
 
@@ -134,6 +135,7 @@ in `#pragma warning`, `/nowarn` and `.editorconfig`.
 | CS20010 | Warning | Call to non-readonly member '{0}' on readonly local '{1}' runs on a copy, so '{1}' is not changed. |
 | CS20011 | Error | A readonly local must be initialized in its declaration, because it cannot be assigned later. |
 | CS20012 | Error | A spread 'yield return ..' cannot enumerate '{0}' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead. |
+| CS20013 | Warning | Call to non-readonly member '{0}' on readonly parameter '{1}' runs on a copy, so '{1}' is not changed. |
 
 ## Where the code is
 
