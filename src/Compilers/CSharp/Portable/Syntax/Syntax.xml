@@ -425,6 +425,34 @@
       <summary>Creates a FunctionTypeSyntax node.</summary>
     </FactoryComment>
   </Node>
+  <Node Name="ParenthesizedTypeSyntax" Base="TypeSyntax">
+    <!-- Sharper's parenthesized function type, ((A) -> R), which lets a suffix apply to the whole function type:
+         ((int) -> int)? and ((int) -> int)[]. It binds to the type it encloses. -->
+    <Kind Name="ParenthesizedType"/>
+    <Field Name="OpenParenToken" Type="SyntaxToken">
+      <Kind Name="OpenParenToken"/>
+      <PropertyComment>
+        <summary>SyntaxToken representing the open parenthesis.</summary>
+      </PropertyComment>
+    </Field>
+    <Field Name="Type" Type="TypeSyntax">
+      <PropertyComment>
+        <summary>TypeSyntax node representing the enclosed type, a function type.</summary>
+      </PropertyComment>
+    </Field>
+    <Field Name="CloseParenToken" Type="SyntaxToken">
+      <Kind Name="CloseParenToken"/>
+      <PropertyComment>
+        <summary>SyntaxToken representing the close parenthesis.</summary>
+      </PropertyComment>
+    </Field>
+    <TypeComment>
+      <summary>Class which represents the syntax node for a Sharper parenthesized type, such as ((int) -> int).</summary>
+    </TypeComment>
+    <FactoryComment>
+      <summary>Creates a ParenthesizedTypeSyntax node.</summary>
+    </FactoryComment>
+  </Node>
   <Node Name="TupleElementSyntax" Base="CSharpSyntaxNode">
     <TypeComment>
       <summary>Tuple type element.</summary>
