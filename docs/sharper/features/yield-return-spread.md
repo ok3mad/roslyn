@@ -52,14 +52,21 @@ IEnumerable<T> Walk(Node<T> node)
 
 ## Limitations
 
-- **Async iterators:** not supported (CS20001), whether the source is synchronous or asynchronous. An async source
-  would mean a hidden `await foreach`. Whether to support them is [#43](https://github.com/ok3mad/roslyn/issues/43).
+- **Async iterators:** not supported yet (CS20001), whether the source is synchronous or asynchronous. A synchronous
+  source is to be supported ([#49](https://github.com/ok3mad/roslyn/issues/49)). An asynchronous source never will be,
+  because it would insert an `await` the user never wrote ([#43](https://github.com/ok3mad/roslyn/issues/43)).
 - **`dynamic` operands:** `..d` converts `d` to `Index` at runtime, so it is valid C# and stays a range. The compiler
   warns (CS20002); convert `d` to a sequence type to spread it. Where a range is not valid (for example an iterator of
   `int`), `..d` spreads and enumerates `d` dynamically. Deciding at runtime instead is [#42](https://github.com/ok3mad/roslyn/issues/42).
 - **Ref struct sources** such as spans are rejected, with an error about the span's enumerator (CS4007). A clearer
   error is [#44](https://github.com/ok3mad/roslyn/issues/44).
-- **Edit and Continue** has not been verified with spreads ([#45](https://github.com/ok3mad/roslyn/issues/45)).
+- **Edit and Continue** works for methods with spreads: edits before, after and inside a spread keep its states and
+  its hoisted enumerator, so a suspended iterator continues where it was. As with `foreach`, changing the type of the
+  source creates new hoisted fields, so an iterator suspended inside that spread cannot continue it. Replacing a
+  `yield return x;` with `yield return ..xs;` (or the reverse) is a delete and an insert, so an iterator suspended
+  there throws when resumed ([#45](https://github.com/ok3mad/roslyn/issues/45)).
+- **Debugging:** the source of a spread is evaluated, and the enumerator advanced, under hidden sequence points; only
+  the yield of each element stops on `yield return ..xs;`.
 - **Recursion:** each element of a recursive spread passes through every level, so a tree walk costs O(depth) per
   element ([#47](https://github.com/ok3mad/roslyn/issues/47)).
 
@@ -67,5 +74,10 @@ IEnumerable<T> Walk(Node<T> node)
 
 The binder (`Binder_Statements.cs`, `BindYieldReturnStatement`) trial-binds the operand as a C# range and creates a
 `BoundYieldReturnSpreadStatement` if that fails. Lowering (`LocalRewriter_Yield.cs`) rewrites the node into a
-`foreach` of plain yield returns before the iterator state machine is built. Tests are the `YieldReturnSpread_*`
-tests in `SharperTests.cs`.
+`foreach` of plain yield returns before the iterator state machine is built. The generated `try`/`finally` and the
+yield return share the statement's syntax, so the iterator rewriter (`IteratorMethodToStateMachineRewriter.PushFrame`)
+gives the finalize state the second relative ordinal of that syntax node, which Edit and Continue uses to map states.
+The IDE's Edit and Continue matcher (`SyntaxComparer` in `src/Features/CSharp/Portable/EditAndContinue`) never matches
+a spread with a yield return of a single value. Tests are the `YieldReturnSpread_*` tests in `SharperTests.cs`,
+`EditAndContinueSharperTests.cs` (`src/Compilers/CSharp/Test/Emit2`) and `SharperStatementMatchingTests.cs`
+(`src/Features/CSharpTest`).
