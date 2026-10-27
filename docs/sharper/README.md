@@ -88,7 +88,7 @@ Not done yet:
 | [Function types](features/function-types.md) | `(A, B) -> R` is `Func<A, B, R>`, and `(A) -> void` is `Action<A>`. | Prototype, merged into `main` | [#21](https://github.com/ok3mad/roslyn/issues/21) |
 | [`val` locals](features/val-locals.md) | `val x = e;` declares an implicitly typed local that cannot be reassigned, also in deconstructions, `foreach`, `out` and patterns. | Prototype, merged into `main` | [#14](https://github.com/ok3mad/roslyn/issues/14), [#15](https://github.com/ok3mad/roslyn/issues/15), [#18](https://github.com/ok3mad/roslyn/issues/18) |
 | [Sequence type](features/sequence-type.md) | `T[..]` is `IEnumerable<T>` in every type position. | Prototype, merged into `main` | [#19](https://github.com/ok3mad/roslyn/issues/19) |
-| [Task type](features/task-type.md) | `T~` is `Task<T>`, and `void~` is `Task`. | Prototype, on `sharper/task-hat` | [#20](https://github.com/ok3mad/roslyn/issues/20) |
+| [Task type](features/task-type.md) | `T~` is `Task<T>`, and `void~` is `Task`. | Prototype, merged into `main` | [#20](https://github.com/ok3mad/roslyn/issues/20) |
 
 Every planned feature has an issue, one per row of the
 [syntax roadmap](planning/implementation-plan.md#syntax-roadmap), collected under the tracking issue
@@ -105,7 +105,7 @@ git grep -n "PROTOTYPE(sharper)"
 
 - `main` is the integration branch. It holds upstream Roslyn plus the finished Sharper prototypes.
 - `sharper/<feature>` branches hold features in progress; `sharper/gating`, `sharper/val`,
-  `sharper/val-designations`, `sharper/val-patterns` and `sharper/function-types` are merged.
+  `sharper/val-designations`, `sharper/val-patterns`, `sharper/function-types` and `sharper/task-type` are merged.
 
 ## Diagnostics
 

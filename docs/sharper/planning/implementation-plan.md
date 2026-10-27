@@ -148,7 +148,7 @@ Not listed: `union Name(A, B)` comes from C# 15, and `collect`, `Retry` and `Une
 
 1. `val` (#2, #3, #6), in three steps: `val x = e` locals (binder only), then deconstruction and designations (parser), then patterns (keyword). It exercises the gated parser, the first deliberate break with its `@val` escape, and new semantics on an existing symbol, none of which the first PoC touched. The no-reassignment check reuses the read-only local check behind CS1656.
 2. `T[..]` (#7), done. Its binder rewrite onto a BCL type is the pattern for the other short type forms (see [Feature 3](#feature-3-sequence-type-t)).
-3. `T~` (#8), prototype on `sharper/task-hat`. Function types (#9) are done.
+3. `T~` (#8) and function types (#9), done.
 4. `readonly` parameters (#11), small, and the parameter switch body (#14, with #26), which needs no inference.
 5. Type inference (#10 and #15), the first real inference work, in the steps of the
    [work breakdown](#type-inference-work-breakdown).

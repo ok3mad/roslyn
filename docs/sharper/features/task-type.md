@@ -1,6 +1,6 @@
 # Task type
 
-**Status:** Prototype, on branch `sharper/task-hat`. Requires `/features:sharper`. Issue:
+**Status:** Prototype, merged into `main`. Requires `/features:sharper`. Issue:
 [#20](https://github.com/ok3mad/roslyn/issues/20).
 
 ## Summary
