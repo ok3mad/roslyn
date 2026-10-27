@@ -7709,7 +7709,7 @@ done:
             return tokenAfterVoid.Kind == SyntaxKind.TildeToken && IsFeatureEnabled(MessageID.IDS_FeatureSharper);
         }
 
-        private TypeSyntax ParseTypeOrVoid()
+        private TypeSyntax ParseTypeOrVoid(ParseTypeMode mode = ParseTypeMode.Normal)
         {
             if (this.CurrentToken.Kind == SyntaxKind.VoidKeyword && this.PeekToken(1).Kind != SyntaxKind.AsteriskToken && !IsSharperVoidTask(this.PeekToken(1)))
             {
@@ -7717,7 +7717,7 @@ done:
                 return _syntaxFactory.PredefinedType(this.EatToken());
             }
 
-            return this.ParseType();
+            return this.ParseType(mode);
         }
 
         private enum ParseTypeMode
@@ -8215,7 +8215,9 @@ done:
         /// Sharper: parses a function type, <c>(A, B) -> R</c>. Parameter modifiers are kept for the binder to report;
         /// parameter names are skipped with an error.
         /// </summary>
-        private FunctionTypeSyntax ParseSharperFunctionType()
+        /// <param name="mode">In a pattern, the return type is parsed as the type of a pattern, so that
+        /// <c>x is (int) -> int ? a : b</c> stays a conditional, as <c>x is int ? a : b</c> is.</param>
+        private FunctionTypeSyntax ParseSharperFunctionType(ParseTypeMode mode = ParseTypeMode.Normal)
         {
             var open = this.EatToken(SyntaxKind.OpenParenToken);
             var parameters = _pool.AllocateSeparated<FunctionPointerParameterSyntax>();
@@ -8258,7 +8260,7 @@ done:
                 _pool.ToListAndFree(parameters),
                 close,
                 arrow,
-                this.ParseTypeOrVoid());
+                this.ParseTypeOrVoid(mode is ParseTypeMode.AfterIs or ParseTypeMode.DefinitePattern ? mode : ParseTypeMode.Normal));
         }
 
         /// <summary>
@@ -8312,7 +8314,7 @@ done:
             {
                 if (IsFeatureEnabled(MessageID.IDS_FeatureSharper) && IsSharperFunctionTypeStart(out bool isParenthesized))
                 {
-                    return isParenthesized ? this.ParseSharperParenthesizedType() : this.ParseSharperFunctionType();
+                    return isParenthesized ? this.ParseSharperParenthesizedType() : this.ParseSharperFunctionType(mode);
                 }
 
                 return this.ParseTupleType();
