@@ -89,6 +89,16 @@ without a designation is still a type test.
 
 ## Not covered yet
 
-Every non-readonly member of a struct `val` warns, even one that does not mutate (inferring which members mutate is a follow-up). The editor does not classify `val` as a keyword yet.
-These are tracked as `PROTOTYPE(sharper)` comments and in the
-[implementation plan](../planning/implementation-plan.md#follow-ups).
+- **Noisy CS20003:** every non-readonly member of a struct `val` warns, even one that does not mutate. Inferring which
+  members mutate is [#84](https://github.com/ok3mad/roslyn/issues/84); the warning's default severity until then is
+  [#85](https://github.com/ok3mad/roslyn/issues/85).
+- **Sharpener:** escaping `val` as `@val` for the accepted breaks is [#86](https://github.com/ok3mad/roslyn/issues/86).
+- **IDE:** the editor does not treat `val` like `var` yet: classification, Quick Info, completion, hints and
+  refactorings ([#87](https://github.com/ok3mad/roslyn/issues/87)). An analyzer that suggests `val` for locals that are
+  never reassigned is [#89](https://github.com/ok3mad/roslyn/issues/89).
+- **Public API:** nothing public tells a `val` local from a `var` local ([#88](https://github.com/ok3mad/roslyn/issues/88)).
+- **Edit and Continue** has not been verified with `val` ([#90](https://github.com/ok3mad/roslyn/issues/90)).
+- **Deeper immutability:** `val` makes the binding read-only, and a struct value with it, but not the object behind a
+  reference. A type-level marker is an open question ([#92](https://github.com/ok3mad/roslyn/issues/92)).
+- **Not started:** `readonly` locals ([#16](https://github.com/ok3mad/roslyn/issues/16)) and `val` lambda parameters
+  ([#17](https://github.com/ok3mad/roslyn/issues/17)).
