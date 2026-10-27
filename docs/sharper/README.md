@@ -36,7 +36,8 @@ has the full implementation checklist.
    `val (a, b) = e`, which code that uses `val` as an identifier there must spell `@val`. Each accepted break is listed
    in the [implementation plan](planning/implementation-plan.md#follow-ups); the sharpener and the `.cx` extension will
    make it safe to adopt. The sequence type adds a second, smaller one: `F<a[..]>(x)` is a generic call, where C#
-   reads two comparisons that only compile with user-defined operators.
+   reads two comparisons that only compile with user-defined operators. Function types add the same one for
+   `F<(p)->b>(x)`. Both also cover the argument-list form, such as `M(F < a[..], b > (c))`.
 3. **Reuse the C# syntax.** Features reinterpret existing syntax in the binder where possible, instead of adding
    syntax nodes and public API.
 4. **Lower to C#.** Each feature lowers to constructs the compiler already emits, so debugging, PDBs and the runtime
@@ -162,6 +163,22 @@ dotnet test src/Compilers/CSharp/Test/Semantic/Microsoft.CodeAnalysis.CSharp.Sem
 
 Also run them with `ROSLYN_TEST_IOPERATION=1`, which checks IOperation, the semantic model and the control flow graph
 for every compilation.
+
+After a parser change, run the upstream parser tests with `ROSLYN_TEST_SHARPER=1`, which turns Sharper on for every
+parse in the tests (`TestOptions.SharperForAllParses`), to check design rule 2:
+
+```bash
+ROSLYN_TEST_SHARPER=1 dotnet test src/Compilers/CSharp/Test/Syntax/Microsoft.CodeAnalysis.CSharp.Syntax.UnitTests.csproj -f net10.0
+```
+
+The switch reaches the parse options of `ParsingTests`, `TestOptions` and `CSharpTestSource.Parse`, but not tests that
+call `SyntaxFactory` without options. It also turns Sharper on for the compilations of the other C# test projects; for
+a change that also affects binding, run the Semantic project the same way with
+`--filter "FullyQualifiedName!~SharperTests"`, since the Sharper tests check the flag-off behavior too. Some
+failures are expected: tests of invalid C# that Sharper gives a meaning (such as `readonly` on a local), tests that
+count the parse options' features, and the accepted breaks. The
+[implementation plan](planning/implementation-plan.md#follow-ups) has the last run's list; any other failure is a bug
+unless it is one of those.
 
 ## Not covered yet
 

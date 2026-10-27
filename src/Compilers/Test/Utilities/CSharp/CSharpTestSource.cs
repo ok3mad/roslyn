@@ -39,7 +39,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Test.Utilities
             SourceHashAlgorithm checksumAlgorithm = SourceHashAlgorithms.Default)
         {
             var stringText = SourceText.From(text, encoding ?? Encoding.UTF8, checksumAlgorithm);
-            var tree = SyntaxFactory.ParseSyntaxTree(stringText, options ?? TestOptions.RegularPreview, path);
+            var tree = SyntaxFactory.ParseSyntaxTree(stringText, (options ?? TestOptions.RegularPreview).WithSharperIfRequested(), path);
             return tree;
         }
 

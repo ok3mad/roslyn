@@ -2645,6 +2645,22 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             }
         }
 
+        [Theory]
+        [CombinatorialData]
+        public void FunctionType_Parsing_RefTupleElement(bool sharper)
+        {
+            // C# scans a 'ref' tuple element as part of the tuple type and reports the 'ref', so Sharper must too.
+            // Found by the parser tests with ROSLYN_TEST_SHARPER (RefReadonlyTests.RefReadonlyReturn_UnexpectedBindTime).
+            var options = sharper ? s_sharperOptions : TestOptions.Regular;
+            foreach (var text in new[] { "(ref readonly int, ref readonly int Alice)? t = null;", "(ref int, int) t = default;" })
+            {
+                var statement = SyntaxFactory.ParseStatement(text, options: options);
+                Assert.Equal(SyntaxKind.LocalDeclarationStatement, statement.Kind());
+                Assert.IsAssignableFrom<TupleTypeSyntax>(((LocalDeclarationStatementSyntax)statement).Declaration.Type.DescendantNodesAndSelf().First(n => n is TupleTypeSyntax));
+                Assert.All(statement.GetDiagnostics(), d => Assert.Equal((int)ErrorCode.ERR_UnexpectedToken, d.Code));
+            }
+        }
+
         [Fact]
         public void FunctionType_Parsing_DeeplyNestedParentheses()
         {

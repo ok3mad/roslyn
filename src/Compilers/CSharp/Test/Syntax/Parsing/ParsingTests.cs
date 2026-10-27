@@ -80,13 +80,52 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         protected virtual SyntaxTree ParseTree(string text, CSharpParseOptions? options) => SyntaxFactory.ParseSyntaxTree(text, options);
 
         public CompilationUnitSyntax ParseFile(string text, CSharpParseOptions? parseOptions = null) =>
-            SyntaxFactory.ParseCompilationUnit(text, options: parseOptions);
+            SyntaxFactory.ParseCompilationUnit(text, options: (CSharpParseOptions?)OptionsForTest(parseOptions));
 
         internal CompilationUnitSyntax ParseFileExperimental(string text, MessageID feature) =>
             ParseFile(text, parseOptions: TestOptions.Regular.WithExperimental(feature));
 
         protected virtual CSharpSyntaxNode ParseNode(string text, CSharpParseOptions? options) =>
             ParseTree(text, options).GetCompilationUnitRoot();
+
+        /// <summary>
+        /// With ROSLYN_TEST_SHARPER set (<see cref="TestOptions.SharperForAllParses"/>), adds the Sharper feature to the
+        /// options. Without options, parses again with the Sharper feature added to the options that
+        /// <see cref="ParseTree"/> used, so that the defaults of overrides are kept.
+        /// </summary>
+        private SyntaxTree ParseTreeForTest(string text, CSharpParseOptions? options)
+        {
+            var tree = ParseTree(text, options?.WithSharperIfRequested());
+            if (options is null)
+            {
+                var usedOptions = (CSharpParseOptions)tree.Options;
+                if (usedOptions.WithSharperIfRequested() != usedOptions)
+                {
+                    tree = ParseTree(text, usedOptions.WithSharperIfRequested());
+                }
+            }
+
+            return tree;
+        }
+
+        /// <inheritdoc cref="ParseTreeForTest"/>
+        private CSharpSyntaxNode ParseNodeForTest(string text, CSharpParseOptions? options)
+        {
+            var node = ParseNode(text, options?.WithSharperIfRequested());
+            if (options is null)
+            {
+                var usedOptions = (CSharpParseOptions)node.SyntaxTree.Options;
+                if (usedOptions.WithSharperIfRequested() != usedOptions)
+                {
+                    node = ParseNode(text, usedOptions.WithSharperIfRequested());
+                }
+            }
+
+            return node;
+        }
+
+        private static ParseOptions? OptionsForTest(ParseOptions? options) =>
+            TestOptions.SharperForAllParses ? ((CSharpParseOptions?)options ?? CSharpParseOptions.Default).WithSharperIfRequested() : options;
 
         internal void UsingStatement(string text, params DiagnosticDescription[] expectedErrors)
         {
@@ -95,7 +134,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
 
         internal void UsingStatement(string text, ParseOptions? options, params DiagnosticDescription[] expectedErrors)
         {
-            var node = SyntaxFactory.ParseStatement(text, options: options);
+            var node = SyntaxFactory.ParseStatement(text, options: OptionsForTest(options));
             Validate(text, node, expectedErrors);
             UsingNode(node);
         }
@@ -107,7 +146,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
 
         internal void UsingDeclaration(string text, int offset = 0, ParseOptions? options = null, bool consumeFullText = true, params DiagnosticDescription[] expectedErrors)
         {
-            var node = SyntaxFactory.ParseMemberDeclaration(text, offset, options, consumeFullText);
+            var node = SyntaxFactory.ParseMemberDeclaration(text, offset, OptionsForTest(options), consumeFullText);
             Debug.Assert(node is object);
             if (consumeFullText)
             {
@@ -122,7 +161,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
 
         internal void UsingExpression(string text, ParseOptions? options, params DiagnosticDescription[] expectedErrors)
         {
-            UsingNode(text, SyntaxFactory.ParseExpression(text, options: options), expectedErrors);
+            UsingNode(text, SyntaxFactory.ParseExpression(text, options: OptionsForTest(options)), expectedErrors);
         }
 
         protected void UsingNode(string text, CSharpSyntaxNode node, params DiagnosticDescription[] expectedErrors)
@@ -151,7 +190,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
 
         protected SyntaxTree UsingTree(string text, CSharpParseOptions? options, params DiagnosticDescription[] expectedErrors)
         {
-            return UsingTree(ParseTree(text, options), expectedErrors);
+            return UsingTree(ParseTreeForTest(text, options), expectedErrors);
         }
 
         protected SyntaxTree UsingTree(SyntaxTree tree, params DiagnosticDescription[] expectedErrors)
@@ -171,14 +210,14 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         /// </summary>
         protected CSharpSyntaxNode UsingNode(string text)
         {
-            var root = ParseNode(text, options: null);
+            var root = ParseNodeForTest(text, options: null);
             UsingNode(root);
             return root;
         }
 
         protected CSharpSyntaxNode UsingNode(string text, CSharpParseOptions options, params DiagnosticDescription[] expectedErrors)
         {
-            var node = ParseNode(text, options);
+            var node = ParseNodeForTest(text, options);
             UsingNode(text, node, expectedErrors);
             return node;
         }
