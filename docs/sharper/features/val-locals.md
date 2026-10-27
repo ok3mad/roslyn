@@ -1,8 +1,10 @@
 # `val` locals
 
 **Status:** Prototype, merged into `main`: local declarations (step 1, #2), deconstruction, `foreach` and `out`
-(step 2, #4), and patterns (step 3). Requires `/features:sharper`. Issues: [#14](https://github.com/ok3mad/roslyn/issues/14) (locals),
-[#15](https://github.com/ok3mad/roslyn/issues/15) (deconstruction) and [#18](https://github.com/ok3mad/roslyn/issues/18) (patterns); `val` lambda parameters are [#17](https://github.com/ok3mad/roslyn/issues/17).
+(step 2, #4), and patterns (step 3); lambda parameters (step 4). Requires `/features:sharper`. Issues:
+[#14](https://github.com/ok3mad/roslyn/issues/14) (locals), [#15](https://github.com/ok3mad/roslyn/issues/15)
+(deconstruction), [#18](https://github.com/ok3mad/roslyn/issues/18) (patterns) and
+[#17](https://github.com/ok3mad/roslyn/issues/17) (lambda parameters).
 
 ## Summary
 
@@ -45,6 +47,27 @@ if (o is val y) { }                // pattern, also case val y:, val y =>, (val 
 
 Every one of these locals cannot be reassigned, and the error names the 'val variable', also for `foreach` and
 `using` variables.
+
+## Lambda parameters
+
+`(val x) => ...` is an implicitly typed lambda parameter, inferred from the target delegate like `(x) => ...`, that cannot
+be reassigned:
+
+```csharp
+xs.Select((val x) => x * 2);
+Func<int, int> f = (val x) => { x = 0; return x; };   // error CS1656: Cannot assign to 'x' because it is a 'val variable'
+```
+
+- Every rule of a `val` local applies: CS1656, CS1657 and CS1654 for writes, and a non-readonly struct member runs on a
+  copy with CS20003.
+- **C# wins.** With a type named `val` in scope, `(val x)` is an explicitly typed parameter of that type.
+- It works in every lambda form: `async`, `static`, an explicit return type, expression trees, and with the modifiers
+  C# allows on implicitly typed parameters: `(ref val x)`, `(out val x)`, `(in val x)` and `(scoped val x)`. A `ref val`
+  parameter is written through, and `x = ref y` is CS20006.
+- It follows C#'s rules for implicitly typed parameters: `(val a, b)` is fine, `(val a, int b)` is CS0748,
+  `(val x = 1)` is CS9098, `(params val x)` is CS9272, and `var f = (val x) => x` has no natural type (CS8917).
+- Anonymous methods (`delegate (val x) { }`) and local functions take only explicitly typed parameters, so `val` is
+  a type name there, as in C#.
 
 ## Scripts
 

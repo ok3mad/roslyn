@@ -9,7 +9,8 @@ Sharper is a stricter C# dialect built inside Roslyn in this fork: `main` holds 
 branches the ones in progress (overview and feature status in `docs/sharper/README.md`). Its features are compiled
 by the C# compiler itself: new syntax binds to bound nodes and lowers to ordinary constructs. This skill is the
 checklist distilled from the first features: `yield return ..xs` (a new bound node; the commits merged from
-`sharper/gating`), `val` locals (a contextual keyword on an existing symbol; merged from `sharper/val`) and the
+`sharper/gating`), `val` locals (a contextual keyword on an existing symbol; merged from `sharper/val`, later extended to
+deconstruction, patterns and lambda parameters) and the
 sequence type `T[..]` (a type form that binds to a BCL type; `sharper/sequence-type`). See `SharperTests.cs` for all
 three.
 
@@ -164,6 +165,12 @@ implementation plan, "Feature 3"):
 18. **`GetTypeInfo` on a type syntax drops the top-level nullable annotation.** Compare
    `TypeWithAnnotations` of the declared symbols (`ToTestDisplayString(includeNonNullable: true)`), and compare
    with a C# twin rather than guess the display order of mixed array ranks.
+19. **"Implicitly typed" is often a syntax check.** `(val x) => ...` keeps its type syntax `val`, but C# finds implicitly
+   typed lambda parameters by a missing type (`p.Type == null`): in the all-explicit-or-all-implicit check (CS0748), the
+   explicitly typed parameter list, and `ParameterHelpers.CheckParameterModifiers` (CS9272 for `params`). Each needed the
+   binder's decision, and the semantic model needed it too for `GetTypeInfo` on `val`. A decision made by lookup cannot
+   be recomputed from syntax later, so it travels with the bound state (`UnboundLambdaState.ParameterIsSharperVal`) to
+   the symbol (`LambdaParameterSymbol.IsSharperVal`).
 
 ## Testing
 
