@@ -2771,6 +2771,16 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             Assert.Throws<ArgumentException>(() => SyntaxFactory.VarPattern(SyntaxFactory.Token(SyntaxKind.LetKeyword), SyntaxFactory.SingleVariableDesignation(SyntaxFactory.Identifier("x"))));
         }
 
+        [Fact]
+        public void ValKeyword_VarPatternFactoryWithoutToken()
+        {
+            // The shipped overload without a keyword token still exists, and still creates a var pattern
+            // (https://github.com/ok3mad/roslyn/issues/61).
+            var pattern = SyntaxFactory.VarPattern(SyntaxFactory.SingleVariableDesignation(SyntaxFactory.Identifier("x")));
+            Assert.Equal(SyntaxKind.VarKeyword, pattern.VarKeyword.Kind());
+            Assert.Equal("var x", pattern.NormalizeWhitespace().ToFullString());
+        }
+
         [Theory]
         [InlineData("int[..]")]
         [InlineData("IEnumerable<int>")]
