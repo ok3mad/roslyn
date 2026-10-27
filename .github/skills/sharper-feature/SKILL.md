@@ -132,6 +132,9 @@ implementation plan, "Feature 3"):
    to `EndOfFileToken`, so a new keyword kind must sit in the keyword range: take free slots from the top
    (`ValKeyword` = 8466, below `ElifKeyword`) and test that no other `SyntaxKind` has the value, because duplicate enum
    values compile silently. Diagnostics have no such limit: Sharper codes start at `SharperErrorCodes.Base` (CS20001).
+   Giving a token field a second kind in `Syntax.xml` silently drops the generated convenience overload that fills in
+   the token (`SyntaxFactory.VarPattern(designation)`), a shipped public API and a binary break (#61). Only the
+   analyzer build reports it (RS0017); restore such overloads by hand.
 14. **A new syntax node is public API and hides in type switches.** When no existing node fits (function types), add it
    to `Syntax.xml` with a `SyntaxKind` from 9900 up (Sharper node kinds count up from there, apart from upstream),
    regenerate, and copy the build's RS0016 list into `PublicAPI.Unshipped.txt`. A new type node also needs
@@ -165,6 +168,9 @@ implementation plan, "Feature 3"):
   analysis (`AnalyzeControlFlow`, `AnalyzeDataFlow`).
 - Run the Sharper tests with `ROSLYN_TEST_IOPERATION=1` as well: every compilation then also validates IOperation,
   the semantic model and the control flow graph.
+- Before merging, build with the analyzers on, which the test runs skip: it reports public API changes (RS0016,
+  RS0017) and other analyzer errors.
+  `dotnet build src/Compilers/CSharp/Portable/Microsoft.CodeAnalysis.CSharp.csproj -p:RunAnalyzersDuringBuild=true`
 - Run tests in Debug. The debug-only checks (`PipelinePhaseValidator`, `DebugVerifier`, pool-leak tracking,
   `Feature.AssertValidFeature`) catch most mistakes in a new node.
 

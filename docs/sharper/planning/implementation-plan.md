@@ -309,12 +309,18 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 - [ ] Avoid the O(depth) cost of recursive spreads with a delegating state machine. [#47](https://github.com/ok3mad/roslyn/issues/47)
 - [x] Number Sharper diagnostics from their own base, `SharperErrorCodes.Base` = 20000 (CS20001 and up), far from upstream.
 - [x] Full C# compiler regression run (net10.0, Debug): 88,327 tests passed and 0 failed across 10 test projects. WinRT was not run; it targets .NET Framework only.
-- [ ] Infer whether a struct member mutates `this`, and silence CS20003 for members that do not. Until then, every call to a non-`readonly` member of a `val` warns, including interface members on a generic `val` (`g.Get()`).
+- [ ] Infer whether a struct member mutates `this`, and silence CS20003 for members that do not. Until then, every call to a non-`readonly` member of a `val` warns, including interface members on a generic `val` (`g.Get()`). [#84](https://github.com/ok3mad/roslyn/issues/84); its default severity until then is [#85](https://github.com/ok3mad/roslyn/issues/85).
 - [x] Copy and warn for the pattern-based members that bypassed the shared check: `await`/`GetAwaiter`, implicit Index and Range indexers, list patterns and property patterns. Collection spreads and `using` already copy their operand.
-- [ ] Build the sharpening infrastructure and move Sharper to the `.cx` extension. The accepted breaks need it: `val` as a keyword in patterns, and `val (a, b) = e` as a declaration. The sharpener rewrites those to `@val`, and the extension keeps plain `.cs` files on C# semantics.
+- [ ] Build the sharpening infrastructure and move Sharper to the `.cx` extension. The accepted breaks need it: `val` as a keyword in patterns, and `val (a, b) = e` as a declaration. The sharpener rewrites those to `@val`, and the extension keeps plain `.cs` files on C# semantics. The `.cx` part is done (see above); escaping `val` is [#86](https://github.com/ok3mad/roslyn/issues/86).
 - [x] Give `val` its own messages: CS20004 and CS20005 (the `val` forms of CS8508 and CS8136), CS20006 for ref reassignment, and the 'val variable' cause also for `foreach` and `using` variables.
 - [x] Script fields: `val` is a read-only inferred field, like `var` plus read-only.
 - [x] Give `val` its own token kind: `SyntaxKind.ValKeyword` (8466, the top free slot below `ElifKeyword`, guarded by a test), a contextual keyword like `var`, used by val patterns.
+- [ ] `val`: IDE support (classification, Quick Info, completion, hints, and refactorings that write `var`). [#87](https://github.com/ok3mad/roslyn/issues/87)
+- [ ] `val`: decide whether to expose val-ness in the public API (`ILocalSymbol` has no read-only flag). [#88](https://github.com/ok3mad/roslyn/issues/88)
+- [ ] `val`: analyzer and fixer "local is never reassigned, use `val`". [#89](https://github.com/ok3mad/roslyn/issues/89)
+- [ ] `val`: verify Edit and Continue with `val` locals and their struct copies. [#90](https://github.com/ok3mad/roslyn/issues/90)
+- [ ] Test `/nowarn` and `.editorconfig` with five-digit Sharper IDs. [#91](https://github.com/ok3mad/roslyn/issues/91)
+- [ ] Decide immutability depth: binding, value or deep (a type-level immutability marker). [#92](https://github.com/ok3mad/roslyn/issues/92)
 - [ ] Sequence type: decide whether array creation should accept sequence elements (`new int[3][..]`, today CS0178, or `new int[..][3]`). [#64](https://github.com/ok3mad/roslyn/issues/64)
 - [ ] Sequence type: report an invalid element type on the element type rather than the whole sequence type (same cause as #62 for function types). [#65](https://github.com/ok3mad/roslyn/issues/65)
 - [ ] Sharpener: rewrite `F<a[..]>(x)` (two comparisons in C#) as `F < (a[..]) > (x)`, the sequence type's accepted break. [#66](https://github.com/ok3mad/roslyn/issues/66)
