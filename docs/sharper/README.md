@@ -104,6 +104,9 @@ git grep -n "PROTOTYPE(sharper)"
 ## Branches
 
 - `main` is the integration branch. It holds upstream Roslyn plus the finished Sharper prototypes.
+- Upstream `dotnet/roslyn` is merged into `main` with the [`sync-upstream`](../../.github/skills/sync-upstream/SKILL.md)
+  skill. The GitHub workflows inherited from upstream run only when started by hand; the fork's own are named
+  `sharper-*.yml`.
 - `sharper/<feature>` branches hold features in progress; `sharper/gating`, `sharper/val`,
   `sharper/val-designations`, `sharper/val-patterns`, `sharper/function-types` and `sharper/task-type` are merged.
 

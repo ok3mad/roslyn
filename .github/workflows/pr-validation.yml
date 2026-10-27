@@ -1,8 +1,10 @@
 name: PR Validation
 
 on:
-  issue_comment:
-    types: [created]
+  # Sharper: triggers other than workflow_dispatch are turned off (.github/skills/sync-upstream).
+  workflow_dispatch:
+  # sharper-off: issue_comment:
+  # sharper-off:   types: [created]
 
 permissions:
   pull-requests: write

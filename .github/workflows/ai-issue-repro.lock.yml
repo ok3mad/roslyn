@@ -52,11 +52,13 @@
 
 name: "AI Issue Repro"
 on:
-  issues:
+  # Sharper: triggers other than workflow_dispatch are turned off (.github/skills/sync-upstream).
+  workflow_dispatch:
+  # sharper-off: issues:
     # names: # Label filtering applied via job conditions
     # - ai-repro # Label filtering applied via job conditions
-    types:
-      - labeled
+  # sharper-off:   types:
+  # sharper-off:     - labeled
 # roles: # Roles processed as role check in pre-activation job
 # - admin # Roles processed as role check in pre-activation job
 # - maintainer # Roles processed as role check in pre-activation job
