@@ -17,8 +17,13 @@ static (int) -> int Compose((int) -> int f, (int) -> int g) => x => g(f(x));
 ```
 
 A function type works wherever C# accepts a type: locals, fields, properties, parameters, return types, generic
-arguments (`List<(int) -> int>`), `typeof`, `default`, casts, `as`, `using` aliases and explicitly typed lambda
-parameters.
+arguments (`List<(int) -> int>`), `typeof`, `default`, casts, `as`, `is`, `using` aliases, explicitly typed lambda
+parameters and patterns:
+
+```csharp
+if (handler is (int) -> int f) { ... }
+var name = o switch { () -> void => "action", (int) -> int f => "f" + f(1), _ => "other" };
+```
 
 ## Rules
 
@@ -50,6 +55,11 @@ parameters.
   `((p)->F)?[i]`, `((p)->F) ? a : b` and `(((p)->F))(x)`. The parenthesized type `((p)->F)` is as ambiguous as
   `(p)->F`, so `((p)->F)? x;` and `((p)->F)[] x;` are declarations, which C# rejects.
 - `(p) -> F x;` is a declaration, because it is never valid C#, the same way that `p.F x;` is a declaration.
+- In a pattern, `( types ) ->` starts a function type, as in `x is (int) -> int f`, `case () -> void a:` and
+  `{ P: (int) -> int f }`. In C# a parenthesized pattern or expression cannot be followed by `->`, so all of these
+  are syntax errors there, `e is (p)->F` included; the constant pattern through a pointer is written `e is p->F`,
+  which keeps its meaning. Where the type cannot be followed by what comes next, the pattern is parsed as in C#.
+  `x is (int) -> int ? a : b` is a conditional, as `x is int ? a : b` is.
 - In a generic argument list, `F<(int) -> int>(x)` is a generic invocation, as C# resolves `F<A, B>(x)`. This changes
   the meaning of `F < (p)->b > (x)`, which compares a pointer member with user-defined operators, and is accepted as a
   theoretical break.
@@ -69,8 +79,6 @@ parameters.
   cannot appear in a public signature. What to do instead is [#56](https://github.com/ok3mad/roslyn/issues/56).
 - **Parameter names** such as `(int width, int height) -> int` are not supported (CS20007), because `Func` cannot
   carry them ([#57](https://github.com/ok3mad/roslyn/issues/57)).
-- **Patterns:** `x is (int) -> int f` does not parse yet; write `x is Func<int, int> f`
-  ([#59](https://github.com/ok3mad/roslyn/issues/59)).
 - **Constraint errors in a local** span the whole function type instead of the offending parameter type.
 - **IDE:** the editor knows nothing about Sharper yet, so completion and formatting may not handle function types.
 
@@ -86,6 +94,8 @@ The parser (`LanguageParser.cs`) changes only when Sharper is on:
   types in one pass, so nested parentheses are not scanned twice, and returns the return type's flags for the
   ambiguous shape `(name) -> name`, so that the statement and type-argument rules treat it like a qualified name.
 - `IsSharperFunctionTypeStart` and `ParseSharperFunctionType` parse the type in `ParseUnderlyingType`.
+- `LooksLikeTypeOfPattern` (`LanguageParser_Patterns.cs`) accepts a function type start, so patterns parse it as their
+  type. In a pattern the return type is parsed in the pattern's type mode, which keeps `? a : b` a conditional.
 - `ScanCast` checks `IsAmbiguousSharperFunctionType` first, so `((p)->F)(x)` is never a cast. No C# type that starts
   with `(` is ambiguous, so an ambiguous one is a parenthesized `(p)->F` and is never a cast either: `(((p)->F))(x)`.
 - A parenthesized function type is the node `ParenthesizedTypeSyntax` (`SyntaxKind.ParenthesizedType`, 9902), which

@@ -2896,18 +2896,6 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 Assert.Empty(statement.DescendantNodes().OfType<CastExpressionSyntax>());
                 Assert.True(statement.IsEquivalentTo(SyntaxFactory.ParseStatement(text, options: TestOptions.Regular)), text);
             }
-
-            // The pattern parser stops at `->`, so these are syntax errors in C#. Sharper parses them the same way, so
-            // that function types in patterns are a change of their own.
-            foreach (var text in new[] { "x = e is (p)->F;", "x = e is ((p)->F);" })
-            {
-                var statement = SyntaxFactory.ParseStatement(text, options: options);
-                Assert.True(statement.ContainsDiagnostics, text);
-                Assert.True(statement.IsEquivalentTo(SyntaxFactory.ParseStatement(text, options: TestOptions.Regular)), text);
-                Assert.Equal(
-                    SyntaxFactory.ParseStatement(text, options: TestOptions.Regular).GetDiagnostics().Select(d => d.ToString()),
-                    statement.GetDiagnostics().Select(d => d.ToString()));
-            }
         }
 
         [Theory]
@@ -2990,6 +2978,282 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             Assert.Equal("System.Func<System.Int32, System.String>[]", model.GetTypeInfo(parenthesized.Parent!).Type.ToTestDisplayString());
             Assert.True(SyntaxFacts.IsInTypeOnlyContext(parenthesized.Type));
             Assert.True(SyntaxFacts.IsTypeSyntax(SyntaxKind.ParenthesizedType));
+        }
+
+        [Fact]
+        public void FunctionType_Pattern_Basic()
+        {
+            // Function types in declaration, type, recursive, list and property patterns, and in switch statements and
+            // expressions.
+            var source = """
+                using System;
+
+                object[] values = [(Func<int, int>)(i => i + 1), (Action)(() => Console.Write("tick")), new Func<int, int>[] { i => i * 2 }, (Func<string, int>)(s => s.Length), "text"];
+                foreach (var o in values)
+                {
+                    Console.Write(Describe(o) + " " + Classify(o) + " " + (o is (int) -> int ? "func" : "not") + (o is not () -> void) + "; ");
+                }
+
+                Console.Write(values is [(int) -> int first, ..] ? first(10) : -1);
+                Console.Write(new Box(values[0]) is { Value: (int) -> int g } ? " " + g(20) : " none");
+                Console.Write(values[1] is () -> void { } a and not null ? " action" : " none");
+
+                static string Describe(object o) => o switch
+                {
+                    (int) -> int f => "f" + f(1),
+                    () -> void a => Run(a),
+                    ((int) -> int)[] fs => "fs" + fs[0](3),
+                    (string) -> int => "string",
+                    _ => "other",
+                };
+
+                static string Run(() -> void a) { a(); return ""; }
+
+                static string Classify(object o)
+                {
+                    switch (o)
+                    {
+                        case (int) -> int f when f(0) > 0:
+                            return "positive";
+                        case (int) -> int:
+                            return "zero";
+                        case () -> void:
+                            return "action";
+                        default:
+                            return "other";
+                    }
+                }
+
+                record Box(object Value);
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90,
+                expectedOutput: ExecutionConditionUtil.IsCoreClr ? "f2 positive funcTrue; tick action notFalse; fs6 other notTrue; string other notTrue; other other notTrue; 11 21 action" : null).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void FunctionType_Pattern_SameAsFunc()
+        {
+            // A function type pattern reports what its Func twin reports.
+            var source = """
+                #nullable enable
+                using System;
+
+                class C
+                {
+                    void M(object o, Func<int, int> f)
+                    {
+                        switch (o)
+                        {
+                            case Func<int, int>: break;
+                            case (int) -> int: break;
+                        }
+                        switch (o)
+                        {
+                            case (int) -> int: break;
+                            case Func<int, int>: break;
+                        }
+                        _ = o is ((int) -> int)? a;
+                        _ = o is Func<int, int>? b;
+                        _ = f is (int) -> int;
+                        _ = f is Func<int, int>;
+                        _ = o is (ref int) -> int c;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (11,18): error CS8120: The switch case is unreachable. It has already been handled by a previous case or it is impossible to match.
+                //             case (int) -> int: break;
+                Diagnostic(ErrorCode.ERR_SwitchCaseSubsumed, "(int) -> int").WithLocation(11, 18),
+                // (16,18): error CS8120: The switch case is unreachable. It has already been handled by a previous case or it is impossible to match.
+                //             case Func<int, int>: break;
+                Diagnostic(ErrorCode.ERR_SwitchCaseSubsumed, "Func<int, int>").WithLocation(16, 18),
+                // (18,18): error CS8116: It is not legal to use nullable type 'Func<int, int>?' in a pattern; use the underlying type 'Func<int, int>' instead.
+                //         _ = o is ((int) -> int)? a;
+                Diagnostic(ErrorCode.ERR_PatternNullableType, "((int) -> int)?").WithArguments("System.Func<int, int>").WithLocation(18, 18),
+                // (19,18): error CS8116: It is not legal to use nullable type 'Func<int, int>?' in a pattern; use the underlying type 'Func<int, int>' instead.
+                //         _ = o is Func<int, int>? b;
+                Diagnostic(ErrorCode.ERR_PatternNullableType, "Func<int, int>?").WithArguments("System.Func<int, int>").WithLocation(19, 18),
+                // (22,19): error CS20008: A function type parameter cannot be 'ref', because a function type is a 'System.Func' or 'System.Action' delegate.
+                //         _ = o is (ref int) -> int c;
+                Diagnostic(ErrorCode.ERR_SharperFunctionTypeParameterModifier, "ref").WithArguments("ref").WithLocation(22, 19));
+        }
+
+        [Fact]
+        public void FunctionType_Pattern_SemanticModel()
+        {
+            var source = """
+                class C
+                {
+                    bool M(object o) => o is (int, string) -> bool f && f(1, "");
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics();
+
+            var tree = comp.SyntaxTrees.Single();
+            var model = comp.GetSemanticModel(tree);
+            var pattern = tree.GetRoot().DescendantNodes().OfType<DeclarationPatternSyntax>().Single();
+            Assert.Equal(SyntaxKind.FunctionType, pattern.Type.Kind());
+            Assert.Equal("System.Func<System.Int32, System.String, System.Boolean>", model.GetTypeInfo(pattern.Type).Type.ToTestDisplayString());
+            var local = (ILocalSymbol)model.GetDeclaredSymbol(pattern.Designation)!;
+            Assert.Equal("System.Func<System.Int32, System.String, System.Boolean>", local.Type.ToTestDisplayString());
+        }
+
+        [Fact]
+        public void FunctionType_Pattern_IOperation()
+        {
+            var source = """
+                class C
+                {
+                    bool M(object o)
+                    {
+                        return /*<bind>*/o is (int) -> int f/*</bind>*/;
+                    }
+                }
+                """;
+            var expectedOperationTree = """
+                IIsPatternOperation (OperationKind.IsPattern, Type: System.Boolean) (Syntax: 'o is (int) -> int f')
+                  Value:
+                    IParameterReferenceOperation: o (OperationKind.ParameterReference, Type: System.Object) (Syntax: 'o')
+                  Pattern:
+                    IDeclarationPatternOperation (OperationKind.DeclarationPattern, Type: null) (Syntax: '(int) -> int f') (InputType: System.Object, NarrowedType: System.Func<System.Int32, System.Int32>, DeclaredSymbol: System.Func<System.Int32, System.Int32> f, MatchesNull: False)
+                """;
+            VerifyOperationTreeAndDiagnosticsForTest<IsPatternExpressionSyntax>(source, expectedOperationTree, DiagnosticDescription.None,
+                parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+        }
+
+        [Fact]
+        public void FunctionType_Pattern_Disabled()
+        {
+            // Without Sharper, a function type in a pattern reports the usual C# syntax errors.
+            var source = """
+                class C
+                {
+                    bool M(object o) => o is (int) -> int f;
+                    int N(object o) => o switch { () -> void => 1, _ => 0 };
+                }
+                """;
+            var comp = CreateCompilation(source, targetFramework: TargetFramework.Net90);
+            Assert.Contains(comp.GetDiagnostics(), d => d.Severity == DiagnosticSeverity.Error);
+            Assert.Empty(comp.SyntaxTrees.Single().GetRoot().DescendantNodes().OfType<FunctionTypeSyntax>());
+        }
+
+        [Theory]
+        [CombinatorialData]
+        public void FunctionType_Pattern_Parsing(bool sharper)
+        {
+            var options = sharper ? s_sharperOptions : TestOptions.Regular;
+
+            // Every one of these is a syntax error in C#: a parenthesized pattern or expression cannot be followed by `->`.
+            foreach (var text in new[] { "x = o is (int) -> int f;", "x = o is (int) -> int;", "x = o is () -> void;", "x = o is not (int) -> int;", "x = o is (int) -> int { } f;", "x = o is ((int) -> int)[] fs;", "x = o is (int) -> int f and not null;", "x = o is (int) -> (int) -> int f;", "x = o is (int, string) -> bool;", "x = o is (int) -> int ? a : b;", "x = o switch { (int) -> int f => 1, _ => 0 };", "x = o switch { (int) -> int f when f(0) > 0 => 1, _ => 0 };", "switch (o) { case () -> void a: break; }", "switch (o) { case (int) -> int: break; }", "x = o is { P: (int) -> int f };", "x = o is [(int) -> int f, ..];", "x = o is (p)->F;", "x = o is ((p)->F)[];" })
+            {
+                var statement = SyntaxFactory.ParseStatement(text, options: options);
+                Assert.True(sharper != statement.ContainsDiagnostics, text);
+                Assert.True(sharper == statement.DescendantNodes().OfType<FunctionTypeSyntax>().Any(), text);
+            }
+
+            if (sharper)
+            {
+                // `is` with a type, as for `o is Func<int, int>`.
+                var expression = SyntaxFactory.ParseExpression("o is (int) -> int", options: options);
+                Assert.Equal(SyntaxKind.FunctionType, ((BinaryExpressionSyntax)expression).Right.Kind());
+
+                // A conditional, as `o is int ? a : b` is.
+                expression = SyntaxFactory.ParseExpression("o is (int) -> int ? a : b", options: options);
+                var conditional = (ConditionalExpressionSyntax)expression;
+                Assert.Equal("int", ((FunctionTypeSyntax)((BinaryExpressionSyntax)conditional.Condition).Right).ReturnType.ToString());
+
+                // A nullable return type before a designation.
+                expression = SyntaxFactory.ParseExpression("o is (int) -> int? f", options: options);
+                var pattern = (DeclarationPatternSyntax)((IsPatternExpressionSyntax)expression).Pattern;
+                Assert.Equal(SyntaxKind.NullableType, ((FunctionTypeSyntax)pattern.Type).ReturnType.Kind());
+            }
+        }
+
+        [Theory]
+        [CombinatorialData]
+        public void FunctionType_Pattern_Parsing_KeepsCSharpMeaning(bool sharper)
+        {
+            // Patterns that start with `(` keep their C# meaning, with or without Sharper.
+            var options = sharper ? s_sharperOptions : TestOptions.Regular;
+            foreach (var text in new[] { "x = o is (1);", "x = o is (A);", "x = o is (A.B);", "x = o is (int)1;", "x = o is (A, B);", "x = o is (A, B) t;", "x = o is (int, int)[] t;", "x = o is (> 1 and < 3);", "x = o is (var a, var b);", "x = o is (A) { };", "x = o is > (p)->F;", "x = o is p->F;", "x = o is (int)p->F;", "x = o is ((A, B), C);", "x = o switch { (1) => a, (A, B) => b, _ => c };", "switch (o) { case (1): break; case (A, B) t: break; }", "x = o is (A) ? a : b;", "x = o is (A) and B;" })
+            {
+                var statement = SyntaxFactory.ParseStatement(text, options: options);
+                Assert.False(statement.ContainsDiagnostics, text);
+                Assert.Empty(statement.DescendantNodes().OfType<FunctionTypeSyntax>());
+                Assert.True(statement.IsEquivalentTo(SyntaxFactory.ParseStatement(text, options: TestOptions.Regular)), text);
+            }
+        }
+
+        [Theory]
+        [CombinatorialData]
+        public void FunctionType_Pattern_PointerMemberAccess(bool sharper)
+        {
+            // `e is (p)->F` does not compile in C# (a syntax error), and neither with Sharper, where it is a type pattern
+            // with an unknown type. The C# constant pattern is written `e is p->F`, which keeps its meaning.
+            var source = """
+                unsafe class C
+                {
+                    bool M(object e, S* p) => e is (p)->F;
+                    bool N(object e, S* p) => e is p->F;
+                }
+
+                struct S { public int F; }
+                """;
+            var comp = CreateCompilation(source, parseOptions: sharper ? s_sharperOptions : TestOptions.Regular, targetFramework: TargetFramework.Net90,
+                options: TestOptions.UnsafeReleaseDll);
+            if (sharper)
+            {
+                comp.VerifyDiagnostics(
+                    // (3,37): error CS0118: 'p' is a variable but is used like a type
+                    //     bool M(object e, S* p) => e is (p)->F;
+                    Diagnostic(ErrorCode.ERR_BadSKknown, "p").WithArguments("p", "variable", "type").WithLocation(3, 37),
+                    // (3,41): error CS0246: The type or namespace name 'F' could not be found (are you missing a using directive or an assembly reference?)
+                    //     bool M(object e, S* p) => e is (p)->F;
+                    Diagnostic(ErrorCode.ERR_SingleTypeNameNotFound, "F").WithArguments("F").WithLocation(3, 41),
+                    // (4,36): error CS0150: A constant value is expected
+                    //     bool N(object e, S* p) => e is p->F;
+                    Diagnostic(ErrorCode.ERR_ConstantExpected, "p->F").WithLocation(4, 36),
+                    // (7,23): warning CS0649: Field 'S.F' is never assigned to, and will always have its default value 0
+                    // struct S { public int F; }
+                    Diagnostic(ErrorCode.WRN_UnassignedInternalField, "F").WithArguments("S.F", "0").WithLocation(7, 23));
+            }
+            else
+            {
+                comp.VerifyDiagnostics(
+                    // (3,37): error CS0029: Cannot implicitly convert type 'S*' to 'object'
+                    //     bool M(object e, S* p) => e is (p)->F;
+                    Diagnostic(ErrorCode.ERR_NoImplicitConv, "p").WithArguments("S*", "object").WithLocation(3, 37),
+                    // (3,39): error CS1002: ; expected
+                    //     bool M(object e, S* p) => e is (p)->F;
+                    Diagnostic(ErrorCode.ERR_SemicolonExpected, "->").WithLocation(3, 39),
+                    // (3,39): error CS1519: Invalid token '->' in a member declaration
+                    //     bool M(object e, S* p) => e is (p)->F;
+                    Diagnostic(ErrorCode.ERR_InvalidMemberDecl, "->").WithArguments("->").WithLocation(3, 39),
+                    // (3,42): error CS1519: Invalid token ';' in a member declaration
+                    //     bool M(object e, S* p) => e is (p)->F;
+                    Diagnostic(ErrorCode.ERR_InvalidMemberDecl, ";").WithArguments(";").WithLocation(3, 42),
+                    // (3,42): error CS1519: Invalid token ';' in a member declaration
+                    //     bool M(object e, S* p) => e is (p)->F;
+                    Diagnostic(ErrorCode.ERR_InvalidMemberDecl, ";").WithArguments(";").WithLocation(3, 42),
+                    // (4,36): error CS0150: A constant value is expected
+                    //     bool N(object e, S* p) => e is p->F;
+                    Diagnostic(ErrorCode.ERR_ConstantExpected, "p->F").WithLocation(4, 36),
+                    // (7,23): warning CS0649: Field 'S.F' is never assigned to, and will always have its default value 0
+                    // struct S { public int F; }
+                    Diagnostic(ErrorCode.WRN_UnassignedInternalField, "F").WithArguments("S.F", "0").WithLocation(7, 23));
+            }
+        }
+
+        [Fact]
+        public void FunctionType_Pattern_DeeplyNestedParentheses()
+        {
+            // Every pattern that starts with `(` is scanned for a function type, without taking exponential time.
+            var depth = 200;
+            var text = "x = o is " + new string('(', depth) + "1" + new string(')', depth) + ";";
+            var statement = SyntaxFactory.ParseStatement(text, options: s_sharperOptions);
+            Assert.False(statement.ContainsDiagnostics);
+            Assert.True(statement.IsEquivalentTo(SyntaxFactory.ParseStatement(text, options: TestOptions.Regular)));
         }
 
         [Fact]

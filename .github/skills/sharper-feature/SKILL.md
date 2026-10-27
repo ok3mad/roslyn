@@ -184,7 +184,9 @@ implementation plan, "Feature 3"):
    the last token of the latest function type (`_lastTokenOfScannedSharperFunctionType`), cleared before each read.
    Grep for other scans of `(`: target-typed `new(...)` has its own (`IsImplicitObjectCreation`), so
    `new ((int) -> int)[3]` needed it too. Check every "valid C#" case with the flag off before testing it:
-   `e is (p)->F` turned out to be a C# syntax error, so the test compares the Sharper tree with the C# one instead.
+   `e is (p)->F` turned out to be a C# syntax error, which left function types free to take that place in patterns.
+   Patterns parse their type in their own mode (`AfterIs`, `DefinitePattern`), which is what keeps `x is T ? a : b` a
+   conditional; a type form that parses a nested type (the function type's return type) must pass that mode on.
 
 ## Testing
 
