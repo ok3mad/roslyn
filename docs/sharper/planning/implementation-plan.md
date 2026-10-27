@@ -50,7 +50,7 @@ Each trap was probed before deciding how to handle it.
 | Range ambiguity | `..i` is valid C# in iterators of `Range` and of `object` (boxed). | C# is tried first and wins; covered by tests for both element types. |
 | Async iterator, sync source | Compiler crash: the async rewriter only accepts `try` blocks with certain syntax, for Edit and Continue. | Error CS20001 for now. To be supported ([#49](https://github.com/ok3mad/roslyn/issues/49)). |
 | Async iterator, async source | Misleading "foreach statement cannot operate…" error; would need an implicit `await foreach`. | Same CS20001. Never supported ([#43](https://github.com/ok3mad/roslyn/issues/43)). |
-| Ref-struct sources (spans, inline arrays) | Rejected with CS4007 about `Span<int>.Enumerator`, which the user never wrote. | Kept as is; a clearer error is a follow-up. |
+| Ref-struct sources (spans, inline arrays) | Rejected with CS4007 about `Span<int>.Enumerator`, which the user never wrote. Only the enumerator matters: a ref struct source with a class enumerator works. | Error CS20012 in the binder when the enumerator is a ref struct (or the source is an inline array), naming the source type. |
 | `dynamic` | In an iterator of `object`, `..d` is valid C# (d converts to `Index` at runtime), so it stays a range and throws when d holds a sequence. In an iterator of `int` it spreads. | Warning CS20002. Deciding at runtime is the correct long-term semantics, but changes what valid C# does today. |
 | Both bindings fail (`..5`) | The spread error (CS9212) explains it better than the range error. | Spread error wins. |
 | Edit and Continue | The generated `try`/`finally` and the yield return both had the yield's syntax and ordinal 0, so the next generation mapped the yield to the finalize state and crashed. Adding a spread (or a plain `foreach`) to an iterator without a finalize state also crashed: the PDB path started finalize states at 0. | The finalize state takes ordinal 1; `DefinitionMap` starts decreasing states as the in-memory path does. |
@@ -380,7 +380,7 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 - [ ] Decide whether `dynamic` should choose range or spread at runtime, under the sharpening rules. [#42](https://github.com/ok3mad/roslyn/issues/42)
 - [x] Decide whether async iterators should ever support spreads: never for an asynchronous source. [#43](https://github.com/ok3mad/roslyn/issues/43)
 - [ ] Support spreading a synchronous source in an async iterator. [#49](https://github.com/ok3mad/roslyn/issues/49)
-- [ ] Give ref-struct sources a spread-specific error instead of CS4007. [#44](https://github.com/ok3mad/roslyn/issues/44)
+- [x] Give ref-struct sources a spread-specific error instead of CS4007. [#44](https://github.com/ok3mad/roslyn/issues/44)
 - [x] Verify the spread with Edit and Continue: the generated try/finally and the yield share one syntax offset. Fixed with a second state ordinal, and the IDE no longer matches a spread with a plain yield return. [#45](https://github.com/ok3mad/roslyn/issues/45)
 - [ ] Design a real IOperation shape once the syntax settles. [#46](https://github.com/ok3mad/roslyn/issues/46)
 - [ ] Avoid the O(depth) cost of recursive spreads with a delegating state machine. [#47](https://github.com/ok3mad/roslyn/issues/47)

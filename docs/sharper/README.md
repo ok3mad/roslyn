@@ -133,6 +133,7 @@ in `#pragma warning`, `/nowarn` and `.editorconfig`.
 | CS20009 | Error | A function type cannot have more than {0} parameters, because no 'System.Func' or 'System.Action' delegate has more. |
 | CS20010 | Warning | Call to non-readonly member '{0}' on readonly local '{1}' runs on a copy, so '{1}' is not changed. |
 | CS20011 | Error | A readonly local must be initialized in its declaration, because it cannot be assigned later. |
+| CS20012 | Error | A spread 'yield return ..' cannot enumerate '{0}' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead. |
 
 ## Where the code is
 
