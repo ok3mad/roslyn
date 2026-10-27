@@ -3834,5 +3834,757 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             dataFlow = model.AnalyzeDataFlow(lambda);
             Assert.Equal("x", string.Join(", ", dataFlow.VariablesDeclared.Select(s => s.Name)));
         }
+
+        [Fact]
+        public void ReadonlyLocal_Basic()
+        {
+            var source = """
+                using System;
+
+                readonly int x = 1;
+                readonly var s = "a";
+                readonly string t = "b";
+                Func<int> f = () => x + 1;
+                Console.Write(x);
+                Console.Write(s);
+                Console.Write(t);
+                Console.Write(f());
+                M();
+
+                static void M()
+                {
+                    readonly long y = 3;
+                    Console.Write(y);
+                    using readonly var d = new D("d");
+                    using readonly D e = new D("e");
+                    Console.Write(";");
+                }
+
+                class D(string name) : IDisposable { public void Dispose() { Console.Write(name); } }
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "1ab23;ed" : null).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void ReadonlyLocal_FeatureDisabled()
+        {
+            // Without Sharper, readonly on a local keeps the C# errors, and the local stays writable.
+            var source = """
+                using System;
+
+                class D : IDisposable { public void Dispose() { } }
+
+                class C
+                {
+                    void M()
+                    {
+                        readonly int x = 1;
+                        readonly var y = 2;
+                        x = 3;
+                        y = 3;
+                        using readonly var d = new D();
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: TestOptions.Regular, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (9,9): error CS0106: The modifier 'readonly' is not valid for this item
+                //         readonly int x = 1;
+                Diagnostic(ErrorCode.ERR_BadMemberFlag, "readonly").WithArguments("readonly").WithLocation(9, 9),
+                // (9,22): warning CS0219: The variable 'x' is assigned but its value is never used
+                //         readonly int x = 1;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "x").WithArguments("x").WithLocation(9, 22),
+                // (10,9): error CS0106: The modifier 'readonly' is not valid for this item
+                //         readonly var y = 2;
+                Diagnostic(ErrorCode.ERR_BadMemberFlag, "readonly").WithArguments("readonly").WithLocation(10, 9),
+                // (10,22): warning CS0219: The variable 'y' is assigned but its value is never used
+                //         readonly var y = 2;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "y").WithArguments("y").WithLocation(10, 22),
+                // (13,15): error CS9229: Modifiers cannot be placed on using declarations
+                //         using readonly var d = new D();
+                Diagnostic(ErrorCode.ERR_NoModifiersOnUsing, "readonly").WithLocation(13, 15));
+        }
+
+        [Fact]
+        public void ReadonlyLocal_FeatureDisabled_TopLevel()
+        {
+            var source = """
+                readonly int t = 1;
+                t = 2;
+                System.Console.Write(t);
+                """;
+            CreateCompilation(source, parseOptions: TestOptions.Regular, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (1,1): error CS0106: The modifier 'readonly' is not valid for this item
+                // readonly int t = 1;
+                Diagnostic(ErrorCode.ERR_BadMemberFlag, "readonly").WithArguments("readonly").WithLocation(1, 1));
+        }
+
+        [Fact]
+        public void ReadonlyLocal_Writes()
+        {
+            // Each write to the readonly local next to the same write to its plain twin, which is allowed.
+            var source = """
+                using System;
+
+                class C
+                {
+                    static void Ref(ref int i) { }
+                    static void Out(out int i) { i = 0; }
+                    static void In(in int i) { }
+
+                    void M()
+                    {
+                        readonly int x = 1;
+                        int y = 1;
+                        x = 2;
+                        y = 2;
+                        x += 1;
+                        y += 1;
+                        x++;
+                        y++;
+                        --x;
+                        --y;
+                        Ref(ref x);
+                        Ref(ref y);
+                        Out(out x);
+                        Out(out y);
+                        In(in x);
+                        In(in y);
+                        ref int r = ref x;
+                        ref int q = ref y;
+                        ref readonly int rr = ref x;
+                        Action a = () => x = 3;
+                        Action b = () => y = 3;
+                        void Local() { x = 4; }
+                        void Local2() { y = 4; }
+
+                        readonly string s = null;
+                        string t = null;
+                        s ??= "a";
+                        t ??= "a";
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (13,9): error CS1656: Cannot assign to 'x' because it is a 'readonly local'
+                //         x = 2;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly local").WithLocation(13, 9),
+                // (15,9): error CS1656: Cannot assign to 'x' because it is a 'readonly local'
+                //         x += 1;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly local").WithLocation(15, 9),
+                // (17,9): error CS1656: Cannot assign to 'x' because it is a 'readonly local'
+                //         x++;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly local").WithLocation(17, 9),
+                // (19,11): error CS1656: Cannot assign to 'x' because it is a 'readonly local'
+                //         --x;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly local").WithLocation(19, 11),
+                // (21,17): error CS1657: Cannot use 'x' as a ref or out value because it is a 'readonly local'
+                //         Ref(ref x);
+                Diagnostic(ErrorCode.ERR_RefReadonlyLocalCause, "x").WithArguments("x", "readonly local").WithLocation(21, 17),
+                // (23,17): error CS1657: Cannot use 'x' as a ref or out value because it is a 'readonly local'
+                //         Out(out x);
+                Diagnostic(ErrorCode.ERR_RefReadonlyLocalCause, "x").WithArguments("x", "readonly local").WithLocation(23, 17),
+                // (27,25): error CS1657: Cannot use 'x' as a ref or out value because it is a 'readonly local'
+                //         ref int r = ref x;
+                Diagnostic(ErrorCode.ERR_RefReadonlyLocalCause, "x").WithArguments("x", "readonly local").WithLocation(27, 25),
+                // (30,26): error CS1656: Cannot assign to 'x' because it is a 'readonly local'
+                //         Action a = () => x = 3;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly local").WithLocation(30, 26),
+                // (32,14): warning CS8321: The local function 'Local' is declared but never used
+                //         void Local() { x = 4; }
+                Diagnostic(ErrorCode.WRN_UnreferencedLocalFunction, "Local").WithArguments("Local").WithLocation(32, 14),
+                // (32,24): error CS1656: Cannot assign to 'x' because it is a 'readonly local'
+                //         void Local() { x = 4; }
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly local").WithLocation(32, 24),
+                // (33,14): warning CS8321: The local function 'Local2' is declared but never used
+                //         void Local2() { y = 4; }
+                Diagnostic(ErrorCode.WRN_UnreferencedLocalFunction, "Local2").WithArguments("Local2").WithLocation(33, 14),
+                // (37,9): error CS1656: Cannot assign to 's' because it is a 'readonly local'
+                //         s ??= "a";
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "s").WithArguments("s", "readonly local").WithLocation(37, 9));
+        }
+
+        [Fact]
+        public void ReadonlyLocal_ReadonlyVarIsVal()
+        {
+            // readonly var is val: the same inference, the same errors where var cannot be used, and the same writes rejected.
+            var source = """
+                class C
+                {
+                    void M()
+                    {
+                        readonly var x = 1;
+                        val y = 1;
+                        x = 2;
+                        y = 2;
+                        readonly var a;
+                        val a2;
+                        readonly var b = 1, c = 2;
+                        val b2 = 1, c2 = 2;
+                        readonly var d = null;
+                        val d2 = null;
+                        readonly val e = 1;
+                        e = 2;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (7,9): error CS1656: Cannot assign to 'x' because it is a 'readonly local'
+                //         x = 2;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly local").WithLocation(7, 9),
+                // (8,9): error CS1656: Cannot assign to 'y' because it is a 'val variable'
+                //         y = 2;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "y").WithArguments("y", "val variable").WithLocation(8, 9),
+                // (9,22): error CS0818: Implicitly-typed variables must be initialized
+                //         readonly var a;
+                Diagnostic(ErrorCode.ERR_ImplicitlyTypedVariableWithNoInitializer, "a").WithLocation(9, 22),
+                // (9,22): warning CS0168: The variable 'a' is declared but never used
+                //         readonly var a;
+                Diagnostic(ErrorCode.WRN_UnreferencedVar, "a").WithArguments("a").WithLocation(9, 22),
+                // (10,13): error CS0818: Implicitly-typed variables must be initialized
+                //         val a2;
+                Diagnostic(ErrorCode.ERR_ImplicitlyTypedVariableWithNoInitializer, "a2").WithLocation(10, 13),
+                // (10,13): warning CS0168: The variable 'a2' is declared but never used
+                //         val a2;
+                Diagnostic(ErrorCode.WRN_UnreferencedVar, "a2").WithArguments("a2").WithLocation(10, 13),
+                // (11,18): error CS0819: Implicitly-typed variables cannot have multiple declarators
+                //         readonly var b = 1, c = 2;
+                Diagnostic(ErrorCode.ERR_ImplicitlyTypedVariableMultipleDeclarator, "var b = 1, c = 2").WithLocation(11, 18),
+                // (11,22): warning CS0219: The variable 'b' is assigned but its value is never used
+                //         readonly var b = 1, c = 2;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "b").WithArguments("b").WithLocation(11, 22),
+                // (11,29): warning CS0219: The variable 'c' is assigned but its value is never used
+                //         readonly var b = 1, c = 2;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "c").WithArguments("c").WithLocation(11, 29),
+                // (12,9): error CS0819: Implicitly-typed variables cannot have multiple declarators
+                //         val b2 = 1, c2 = 2;
+                Diagnostic(ErrorCode.ERR_ImplicitlyTypedVariableMultipleDeclarator, "val b2 = 1, c2 = 2").WithLocation(12, 9),
+                // (12,13): warning CS0219: The variable 'b2' is assigned but its value is never used
+                //         val b2 = 1, c2 = 2;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "b2").WithArguments("b2").WithLocation(12, 13),
+                // (12,21): warning CS0219: The variable 'c2' is assigned but its value is never used
+                //         val b2 = 1, c2 = 2;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "c2").WithArguments("c2").WithLocation(12, 21),
+                // (13,22): error CS0815: Cannot assign <null> to an implicitly-typed variable
+                //         readonly var d = null;
+                Diagnostic(ErrorCode.ERR_ImplicitlyTypedVariableAssignedBadValue, "d = null").WithArguments("<null>").WithLocation(13, 22),
+                // (14,13): error CS0815: Cannot assign <null> to an implicitly-typed variable
+                //         val d2 = null;
+                Diagnostic(ErrorCode.ERR_ImplicitlyTypedVariableAssignedBadValue, "d2 = null").WithArguments("<null>").WithLocation(14, 13),
+                // (16,9): error CS1656: Cannot assign to 'e' because it is a 'val variable'
+                //         e = 2;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "e").WithArguments("e", "val variable").WithLocation(16, 9));
+        }
+
+        [Fact]
+        public void ReadonlyLocal_NoInitializer()
+        {
+            var source = """
+                class C
+                {
+                    void M()
+                    {
+                        readonly int x;
+                        readonly int y = 1, z;
+                        int w;
+                        x = 1;
+                        w = 1;
+                        System.Console.Write(x + y + z + w);
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (5,22): error CS20011: A readonly local must be initialized in its declaration, because it cannot be assigned later.
+                //         readonly int x;
+                Diagnostic(ErrorCode.ERR_SharperReadOnlyLocalWithNoInitializer, "x").WithLocation(5, 22),
+                // (6,29): error CS20011: A readonly local must be initialized in its declaration, because it cannot be assigned later.
+                //         readonly int y = 1, z;
+                Diagnostic(ErrorCode.ERR_SharperReadOnlyLocalWithNoInitializer, "z").WithLocation(6, 29),
+                // (8,9): error CS1656: Cannot assign to 'x' because it is a 'readonly local'
+                //         x = 1;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly local").WithLocation(8, 9),
+                // (8,9): error CS0165: Use of unassigned local variable 'x'
+                //         x = 1;
+                Diagnostic(ErrorCode.ERR_UseDefViolation, "x").WithArguments("x").WithLocation(8, 9),
+                // (10,38): error CS0165: Use of unassigned local variable 'z'
+                //         System.Console.Write(x + y + z + w);
+                Diagnostic(ErrorCode.ERR_UseDefViolation, "z").WithArguments("z").WithLocation(10, 38));
+        }
+
+        [Fact]
+        public void ReadonlyLocal_StructFieldAssignment()
+        {
+            var source = """
+                struct S
+                {
+                    public int F;
+                    public int P { get; set; }
+                }
+
+                class C
+                {
+                    void M()
+                    {
+                        readonly S v = new S();
+                        S w = new S();
+                        v.F = 1;
+                        w.F = 1;
+                        v.P = 1;
+                        w.P = 1;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (13,9): error CS1654: Cannot modify members of 'v' because it is a 'readonly local'
+                //         v.F = 1;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocal2Cause, "v.F").WithArguments("v", "readonly local").WithLocation(13, 9),
+                // (15,9): error CS1654: Cannot modify members of 'v' because it is a 'readonly local'
+                //         v.P = 1;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocal2Cause, "v.P").WithArguments("v", "readonly local").WithLocation(15, 9));
+        }
+
+        [Fact]
+        public void ReadonlyLocal_StructMemberCallOnCopy()
+        {
+            // As for val, a non-readonly member runs on a copy and warns, also when captured or hoisted, and for members found by pattern.
+            var source = """
+                using System;
+                using System.Collections.Generic;
+                using System.Threading.Tasks;
+
+                readonly S v = new S();
+                v.Mutate();
+                Console.Write(v.F);
+                _ = v.Getter;
+                Console.Write(v.F);
+                foreach (var x in v) { }
+                Console.Write(v.F);
+                v.ReadOnlyMethod();
+                Action f = () => { v.Mutate(); Console.Write(v.F); };
+                f();
+                await Task.Yield();
+                v.Mutate();
+                Console.Write(v.F);
+                if (v is { Getter: 1 }) { }
+                Console.Write(v.F);
+                readonly var u = new S();
+                u.Mutate();
+                Console.Write(u.F);
+                Console.Write(";");
+
+                var w = new S();
+                readonly ref S r = ref w;
+                r.Mutate();
+                Console.Write(w.F);
+
+                struct S
+                {
+                    public int F;
+                    public void Mutate() { F++; }
+                    public int Getter { get { F++; return F; } }
+                    public readonly void ReadOnlyMethod() { }
+                    public IEnumerator<int> GetEnumerator() { F++; return new List<int>().GetEnumerator(); }
+                }
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "0000000;1" : null).VerifyDiagnostics(
+                // (6,1): warning CS20010: Call to non-readonly member 'S.Mutate()' on readonly local 'v' runs on a copy, so 'v' is not changed.
+                // v.Mutate();
+                Diagnostic(ErrorCode.WRN_SharperReadOnlyLocalMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v").WithLocation(6, 1),
+                // (8,5): warning CS20010: Call to non-readonly member 'S.Getter.get' on readonly local 'v' runs on a copy, so 'v' is not changed.
+                // _ = v.Getter;
+                Diagnostic(ErrorCode.WRN_SharperReadOnlyLocalMemberCallOnCopy, "v").WithArguments("S.Getter.get", "v").WithLocation(8, 5),
+                // (10,19): warning CS20010: Call to non-readonly member 'S.GetEnumerator()' on readonly local 'v' runs on a copy, so 'v' is not changed.
+                // foreach (var x in v) { }
+                Diagnostic(ErrorCode.WRN_SharperReadOnlyLocalMemberCallOnCopy, "v").WithArguments("S.GetEnumerator()", "v").WithLocation(10, 19),
+                // (13,20): warning CS20010: Call to non-readonly member 'S.Mutate()' on readonly local 'v' runs on a copy, so 'v' is not changed.
+                // Action f = () => { v.Mutate(); Console.Write(v.F); };
+                Diagnostic(ErrorCode.WRN_SharperReadOnlyLocalMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v").WithLocation(13, 20),
+                // (16,1): warning CS20010: Call to non-readonly member 'S.Mutate()' on readonly local 'v' runs on a copy, so 'v' is not changed.
+                // v.Mutate();
+                Diagnostic(ErrorCode.WRN_SharperReadOnlyLocalMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v").WithLocation(16, 1),
+                // (18,5): warning CS20010: Call to non-readonly member 'S.Getter.get' on readonly local 'v' runs on a copy, so 'v' is not changed.
+                // if (v is { Getter: 1 }) { }
+                Diagnostic(ErrorCode.WRN_SharperReadOnlyLocalMemberCallOnCopy, "v").WithArguments("S.Getter.get", "v").WithLocation(18, 5),
+                // (21,1): warning CS20010: Call to non-readonly member 'S.Mutate()' on readonly local 'u' runs on a copy, so 'u' is not changed.
+                // u.Mutate();
+                Diagnostic(ErrorCode.WRN_SharperReadOnlyLocalMemberCallOnCopy, "u").WithArguments("S.Mutate()", "u").WithLocation(21, 1));
+        }
+
+        [Fact]
+        public void ReadonlyLocal_Ref()
+        {
+            // readonly on a ref local forbids ref reassignment and allows writes through the ref, as for a readonly ref field.
+            // ref readonly keeps its C# meaning, and readonly ref readonly is both.
+            var source = """
+                using System;
+
+                class C
+                {
+                    void M(Span<int> span)
+                    {
+                        int i = 1, j = 2;
+                        readonly ref int r1 = ref i;
+                        ref readonly int r2 = ref i;
+                        readonly ref readonly int r3 = ref i;
+                        readonly ref var r4 = ref i;
+                        r1 = 5;
+                        r2 = 5;
+                        r3 = 5;
+                        r4 = 5;
+                        r1 = ref j;
+                        r2 = ref j;
+                        r3 = ref j;
+                        r4 = ref j;
+                        readonly ref int r5;
+                        readonly scoped Span<int> s1 = span;
+                        s1 = default;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (13,9): error CS0131: The left-hand side of an assignment must be a variable, property or indexer
+                //         r2 = 5;
+                Diagnostic(ErrorCode.ERR_AssgLvalueExpected, "r2").WithLocation(13, 9),
+                // (14,9): error CS0131: The left-hand side of an assignment must be a variable, property or indexer
+                //         r3 = 5;
+                Diagnostic(ErrorCode.ERR_AssgLvalueExpected, "r3").WithLocation(14, 9),
+                // (16,9): error CS1656: Cannot assign to 'r1' because it is a 'readonly local'
+                //         r1 = ref j;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "r1").WithArguments("r1", "readonly local").WithLocation(16, 9),
+                // (18,9): error CS1656: Cannot assign to 'r3' because it is a 'readonly local'
+                //         r3 = ref j;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "r3").WithArguments("r3", "readonly local").WithLocation(18, 9),
+                // (19,9): error CS1656: Cannot assign to 'r4' because it is a 'readonly local'
+                //         r4 = ref j;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "r4").WithArguments("r4", "readonly local").WithLocation(19, 9),
+                // (20,26): error CS8174: A declaration of a by-reference variable must have an initializer
+                //         readonly ref int r5;
+                Diagnostic(ErrorCode.ERR_ByReferenceVariableMustBeInitialized, "r5").WithLocation(20, 26),
+                // (20,26): warning CS0168: The variable 'r5' is declared but never used
+                //         readonly ref int r5;
+                Diagnostic(ErrorCode.WRN_UnreferencedVar, "r5").WithArguments("r5").WithLocation(20, 26),
+                // (22,9): error CS1656: Cannot assign to 's1' because it is a 'readonly local'
+                //         s1 = default;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "s1").WithArguments("s1", "readonly local").WithLocation(22, 9));
+        }
+
+        [Fact]
+        public void ReadonlyLocal_UsingDeclaration()
+        {
+            var source = """
+                using System;
+
+                class D : IDisposable { public void Dispose() { } }
+
+                class C
+                {
+                    void M()
+                    {
+                        using readonly var d = new D();
+                        using var d2 = new D();
+                        d = null;
+                        d2 = null;
+                        using readonly static D e = null;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (11,9): error CS1656: Cannot assign to 'd' because it is a 'readonly local'
+                //         d = null;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "d").WithArguments("d", "readonly local").WithLocation(11, 9),
+                // (12,9): error CS1656: Cannot assign to 'd2' because it is a 'using variable'
+                //         d2 = null;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "d2").WithArguments("d2", "using variable").WithLocation(12, 9),
+                // (13,24): error CS9229: Modifiers cannot be placed on using declarations
+                //         using readonly static D e = null;
+                Diagnostic(ErrorCode.ERR_NoModifiersOnUsing, "static").WithLocation(13, 24));
+        }
+
+        [Fact]
+        public void ReadonlyLocal_InvalidModifiers()
+        {
+            // const is already read-only, and readonly does not apply to local functions: both keep the C# error.
+            var source = """
+                class C
+                {
+                    void M()
+                    {
+                        const readonly int k1 = 1;
+                        readonly const int k2 = 1;
+                        readonly readonly int r = 1;
+                        static readonly int s = 1;
+                        readonly void F() { }
+                        F();
+                        _ = k1 + k2 + r + s;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (5,15): error CS0106: The modifier 'readonly' is not valid for this item
+                //         const readonly int k1 = 1;
+                Diagnostic(ErrorCode.ERR_BadMemberFlag, "readonly").WithArguments("readonly").WithLocation(5, 15),
+                // (6,9): error CS0106: The modifier 'readonly' is not valid for this item
+                //         readonly const int k2 = 1;
+                Diagnostic(ErrorCode.ERR_BadMemberFlag, "readonly").WithArguments("readonly").WithLocation(6, 9),
+                // (7,18): error CS1004: Duplicate 'readonly' modifier
+                //         readonly readonly int r = 1;
+                Diagnostic(ErrorCode.ERR_DuplicateModifier, "readonly").WithArguments("readonly").WithLocation(7, 18),
+                // (8,9): error CS0106: The modifier 'static' is not valid for this item
+                //         static readonly int s = 1;
+                Diagnostic(ErrorCode.ERR_BadMemberFlag, "static").WithArguments("static").WithLocation(8, 9),
+                // (9,9): error CS0106: The modifier 'readonly' is not valid for this item
+                //         readonly void F() { }
+                Diagnostic(ErrorCode.ERR_BadMemberFlag, "readonly").WithArguments("readonly").WithLocation(9, 9));
+        }
+
+        [Fact]
+        public void ReadonlyLocal_NotSupported()
+        {
+            // for initializers, foreach, deconstruction and out variables have no place for a modifier; they stay syntax errors.
+            // val covers foreach, deconstruction and out.
+            var source = """
+                class C
+                {
+                    void M(int[] xs, (int, int) t)
+                    {
+                        for (readonly int i = 0; i < 3; ) { }
+                        foreach (readonly int e in xs) { }
+                        readonly var (p, q) = t;
+                        int.TryParse("1", out readonly int n);
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (5,14): error CS1002: ; expected
+                //         for (readonly int i = 0; i < 3; ) { }
+                Diagnostic(ErrorCode.ERR_SemicolonExpected, "readonly").WithLocation(5, 14),
+                // (5,14): error CS1525: Invalid expression term 'readonly'
+                //         for (readonly int i = 0; i < 3; ) { }
+                Diagnostic(ErrorCode.ERR_InvalidExprTerm, "readonly").WithArguments("readonly").WithLocation(5, 14),
+                // (5,14): error CS1002: ; expected
+                //         for (readonly int i = 0; i < 3; ) { }
+                Diagnostic(ErrorCode.ERR_SemicolonExpected, "readonly").WithLocation(5, 14),
+                // (5,14): error CS1026: ) expected
+                //         for (readonly int i = 0; i < 3; ) { }
+                Diagnostic(ErrorCode.ERR_CloseParenExpected, "readonly").WithLocation(5, 14),
+                // (5,14): error CS1023: Embedded statement cannot be a declaration or labeled statement
+                //         for (readonly int i = 0; i < 3; ) { }
+                Diagnostic(ErrorCode.ERR_BadEmbeddedStmt, "readonly int i = 0;").WithLocation(5, 14),
+                // (5,27): warning CS0219: The variable 'i' is assigned but its value is never used
+                //         for (readonly int i = 0; i < 3; ) { }
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "i").WithArguments("i").WithLocation(5, 27),
+                // (5,34): error CS0103: The name 'i' does not exist in the current context
+                //         for (readonly int i = 0; i < 3; ) { }
+                Diagnostic(ErrorCode.ERR_NameNotInContext, "i").WithArguments("i").WithLocation(5, 34),
+                // (5,41): error CS1513: } expected
+                //         for (readonly int i = 0; i < 3; ) { }
+                Diagnostic(ErrorCode.ERR_RbraceExpected, ")").WithLocation(5, 41),
+                // (6,18): error CS1525: Invalid expression term 'readonly'
+                //         foreach (readonly int e in xs) { }
+                Diagnostic(ErrorCode.ERR_InvalidExprTerm, "readonly").WithArguments("readonly").WithLocation(6, 18),
+                // (6,18): error CS1515: 'in' expected
+                //         foreach (readonly int e in xs) { }
+                Diagnostic(ErrorCode.ERR_InExpected, "readonly").WithLocation(6, 18),
+                // (6,18): error CS0230: Type and identifier are both required in a foreach statement
+                //         foreach (readonly int e in xs) { }
+                Diagnostic(ErrorCode.ERR_BadForeachDecl, "readonly").WithLocation(6, 18),
+                // (6,18): error CS1525: Invalid expression term 'readonly'
+                //         foreach (readonly int e in xs) { }
+                Diagnostic(ErrorCode.ERR_InvalidExprTerm, "readonly").WithArguments("readonly").WithLocation(6, 18),
+                // (6,18): error CS1026: ) expected
+                //         foreach (readonly int e in xs) { }
+                Diagnostic(ErrorCode.ERR_CloseParenExpected, "readonly").WithLocation(6, 18),
+                // (6,18): error CS1023: Embedded statement cannot be a declaration or labeled statement
+                //         foreach (readonly int e in xs) { }
+                Diagnostic(ErrorCode.ERR_BadEmbeddedStmt, "readonly int e in ").WithLocation(6, 18),
+                // (6,31): warning CS0168: The variable 'e' is declared but never used
+                //         foreach (readonly int e in xs) { }
+                Diagnostic(ErrorCode.WRN_UnreferencedVar, "e").WithArguments("e").WithLocation(6, 31),
+                // (6,33): error CS1003: Syntax error, ',' expected
+                //         foreach (readonly int e in xs) { }
+                Diagnostic(ErrorCode.ERR_SyntaxError, "in").WithArguments(",").WithLocation(6, 33),
+                // (6,36): error CS1002: ; expected
+                //         foreach (readonly int e in xs) { }
+                Diagnostic(ErrorCode.ERR_SemicolonExpected, "xs").WithLocation(6, 36),
+                // (6,38): error CS1002: ; expected
+                //         foreach (readonly int e in xs) { }
+                Diagnostic(ErrorCode.ERR_SemicolonExpected, ")").WithLocation(6, 38),
+                // (6,38): error CS1513: } expected
+                //         foreach (readonly int e in xs) { }
+                Diagnostic(ErrorCode.ERR_RbraceExpected, ")").WithLocation(6, 38),
+                // (7,9): error CS0106: The modifier 'readonly' is not valid for this item
+                //         readonly var (p, q) = t;
+                Diagnostic(ErrorCode.ERR_BadMemberFlag, "readonly").WithArguments("readonly").WithLocation(7, 9),
+                // (7,18): error CS0825: The contextual keyword 'var' may only appear within a local variable declaration or in script code
+                //         readonly var (p, q) = t;
+                Diagnostic(ErrorCode.ERR_TypeVarNotFound, "var").WithLocation(7, 18),
+                // (7,22): error CS1001: Identifier expected
+                //         readonly var (p, q) = t;
+                Diagnostic(ErrorCode.ERR_IdentifierExpected, "(").WithLocation(7, 22),
+                // (7,22): error CS8112: Local function '(p, q)' must declare a body because it is not marked 'static extern'.
+                //         readonly var (p, q) = t;
+                Diagnostic(ErrorCode.ERR_LocalFunctionMissingBody, "").WithArguments("(p, q)").WithLocation(7, 22),
+                // (7,23): error CS0246: The type or namespace name 'p' could not be found (are you missing a using directive or an assembly reference?)
+                //         readonly var (p, q) = t;
+                Diagnostic(ErrorCode.ERR_SingleTypeNameNotFound, "p").WithArguments("p").WithLocation(7, 23),
+                // (7,24): error CS1001: Identifier expected
+                //         readonly var (p, q) = t;
+                Diagnostic(ErrorCode.ERR_IdentifierExpected, ",").WithLocation(7, 24),
+                // (7,26): error CS0246: The type or namespace name 'q' could not be found (are you missing a using directive or an assembly reference?)
+                //         readonly var (p, q) = t;
+                Diagnostic(ErrorCode.ERR_SingleTypeNameNotFound, "q").WithArguments("q").WithLocation(7, 26),
+                // (7,27): error CS1001: Identifier expected
+                //         readonly var (p, q) = t;
+                Diagnostic(ErrorCode.ERR_IdentifierExpected, ")").WithLocation(7, 27),
+                // (7,29): error CS1002: ; expected
+                //         readonly var (p, q) = t;
+                Diagnostic(ErrorCode.ERR_SemicolonExpected, "=").WithLocation(7, 29),
+                // (7,29): error CS1525: Invalid expression term '='
+                //         readonly var (p, q) = t;
+                Diagnostic(ErrorCode.ERR_InvalidExprTerm, "=").WithArguments("=").WithLocation(7, 29),
+                // (8,31): error CS1525: Invalid expression term 'readonly'
+                //         int.TryParse("1", out readonly int n);
+                Diagnostic(ErrorCode.ERR_InvalidExprTerm, "readonly").WithArguments("readonly").WithLocation(8, 31),
+                // (8,31): error CS1026: ) expected
+                //         int.TryParse("1", out readonly int n);
+                Diagnostic(ErrorCode.ERR_CloseParenExpected, "readonly").WithLocation(8, 31),
+                // (8,31): error CS1002: ; expected
+                //         int.TryParse("1", out readonly int n);
+                Diagnostic(ErrorCode.ERR_SemicolonExpected, "readonly").WithLocation(8, 31),
+                // (8,44): warning CS0168: The variable 'n' is declared but never used
+                //         int.TryParse("1", out readonly int n);
+                Diagnostic(ErrorCode.WRN_UnreferencedVar, "n").WithArguments("n").WithLocation(8, 44),
+                // (8,45): error CS1003: Syntax error, ',' expected
+                //         int.TryParse("1", out readonly int n);
+                Diagnostic(ErrorCode.ERR_SyntaxError, ")").WithArguments(",").WithLocation(8, 45));
+        }
+
+        [Theory]
+        [CombinatorialData]
+        public void ReadonlyLocal_ScriptFieldsKeepCSharpMeaning(bool sharper)
+        {
+            // In a script, top-level declarations are fields, and readonly fields are already C#.
+            var source = """
+                readonly int t = 1;
+                readonly var u = 2;
+                t = 2;
+                u = 3;
+                """;
+            CreateCompilation(source, parseOptions: sharper ? s_sharperScriptOptions : TestOptions.Script, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (3,1): error CS0191: A readonly field cannot be assigned to (except in a constructor or init-only setter of the type in which the field is defined or a variable initializer)
+                // t = 2;
+                Diagnostic(ErrorCode.ERR_AssgReadonly, "t").WithLocation(3, 1),
+                // (4,1): error CS0191: A readonly field cannot be assigned to (except in a constructor or init-only setter of the type in which the field is defined or a variable initializer)
+                // u = 3;
+                Diagnostic(ErrorCode.ERR_AssgReadonly, "u").WithLocation(4, 1));
+        }
+
+        [Fact]
+        public void ReadonlyLocal_Nullable()
+        {
+            var source = """
+                #nullable enable
+                class C
+                {
+                    void M(string? maybe)
+                    {
+                        readonly string? v = maybe;
+                        readonly var w = maybe;
+                        readonly string x = maybe;
+                        _ = v.Length;
+                        _ = w.Length;
+                        _ = x.Length;
+                        if (v is not null) _ = v.Length;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (8,29): warning CS8600: Converting null literal or possible null value to non-nullable type.
+                //         readonly string x = maybe;
+                Diagnostic(ErrorCode.WRN_ConvertingNullableToNonNullable, "maybe").WithLocation(8, 29),
+                // (9,13): warning CS8602: Dereference of a possibly null reference.
+                //         _ = v.Length;
+                Diagnostic(ErrorCode.WRN_NullReferenceReceiver, "v").WithLocation(9, 13),
+                // (10,13): warning CS8602: Dereference of a possibly null reference.
+                //         _ = w.Length;
+                Diagnostic(ErrorCode.WRN_NullReferenceReceiver, "w").WithLocation(10, 13),
+                // (11,13): warning CS8602: Dereference of a possibly null reference.
+                //         _ = x.Length;
+                Diagnostic(ErrorCode.WRN_NullReferenceReceiver, "x").WithLocation(11, 13));
+        }
+
+        [Fact]
+        public void ReadonlyLocal_SemanticModel()
+        {
+            var source = """
+                class C
+                {
+                    void M()
+                    {
+                        readonly int x = 1;
+                        readonly var y = 2;
+                        _ = x + y;
+                    }
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics();
+            var tree = comp.SyntaxTrees[0];
+            var model = comp.GetSemanticModel(tree);
+            var declarations = tree.GetRoot().DescendantNodes().OfType<LocalDeclarationStatementSyntax>().ToArray();
+            foreach (var declaration in declarations)
+            {
+                Assert.Equal(SyntaxKind.ReadOnlyKeyword, declaration.Modifiers.Single().Kind());
+                Assert.Equal("System.Int32", model.GetTypeInfo(declaration.Declaration.Type).Type.ToTestDisplayString());
+                var local = (ILocalSymbol)model.GetDeclaredSymbol(declaration.Declaration.Variables[0]);
+                Assert.False(local.IsConst);
+                Assert.Equal(RefKind.None, local.RefKind);
+            }
+        }
+
+        [Fact]
+        public void ReadonlyLocal_IOperation()
+        {
+            var source = """
+                class C
+                {
+                    void M()
+                    {
+                        /*<bind>*/readonly int x = 1;/*</bind>*/
+                        _ = x;
+                    }
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            var expectedOperationTree = """
+                IVariableDeclarationGroupOperation (1 declarations) (OperationKind.VariableDeclarationGroup, Type: null) (Syntax: 'readonly int x = 1;')
+                  IVariableDeclarationOperation (1 declarators) (OperationKind.VariableDeclaration, Type: null) (Syntax: 'int x = 1')
+                    Declarators:
+                        IVariableDeclaratorOperation (Symbol: System.Int32 x) (OperationKind.VariableDeclarator, Type: null) (Syntax: 'x = 1')
+                          Initializer:
+                            IVariableInitializerOperation (OperationKind.VariableInitializer, Type: null) (Syntax: '= 1')
+                              ILiteralOperation (OperationKind.Literal, Type: System.Int32, Constant: 1) (Syntax: '1')
+                    Initializer:
+                      null
+                """;
+            VerifyOperationTreeAndDiagnosticsForTest<LocalDeclarationStatementSyntax>(comp, expectedOperationTree, []);
+        }
+
+        [Theory]
+        [CombinatorialData]
+        public void ReadonlyLocal_Parsing(bool sharper)
+        {
+            // The readonly modifier parses the same way with and without Sharper; only its error goes away.
+            var options = sharper ? s_sharperOptions : TestOptions.Regular;
+            var statement = (LocalDeclarationStatementSyntax)SyntaxFactory.ParseStatement("readonly int x = 1;", options: options);
+            Assert.Equal(SyntaxKind.ReadOnlyKeyword, statement.Modifiers.Single().Kind());
+            Assert.Equal(!sharper, statement.Modifiers.Single().ContainsDiagnostics);
+
+            statement = (LocalDeclarationStatementSyntax)SyntaxFactory.ParseStatement("using readonly var x = e;", options: options);
+            Assert.Equal(SyntaxKind.ReadOnlyKeyword, statement.Modifiers.Single().Kind());
+            Assert.Equal(!sharper, statement.Modifiers.Single().ContainsDiagnostics);
+
+            var localFunction = (LocalFunctionStatementSyntax)SyntaxFactory.ParseStatement("readonly void F() { }", options: options);
+            Assert.True(localFunction.Modifiers.Single().ContainsDiagnostics);
+        }
     }
 }

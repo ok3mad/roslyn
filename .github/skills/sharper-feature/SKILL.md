@@ -10,9 +10,9 @@ branches the ones in progress (overview and feature status in `docs/sharper/READ
 by the C# compiler itself: new syntax binds to bound nodes and lowers to ordinary constructs. This skill is the
 checklist distilled from the first features: `yield return ..xs` (a new bound node; the commits merged from
 `sharper/gating`), `val` locals (a contextual keyword on an existing symbol; merged from `sharper/val`, later extended to
-deconstruction, patterns and lambda parameters) and the
-sequence type `T[..]` (a type form that binds to a BCL type; `sharper/sequence-type`). See `SharperTests.cs` for all
-three.
+deconstruction, patterns and lambda parameters), `readonly`
+locals (a modifier C# rejected, reusing the `val` checks) and the sequence type `T[..]` (a type form that binds to a
+BCL type; `sharper/sequence-type`). See `SharperTests.cs` for all of them.
 
 ## When to Use
 
@@ -171,6 +171,11 @@ implementation plan, "Feature 3"):
    binder's decision, and the semantic model needed it too for `GetTypeInfo` on `val`. A decision made by lookup cannot
    be recomputed from syntax later, so it travels with the bound state (`UnboundLambdaState.ParameterIsSharperVal`) to
    the symbol (`LambdaParameterSymbol.IsSharperVal`).
+20. **A modifier C# rejects may be rejected by the parser.** `readonly` on a local parses, but the parser attaches CS0106
+   to the token, so no binder change can lift it. Gate the error in the parser, then add it back wherever the same
+   modifier list builds another construct (`readonly` locals: the local function path and `const readonly`). Check that
+   every position the feature should cover has a slot for the modifier: a `for` initializer has none, and adding one
+   is a public syntax API change.
 
 ## Testing
 

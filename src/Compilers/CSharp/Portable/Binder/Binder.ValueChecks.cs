@@ -3455,6 +3455,11 @@ namespace Microsoft.CodeAnalysis.CSharp
 
                 cause = MessageID.IDS_VALLOCAL;
             }
+            else if (local is SourceLocalSymbol { IsSharperReadOnly: true } && (local.RefKind == RefKind.None || RequiresRefAssignableVariable(kind)))
+            {
+                // On a ref local, readonly forbids ref reassignment; a write through 'readonly ref readonly' reports as for 'ref readonly'.
+                cause = MessageID.IDS_READONLYLOCAL;
+            }
             else if (local.IsForEach)
             {
                 cause = MessageID.IDS_FOREACHLOCAL;

@@ -87,6 +87,7 @@ Not done yet:
 | [Spread in `yield return`](features/yield-return-spread.md) | `yield return ..xs;` yields every element of `xs`. | Prototype, merged into `main` | [#13](https://github.com/ok3mad/roslyn/issues/13) |
 | [Function types](features/function-types.md) | `(A, B) -> R` is `Func<A, B, R>`, and `(A) -> void` is `Action<A>`. | Prototype, merged into `main` | [#21](https://github.com/ok3mad/roslyn/issues/21) |
 | [`val` locals](features/val-locals.md) | `val x = e;` declares an implicitly typed local that cannot be reassigned, also in deconstructions, `foreach`, `out`, patterns and lambda parameters (`(val x) => ...`). | Prototype, merged into `main` | [#14](https://github.com/ok3mad/roslyn/issues/14), [#15](https://github.com/ok3mad/roslyn/issues/15), [#18](https://github.com/ok3mad/roslyn/issues/18), [#17](https://github.com/ok3mad/roslyn/issues/17) |
+| [`readonly` locals](features/readonly-locals.md) | `readonly int x = e;` and `readonly var x = e;` declare locals that cannot be reassigned; `readonly var` is `val`. | Prototype, merged into `main` | [#16](https://github.com/ok3mad/roslyn/issues/16) |
 | [Sequence type](features/sequence-type.md) | `T[..]` is `IEnumerable<T>` in every type position. | Prototype, merged into `main` | [#19](https://github.com/ok3mad/roslyn/issues/19) |
 | [Task type](features/task-type.md) | `T~` is `Task<T>`, and `void~` is `Task`. | Prototype, merged into `main` | [#20](https://github.com/ok3mad/roslyn/issues/20) |
 
@@ -108,7 +109,8 @@ git grep -n "PROTOTYPE(sharper)"
   skill. The GitHub workflows inherited from upstream run only when started by hand; the fork's own are named
   `sharper-*.yml`.
 - `sharper/<feature>` branches hold features in progress; `sharper/gating`, `sharper/val`,
-  `sharper/val-designations`, `sharper/val-patterns`, `sharper/function-types` and `sharper/task-type` are merged.
+  `sharper/val-designations`, `sharper/val-patterns`, `sharper/function-types`, `sharper/task-type`, `sharper/val-lambda-parameters` and
+  `sharper/readonly-locals` are merged.
 
 ## Diagnostics
 
@@ -128,6 +130,8 @@ in `#pragma warning`, `/nowarn` and `.editorconfig`.
 | CS20007 | Error | A function type cannot name its parameters. Remove the name '{0}'. |
 | CS20008 | Error | A function type parameter cannot be '{0}', because a function type is a 'System.Func' or 'System.Action' delegate. |
 | CS20009 | Error | A function type cannot have more than {0} parameters, because no 'System.Func' or 'System.Action' delegate has more. |
+| CS20010 | Warning | Call to non-readonly member '{0}' on readonly local '{1}' runs on a copy, so '{1}' is not changed. |
+| CS20011 | Error | A readonly local must be initialized in its declaration, because it cannot be assigned later. |
 
 ## Where the code is
 

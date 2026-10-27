@@ -1958,12 +1958,12 @@ namespace Microsoft.CodeAnalysis.CSharp
         }
 
         /// <summary>
-        /// True if <paramref name="expression"/> is a Sharper <c>val</c> local, script field or lambda parameter (not a <c>ref val</c>)
+        /// True if <paramref name="expression"/> is a Sharper <c>val</c> or <c>readonly</c> local, a <c>val</c> script field or lambda parameter (not a <c>ref val</c> or <c>readonly ref</c>)
         /// of a type that may be a value type.
         /// </summary>
         internal static bool IsSharperValValue(BoundExpression expression)
         {
-            return expression is BoundLocal { LocalSymbol: SourceLocalSymbol { IsVal: true, RefKind: RefKind.None } } or
+            return expression is BoundLocal { LocalSymbol: SourceLocalSymbol { IsValOrSharperReadOnly: true, RefKind: RefKind.None } } or
                     BoundFieldAccess { FieldSymbol: SourceMemberFieldSymbol { IsSharperVal: true } } or
                     BoundParameter { ParameterSymbol: LambdaParameterSymbol { IsSharperVal: true, RefKind: RefKind.None } } &&
                 expression.Type is { IsReferenceType: false };
@@ -1989,7 +1989,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 BoundParameter parameter => parameter.ParameterSymbol.Name,
                 _ => ((BoundLocal)local).LocalSymbol,
             };
-            Error(diagnostics, ErrorCode.WRN_SharperValMemberCallOnCopy, local.Syntax, method, variable);
+            Error(diagnostics, variable is SourceLocalSymbol { IsVal: false } ? ErrorCode.WRN_SharperReadOnlyLocalMemberCallOnCopy : ErrorCode.WRN_SharperValMemberCallOnCopy, local.Syntax, method, variable);
             return true;
         }
 
