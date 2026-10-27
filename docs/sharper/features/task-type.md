@@ -33,7 +33,7 @@ variables and `using` aliases.
 - **Nullable annotations:** `string?~` is `Task<string?>` and `string~?` is a nullable `Task<string>`, with the same
   warnings as the `Task` spelling.
 - **Constraints are those of `Task<T>`:** a pointer, a static type or a ref struct cannot be the result type (CS0306,
-  CS0718, CS9244).
+  CS0718, CS9244). The error is reported on the result type, where the `Task<T>` spelling reports it.
 - **Not sugared:** `ValueTask<T>` and `IAsyncEnumerable<T>` stay spelled out. In six open-source applications,
   `ValueTask` is 0.4% of async declarations, mostly where an interface imposes it (`DisposeAsync`).
 

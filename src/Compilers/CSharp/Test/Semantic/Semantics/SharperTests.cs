@@ -2155,10 +2155,27 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                     {
                         (int*) -> int local = null;
                         System.Func<int*, int> localTwin = null;
+                        (int, System.Span<int>) -> int span2 = null;
+                        System.Func<int, System.Span<int>, int> span2Twin = null;
+                        (int) -> System.Console staticLocal = null;
+                        System.Func<int, System.Console> staticLocalTwin = null;
+                        ((int*) -> int) -> int nested = null;
+                        System.Func<System.Func<int*, int>, int> nestedTwin = null;
+                        (int*[..]) -> int sequence = null;
+                        System.Func<System.Collections.Generic.IEnumerable<int*>, int> sequenceTwin = null;
+                        (int) -> int*~ task = null;
+                        System.Func<int, System.Threading.Tasks.Task<int*>> taskTwin = null;
+                        (S<string>) -> int constrained = null;
+                        System.Func<S<string>, int> constrainedTwin = null;
                     }
+                    void P((int*) -> int p, System.Func<int*, int> pTwin, (S<string>) -> void q, System.Action<S<string>> qTwin) { }
+                    (S<string>) -> int constrainedField;
+                    System.Func<S<string>, int> constrainedFieldTwin;
                 }
+                struct S<T> where T : struct { }
                 """;
-            // Constraint errors are the same as for the Func twins; in a local, they span the whole function type.
+            // Constraint errors are the same as for the Func twins, and are reported at the same place: on the
+            // parameter or return type that stands for the offending type argument.
             CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, options: TestOptions.UnsafeReleaseDll).VerifyDiagnostics(
                 // (4,6): error CS20008: A function type parameter cannot be 'ref', because a function type is a 'System.Func' or 'System.Action' delegate.
                 //     (ref int, out string, in long) -> bool modifiers;
@@ -2196,9 +2213,9 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (13,38): error CS0718: 'Console': static types cannot be used as type arguments
                 //     System.Func<int, System.Console> staticReturnTwin;
                 Diagnostic(ErrorCode.ERR_GenericArgIsStaticClass, "staticReturnTwin").WithArguments("System.Console").WithLocation(13, 38),
-                // (16,9): error CS0306: The type 'int*' may not be used as a type argument
+                // (16,10): error CS0306: The type 'int*' may not be used as a type argument
                 //         (int*) -> int local = null;
-                Diagnostic(ErrorCode.ERR_BadTypeArgument, "(int*) -> int").WithArguments("int*").WithLocation(16, 9),
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(16, 10),
                 // (16,23): warning CS0219: The variable 'local' is assigned but its value is never used
                 //         (int*) -> int local = null;
                 Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "local").WithArguments("local").WithLocation(16, 23),
@@ -2207,7 +2224,91 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(17, 21),
                 // (17,32): warning CS0219: The variable 'localTwin' is assigned but its value is never used
                 //         System.Func<int*, int> localTwin = null;
-                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "localTwin").WithArguments("localTwin").WithLocation(17, 32));
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "localTwin").WithArguments("localTwin").WithLocation(17, 32),
+                // (18,40): warning CS0219: The variable 'span2' is assigned but its value is never used
+                //         (int, System.Span<int>) -> int span2 = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "span2").WithArguments("span2").WithLocation(18, 40),
+                // (19,49): warning CS0219: The variable 'span2Twin' is assigned but its value is never used
+                //         System.Func<int, System.Span<int>, int> span2Twin = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "span2Twin").WithArguments("span2Twin").WithLocation(19, 49),
+                // (20,18): error CS0718: 'Console': static types cannot be used as type arguments
+                //         (int) -> System.Console staticLocal = null;
+                Diagnostic(ErrorCode.ERR_GenericArgIsStaticClass, "System.Console").WithArguments("System.Console").WithLocation(20, 18),
+                // (20,33): warning CS0219: The variable 'staticLocal' is assigned but its value is never used
+                //         (int) -> System.Console staticLocal = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "staticLocal").WithArguments("staticLocal").WithLocation(20, 33),
+                // (21,26): error CS0718: 'Console': static types cannot be used as type arguments
+                //         System.Func<int, System.Console> staticLocalTwin = null;
+                Diagnostic(ErrorCode.ERR_GenericArgIsStaticClass, "System.Console").WithArguments("System.Console").WithLocation(21, 26),
+                // (21,42): warning CS0219: The variable 'staticLocalTwin' is assigned but its value is never used
+                //         System.Func<int, System.Console> staticLocalTwin = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "staticLocalTwin").WithArguments("staticLocalTwin").WithLocation(21, 42),
+                // (22,11): error CS0306: The type 'int*' may not be used as a type argument
+                //         ((int*) -> int) -> int nested = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(22, 11),
+                // (22,32): warning CS0219: The variable 'nested' is assigned but its value is never used
+                //         ((int*) -> int) -> int nested = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "nested").WithArguments("nested").WithLocation(22, 32),
+                // (23,33): error CS0306: The type 'int*' may not be used as a type argument
+                //         System.Func<System.Func<int*, int>, int> nestedTwin = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(23, 33),
+                // (23,50): warning CS0219: The variable 'nestedTwin' is assigned but its value is never used
+                //         System.Func<System.Func<int*, int>, int> nestedTwin = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "nestedTwin").WithArguments("nestedTwin").WithLocation(23, 50),
+                // (24,10): error CS0306: The type 'int*' may not be used as a type argument
+                //         (int*[..]) -> int sequence = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(24, 10),
+                // (24,27): warning CS0219: The variable 'sequence' is assigned but its value is never used
+                //         (int*[..]) -> int sequence = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "sequence").WithArguments("sequence").WithLocation(24, 27),
+                // (25,60): error CS0306: The type 'int*' may not be used as a type argument
+                //         System.Func<System.Collections.Generic.IEnumerable<int*>, int> sequenceTwin = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(25, 60),
+                // (25,72): warning CS0219: The variable 'sequenceTwin' is assigned but its value is never used
+                //         System.Func<System.Collections.Generic.IEnumerable<int*>, int> sequenceTwin = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "sequenceTwin").WithArguments("sequenceTwin").WithLocation(25, 72),
+                // (26,18): error CS0306: The type 'int*' may not be used as a type argument
+                //         (int) -> int*~ task = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(26, 18),
+                // (26,24): warning CS0219: The variable 'task' is assigned but its value is never used
+                //         (int) -> int*~ task = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "task").WithArguments("task").WithLocation(26, 24),
+                // (27,54): error CS0306: The type 'int*' may not be used as a type argument
+                //         System.Func<int, System.Threading.Tasks.Task<int*>> taskTwin = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(27, 54),
+                // (27,61): warning CS0219: The variable 'taskTwin' is assigned but its value is never used
+                //         System.Func<int, System.Threading.Tasks.Task<int*>> taskTwin = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "taskTwin").WithArguments("taskTwin").WithLocation(27, 61),
+                // (28,12): error CS0453: The type 'string' must be a non-nullable value type in order to use it as parameter 'T' in the generic type or method 'S<T>'
+                //         (S<string>) -> int constrained = null;
+                Diagnostic(ErrorCode.ERR_ValConstraintNotSatisfied, "string").WithArguments("S<T>", "T", "string").WithLocation(28, 12),
+                // (28,28): warning CS0219: The variable 'constrained' is assigned but its value is never used
+                //         (S<string>) -> int constrained = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "constrained").WithArguments("constrained").WithLocation(28, 28),
+                // (29,23): error CS0453: The type 'string' must be a non-nullable value type in order to use it as parameter 'T' in the generic type or method 'S<T>'
+                //         System.Func<S<string>, int> constrainedTwin = null;
+                Diagnostic(ErrorCode.ERR_ValConstraintNotSatisfied, "string").WithArguments("S<T>", "T", "string").WithLocation(29, 23),
+                // (29,37): warning CS0219: The variable 'constrainedTwin' is assigned but its value is never used
+                //         System.Func<S<string>, int> constrainedTwin = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "constrainedTwin").WithArguments("constrainedTwin").WithLocation(29, 37),
+                // (31,26): error CS0306: The type 'int*' may not be used as a type argument
+                //     void P((int*) -> int p, System.Func<int*, int> pTwin, (S<string>) -> void q, System.Action<S<string>> qTwin) { }
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "p").WithArguments("int*").WithLocation(31, 26),
+                // (31,52): error CS0306: The type 'int*' may not be used as a type argument
+                //     void P((int*) -> int p, System.Func<int*, int> pTwin, (S<string>) -> void q, System.Action<S<string>> qTwin) { }
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "pTwin").WithArguments("int*").WithLocation(31, 52),
+                // (31,79): error CS0453: The type 'string' must be a non-nullable value type in order to use it as parameter 'T' in the generic type or method 'S<T>'
+                //     void P((int*) -> int p, System.Func<int*, int> pTwin, (S<string>) -> void q, System.Action<S<string>> qTwin) { }
+                Diagnostic(ErrorCode.ERR_ValConstraintNotSatisfied, "q").WithArguments("S<T>", "T", "string").WithLocation(31, 79),
+                // (31,107): error CS0453: The type 'string' must be a non-nullable value type in order to use it as parameter 'T' in the generic type or method 'S<T>'
+                //     void P((int*) -> int p, System.Func<int*, int> pTwin, (S<string>) -> void q, System.Action<S<string>> qTwin) { }
+                Diagnostic(ErrorCode.ERR_ValConstraintNotSatisfied, "qTwin").WithArguments("S<T>", "T", "string").WithLocation(31, 107),
+                // (32,24): error CS0453: The type 'string' must be a non-nullable value type in order to use it as parameter 'T' in the generic type or method 'S<T>'
+                //     (S<string>) -> int constrainedField;
+                Diagnostic(ErrorCode.ERR_ValConstraintNotSatisfied, "constrainedField").WithArguments("S<T>", "T", "string").WithLocation(32, 24),
+                // (33,33): error CS0453: The type 'string' must be a non-nullable value type in order to use it as parameter 'T' in the generic type or method 'S<T>'
+                //     System.Func<S<string>, int> constrainedFieldTwin;
+                Diagnostic(ErrorCode.ERR_ValConstraintNotSatisfied, "constrainedFieldTwin").WithArguments("S<T>", "T", "string").WithLocation(33, 33));
         }
 
         [Fact]
@@ -2583,9 +2684,27 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                     {
                         int*~ local = null;
                         System.Threading.Tasks.Task<int*> localTwin = null;
+                        System.Span<int>~ spanLocal = null;
+                        System.Threading.Tasks.Task<System.Span<int>> spanLocalTwin = null;
+                        System.Console~ staticLocal = null;
+                        System.Threading.Tasks.Task<System.Console> staticLocalTwin = null;
+                        int*~~ nested = null;
+                        System.Threading.Tasks.Task<System.Threading.Tasks.Task<int*>> nestedTwin = null;
+                        int*[..]~ sequence = null;
+                        System.Threading.Tasks.Task<System.Collections.Generic.IEnumerable<int*>> sequenceTwin = null;
+                        (int*) -> int~ function = null;
+                        System.Func<int*, System.Threading.Tasks.Task<int>> functionTwin = null;
+                        S<string>~ constrained = null;
+                        System.Threading.Tasks.Task<S<string>> constrainedTwin = null;
                     }
+                    void P(int*~ p, System.Threading.Tasks.Task<int*> pTwin, S<string>~ q, System.Threading.Tasks.Task<S<string>> qTwin) { }
+                    S<string>~ constrainedField;
+                    System.Threading.Tasks.Task<S<string>> constrainedFieldTwin;
                 }
+                struct S<T> where T : struct { }
                 """;
+            // Constraint errors are the same as for the Task<T> twins, and are reported at the same place: on the
+            // result type.
             CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, options: TestOptions.UnsafeReleaseDll).VerifyDiagnostics(
                 // (4,11): error CS0306: The type 'int*' may not be used as a type argument
                 //     int*~ pointer;
@@ -2607,7 +2726,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 Diagnostic(ErrorCode.ERR_GenericArgIsStaticClass, "staticResultTwin").WithArguments("System.Console").WithLocation(9, 49),
                 // (13,9): error CS0306: The type 'int*' may not be used as a type argument
                 //         int*~ local = null;
-                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*~").WithArguments("int*").WithLocation(13, 9),
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(13, 9),
                 // (13,15): warning CS0219: The variable 'local' is assigned but its value is never used
                 //         int*~ local = null;
                 Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "local").WithArguments("local").WithLocation(13, 15),
@@ -2616,7 +2735,97 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(14, 37),
                 // (14,43): warning CS0219: The variable 'localTwin' is assigned but its value is never used
                 //         System.Threading.Tasks.Task<int*> localTwin = null;
-                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "localTwin").WithArguments("localTwin").WithLocation(14, 43));
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "localTwin").WithArguments("localTwin").WithLocation(14, 43),
+                // (15,9): error CS9244: The type 'Span<int>' may not be a ref struct or a type parameter allowing ref structs in order to use it as parameter 'TResult' in the generic type or method 'Task<TResult>'
+                //         System.Span<int>~ spanLocal = null;
+                Diagnostic(ErrorCode.ERR_NotRefStructConstraintNotSatisfied, "System.Span<int>").WithArguments("System.Threading.Tasks.Task<TResult>", "TResult", "System.Span<int>").WithLocation(15, 9),
+                // (15,27): warning CS0219: The variable 'spanLocal' is assigned but its value is never used
+                //         System.Span<int>~ spanLocal = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "spanLocal").WithArguments("spanLocal").WithLocation(15, 27),
+                // (16,37): error CS9244: The type 'Span<int>' may not be a ref struct or a type parameter allowing ref structs in order to use it as parameter 'TResult' in the generic type or method 'Task<TResult>'
+                //         System.Threading.Tasks.Task<System.Span<int>> spanLocalTwin = null;
+                Diagnostic(ErrorCode.ERR_NotRefStructConstraintNotSatisfied, "System.Span<int>").WithArguments("System.Threading.Tasks.Task<TResult>", "TResult", "System.Span<int>").WithLocation(16, 37),
+                // (16,55): warning CS0219: The variable 'spanLocalTwin' is assigned but its value is never used
+                //         System.Threading.Tasks.Task<System.Span<int>> spanLocalTwin = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "spanLocalTwin").WithArguments("spanLocalTwin").WithLocation(16, 55),
+                // (17,9): error CS0718: 'Console': static types cannot be used as type arguments
+                //         System.Console~ staticLocal = null;
+                Diagnostic(ErrorCode.ERR_GenericArgIsStaticClass, "System.Console").WithArguments("System.Console").WithLocation(17, 9),
+                // (17,25): warning CS0219: The variable 'staticLocal' is assigned but its value is never used
+                //         System.Console~ staticLocal = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "staticLocal").WithArguments("staticLocal").WithLocation(17, 25),
+                // (18,37): error CS0718: 'Console': static types cannot be used as type arguments
+                //         System.Threading.Tasks.Task<System.Console> staticLocalTwin = null;
+                Diagnostic(ErrorCode.ERR_GenericArgIsStaticClass, "System.Console").WithArguments("System.Console").WithLocation(18, 37),
+                // (18,53): warning CS0219: The variable 'staticLocalTwin' is assigned but its value is never used
+                //         System.Threading.Tasks.Task<System.Console> staticLocalTwin = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "staticLocalTwin").WithArguments("staticLocalTwin").WithLocation(18, 53),
+                // (19,9): error CS0306: The type 'int*' may not be used as a type argument
+                //         int*~~ nested = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(19, 9),
+                // (19,16): warning CS0219: The variable 'nested' is assigned but its value is never used
+                //         int*~~ nested = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "nested").WithArguments("nested").WithLocation(19, 16),
+                // (20,65): error CS0306: The type 'int*' may not be used as a type argument
+                //         System.Threading.Tasks.Task<System.Threading.Tasks.Task<int*>> nestedTwin = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(20, 65),
+                // (20,72): warning CS0219: The variable 'nestedTwin' is assigned but its value is never used
+                //         System.Threading.Tasks.Task<System.Threading.Tasks.Task<int*>> nestedTwin = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "nestedTwin").WithArguments("nestedTwin").WithLocation(20, 72),
+                // (21,9): error CS0306: The type 'int*' may not be used as a type argument
+                //         int*[..]~ sequence = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(21, 9),
+                // (21,19): warning CS0219: The variable 'sequence' is assigned but its value is never used
+                //         int*[..]~ sequence = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "sequence").WithArguments("sequence").WithLocation(21, 19),
+                // (22,76): error CS0306: The type 'int*' may not be used as a type argument
+                //         System.Threading.Tasks.Task<System.Collections.Generic.IEnumerable<int*>> sequenceTwin = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(22, 76),
+                // (22,83): warning CS0219: The variable 'sequenceTwin' is assigned but its value is never used
+                //         System.Threading.Tasks.Task<System.Collections.Generic.IEnumerable<int*>> sequenceTwin = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "sequenceTwin").WithArguments("sequenceTwin").WithLocation(22, 83),
+                // (23,10): error CS0306: The type 'int*' may not be used as a type argument
+                //         (int*) -> int~ function = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(23, 10),
+                // (23,24): warning CS0219: The variable 'function' is assigned but its value is never used
+                //         (int*) -> int~ function = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "function").WithArguments("function").WithLocation(23, 24),
+                // (24,21): error CS0306: The type 'int*' may not be used as a type argument
+                //         System.Func<int*, System.Threading.Tasks.Task<int>> functionTwin = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(24, 21),
+                // (24,61): warning CS0219: The variable 'functionTwin' is assigned but its value is never used
+                //         System.Func<int*, System.Threading.Tasks.Task<int>> functionTwin = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "functionTwin").WithArguments("functionTwin").WithLocation(24, 61),
+                // (25,11): error CS0453: The type 'string' must be a non-nullable value type in order to use it as parameter 'T' in the generic type or method 'S<T>'
+                //         S<string>~ constrained = null;
+                Diagnostic(ErrorCode.ERR_ValConstraintNotSatisfied, "string").WithArguments("S<T>", "T", "string").WithLocation(25, 11),
+                // (25,20): warning CS0219: The variable 'constrained' is assigned but its value is never used
+                //         S<string>~ constrained = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "constrained").WithArguments("constrained").WithLocation(25, 20),
+                // (26,39): error CS0453: The type 'string' must be a non-nullable value type in order to use it as parameter 'T' in the generic type or method 'S<T>'
+                //         System.Threading.Tasks.Task<S<string>> constrainedTwin = null;
+                Diagnostic(ErrorCode.ERR_ValConstraintNotSatisfied, "string").WithArguments("S<T>", "T", "string").WithLocation(26, 39),
+                // (26,48): warning CS0219: The variable 'constrainedTwin' is assigned but its value is never used
+                //         System.Threading.Tasks.Task<S<string>> constrainedTwin = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "constrainedTwin").WithArguments("constrainedTwin").WithLocation(26, 48),
+                // (28,18): error CS0306: The type 'int*' may not be used as a type argument
+                //     void P(int*~ p, System.Threading.Tasks.Task<int*> pTwin, S<string>~ q, System.Threading.Tasks.Task<S<string>> qTwin) { }
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "p").WithArguments("int*").WithLocation(28, 18),
+                // (28,55): error CS0306: The type 'int*' may not be used as a type argument
+                //     void P(int*~ p, System.Threading.Tasks.Task<int*> pTwin, S<string>~ q, System.Threading.Tasks.Task<S<string>> qTwin) { }
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "pTwin").WithArguments("int*").WithLocation(28, 55),
+                // (28,73): error CS0453: The type 'string' must be a non-nullable value type in order to use it as parameter 'T' in the generic type or method 'S<T>'
+                //     void P(int*~ p, System.Threading.Tasks.Task<int*> pTwin, S<string>~ q, System.Threading.Tasks.Task<S<string>> qTwin) { }
+                Diagnostic(ErrorCode.ERR_ValConstraintNotSatisfied, "q").WithArguments("S<T>", "T", "string").WithLocation(28, 73),
+                // (28,115): error CS0453: The type 'string' must be a non-nullable value type in order to use it as parameter 'T' in the generic type or method 'S<T>'
+                //     void P(int*~ p, System.Threading.Tasks.Task<int*> pTwin, S<string>~ q, System.Threading.Tasks.Task<S<string>> qTwin) { }
+                Diagnostic(ErrorCode.ERR_ValConstraintNotSatisfied, "qTwin").WithArguments("S<T>", "T", "string").WithLocation(28, 115),
+                // (29,16): error CS0453: The type 'string' must be a non-nullable value type in order to use it as parameter 'T' in the generic type or method 'S<T>'
+                //     S<string>~ constrainedField;
+                Diagnostic(ErrorCode.ERR_ValConstraintNotSatisfied, "constrainedField").WithArguments("S<T>", "T", "string").WithLocation(29, 16),
+                // (30,44): error CS0453: The type 'string' must be a non-nullable value type in order to use it as parameter 'T' in the generic type or method 'S<T>'
+                //     System.Threading.Tasks.Task<S<string>> constrainedFieldTwin;
+                Diagnostic(ErrorCode.ERR_ValConstraintNotSatisfied, "constrainedFieldTwin").WithArguments("S<T>", "T", "string").WithLocation(30, 44));
         }
 
         [Fact]
@@ -3141,11 +3350,35 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                         _ = new int[3][..];
                         System.Console[..] d = null;
                         IEnumerable<System.Console> d2 = null;
+                        unsafe
+                        {
+                            int*[..] e = null;
+                            IEnumerable<int*> e2 = null;
+                            int*[..][..] nested = null;
+                            IEnumerable<IEnumerable<int*>> nested2 = null;
+                            int*[][..] pointerArrays = null;
+                            IEnumerable<int*[]> pointerArrays2 = null;
+                            int*[..][][..] mixed = null;
+                            IEnumerable<IEnumerable<int*>[]> mixed2 = null;
+                            int*~[..] task = null;
+                            IEnumerable<System.Threading.Tasks.Task<int*>> task2 = null;
+                        }
+                        System.Span<int>[..] span = null;
+                        IEnumerable<System.Span<int>> span2 = null;
+                        System.Console[][..] staticArrays = null;
+                        IEnumerable<System.Console[]> staticArrays2 = null;
+                        S<string>[..] constrained = null;
+                        IEnumerable<S<string>> constrained2 = null;
                     }
+                    void P(System.Console[..] p, IEnumerable<System.Console> p2, S<string>[..] q, IEnumerable<S<string>> q2) { }
+                    S<string>[..] H;
+                    IEnumerable<S<string>> H2;
                 }
+                struct S<T> where T : struct { }
                 """;
             // Sizes other than a lone `..` stay array sizes, and an array creation keeps its C# meaning. A sequence of
-            // an invalid element type reports what its IEnumerable<T> twin reports.
+            // an invalid element type reports what its IEnumerable<T> twin reports, at the same place: on the element
+            // type.
             CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, options: TestOptions.UnsafeDebugDll).VerifyDiagnostics(
                 // (4,8): error CS0270: Array size cannot be specified in a variable declaration (try initializing with a 'new' expression)
                 //     int[1..] A;
@@ -3227,7 +3460,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 Diagnostic(ErrorCode.ERR_InvalidArray, "..").WithLocation(17, 24),
                 // (18,9): error CS0718: 'Console': static types cannot be used as type arguments
                 //         System.Console[..] d = null;
-                Diagnostic(ErrorCode.ERR_GenericArgIsStaticClass, "System.Console[..]").WithArguments("System.Console").WithLocation(18, 9),
+                Diagnostic(ErrorCode.ERR_GenericArgIsStaticClass, "System.Console").WithArguments("System.Console").WithLocation(18, 9),
                 // (18,28): warning CS0219: The variable 'd' is assigned but its value is never used
                 //         System.Console[..] d = null;
                 Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "d").WithArguments("d").WithLocation(18, 28),
@@ -3236,7 +3469,115 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 Diagnostic(ErrorCode.ERR_GenericArgIsStaticClass, "System.Console").WithArguments("System.Console").WithLocation(19, 21),
                 // (19,37): warning CS0219: The variable 'd2' is assigned but its value is never used
                 //         IEnumerable<System.Console> d2 = null;
-                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "d2").WithArguments("d2").WithLocation(19, 37));
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "d2").WithArguments("d2").WithLocation(19, 37),
+                // (22,13): error CS0306: The type 'int*' may not be used as a type argument
+                //             int*[..] e = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(22, 13),
+                // (22,22): warning CS0219: The variable 'e' is assigned but its value is never used
+                //             int*[..] e = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "e").WithArguments("e").WithLocation(22, 22),
+                // (23,25): error CS0306: The type 'int*' may not be used as a type argument
+                //             IEnumerable<int*> e2 = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(23, 25),
+                // (23,31): warning CS0219: The variable 'e2' is assigned but its value is never used
+                //             IEnumerable<int*> e2 = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "e2").WithArguments("e2").WithLocation(23, 31),
+                // (24,13): error CS0306: The type 'int*' may not be used as a type argument
+                //             int*[..][..] nested = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(24, 13),
+                // (24,26): warning CS0219: The variable 'nested' is assigned but its value is never used
+                //             int*[..][..] nested = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "nested").WithArguments("nested").WithLocation(24, 26),
+                // (25,37): error CS0306: The type 'int*' may not be used as a type argument
+                //             IEnumerable<IEnumerable<int*>> nested2 = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(25, 37),
+                // (25,44): warning CS0219: The variable 'nested2' is assigned but its value is never used
+                //             IEnumerable<IEnumerable<int*>> nested2 = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "nested2").WithArguments("nested2").WithLocation(25, 44),
+                // (26,24): warning CS0219: The variable 'pointerArrays' is assigned but its value is never used
+                //             int*[][..] pointerArrays = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "pointerArrays").WithArguments("pointerArrays").WithLocation(26, 24),
+                // (27,33): warning CS0219: The variable 'pointerArrays2' is assigned but its value is never used
+                //             IEnumerable<int*[]> pointerArrays2 = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "pointerArrays2").WithArguments("pointerArrays2").WithLocation(27, 33),
+                // (28,13): error CS0306: The type 'int*' may not be used as a type argument
+                //             int*[..][][..] mixed = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(28, 13),
+                // (28,28): warning CS0219: The variable 'mixed' is assigned but its value is never used
+                //             int*[..][][..] mixed = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "mixed").WithArguments("mixed").WithLocation(28, 28),
+                // (29,37): error CS0306: The type 'int*' may not be used as a type argument
+                //             IEnumerable<IEnumerable<int*>[]> mixed2 = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(29, 37),
+                // (29,46): warning CS0219: The variable 'mixed2' is assigned but its value is never used
+                //             IEnumerable<IEnumerable<int*>[]> mixed2 = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "mixed2").WithArguments("mixed2").WithLocation(29, 46),
+                // (30,13): error CS0306: The type 'int*' may not be used as a type argument
+                //             int*~[..] task = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(30, 13),
+                // (30,23): warning CS0219: The variable 'task' is assigned but its value is never used
+                //             int*~[..] task = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "task").WithArguments("task").WithLocation(30, 23),
+                // (31,53): error CS0306: The type 'int*' may not be used as a type argument
+                //             IEnumerable<System.Threading.Tasks.Task<int*>> task2 = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(31, 53),
+                // (31,60): warning CS0219: The variable 'task2' is assigned but its value is never used
+                //             IEnumerable<System.Threading.Tasks.Task<int*>> task2 = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "task2").WithArguments("task2").WithLocation(31, 60),
+                // (33,30): warning CS0219: The variable 'span' is assigned but its value is never used
+                //         System.Span<int>[..] span = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "span").WithArguments("span").WithLocation(33, 30),
+                // (34,39): warning CS0219: The variable 'span2' is assigned but its value is never used
+                //         IEnumerable<System.Span<int>> span2 = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "span2").WithArguments("span2").WithLocation(34, 39),
+                // (35,9): error CS0719: 'Console': array elements cannot be of static type
+                //         System.Console[][..] staticArrays = null;
+                Diagnostic(ErrorCode.ERR_ArrayOfStaticClass, "System.Console").WithArguments("System.Console").WithLocation(35, 9),
+                // (35,30): warning CS0219: The variable 'staticArrays' is assigned but its value is never used
+                //         System.Console[][..] staticArrays = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "staticArrays").WithArguments("staticArrays").WithLocation(35, 30),
+                // (36,21): error CS0719: 'Console': array elements cannot be of static type
+                //         IEnumerable<System.Console[]> staticArrays2 = null;
+                Diagnostic(ErrorCode.ERR_ArrayOfStaticClass, "System.Console").WithArguments("System.Console").WithLocation(36, 21),
+                // (36,39): warning CS0219: The variable 'staticArrays2' is assigned but its value is never used
+                //         IEnumerable<System.Console[]> staticArrays2 = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "staticArrays2").WithArguments("staticArrays2").WithLocation(36, 39),
+                // (37,11): error CS0453: The type 'string' must be a non-nullable value type in order to use it as parameter 'T' in the generic type or method 'S<T>'
+                //         S<string>[..] constrained = null;
+                Diagnostic(ErrorCode.ERR_ValConstraintNotSatisfied, "string").WithArguments("S<T>", "T", "string").WithLocation(37, 11),
+                // (37,23): warning CS0219: The variable 'constrained' is assigned but its value is never used
+                //         S<string>[..] constrained = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "constrained").WithArguments("constrained").WithLocation(37, 23),
+                // (38,23): error CS0453: The type 'string' must be a non-nullable value type in order to use it as parameter 'T' in the generic type or method 'S<T>'
+                //         IEnumerable<S<string>> constrained2 = null;
+                Diagnostic(ErrorCode.ERR_ValConstraintNotSatisfied, "string").WithArguments("S<T>", "T", "string").WithLocation(38, 23),
+                // (38,32): warning CS0219: The variable 'constrained2' is assigned but its value is never used
+                //         IEnumerable<S<string>> constrained2 = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "constrained2").WithArguments("constrained2").WithLocation(38, 32),
+                // (40,31): error CS0718: 'Console': static types cannot be used as type arguments
+                //     void P(System.Console[..] p, IEnumerable<System.Console> p2, S<string>[..] q, IEnumerable<S<string>> q2) { }
+                Diagnostic(ErrorCode.ERR_GenericArgIsStaticClass, "p").WithArguments("System.Console").WithLocation(40, 31),
+                // (40,62): error CS0718: 'Console': static types cannot be used as type arguments
+                //     void P(System.Console[..] p, IEnumerable<System.Console> p2, S<string>[..] q, IEnumerable<S<string>> q2) { }
+                Diagnostic(ErrorCode.ERR_GenericArgIsStaticClass, "p2").WithArguments("System.Console").WithLocation(40, 62),
+                // (40,80): error CS0453: The type 'string' must be a non-nullable value type in order to use it as parameter 'T' in the generic type or method 'S<T>'
+                //     void P(System.Console[..] p, IEnumerable<System.Console> p2, S<string>[..] q, IEnumerable<S<string>> q2) { }
+                Diagnostic(ErrorCode.ERR_ValConstraintNotSatisfied, "q").WithArguments("S<T>", "T", "string").WithLocation(40, 80),
+                // (40,106): error CS0453: The type 'string' must be a non-nullable value type in order to use it as parameter 'T' in the generic type or method 'S<T>'
+                //     void P(System.Console[..] p, IEnumerable<System.Console> p2, S<string>[..] q, IEnumerable<S<string>> q2) { }
+                Diagnostic(ErrorCode.ERR_ValConstraintNotSatisfied, "q2").WithArguments("S<T>", "T", "string").WithLocation(40, 106),
+                // (41,19): error CS0453: The type 'string' must be a non-nullable value type in order to use it as parameter 'T' in the generic type or method 'S<T>'
+                //     S<string>[..] H;
+                Diagnostic(ErrorCode.ERR_ValConstraintNotSatisfied, "H").WithArguments("S<T>", "T", "string").WithLocation(41, 19),
+                // (41,19): warning CS0169: The field 'C.H' is never used
+                //     S<string>[..] H;
+                Diagnostic(ErrorCode.WRN_UnreferencedField, "H").WithArguments("C.H").WithLocation(41, 19),
+                // (42,28): error CS0453: The type 'string' must be a non-nullable value type in order to use it as parameter 'T' in the generic type or method 'S<T>'
+                //     IEnumerable<S<string>> H2;
+                Diagnostic(ErrorCode.ERR_ValConstraintNotSatisfied, "H2").WithArguments("S<T>", "T", "string").WithLocation(42, 28),
+                // (42,28): warning CS0169: The field 'C.H2' is never used
+                //     IEnumerable<S<string>> H2;
+                Diagnostic(ErrorCode.WRN_UnreferencedField, "H2").WithArguments("C.H2").WithLocation(42, 28));
         }
 
         [Fact]
