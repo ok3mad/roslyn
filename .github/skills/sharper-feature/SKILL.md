@@ -177,7 +177,18 @@ implementation plan, "Feature 3"):
    every position the feature should cover has a slot for the modifier: a `for` initializer has none, and adding one
    is a public syntax API change. Other modifiers are rejected by the binder instead: `readonly` on a parameter parses
    (for `ref readonly`), and `ParameterHelpers.CheckParameterModifiers` reports CS9190.
-21. **Simple symbols keep no syntax.** A rule read from a parameter's syntax needs the syntax on the symbol, but
+21. **A type form that wraps an ambiguous one inherits its ambiguity, and C# has more than one tuple scan.** The
+   parenthesized function type `((p)->F)` returns the flags of `(p)->F` from `ScanType`, so callers treat it like a
+   name and `((p)->F)[i]`, `((p)->F)?.X` and `((p)->F) ? a : b` keep their C# meaning. The cast heuristic is the
+   exception: `(((p)->F))(x)` would become a cast, so `ScanCast` refuses an ambiguous type that starts with `(` (no C#
+   type that starts with `(` is ambiguous). `ScanTypeFlags` cannot say what kind of type was scanned; the scan records
+   the last token of the latest function type (`_lastTokenOfScannedSharperFunctionType`), cleared before each read.
+   Grep for other scans of `(`: target-typed `new(...)` has its own (`IsImplicitObjectCreation`), so
+   `new ((int) -> int)[3]` needed it too. Check every "valid C#" case with the flag off before testing it:
+   `e is (p)->F` turned out to be a C# syntax error, which left function types free to take that place in patterns.
+   Patterns parse their type in their own mode (`AfterIs`, `DefinitePattern`), which is what keeps `x is T ? a : b` a
+   conditional; a type form that parses a nested type (the function type's return type) must pass that mode on.
+22. **Simple symbols keep no syntax.** A rule read from a parameter's syntax needs the syntax on the symbol, but
    `SourceParameterSymbol.Create` makes a parameter with no modifiers, attributes or default a
    `SourceSimpleParameterSymbol`, which drops it. Add the condition there so such parameters stay complex
    (`readonly` parameters), or carry the decision in a flag, as `LambdaParameterSymbol.IsSharperVal` does.

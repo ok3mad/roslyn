@@ -98,6 +98,14 @@ namespace Microsoft.CodeAnalysis.CSharp.Syntax.InternalSyntax
                 return true;
             }
 
+            // Sharper: a function type, `(A) -> R`, or a parenthesized one, `((A) -> R)[]`. In C# neither is a pattern: a
+            // parenthesized pattern or expression cannot be followed by `->`. Where the type cannot be followed by what
+            // comes next, the caller still parses C#'s pattern instead.
+            if (tk == SyntaxKind.OpenParenToken && IsFeatureEnabled(MessageID.IDS_FeatureSharper) && IsSharperFunctionTypeStart(out _))
+            {
+                return true;
+            }
+
             return false;
         }
 

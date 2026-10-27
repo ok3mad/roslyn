@@ -543,7 +543,8 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         [Fact]
         public void YieldReturnSpread_RefStructSource()
         {
-            // A span's enumerator cannot live across the yields.
+            // A span's enumerator cannot live across the yields. The spread says so, instead of CS4007 about
+            // Span<int>.Enumerator, which the user never wrote.
             var source = """
                 using System;
                 using System.Collections.Generic;
@@ -557,9 +558,217 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyEmitDiagnostics(
-                // (8,9): error CS4007: Instance of type 'System.Span<int>.Enumerator' cannot be preserved across 'await' or 'yield' boundary.
+                // (8,24): error CS20012: A spread 'yield return ..' cannot enumerate 'Span<int>' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead.
                 //         yield return ..xs.AsSpan();
-                Diagnostic(ErrorCode.ERR_ByRefTypeAndAwait, "yield return ..xs.AsSpan();").WithArguments("System.Span<int>.Enumerator").WithLocation(8, 9));
+                Diagnostic(ErrorCode.ERR_SharperSpreadRefStructEnumerator, "xs.AsSpan()").WithArguments("System.Span<int>").WithLocation(8, 24));
+        }
+
+        [Fact]
+        public void YieldReturnSpread_RefStructSource_CSharp()
+        {
+            // The C# the spread stands for.
+            var source = """
+                using System;
+                using System.Collections.Generic;
+
+                class C
+                {
+                    static IEnumerable<int> Spread(int[] xs)
+                    {
+                        foreach (var x in xs.AsSpan())
+                            yield return x;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyEmitDiagnostics(
+                // (8,9): error CS4007: Instance of type 'System.Span<int>' cannot be preserved across 'await' or 'yield' boundary.
+                //         foreach (var x in xs.AsSpan())
+                Diagnostic(ErrorCode.ERR_ByRefTypeAndAwait, @"foreach (var x in xs.AsSpan())
+            yield return x;").WithArguments("System.Span<int>").WithLocation(8, 9));
+        }
+
+        [Fact]
+        public void YieldReturnSpread_RefStructSource_ReadOnlySpan()
+        {
+            // The element conversion (string to int) would fail too; only the spread error is reported.
+            var source = """
+                using System;
+                using System.Collections.Generic;
+
+                class C
+                {
+                    static IEnumerable<int> Spread(string s, int[] xs)
+                    {
+                        yield return ..s.AsSpan();
+                        yield return ..new ReadOnlySpan<int>(xs);
+                        yield return ..new ReadOnlySpan<string>([s]);
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyEmitDiagnostics(
+                // (8,24): error CS20012: A spread 'yield return ..' cannot enumerate 'ReadOnlySpan<char>' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead.
+                //         yield return ..s.AsSpan();
+                Diagnostic(ErrorCode.ERR_SharperSpreadRefStructEnumerator, "s.AsSpan()").WithArguments("System.ReadOnlySpan<char>").WithLocation(8, 24),
+                // (9,24): error CS20012: A spread 'yield return ..' cannot enumerate 'ReadOnlySpan<int>' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead.
+                //         yield return ..new ReadOnlySpan<int>(xs);
+                Diagnostic(ErrorCode.ERR_SharperSpreadRefStructEnumerator, "new ReadOnlySpan<int>(xs)").WithArguments("System.ReadOnlySpan<int>").WithLocation(9, 24),
+                // (10,24): error CS20012: A spread 'yield return ..' cannot enumerate 'ReadOnlySpan<string>' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead.
+                //         yield return ..new ReadOnlySpan<string>([s]);
+                Diagnostic(ErrorCode.ERR_SharperSpreadRefStructEnumerator, "new ReadOnlySpan<string>([s])").WithArguments("System.ReadOnlySpan<string>").WithLocation(10, 24));
+        }
+
+        [Fact]
+        public void YieldReturnSpread_RefStructSource_InlineArray()
+        {
+            // An inline array is not a ref struct, but it is enumerated through a span.
+            var source = """
+                using System.Collections.Generic;
+                using System.Runtime.CompilerServices;
+
+                class C
+                {
+                    static IEnumerable<int> Spread(Buffer b)
+                    {
+                        yield return ..b;
+                    }
+                }
+
+                [InlineArray(3)]
+                struct Buffer
+                {
+                    private int _element0;
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyEmitDiagnostics(
+                // (8,24): error CS20012: A spread 'yield return ..' cannot enumerate 'Buffer' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead.
+                //         yield return ..b;
+                Diagnostic(ErrorCode.ERR_SharperSpreadRefStructEnumerator, "b").WithArguments("Buffer").WithLocation(8, 24));
+        }
+
+        [Fact]
+        public void YieldReturnSpread_RefStructSource_PatternEnumerator()
+        {
+            // A ref struct collection whose pattern-based GetEnumerator returns a ref struct.
+            var source = """
+                using System.Collections.Generic;
+
+                class C
+                {
+                    static IEnumerable<int> Spread()
+                    {
+                        yield return ..new R();
+                    }
+                }
+
+                ref struct R
+                {
+                    public Enumerator GetEnumerator() => default;
+
+                    public ref struct Enumerator
+                    {
+                        public int Current => 0;
+                        public bool MoveNext() => false;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyEmitDiagnostics(
+                // (7,24): error CS20012: A spread 'yield return ..' cannot enumerate 'R' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead.
+                //         yield return ..new R();
+                Diagnostic(ErrorCode.ERR_SharperSpreadRefStructEnumerator, "new R()").WithArguments("R").WithLocation(7, 24));
+        }
+
+        [Fact]
+        public void YieldReturnSpread_RefStructSource_ClassEnumerator()
+        {
+            // A ref struct collection whose enumerator is a class is fine: only the enumerator lives across the yields.
+            var source = """
+                using System;
+                using System.Collections.Generic;
+
+                foreach (var x in C.Spread())
+                    Console.Write(x);
+
+                class C
+                {
+                    public static IEnumerable<int> Spread()
+                    {
+                        yield return ..new R();
+                    }
+                }
+
+                ref struct R
+                {
+                    public IEnumerator<int> GetEnumerator() => new List<int> { 1, 2, 3 }.GetEnumerator();
+                }
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "123" : null).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void YieldReturnSpread_RefStructEnumerator_ClassSource()
+        {
+            // A class collection whose enumerator is a ref struct is rejected too.
+            var source = """
+                using System.Collections.Generic;
+
+                class C
+                {
+                    static IEnumerable<int> Spread(S s)
+                    {
+                        yield return ..s;
+                    }
+                }
+
+                class S
+                {
+                    public Enumerator GetEnumerator() => default;
+
+                    public ref struct Enumerator
+                    {
+                        public int Current => 0;
+                        public bool MoveNext() => false;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyEmitDiagnostics(
+                // (7,24): error CS20012: A spread 'yield return ..' cannot enumerate 'S' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead.
+                //         yield return ..s;
+                Diagnostic(ErrorCode.ERR_SharperSpreadRefStructEnumerator, "s").WithArguments("S").WithLocation(7, 24));
+        }
+
+        [Fact]
+        public void YieldReturnSpread_RefStructSource_RangeWins()
+        {
+            // A ref struct that converts to Index makes `..r` a valid C# range in an iterator of Range. C# wins: no error.
+            var source = """
+                using System;
+                using System.Collections.Generic;
+
+                foreach (var x in C.Spread())
+                    Console.Write(x);
+
+                class C
+                {
+                    public static IEnumerable<Range> Spread()
+                    {
+                        yield return ..new R();
+                    }
+                }
+
+                ref struct R
+                {
+                    public static implicit operator Index(R r) => 2;
+                    public Enumerator GetEnumerator() => default;
+
+                    public ref struct Enumerator
+                    {
+                        public int Current => 0;
+                        public bool MoveNext() => false;
+                    }
+                }
+                """;
+            // ILVerify: Return type is ByRef, TypedReference, ArgHandle, or ArgIterator (R.GetEnumerator returns a ref struct).
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, verify: Verification.FailsILVerify, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "0..2" : null).VerifyDiagnostics();
         }
 
         [Fact]
@@ -2412,6 +2621,650 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         }
 
         [Fact]
+        public void FunctionType_Parenthesized_Basic()
+        {
+            // Parentheses let a suffix apply to the whole function type: ((int) -> int)? is Func<int, int>?.
+            var source = """
+                #nullable enable
+                using System;
+                using System.Collections.Generic;
+                using System.Threading.Tasks;
+
+                ((int) -> int)? none = null;
+                ((int) -> int)[] handlers = [i => i + 1, i => i * 2];
+                ((int) -> int)~ pending = Task.FromResult<(int) -> int>(i => -i);
+                List<((string) -> void)?> actions = [null, s => Console.Write(" " + s)];
+                () -> ((int) -> int)[] factory = () => handlers;
+
+                Console.Write(none is null);
+                Console.Write(" " + handlers[0](1) + handlers[1](5));
+                Console.Write(" " + (await pending)(3));
+                actions[1]?.Invoke("action");
+                Console.Write(" " + factory().Length);
+                Console.Write(" " + Apply(handlers, 10));
+                Console.Write(" " + (typeof(((int) -> int)[]) == typeof(Func<int, int>[])));
+                Console.Write(" " + (typeof(((int) -> int)~) == typeof(Task<Func<int, int>>)));
+                Console.Write(" " + (typeof(((int) -> int)[..]) == typeof(IEnumerable<Func<int, int>>)));
+                Console.Write(" " + (typeof(((int) -> int)) == typeof(Func<int, int>)));
+
+                static int Apply(((int) -> int)[] fs, int x)
+                {
+                    foreach (((int) -> int)? f in fs) { x = f?.Invoke(x) ?? x; }
+                    return x;
+                }
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90,
+                expectedOutput: ExecutionConditionUtil.IsCoreClr ? "True 210 -3 action 2 22 True True True True" : null).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void FunctionType_Parenthesized_TypePositions()
+        {
+            // Each parenthesized function type is the type written with Func, Action, Task and IEnumerable.
+            var source = """
+                #nullable enable
+                using System;
+                using System.Collections.Generic;
+                using System.Threading.Tasks;
+                using Handlers = ((int) -> int)[];
+
+                #pragma warning disable CS0169, CS0649, CS8618 // The field is never used, assigned or initialized
+                class C
+                {
+                    ((int) -> int)? A; Func<int, int>? ATwin;
+                    ((int) -> int)[] B; Func<int, int>[] BTwin;
+                    ((int) -> int)~ T; Task<Func<int, int>> TTwin;
+                    ((int) -> int)[]? D; Func<int, int>[]? DTwin;
+                    ((int) -> int)~? E; Task<Func<int, int>>? ETwin;
+                    ((int) -> int)?[] F; Func<int, int>?[] FTwin;
+                    ((int) -> int?)? G; Func<int, int?>? GTwin;
+                    ((int) -> int)[,] H; Func<int, int>[,] HTwin;
+                    ((int) -> int)[..] I; IEnumerable<Func<int, int>> ITwin;
+                    ((string) -> void)? J; Action<string>? JTwin;
+                    (((int) -> int)?) -> int K; Func<Func<int, int>?, int> KTwin;
+                    (int) -> ((int) -> int)? L; Func<int, Func<int, int>?> LTwin;
+                    ((int) -> (int) -> int)? M; Func<int, Func<int, int>>? MTwin;
+                    (((int) -> int)[], string) N; (Func<int, int>[], string) NTwin;
+                    List<((int) -> int)?> O; List<Func<int, int>?> OTwin;
+                    Handlers P; Func<int, int>[] PTwin;
+                    ((int, int) -> int)? Q; Func<int, int, int>? QTwin;
+                    (() -> void)[] R; Action[] RTwin;
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics();
+
+            var c = comp.GetMember<NamedTypeSymbol>("C");
+            var fields = c.GetMembers().OfType<FieldSymbol>().ToArray();
+            Assert.Equal(36, fields.Length);
+            for (int i = 0; i < fields.Length; i += 2)
+            {
+                Assert.Equal(fields[i].Name + "Twin", fields[i + 1].Name);
+                Assert.Equal(fields[i + 1].TypeWithAnnotations.ToTestDisplayString(includeNonNullable: true), fields[i].TypeWithAnnotations.ToTestDisplayString(includeNonNullable: true));
+            }
+        }
+
+        [Fact]
+        public void FunctionType_Parenthesized_Locals()
+        {
+            // The same in local positions, compared with the local of the twin.
+            var source = """
+                #nullable enable
+                using System;
+                using System.Threading.Tasks;
+
+                class C
+                {
+                    async Task M(object o, ((int) -> int)?[] fs)
+                    {
+                        #pragma warning disable CS0219 // The variable is assigned but its value is never used
+                        ((int) -> int)? a = null; Func<int, int>? aTwin = null;
+                        var b = (((int) -> int)[])o; var bTwin = (Func<int, int>[])o;
+                        var c = o as ((int) -> int)[]; var cTwin = o as Func<int, int>[];
+                        var d = default(((int) -> int)~); var dTwin = default(Task<Func<int, int>>);
+                        var e = new ((int) -> int)[3]; var eTwin = new Func<int, int>[3];
+                        foreach (((int) -> int)? f in fs) { } foreach (Func<int, int>? fTwin in fs) { }
+                        G(out ((int) -> int)[] g); G(out Func<int, int>[] gTwin);
+                        (((int) -> int)[] h, int i) = (new ((int) -> int)[0], 1); (Func<int, int>[] hTwin, int iTwin) = (new Func<int, int>[0], 1);
+                        using (((int) -> int)~? j = null) { } using (Task<Func<int, int>>? jTwin = null) { }
+                        ((int) -> int)? k = await Task.FromResult<((int) -> int)?>(null); Func<int, int>? kTwin = await Task.FromResult<Func<int, int>?>(null);
+                        var l = (((int) -> int)? x) => x; var lTwin = (Func<int, int>? xTwin) => xTwin;
+                    }
+
+                    void G(out ((int) -> int)[] g) => g = [];
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics();
+
+            var tree = comp.SyntaxTrees.Single();
+            var model = comp.GetSemanticModel(tree);
+            var locals = tree.GetRoot().DescendantNodes()
+                .Where(n => n is VariableDeclaratorSyntax or SingleVariableDesignationSyntax or ForEachStatementSyntax or ParameterSyntax { Parent.Parent: ParenthesizedLambdaExpressionSyntax })
+                .Select(n => model.GetDeclaredSymbol(n))
+                .OfType<ISymbol>()
+                .Where(s => s is ILocalSymbol or IParameterSymbol { ContainingSymbol: IMethodSymbol { MethodKind: MethodKind.AnonymousFunction } })
+                .ToDictionary(s => s.Name, s => s switch { ILocalSymbol l => l.Type.ToTestDisplayString(includeNonNullable: true), IParameterSymbol p => p.Type.ToTestDisplayString(includeNonNullable: true), _ => null });
+            Assert.Equal(26, locals.Count);
+            foreach (var (name, type) in locals)
+            {
+                if (!name.EndsWith("Twin"))
+                {
+                    Assert.Equal(locals[name + "Twin"], type);
+                }
+            }
+        }
+
+        [Fact]
+        public void FunctionType_Parenthesized_Nullable()
+        {
+            var source = """
+                #nullable enable
+                using System;
+
+                ((int) -> int)? f = null;
+                Func<int, int>? g = null;
+                f(1);
+                g(1);
+                ((int) -> int)[] fs = [null];
+                Func<int, int>[] gs = [null];
+                """;
+            // The same warnings as for the Func twins.
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (6,1): warning CS8602: Dereference of a possibly null reference.
+                // f(1);
+                Diagnostic(ErrorCode.WRN_NullReferenceReceiver, "f").WithLocation(6, 1),
+                // (7,1): warning CS8602: Dereference of a possibly null reference.
+                // g(1);
+                Diagnostic(ErrorCode.WRN_NullReferenceReceiver, "g").WithLocation(7, 1),
+                // (8,24): warning CS8625: Cannot convert null literal to non-nullable reference type.
+                // ((int) -> int)[] fs = [null];
+                Diagnostic(ErrorCode.WRN_NullAsNonNullable, "null").WithLocation(8, 24),
+                // (9,24): warning CS8625: Cannot convert null literal to non-nullable reference type.
+                // Func<int, int>[] gs = [null];
+                Diagnostic(ErrorCode.WRN_NullAsNonNullable, "null").WithLocation(9, 24));
+        }
+
+        [Fact]
+        public void FunctionType_Parenthesized_Errors()
+        {
+            // Parentheses are a type only around a function type.
+            foreach (var text in new[] { "((int)) a = null;", "((int) -> int c) d = null;", "(ref (int) -> int) e = null;", "((int, int)) f = null;" })
+            {
+                var statement = SyntaxFactory.ParseStatement(text, options: s_sharperOptions);
+                Assert.Empty(statement.DescendantNodes().OfType<ParenthesizedTypeSyntax>());
+                Assert.NotEqual(SyntaxKind.LocalDeclarationStatement, statement.Kind());
+            }
+        }
+
+        [Fact]
+        public void FunctionType_Parenthesized_Disabled()
+        {
+            // Without Sharper, the parenthesized function type reports the usual C# errors.
+            var source = """
+                class C
+                {
+                    void M()
+                    {
+                        ((int) -> int)? f = null;
+                        ((int) -> int)[] g = null;
+                    }
+                }
+                """;
+            var comp = CreateCompilation(source, targetFramework: TargetFramework.Net90);
+            Assert.NotEmpty(comp.GetDiagnostics());
+            Assert.Empty(comp.SyntaxTrees.Single().GetRoot().DescendantNodes().OfType<ParenthesizedTypeSyntax>());
+            Assert.Empty(comp.SyntaxTrees.Single().GetRoot().DescendantNodes().OfType<FunctionTypeSyntax>());
+        }
+
+        [Fact]
+        public void FunctionType_Parenthesized_FactoryWithoutSharper()
+        {
+            // A parenthesized type built with SyntaxFactory in a C# tree reports that Sharper is not enabled.
+            var tree = SyntaxFactory.ParseSyntaxTree("class C { ((int) -> int)? F; }", s_sharperOptions);
+            var csharpTree = tree.WithRootAndOptions(tree.GetRoot(), TestOptions.Regular);
+            CreateCompilation(csharpTree, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (1,11): error CS8058: Feature 'Sharper' is experimental and unsupported; use '/features:sharper' to enable.
+                // class C { ((int) -> int)? F; }
+                Diagnostic(ErrorCode.ERR_FeatureIsExperimental, "(").WithArguments("Sharper", "sharper").WithLocation(1, 11),
+                // (1,18): error CS8058: Feature 'Sharper' is experimental and unsupported; use '/features:sharper' to enable.
+                // class C { ((int) -> int)? F; }
+                Diagnostic(ErrorCode.ERR_FeatureIsExperimental, "->").WithArguments("Sharper", "sharper").WithLocation(1, 18),
+                // (1,25): warning CS8632: The annotation for nullable reference types should only be used in code within a '#nullable' annotations context.
+                // class C { ((int) -> int)? F; }
+                Diagnostic(ErrorCode.WRN_MissingNonNullTypesContextForAnnotation, "?").WithLocation(1, 25),
+                // (1,27): warning CS0169: The field 'C.F' is never used
+                // class C { ((int) -> int)? F; }
+                Diagnostic(ErrorCode.WRN_UnreferencedField, "F").WithArguments("C.F").WithLocation(1, 27));
+        }
+
+        [Theory]
+        [CombinatorialData]
+        public void FunctionType_Parenthesized_Parsing(bool sharper)
+        {
+            var options = sharper ? s_sharperOptions : TestOptions.Regular;
+
+            // Every one of these is a syntax error in C#.
+            foreach (var text in new[] { "((int) -> int)? f;", "((int) -> int)[] f;", "((int) -> int)~ f;", "((int) -> int)[]? f = null;", "((p) -> F)? x;", "((p) -> F)[] x;", "((p) -> F)~ x;", "(((int) -> int)[] a, int b) = t;", "foreach (((int) -> int)? f in fs) { }", "M(out ((int) -> int)? f);", "x = (((int) -> int)?)y;", "x = (((int) -> int)[])y;", "x = (((int) -> int))y;", "x = y as ((int) -> int)[];", "x = typeof(((int) -> int)[]);", "x = default(((int) -> int)?);", "x = F<((int) -> int)?>(y);", "x = new ((int) -> int)[3];", "((int) -> int)? L() => null;", "x = (((int) -> int)? f) => f;" })
+            {
+                var statement = SyntaxFactory.ParseStatement(text, options: options);
+                Assert.True(sharper != statement.ContainsDiagnostics, text);
+                Assert.True(sharper == statement.DescendantNodes().OfType<ParenthesizedTypeSyntax>().Any(), text);
+            }
+
+            // The suffix applies to the parenthesized type, and the parentheses hold the function type.
+            var declaration = SyntaxFactory.ParseStatement("((int) -> int)? f;", options: options);
+            if (sharper)
+            {
+                var type = (NullableTypeSyntax)((LocalDeclarationStatementSyntax)declaration).Declaration.Type;
+                var parenthesized = (ParenthesizedTypeSyntax)type.ElementType;
+                Assert.Equal(SyntaxKind.FunctionType, parenthesized.Type.Kind());
+                Assert.Equal("int", ((FunctionTypeSyntax)parenthesized.Type).ReturnType.ToString());
+            }
+
+            // A parenthesized function type as a parameter of a function type, and as its return type.
+            declaration = SyntaxFactory.ParseStatement("(((int) -> int)?) -> ((int) -> int)[] f;", options: options);
+            if (sharper)
+            {
+                var type = (FunctionTypeSyntax)((LocalDeclarationStatementSyntax)declaration).Declaration.Type;
+                Assert.Equal(SyntaxKind.NullableType, type.Parameters.Single().Type.Kind());
+                Assert.Equal(SyntaxKind.ArrayType, type.ReturnType.Kind());
+                Assert.False(declaration.ContainsDiagnostics);
+            }
+
+            // A function type taking a function type, which needs no extra parentheses.
+            declaration = SyntaxFactory.ParseStatement("((int) -> int) -> int f;", options: options);
+            if (sharper)
+            {
+                var type = (FunctionTypeSyntax)((LocalDeclarationStatementSyntax)declaration).Declaration.Type;
+                Assert.Equal(SyntaxKind.FunctionType, type.Parameters.Single().Type.Kind());
+            }
+        }
+
+        [Theory]
+        [CombinatorialData]
+        public void FunctionType_Parenthesized_Parsing_KeepsCSharpMeaning(bool sharper)
+        {
+            // A parenthesized pointer member access keeps its C# meaning, with or without Sharper.
+            var options = sharper ? s_sharperOptions : TestOptions.Regular;
+            foreach (var text in new[] { "x = ((p)->F)[i];", "((p)->F)[i] = 1;", "x = ((p)->F)?.X;", "((p)->F)?.M();", "x = ((p)->F)?[i];", "x = ((p)->F) ? a : b;", "x = ((p)->F) ? [a] : b;", "x = c ? ((p)->F) : b;", "((p)->F)(x);", "(((p)->F))(x);", "x = (((p)->F))(y);", "x = (((p)->F<int>))(y);", "x = ((p)->F)!;", "x = (((p)->F))!;", "((p)->F)++;", "x = ((p)->F) * y;", "x = ((p)->F) < y;", "M(((p)->F)?.X, y);", "x = ((p)->F, y);", "x = (((p)->F), y);" })
+            {
+                var statement = SyntaxFactory.ParseStatement(text, options: options);
+                Assert.False(statement.ContainsDiagnostics, text);
+                Assert.Empty(statement.DescendantNodes().OfType<ParenthesizedTypeSyntax>());
+                Assert.Empty(statement.DescendantNodes().OfType<FunctionTypeSyntax>());
+                Assert.Empty(statement.DescendantNodes().OfType<CastExpressionSyntax>());
+                Assert.True(statement.IsEquivalentTo(SyntaxFactory.ParseStatement(text, options: TestOptions.Regular)), text);
+            }
+        }
+
+        [Theory]
+        [CombinatorialData]
+        public void FunctionType_Parenthesized_PointerMemberAccess_KeepsCSharpMeaning(bool sharper)
+        {
+            var source = """
+                using System;
+
+                unsafe
+                {
+                    var s = new S { A = [10, 20], B = true, F = i => i * 10 };
+                    S* p = &s;
+                    Console.Write(((p)->A)[1]);
+                    Console.Write(" " + (((p)->N)?.Length ?? -1));
+                    Console.Write(" " + (((p)->A)?[0]));
+                    Console.Write(" " + (((p)->B) ? "yes" : "no"));
+                    Console.Write(" " + ((p)->F)(1));
+                    Console.Write(" " + (((p)->F))(2));
+                    ((p)->A)[0] = 30;
+                    Console.Write(" " + s.A[0]);
+                }
+
+                struct S { public int[] A; public string N; public bool B; public Func<int, int> F; }
+                """;
+            CompileAndVerify(source, parseOptions: sharper ? s_sharperOptions : TestOptions.Regular, targetFramework: TargetFramework.Net90,
+                options: TestOptions.UnsafeReleaseExe, verify: Verification.Skipped,
+                expectedOutput: ExecutionConditionUtil.IsCoreClr ? "20 -1 10 yes 10 20 30" : null).VerifyDiagnostics(
+                // (6,5): warning CS8500: This takes the address of, gets the size of, or declares a pointer to a managed type ('S')
+                //     S* p = &s;
+                Diagnostic(ErrorCode.WRN_ManagedAddr, "S*").WithArguments("S").WithLocation(6, 5),
+                // (6,12): warning CS8500: This takes the address of, gets the size of, or declares a pointer to a managed type ('S')
+                //     S* p = &s;
+                Diagnostic(ErrorCode.WRN_ManagedAddr, "&s").WithArguments("S").WithLocation(6, 12));
+        }
+
+        [Fact]
+        public void FunctionType_Parenthesized_DeeplyNested()
+        {
+            // Function types nested in parentheses are scanned in one pass, so they do not take exponential time.
+            var depth = 100;
+            var builder = new System.Text.StringBuilder();
+            for (int i = 0; i < depth; i++)
+            {
+                builder.Append("((int) -> ");
+            }
+
+            builder.Append("int");
+            for (int i = 0; i < depth; i++)
+            {
+                builder.Append(")?");
+            }
+
+            builder.Append(" f;");
+            var statement = SyntaxFactory.ParseStatement(builder.ToString(), options: s_sharperOptions);
+            Assert.Equal(SyntaxKind.LocalDeclarationStatement, statement.Kind());
+            Assert.False(statement.ContainsDiagnostics);
+            Assert.Equal(depth, statement.DescendantNodes().OfType<ParenthesizedTypeSyntax>().Count());
+        }
+
+        [Fact]
+        public void FunctionType_Parenthesized_SemanticModel()
+        {
+            var source = """
+                #pragma warning disable CS0169 // The field is never used
+                class C
+                {
+                    ((int) -> string)[] F;
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics();
+
+            var tree = comp.SyntaxTrees.Single();
+            var model = comp.GetSemanticModel(tree);
+            var parenthesized = tree.GetRoot().DescendantNodes().OfType<ParenthesizedTypeSyntax>().Single();
+            Assert.Equal("System.Func<System.Int32, System.String>", model.GetTypeInfo(parenthesized).Type.ToTestDisplayString());
+            Assert.Equal("System.Func<System.Int32, System.String>", model.GetSymbolInfo(parenthesized).Symbol.ToTestDisplayString());
+            Assert.Equal("System.Func<System.Int32, System.String>", model.GetTypeInfo(parenthesized.Type).Type.ToTestDisplayString());
+            Assert.Equal("System.Func<System.Int32, System.String>[]", model.GetTypeInfo(parenthesized.Parent!).Type.ToTestDisplayString());
+            Assert.True(SyntaxFacts.IsInTypeOnlyContext(parenthesized.Type));
+            Assert.True(SyntaxFacts.IsTypeSyntax(SyntaxKind.ParenthesizedType));
+        }
+
+        [Fact]
+        public void FunctionType_Pattern_Basic()
+        {
+            // Function types in declaration, type, recursive, list and property patterns, and in switch statements and
+            // expressions.
+            var source = """
+                using System;
+
+                object[] values = [(Func<int, int>)(i => i + 1), (Action)(() => Console.Write("tick")), new Func<int, int>[] { i => i * 2 }, (Func<string, int>)(s => s.Length), "text"];
+                foreach (var o in values)
+                {
+                    Console.Write(Describe(o) + " " + Classify(o) + " " + (o is (int) -> int ? "func" : "not") + (o is not () -> void) + "; ");
+                }
+
+                Console.Write(values is [(int) -> int first, ..] ? first(10) : -1);
+                Console.Write(new Box(values[0]) is { Value: (int) -> int g } ? " " + g(20) : " none");
+                Console.Write(values[1] is () -> void { } a and not null ? " action" : " none");
+
+                static string Describe(object o) => o switch
+                {
+                    (int) -> int f => "f" + f(1),
+                    () -> void a => Run(a),
+                    ((int) -> int)[] fs => "fs" + fs[0](3),
+                    (string) -> int => "string",
+                    _ => "other",
+                };
+
+                static string Run(() -> void a) { a(); return ""; }
+
+                static string Classify(object o)
+                {
+                    switch (o)
+                    {
+                        case (int) -> int f when f(0) > 0:
+                            return "positive";
+                        case (int) -> int:
+                            return "zero";
+                        case () -> void:
+                            return "action";
+                        default:
+                            return "other";
+                    }
+                }
+
+                record Box(object Value);
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90,
+                expectedOutput: ExecutionConditionUtil.IsCoreClr ? "f2 positive funcTrue; tick action notFalse; fs6 other notTrue; string other notTrue; other other notTrue; 11 21 action" : null).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void FunctionType_Pattern_SameAsFunc()
+        {
+            // A function type pattern reports what its Func twin reports.
+            var source = """
+                #nullable enable
+                using System;
+
+                class C
+                {
+                    void M(object o, Func<int, int> f)
+                    {
+                        switch (o)
+                        {
+                            case Func<int, int>: break;
+                            case (int) -> int: break;
+                        }
+                        switch (o)
+                        {
+                            case (int) -> int: break;
+                            case Func<int, int>: break;
+                        }
+                        _ = o is ((int) -> int)? a;
+                        _ = o is Func<int, int>? b;
+                        _ = f is (int) -> int;
+                        _ = f is Func<int, int>;
+                        _ = o is (ref int) -> int c;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (11,18): error CS8120: The switch case is unreachable. It has already been handled by a previous case or it is impossible to match.
+                //             case (int) -> int: break;
+                Diagnostic(ErrorCode.ERR_SwitchCaseSubsumed, "(int) -> int").WithLocation(11, 18),
+                // (16,18): error CS8120: The switch case is unreachable. It has already been handled by a previous case or it is impossible to match.
+                //             case Func<int, int>: break;
+                Diagnostic(ErrorCode.ERR_SwitchCaseSubsumed, "Func<int, int>").WithLocation(16, 18),
+                // (18,18): error CS8116: It is not legal to use nullable type 'Func<int, int>?' in a pattern; use the underlying type 'Func<int, int>' instead.
+                //         _ = o is ((int) -> int)? a;
+                Diagnostic(ErrorCode.ERR_PatternNullableType, "((int) -> int)?").WithArguments("System.Func<int, int>").WithLocation(18, 18),
+                // (19,18): error CS8116: It is not legal to use nullable type 'Func<int, int>?' in a pattern; use the underlying type 'Func<int, int>' instead.
+                //         _ = o is Func<int, int>? b;
+                Diagnostic(ErrorCode.ERR_PatternNullableType, "Func<int, int>?").WithArguments("System.Func<int, int>").WithLocation(19, 18),
+                // (22,19): error CS20008: A function type parameter cannot be 'ref', because a function type is a 'System.Func' or 'System.Action' delegate.
+                //         _ = o is (ref int) -> int c;
+                Diagnostic(ErrorCode.ERR_SharperFunctionTypeParameterModifier, "ref").WithArguments("ref").WithLocation(22, 19));
+        }
+
+        [Fact]
+        public void FunctionType_Pattern_SemanticModel()
+        {
+            var source = """
+                class C
+                {
+                    bool M(object o) => o is (int, string) -> bool f && f(1, "");
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics();
+
+            var tree = comp.SyntaxTrees.Single();
+            var model = comp.GetSemanticModel(tree);
+            var pattern = tree.GetRoot().DescendantNodes().OfType<DeclarationPatternSyntax>().Single();
+            Assert.Equal(SyntaxKind.FunctionType, pattern.Type.Kind());
+            Assert.Equal("System.Func<System.Int32, System.String, System.Boolean>", model.GetTypeInfo(pattern.Type).Type.ToTestDisplayString());
+            var local = (ILocalSymbol)model.GetDeclaredSymbol(pattern.Designation)!;
+            Assert.Equal("System.Func<System.Int32, System.String, System.Boolean>", local.Type.ToTestDisplayString());
+        }
+
+        [Fact]
+        public void FunctionType_Pattern_IOperation()
+        {
+            var source = """
+                class C
+                {
+                    bool M(object o)
+                    {
+                        return /*<bind>*/o is (int) -> int f/*</bind>*/;
+                    }
+                }
+                """;
+            var expectedOperationTree = """
+                IIsPatternOperation (OperationKind.IsPattern, Type: System.Boolean) (Syntax: 'o is (int) -> int f')
+                  Value:
+                    IParameterReferenceOperation: o (OperationKind.ParameterReference, Type: System.Object) (Syntax: 'o')
+                  Pattern:
+                    IDeclarationPatternOperation (OperationKind.DeclarationPattern, Type: null) (Syntax: '(int) -> int f') (InputType: System.Object, NarrowedType: System.Func<System.Int32, System.Int32>, DeclaredSymbol: System.Func<System.Int32, System.Int32> f, MatchesNull: False)
+                """;
+            VerifyOperationTreeAndDiagnosticsForTest<IsPatternExpressionSyntax>(source, expectedOperationTree, DiagnosticDescription.None,
+                parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+        }
+
+        [Fact]
+        public void FunctionType_Pattern_Disabled()
+        {
+            // Without Sharper, a function type in a pattern reports the usual C# syntax errors.
+            var source = """
+                class C
+                {
+                    bool M(object o) => o is (int) -> int f;
+                    int N(object o) => o switch { () -> void => 1, _ => 0 };
+                }
+                """;
+            var comp = CreateCompilation(source, targetFramework: TargetFramework.Net90);
+            Assert.Contains(comp.GetDiagnostics(), d => d.Severity == DiagnosticSeverity.Error);
+            Assert.Empty(comp.SyntaxTrees.Single().GetRoot().DescendantNodes().OfType<FunctionTypeSyntax>());
+        }
+
+        [Theory]
+        [CombinatorialData]
+        public void FunctionType_Pattern_Parsing(bool sharper)
+        {
+            var options = sharper ? s_sharperOptions : TestOptions.Regular;
+
+            // Every one of these is a syntax error in C#: a parenthesized pattern or expression cannot be followed by `->`.
+            foreach (var text in new[] { "x = o is (int) -> int f;", "x = o is (int) -> int;", "x = o is () -> void;", "x = o is not (int) -> int;", "x = o is (int) -> int { } f;", "x = o is ((int) -> int)[] fs;", "x = o is (int) -> int f and not null;", "x = o is (int) -> (int) -> int f;", "x = o is (int, string) -> bool;", "x = o is (int) -> int ? a : b;", "x = o switch { (int) -> int f => 1, _ => 0 };", "x = o switch { (int) -> int f when f(0) > 0 => 1, _ => 0 };", "switch (o) { case () -> void a: break; }", "switch (o) { case (int) -> int: break; }", "x = o is { P: (int) -> int f };", "x = o is [(int) -> int f, ..];", "x = o is (p)->F;", "x = o is ((p)->F)[];" })
+            {
+                var statement = SyntaxFactory.ParseStatement(text, options: options);
+                Assert.True(sharper != statement.ContainsDiagnostics, text);
+                Assert.True(sharper == statement.DescendantNodes().OfType<FunctionTypeSyntax>().Any(), text);
+            }
+
+            if (sharper)
+            {
+                // `is` with a type, as for `o is Func<int, int>`.
+                var expression = SyntaxFactory.ParseExpression("o is (int) -> int", options: options);
+                Assert.Equal(SyntaxKind.FunctionType, ((BinaryExpressionSyntax)expression).Right.Kind());
+
+                // A conditional, as `o is int ? a : b` is.
+                expression = SyntaxFactory.ParseExpression("o is (int) -> int ? a : b", options: options);
+                var conditional = (ConditionalExpressionSyntax)expression;
+                Assert.Equal("int", ((FunctionTypeSyntax)((BinaryExpressionSyntax)conditional.Condition).Right).ReturnType.ToString());
+
+                // A nullable return type before a designation.
+                expression = SyntaxFactory.ParseExpression("o is (int) -> int? f", options: options);
+                var pattern = (DeclarationPatternSyntax)((IsPatternExpressionSyntax)expression).Pattern;
+                Assert.Equal(SyntaxKind.NullableType, ((FunctionTypeSyntax)pattern.Type).ReturnType.Kind());
+            }
+        }
+
+        [Theory]
+        [CombinatorialData]
+        public void FunctionType_Pattern_Parsing_KeepsCSharpMeaning(bool sharper)
+        {
+            // Patterns that start with `(` keep their C# meaning, with or without Sharper.
+            var options = sharper ? s_sharperOptions : TestOptions.Regular;
+            foreach (var text in new[] { "x = o is (1);", "x = o is (A);", "x = o is (A.B);", "x = o is (int)1;", "x = o is (A, B);", "x = o is (A, B) t;", "x = o is (int, int)[] t;", "x = o is (> 1 and < 3);", "x = o is (var a, var b);", "x = o is (A) { };", "x = o is > (p)->F;", "x = o is p->F;", "x = o is (int)p->F;", "x = o is ((A, B), C);", "x = o switch { (1) => a, (A, B) => b, _ => c };", "switch (o) { case (1): break; case (A, B) t: break; }", "x = o is (A) ? a : b;", "x = o is (A) and B;" })
+            {
+                var statement = SyntaxFactory.ParseStatement(text, options: options);
+                Assert.False(statement.ContainsDiagnostics, text);
+                Assert.Empty(statement.DescendantNodes().OfType<FunctionTypeSyntax>());
+                Assert.True(statement.IsEquivalentTo(SyntaxFactory.ParseStatement(text, options: TestOptions.Regular)), text);
+            }
+        }
+
+        [Theory]
+        [CombinatorialData]
+        public void FunctionType_Pattern_PointerMemberAccess(bool sharper)
+        {
+            // `e is (p)->F` does not compile in C# (a syntax error), and neither with Sharper, where it is a type pattern
+            // with an unknown type. The C# constant pattern is written `e is p->F`, which keeps its meaning.
+            var source = """
+                unsafe class C
+                {
+                    bool M(object e, S* p) => e is (p)->F;
+                    bool N(object e, S* p) => e is p->F;
+                }
+
+                struct S { public int F; }
+                """;
+            var comp = CreateCompilation(source, parseOptions: sharper ? s_sharperOptions : TestOptions.Regular, targetFramework: TargetFramework.Net90,
+                options: TestOptions.UnsafeReleaseDll);
+            if (sharper)
+            {
+                comp.VerifyDiagnostics(
+                    // (3,37): error CS0118: 'p' is a variable but is used like a type
+                    //     bool M(object e, S* p) => e is (p)->F;
+                    Diagnostic(ErrorCode.ERR_BadSKknown, "p").WithArguments("p", "variable", "type").WithLocation(3, 37),
+                    // (3,41): error CS0246: The type or namespace name 'F' could not be found (are you missing a using directive or an assembly reference?)
+                    //     bool M(object e, S* p) => e is (p)->F;
+                    Diagnostic(ErrorCode.ERR_SingleTypeNameNotFound, "F").WithArguments("F").WithLocation(3, 41),
+                    // (4,36): error CS0150: A constant value is expected
+                    //     bool N(object e, S* p) => e is p->F;
+                    Diagnostic(ErrorCode.ERR_ConstantExpected, "p->F").WithLocation(4, 36),
+                    // (7,23): warning CS0649: Field 'S.F' is never assigned to, and will always have its default value 0
+                    // struct S { public int F; }
+                    Diagnostic(ErrorCode.WRN_UnassignedInternalField, "F").WithArguments("S.F", "0").WithLocation(7, 23));
+            }
+            else
+            {
+                comp.VerifyDiagnostics(
+                    // (3,37): error CS0029: Cannot implicitly convert type 'S*' to 'object'
+                    //     bool M(object e, S* p) => e is (p)->F;
+                    Diagnostic(ErrorCode.ERR_NoImplicitConv, "p").WithArguments("S*", "object").WithLocation(3, 37),
+                    // (3,39): error CS1002: ; expected
+                    //     bool M(object e, S* p) => e is (p)->F;
+                    Diagnostic(ErrorCode.ERR_SemicolonExpected, "->").WithLocation(3, 39),
+                    // (3,39): error CS1519: Invalid token '->' in a member declaration
+                    //     bool M(object e, S* p) => e is (p)->F;
+                    Diagnostic(ErrorCode.ERR_InvalidMemberDecl, "->").WithArguments("->").WithLocation(3, 39),
+                    // (3,42): error CS1519: Invalid token ';' in a member declaration
+                    //     bool M(object e, S* p) => e is (p)->F;
+                    Diagnostic(ErrorCode.ERR_InvalidMemberDecl, ";").WithArguments(";").WithLocation(3, 42),
+                    // (3,42): error CS1519: Invalid token ';' in a member declaration
+                    //     bool M(object e, S* p) => e is (p)->F;
+                    Diagnostic(ErrorCode.ERR_InvalidMemberDecl, ";").WithArguments(";").WithLocation(3, 42),
+                    // (4,36): error CS0150: A constant value is expected
+                    //     bool N(object e, S* p) => e is p->F;
+                    Diagnostic(ErrorCode.ERR_ConstantExpected, "p->F").WithLocation(4, 36),
+                    // (7,23): warning CS0649: Field 'S.F' is never assigned to, and will always have its default value 0
+                    // struct S { public int F; }
+                    Diagnostic(ErrorCode.WRN_UnassignedInternalField, "F").WithArguments("S.F", "0").WithLocation(7, 23));
+            }
+        }
+
+        [Fact]
+        public void FunctionType_Pattern_DeeplyNestedParentheses()
+        {
+            // Every pattern that starts with `(` is scanned for a function type, without taking exponential time.
+            var depth = 200;
+            var text = "x = o is " + new string('(', depth) + "1" + new string(')', depth) + ";";
+            var statement = SyntaxFactory.ParseStatement(text, options: s_sharperOptions);
+            Assert.False(statement.ContainsDiagnostics);
+            Assert.True(statement.IsEquivalentTo(SyntaxFactory.ParseStatement(text, options: TestOptions.Regular)));
+        }
+
+        [Fact]
+        public void FunctionType_Parenthesized_SyntaxKind()
+        {
+            // Sharper syntax nodes sit apart from the upstream ones; an upstream merge must not reuse the value.
+            Assert.Equal(9902, (int)SyntaxKind.ParenthesizedType);
+            Assert.Single(Enum.GetValues(typeof(SyntaxKind)).Cast<SyntaxKind>(), k => (int)k == (int)SyntaxKind.ParenthesizedType);
+        }
+
+        [Fact]
         public void TaskType_Basic()
         {
             var source = """
@@ -3659,6 +4512,34 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (10,17): error CS8917: The delegate type could not be inferred.
                 //         var g = (y) => y;
                 Diagnostic(ErrorCode.ERR_CannotInferDelegateType, "(y) => y").WithLocation(10, 17));
+        }
+
+        [Theory]
+        [CombinatorialData]
+        public void ValLambda_SimpleLambdaNeedsParentheses(bool sharper)
+        {
+            // Like C#'s parameter modifiers, val needs the parenthesized form: val x => x is the same syntax error with or without
+            // Sharper. A clearer error is https://github.com/ok3mad/roslyn/issues/98.
+            var source = """
+                using System;
+                class C
+                {
+                    void M()
+                    {
+                        Func<int, int> f = val x => x;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: sharper ? s_sharperOptions : TestOptions.Regular, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (6,28): error CS0103: The name 'val' does not exist in the current context
+                //         Func<int, int> f = val x => x;
+                Diagnostic(ErrorCode.ERR_NameNotInContext, "val").WithArguments("val").WithLocation(6, 28),
+                // (6,32): error CS1002: ; expected
+                //         Func<int, int> f = val x => x;
+                Diagnostic(ErrorCode.ERR_SemicolonExpected, "x").WithLocation(6, 32),
+                // (6,32): error CS0201: Only assignment, call, increment, decrement, await, and new object expressions can be used as a statement
+                //         Func<int, int> f = val x => x;
+                Diagnostic(ErrorCode.ERR_IllegalStatement, "x => x").WithLocation(6, 32));
         }
 
         [Fact]
