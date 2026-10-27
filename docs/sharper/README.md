@@ -63,7 +63,8 @@ glob. `<EnableDefaultCompileItems>false</EnableDefaultCompileItems>` and `<Compi
 for `.cs` files. Do not also include `*.cx` in the project, or the SDK reports duplicate `Compile` items.
 
 The language server treats `.cx` files as C# (`LanguageInfoProvider`), and reloads a project when a `.cx` file is
-added to or removed from its directory.
+added to or removed from its directory. [Sharper in VS Code](vscode.md) shows how to use it, with a release workflow
+and a devcontainer.
 
 Not done yet:
 
@@ -132,6 +133,7 @@ in `#pragma warning`, `/nowarn` and `.editorconfig`.
 | CS20009 | Error | A function type cannot have more than {0} parameters, because no 'System.Func' or 'System.Action' delegate has more. |
 | CS20010 | Warning | Call to non-readonly member '{0}' on readonly local '{1}' runs on a copy, so '{1}' is not changed. |
 | CS20011 | Error | A readonly local must be initialized in its declaration, because it cannot be assigned later. |
+| CS20012 | Error | A spread 'yield return ..' cannot enumerate '{0}' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead. |
 
 ## Where the code is
 
@@ -140,7 +142,7 @@ in `#pragma warning`, `/nowarn` and `.editorconfig`.
 | Feature flag | `src/Compilers/CSharp/Portable/Errors/MessageID.cs` (`IDS_FeatureSharper`), `src/Compilers/Core/Portable/CommandLine/Feature.cs` (`Feature.Sharper`) |
 | Parser | `src/Compilers/CSharp/Portable/Parser/LanguageParser.cs` (search for `IDS_FeatureSharper`) |
 | Binding | `src/Compilers/CSharp/Portable/Binder/` (search for `IDS_FeatureSharper`); short type forms such as `T[..]` in `Binder_SharperTypes.cs` |
-| Syntax nodes | `src/Compilers/CSharp/Portable/Syntax/Syntax.xml` (`FunctionTypeSyntax`); Sharper kinds in `SyntaxKind.cs` count up from 9900 |
+| Syntax nodes | `src/Compilers/CSharp/Portable/Syntax/Syntax.xml` (`FunctionTypeSyntax`, `TaskTypeSyntax`, `ParenthesizedTypeSyntax`); Sharper kinds in `SyntaxKind.cs` count up from 9900 |
 | Bound nodes | `src/Compilers/CSharp/Portable/BoundTree/BoundNodes.xml` |
 | Lowering | `src/Compilers/CSharp/Portable/Lowering/LocalRewriter/` |
 | Tests | `src/Compilers/CSharp/Test/Semantic/Semantics/SharperTests.cs` |

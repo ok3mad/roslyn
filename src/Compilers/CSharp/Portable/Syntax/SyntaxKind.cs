@@ -960,5 +960,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         FunctionType = 9900,
         /// <summary>Represents Sharper's task type, such as <c>int~</c> or <c>void~</c>.</summary>
         TaskType = 9901,
+        /// <summary>Represents Sharper's parenthesized type, such as <c>((int) -> int)</c> in <c>((int) -> int)?</c>.</summary>
+        ParenthesizedType = 9902,
     }
 }

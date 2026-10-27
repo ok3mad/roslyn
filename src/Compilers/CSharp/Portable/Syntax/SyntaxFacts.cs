@@ -107,6 +107,9 @@ namespace Microsoft.CodeAnalysis.CSharp
                     case TaskType:
                         return ((TaskTypeSyntax)parent).ElementType == node;
 
+                    case ParenthesizedType:
+                        return ((ParenthesizedTypeSyntax)parent).Type == node;
+
                     case PredefinedType:
                         return true;
 

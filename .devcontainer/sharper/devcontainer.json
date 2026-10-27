@@ -1,0 +1,24 @@
+// A container for trying Sharper in VS Code: the C# extension runs the Sharper language server, and the playground
+// project builds with the Sharper compiler. Both come from the latest release of .github/workflows/sharper-release.yml.
+// See docs/sharper/vscode.md.
+{
+  "name": "Sharper playground",
+  "image": "mcr.microsoft.com/devcontainers/dotnet:10.0",
+  "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}/docs/sharper/playground",
+  "postCreateCommand": "bash ${containerWorkspaceFolder}/../../../.devcontainer/sharper/setup.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-dotnettools.csharp"
+      ],
+      "settings": {
+        "files.associations": {
+          "*.cx": "csharp"
+        },
+        "dotnet.server.path": "/opt/sharper/server/Microsoft.CodeAnalysis.LanguageServer.dll",
+        // Use the C# extension's own project system rather than C# Dev Kit's.
+        "dotnet.preferCSharpExtension": true
+      }
+    }
+  }
+}
