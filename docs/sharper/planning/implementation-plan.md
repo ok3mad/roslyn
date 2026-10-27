@@ -110,7 +110,7 @@ The brainstorm proposes 28 pieces of syntax (#28, discard arguments, is still to
 | 7 | Sequence type | `int[..]` | `IEnumerable<int>` | small: `ScanType` accepts `[..]`; `ScanCast` keeps `(a[..])` an element access | S | Done | `new T[..]` keeps its C# meaning ([#64](https://github.com/ok3mad/roslyn/issues/64)); accepted break: `F<a[..]>(x)` is a generic call ([#66](https://github.com/ok3mad/roslyn/issues/66)). See [Feature 3](#feature-3-sequence-type-t) | [#19](https://github.com/ok3mad/roslyn/issues/19) |
 | 8 | Task tilde | `T~`, `void~`, `int[..]~` | `Task<T>`, `Task` | yes (a postfix `~` after a type, next to `?` and `*`; `~` has no binary meaning, so no disambiguation) | S–M | Prototype | Spelling `~` chosen over the hat `^` (XOR is valid in tuples, `is` and `as`). Confirmed on six applications; `ValueTask` stays unsugared (0.4% of their async declarations). A new syntax node, `TaskTypeSyntax`; see the [feature page](../features/task-type.md) | [#20](https://github.com/ok3mad/roslyn/issues/20) |
 | 9 | Function types | `(A, B) -> R`, `() -> T` | `Func<...>`, `Action<...>` | yes: a new syntax node, `FunctionTypeSyntax`, and a one-pass tuple-or-function lookahead | M | Prototype | Decided: `->` only in types, lambdas keep `=>`. Follow-ups: `ref` parameters [#56](https://github.com/ok3mad/roslyn/issues/56), names [#57](https://github.com/ok3mad/roslyn/issues/57), `((F))?` [#58](https://github.com/ok3mad/roslyn/issues/58), patterns [#59](https://github.com/ok3mad/roslyn/issues/59) | [#21](https://github.com/ok3mad/roslyn/issues/21) |
-| 10 | Inferred return type | `static infer Hello(int id) => ...` | method with the inferred return type | none (`infer` parses as a type name) | L, in steps R1 to R5 | Med | Ordering and cycles. Allowed on public members too, with no warning. Replaces the expression-bodied `fun` | [#22](https://github.com/ok3mad/roslyn/issues/22) |
+| 10 | Inferred return type | `static infer Hello(int id) => ...` | method with the inferred return type | none (`infer` parses as a type name) | L, in steps R1 to R5 | Med; R1 prototype | Ordering and cycles. Allowed on public members too, with no warning. Replaces the expression-bodied `fun`. R1 (expression bodies of private methods and local functions) is a prototype; see [Feature 5](#feature-5-inferred-return-type-step-r1) and the [feature page](../features/inferred-return-type.md) | [#22](https://github.com/ok3mad/roslyn/issues/22) |
 | 11 | `readonly` parameters | `void F(readonly int x)` | plain parameter plus the `val` no-reassignment check | none (`readonly` already parses as a parameter modifier, and C# reports an error without `ref`) | S | Med | Completes the mutability grid with #4 and #5. Replaces the `mutable` parameter in `fun`: immutable-by-default parameters and a `mutable` marker are a strictness ladder setting now, not syntax | [#23](https://github.com/ok3mad/roslyn/issues/23) |
 | 15 | Inferred parameter types | `public infer Load(infer userId) => ...`, `infer timeout = TimeSpan.FromSeconds(5)` | method with the inferred types | none (`infer x` parses as a typed parameter) | S to XL, in steps P1 to P8 | Med | Copied from an overridden member, a default value, a function type or a call that pins one type, never from shape. Generic by default is open. Replaces untyped `fun` parameters inferred from arms | [#27](https://github.com/ok3mad/roslyn/issues/27) |
 
@@ -174,7 +174,7 @@ Return type (#10):
 
 | Step | Scope | Size | Open point |
 | --- | --- | --- | --- |
-| R1 | `infer` as a return type: gating, a type named `infer` wins, CS0246 with the flag off. Expression bodies of private methods and local functions that call only methods with written return types | S–M | The error when nothing can be inferred (`null`, a method group) |
+| R1 | `infer` as a return type: gating, a type named `infer` wins, CS0246 with the flag off. Expression bodies of private methods and local functions that call only methods with written return types | S–M | Prototype ([#67](https://github.com/ok3mad/roslyn/issues/67)). Decided: nothing to infer from is CS20013, where `var` reports CS0815, CS8917 or CS8716 |
 | R2 | Block bodies: several `return` statements with the best common type, no return value as `void`, iterators, `async` | M | Nullable annotation of the result when one `return` is maybe-null |
 | R3 | Methods with inferred return types calling each other: binding order across members, cycle and recursion errors | L | Whether a recursive method with a non-recursive `return` is allowed later |
 | R4 | Every member kind and accessibility: public and protected members, `virtual`, `partial`, operators, metadata emission, Edit and Continue (a body edit that changes the type is a signature change) | M | None for public members: they infer like any other (decided) |
@@ -365,6 +365,68 @@ machinery: the write checks, `ReportReadonlyLocalError` (cause 'readonly local')
 Tests: 17 `ReadonlyLocal_*` tests (19 cases) in `SharperTests.cs`; all 95 Sharper tests pass, also with `ROSLYN_TEST_IOPERATION=1`.
 Regression run of the C# compiler tests (net10.0, Debug, 10 projects; WinRT not run): 88,398 passed, 0 failed.
 
+## Feature 5: inferred return type, step R1
+
+`private static infer Greeting(int id) => $"Hello, {id}!";` returns `string`, on branch `sharper/infer-return-r1`
+([#67](https://github.com/ok3mad/roslyn/issues/67), feature page [inferred-return-type.md](../features/inferred-return-type.md)).
+It adds no syntax, bound node or public API, and needs no lowering: once the type is known, the method is an ordinary
+method with that return type.
+
+**Probe.** `infer` already parses as a type name in every return type position, and binds to CS0246. The return type of
+a source method is bound in `MethodChecks`, under a per-method lock (`LazyMethodChecks`), and is read during the
+checks themselves (`CheckModifiers`, override and explicit implementation matching). Binding a body there would
+read other methods' signatures under that lock: two methods that use each other would deadlock on two threads, and
+a method that uses itself would see its return type half set. Local functions compute their return type without a
+lock. C#'s nearest precedents are `var` locals (`SourceLocalSymbol` binds its initializer on demand and detects cycles
+with a thread-static set) and lambda return types (`UnboundLambda.InferReturnType` and its nullable re-inference).
+
+### The mechanism
+
+| Piece | What it does | Extended by |
+| --- | --- | --- |
+| `Binder.BindTypeOrSharperInferKeyword` | Binds the return type syntax; `infer` is a keyword only when no type named `infer` is in scope (`BindTypeOrAliasOrKeyword`, as for `var`) | P1 (parameters) |
+| `SharperInferredReturnType` | Holds the inferred type of one method, computed on first use outside of any lock and published once (diagnostics before the type). `MethodChecks` stores it instead of a return type and skips the checks that need the type; they run after inference | R2 (more body shapes), R3 |
+| Thread-static inference frame | While a body is bound for inference, a read of any inferred return type is recorded and gets an uncached error type: the method itself is CS20017, another inferred method CS20016 | R3 replaces the frame with a stack |
+| `Binder.BindSharperInferredReturnType` | Binds the expression body with the body's own binder, takes the natural type as `var` does (`BindToNaturalType`, `BindToInferredDelegateType`) | R2 collects `return` statements and uses the best common type, as lambdas do |
+| `NullableWalker.AnalyzeSharperInferredReturnType` | Analyzes the body with `returnTypesOpt`, as for a lambda, and takes the top-level annotation from the returned state | R2 joins several returns (`BestTypeForLambdaReturns`) |
+| `CSharpSemanticModel.GetSharperInferredReturnTypeMethod` | `GetTypeInfo` and `GetSymbolInfo` on `infer` return the inferred type | R5 |
+| `CheckSharperInferredReturnTypeSupported` | The R1 limits: CS20014 for what a later step adds, CS20015 for members with no body | R2 and R4 remove rows |
+
+### Decisions
+
+| Question | Decision | Why |
+| --- | --- | --- |
+| What is inferred | The type `var r = e;` gives `r`, or `void` for a call that returns nothing | `var` already decides natural types (lambdas, method groups, tuples); one rule for locals and return types |
+| Nothing to infer from | CS20013, on the expression, where `var` reports CS0815, CS8917 or CS8716 | One message for every expression without a type, naming the method |
+| Body with errors | Error type, no extra diagnostic | The body binding reports the errors when the method is compiled |
+| Nullable annotation | From the flow state of the body; oblivious where annotations are disabled at `infer` | Matches lambda return types; a maybe-null body is the R2 open point for several returns |
+| Using itself | CS20017, permanent | The brainstorm's F# rule. A recursive method with a non-recursive `return` stays the R3 open point |
+| Using another inferred method | CS20016 in R1, reported on the user | Ordering is R3; reporting on the user keeps the other method valid, and the error type is never cached, so the result does not depend on the order |
+| Unsupported positions | CS20014 with the position, CS20015 for no body; properties, indexers and operators included | A clear "not yet" instead of CS0246 for a type named `infer` |
+| Where the diagnostics are | On `infer` for CS20014 to CS20017, on the body for CS20013 | The use of an inferred method is found through the symbol, which has no syntax |
+
+### Plan for the later steps
+
+- **R2, block bodies.** Bind the block with the body's binder into a throwaway `BoundBlock` and collect the
+  `return` statements (the binder's return-statement visitor, as `UnboundLambda` does). Best common type with
+  `BestTypeInferrer`; no return value gives `void`; iterators and `async` wrap the result as for lambdas
+  (`CalculateReturnType`). Nullable: pass the collected returns to `BestTypeForLambdaReturns`. `MethodChecks` already
+  skips everything that needs the type, so only `CheckSharperInferredReturnTypeSupported` changes.
+- **R3, inferred methods using each other.** Turn the thread-static frame into a stack. A read of another inferred
+  method whose type is not published infers it in a nested frame on the same thread (no lock is held, so nothing can
+  deadlock); a method already on the stack is a cycle, reported on every method of the cycle. Two threads may infer
+  the same method at once and compute the same type. A published type is read directly, also during inference,
+  which is safe once nesting is allowed. Partial declarations and other types need nothing more, since inference is
+  per symbol.
+- **R4, every member.** Lift the accessibility row. Overrides and explicit implementations copy the type of the
+  member they implement (P2), so `MethodChecks` must find that member before the custom-modifier copy that now
+  assumes a return type. Properties need the same lazy type on `SourcePropertySymbolBase`; operators on
+  `SourceUserDefinedOperatorSymbolBase`. Edit and Continue treats a changed inferred type as a signature change.
+
+Tests: 16 `Infer_*` tests in `SharperTests.cs`: runtime output, every inferred type next to a C# twin, the errors,
+nullable annotations, the semantic model, IOperation, metadata seen from a C# compilation, the order of inference
+and concurrent inference.
+
 ## Follow-ups
 
 Sharper diagnostics were renumbered from `SharperErrorCodes.Base` (20000): CS9402, CS9403 and CS9404 became CS20001, CS20002 and CS20003, and this document uses the new numbers throughout.
@@ -403,4 +465,5 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 - [ ] `readonly` locals: decide `readonly` in `for` initializers, `foreach`, deconstruction and `out` (no modifier slot; a public syntax change). [#95](https://github.com/ok3mad/roslyn/issues/95)
 - [ ] `readonly` locals: IDE support (completion, refactorings that drop or break `readonly`). [#96](https://github.com/ok3mad/roslyn/issues/96)
 - [ ] `readonly` parameters, the grid's remaining explicitly typed corner. [#97](https://github.com/ok3mad/roslyn/issues/97)
+- [ ] Inferred return type: steps R2 to R5 ([#68](https://github.com/ok3mad/roslyn/issues/68) to [#71](https://github.com/ok3mad/roslyn/issues/71)); a local function's nullable inference sees captured variables at their declared state.
 - [ ] `readonly` locals share the `val` follow-ups: silence CS20010 with CS20003 (#84), the "never reassigned" fixer can offer `readonly int` (#89), and the public API (#88) and Edit and Continue (#90) items cover them too.

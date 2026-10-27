@@ -177,6 +177,22 @@ implementation plan, "Feature 3"):
    every position the feature should cover has a slot for the modifier: a `for` initializer has none, and adding one
    is a public syntax API change.
 
+21. **A signature inferred from a body must not be computed under the method-checks lock.** `MethodChecks` runs under a
+   per-method lock (`LazyMethodChecks`) and reads the return type itself; binding a body there reads other methods'
+   signatures, so two methods that use each other deadlock on two threads, and a reentrant read sees a half-set symbol.
+   `infer` keeps a `SharperInferredReturnType` instead: computed on first use outside any lock, published once with
+   its diagnostics, and guarded by a thread-static frame that turns a read of an inferred type during inference into
+   an uncached error type, so results never depend on the order of inference (the `var` local precedent:
+   `SourceLocalSymbol.s_LocalTypeInferenceInProgress`). Test the order (force one symbol first) and concurrent reads.
+
+## Inferred Types
+
+Inference from a body (`infer` return types, rows 10 and 15) reuses `var`'s rules for the natural type
+(`BindToNaturalType`, `BindToInferredDelegateType`) and lambdas' nullable re-inference (`NullableWalker` with
+`returnTypesOpt`). The body is bound once to infer and again to compile; drop the diagnostics of the first binding
+unless they are the inference's own. The design and the plan for the later steps are in the implementation plan,
+"Feature 5".
+
 ## Testing
 
 - Tests live in `src/Compilers/CSharp/Test/Semantic/Semantics/SharperTests.cs`. Use

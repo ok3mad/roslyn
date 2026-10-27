@@ -318,6 +318,15 @@ namespace Microsoft.CodeAnalysis.CSharp
         IDS_FeatureSharper = MessageBase + 12865,
         IDS_VALLOCAL = MessageBase + 12866,
         IDS_READONLYLOCAL = MessageBase + 12867,
+        IDS_SharperInferOnBlockBody = MessageBase + 12868,
+        IDS_SharperInferOnNonPrivateMember = MessageBase + 12869,
+        IDS_SharperInferOnAsync = MessageBase + 12870,
+        IDS_SharperInferOnRefReturn = MessageBase + 12871,
+        IDS_SharperInferOnPartialMethod = MessageBase + 12872,
+        IDS_SharperInferOnExplicitImplementation = MessageBase + 12873,
+        IDS_SharperInferOnExtensionMember = MessageBase + 12874,
+        IDS_SharperInferOnPropertyOrIndexer = MessageBase + 12875,
+        IDS_SharperInferOnOperator = MessageBase + 12876,
     }
 
     // Message IDs may refer to strings that need to be localized.
