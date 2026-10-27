@@ -17,7 +17,7 @@ The PoC works: behind `/features:sharper`, `yield return ..xs` compiles, runs an
 
 - 27 Sharper tests cover runtime output, diagnostics, nullable warnings, IOperation, the control flow graph and region analysis. They also pass with the IOperation test hook (`ROSLYN_TEST_IOPERATION=1`).
 - The feature reached every layer of the pipeline, but most of the work was in places no grep for the feature name finds (see the map and the lessons below).
-- Async iterators are deliberately unsupported (a clear error), and `dynamic` gets a warning instead of a runtime decision.
+- Async iterators are unsupported for now (a clear error), and `dynamic` gets a warning instead of a runtime decision.
 
 ## Probe feature: `yield return ..xs`
 
@@ -38,6 +38,7 @@ In pipeline order. Paths are under `src/Compilers/CSharp/Portable` unless noted.
 | IOperation | `Operations/CSharpOperationFactory.cs`, `BoundTree/Statement.cs` | `OperationKind.None` with xs as its child, the documented feature-branch approach. A real shape is an API decision. |
 | Lowering | `Lowering/LocalRewriter/LocalRewriter_Yield.cs`, `_ForStatement.cs`, `_WhileStatement.cs` | Expanded with the shared foreach helpers into a loop of plain yield returns. The loop helpers have node-kind allowlists. |
 | Diagnostics | `Errors/ErrorCode.cs`, `ErrorFacts.cs`, `CSharpResources.resx` + `.xlf` | CS20001 (async) and CS20002 (dynamic). A checklist at the end of `ErrorCode.cs` lists every place to update. |
+| Edit and Continue | `Lowering/IteratorRewriter/IteratorMethodToStateMachineRewriter.cs` (`PushFrame`), `Core/Portable/Emit/EditAndContinue/DefinitionMap.cs`, `src/Features/CSharp/Portable/EditAndContinue/SyntaxComparer.cs` | States are mapped by syntax offset and relative ordinal (`AwaitDebugId`); the spread's finalize state takes ordinal 1 of the yield's syntax. The IDE matcher gives the spread its own label, so it never maps to a plain yield return. |
 | Tests | `Test/Semantic/Semantics/SharperTests.cs` | Diagnostics, runtime output, nullable, IOperation, flow graph, region analysis. |
 
 ## Known traps
@@ -47,11 +48,12 @@ Each trap was probed before deciding how to handle it.
 | Trap | What the probe showed | How the PoC handles it |
 | --- | --- | --- |
 | Range ambiguity | `..i` is valid C# in iterators of `Range` and of `object` (boxed). | C# is tried first and wins; covered by tests for both element types. |
-| Async iterator, sync source | Compiler crash: the async rewriter only accepts `try` blocks with certain syntax, for Edit and Continue. | Error CS20001. May never be supported. |
-| Async iterator, async source | Misleading "foreach statement cannot operate…" error; would need an implicit `await foreach`. | Same CS20001. |
-| Ref-struct sources (spans, inline arrays) | Rejected with CS4007 about `Span<int>.Enumerator`, which the user never wrote. Only the enumerator matters: a ref struct source with a class enumerator works. | Error CS20007 in the binder when the enumerator is a ref struct (or the source is an inline array), naming the source type. |
+| Async iterator, sync source | Compiler crash: the async rewriter only accepts `try` blocks with certain syntax, for Edit and Continue. | Error CS20001 for now. To be supported ([#49](https://github.com/ok3mad/roslyn/issues/49)). |
+| Async iterator, async source | Misleading "foreach statement cannot operate…" error; would need an implicit `await foreach`. | Same CS20001. Never supported ([#43](https://github.com/ok3mad/roslyn/issues/43)). |
+| Ref-struct sources (spans, inline arrays) | Rejected with CS4007 about `Span<int>.Enumerator`, which the user never wrote. Only the enumerator matters: a ref struct source with a class enumerator works. | Error CS20012 in the binder when the enumerator is a ref struct (or the source is an inline array), naming the source type. |
 | `dynamic` | In an iterator of `object`, `..d` is valid C# (d converts to `Index` at runtime), so it stays a range and throws when d holds a sequence. In an iterator of `int` it spreads. | Warning CS20002. Deciding at runtime is the correct long-term semantics, but changes what valid C# does today. |
 | Both bindings fail (`..5`) | The spread error (CS9212) explains it better than the range error. | Spread error wins. |
+| Edit and Continue | The generated `try`/`finally` and the yield return both had the yield's syntax and ordinal 0, so the next generation mapped the yield to the finalize state and crashed. Adding a spread (or a plain `foreach`) to an iterator without a finalize state also crashed: the PDB path started finalize states at 0. | The finalize state takes ordinal 1; `DefinitionMap` starts decreasing states as the in-memory path does. |
 
 ## Decisions
 
@@ -63,10 +65,16 @@ Each trap was probed before deciding how to handle it.
 | Element conversion | Implicit, like `yield return x`. | A foreach-style explicit cast would silently accept `..objects` in an `IEnumerable<int>` iterator. |
 | Nullable warnings | CS8602 for a maybe-null source, CS8603 for maybe-null elements. | Same warnings as the C# the spread stands for; CS8619 was too generic. |
 | IOperation | `OperationKind.None` for now. | A real shape is public API; wait until the syntax settles. |
-| Async iterators | Not supported (CS20001). | Needs Edit and Continue work and a hidden `await`; may never be wanted. |
+| Async iterators | A synchronous source is to be supported ([#49](https://github.com/ok3mad/roslyn/issues/49)); an asynchronous source never is, and stays CS20001 ([#43](https://github.com/ok3mad/roslyn/issues/43)). | A synchronous source is a legitimate spread and only needs lowering work. Spreading an `IAsyncEnumerable<T>` would insert an `await` the user never wrote, so there is no marker form either. |
 | `dynamic` | Keep the range meaning, warn (CS20002). | A runtime decision changes the behavior of valid C#. |
 | val in patterns | A keyword in patterns, parsed like var (option 1). | Keeps val and var consistent. It breaks type patterns on a type named val, so the sharpener escapes those as @val. The alternative, reinterpreting a type pattern in the binder, kept C# meaning but diverged from var. |
+| Sequence type stacking | Left to right, innermost first: each `[..]` wraps everything to its left (`int[..][]` is `IEnumerable<int>[]`); plain array ranks between two `[..]` keep the C# order. | The brainstorm's rule for all type suffixes (`int[..]~`, `int~[..]`), and the reading order of `T?[]`. The C# array order would make `int[..][]` a sequence of arrays. |
+| Sequence type in a cast | `(A[..])` is a cast only before an identifier or a literal; `(int[..])` is always a cast. | `(a[..])(b)`, `(a[..])!`, `(a?[..]).b` and `(a[..]) with { }` are valid C# element accesses, which the usual "ambiguous type before `(`" rule would turn into casts. |
+| `(val x) => ...` | An implicitly typed lambda parameter that cannot be reassigned, decided in the binder. | `val x` already parses as a parameter of type `val`; binding it like `var` (a type named `val` wins) keeps the C# meaning without a parser change. |
 | Non-readonly members on a val struct | Run on a copy, with warning CS20003 (option C). | The foreach behavior let a method change the val, which breaks immutability. A silent copy (the readonly field rule) makes mutations disappear without notice. The warning makes the copy visible; member mutation inference will later silence it for members that do not mutate. |
+| `->` as a lambda arrow | No: `->` is only the arrow of function types; lambdas keep `=>`. | `x -> F(x)` is already a pointer member access, parsed the same in and out of unsafe code (`ParsePostFixExpression`); a lambda meaning could only win after binding fails. |
+| What a function type lowers to | Always `Func` or `Action`; `ref`/`out`/`in` parameters and more than 16 parameters are errors for now (#56). | The lambda's natural type synthesizes an anonymous delegate there, but that type is internal to one compilation, so it cannot appear in public signatures, where function types mostly go. |
+| New syntax nodes | Allowed when no existing node can hold the tokens; numbered from `SyntaxKind` 9900 up. | `(A) -> R` fits no existing node. A high range keeps upstream merges from reusing the values, as CS20000 does for diagnostics. |
 
 ## Lessons for the next feature
 
@@ -84,7 +92,7 @@ A new construct's real cost is in the places that never mention it. Model it on 
 
 ## Syntax roadmap
 
-The brainstorm proposes 28 pieces of syntax (#28, discard arguments, is still to be discussed). Each row has a GitHub issue, collected under the tracking issue [#12](https://github.com/ok3mad/roslyn/issues/12). Four are done: `yield return ..xs` and `val` in locals, deconstruction and patterns. Everything that depends on unions or purity waits for those designs.
+The brainstorm proposes 28 pieces of syntax (#28, discard arguments, is still to be discussed). Each row has a GitHub issue, collected under the tracking issue [#12](https://github.com/ok3mad/roslyn/issues/12). Eight are done: `yield return ..xs`, `val` in locals, deconstruction, patterns and lambda parameters, `readonly` locals, the sequence type `T[..]` and function types `(A, B) -> R`. Everything that depends on unions or purity waits for those designs.
 
 - **Size**, relative to the `yield return ..xs` PoC. **S**: about that size (no parser change, one bound node, reused lowering). **M**: a gated parser change, or a new lowering with its own rules. **L**: new inference or binding rules that interact with overload resolution or signature binding. **XL**: a new checker layer (refinements, unions, effects).
 - **Certainty**. **High**: decided in the brainstorm, spelling stable. **Med**: the leading direction, details or spelling open. **Low**: only sketched in examples, contradicted elsewhere, or blocked on an open question.
@@ -96,14 +104,15 @@ The brainstorm proposes 28 pieces of syntax (#28, discard arguments, is still to
 | 1 | Spread in iterators | `yield return ..xs` | `foreach` of yield returns | none | S | Done | Follow-ups below: async iterators, `dynamic`, Edit and Continue | [#13](https://github.com/ok3mad/roslyn/issues/13) |
 | 2 | `val` immutable local | `val total = 0;` | `var` plus a no-reassignment check | none (`val` parses as a type name) | S | Done | The only breaking keyword; trial binding plus a sharpener `@val` escape | [#14](https://github.com/ok3mad/roslyn/issues/14) |
 | 3 | `val` deconstruction | `val (small, large) = ...;` | deconstruction plus the same check | small: accept `val` wherever the parser checks for `var` (`IsPossibleDeconstructionLeft`, statement disambiguation, `IsVarType`) | S | Done | Comes with #2. Without the parser change, `val (a, b) = e` parses as an invocation; the same checks cover `foreach (val (a, b) in ...)` and `out val (a, b)` | [#15](https://github.com/ok3mad/roslyn/issues/15) |
-| 4 | `readonly` locals | `readonly int x`, `readonly var x` | local plus the same check | likely none (modifier probably parses, with an error) | S | Med | Rarely written; completes the mutability grid | [#16](https://github.com/ok3mad/roslyn/issues/16) |
-| 5 | `val` lambda parameter | `(val x) => ...` | lambda plus the same check | small | S | Med |  | [#17](https://github.com/ok3mad/roslyn/issues/17) |
-| 6 | `val` in patterns | `is { Length: val n }` | `var n` pattern plus the same check | yes: in a pattern the parser turns `val` into a keyword, as it does `var` (`LanguageParser_Patterns.cs`) | S | Done | Decided: `val` is always a keyword in patterns, like `var`. Breaks a type pattern on a type named `val`, so the sharpener escapes it as `@val`. Still open: is `val i` in an arm a binding pattern or a parameter modifier? | [#18](https://github.com/ok3mad/roslyn/issues/18) |
-| 7 | Sequence type | `int[..]` | `IEnumerable<int>` | small (reported today as ERR\_ArraySizeInDeclaration) | S | High | Small and decided: a good second feature | [#19](https://github.com/ok3mad/roslyn/issues/19) |
-| 8 | Task hat | `T^`, `void^`, `int[..]^` | `Task<T>`, `Task` | yes (postfix lookahead, like `T?`) | S–M | Med | Leading candidate; to be confirmed on real signatures | [#20](https://github.com/ok3mad/roslyn/issues/20) |
-| 9 | Function types | `(A, B) -> R`, `() -> T` | `Func<...>` | yes (`->` is an existing token) | M | Med–High | The examples also use `->` as a lambda arrow, against "`=>` stays reserved for bodies" | [#21](https://github.com/ok3mad/roslyn/issues/21) |
-| 10 | Expression-bodied `fun` | `fun Hello(int id) => ...` | method with an inferred return type | none (`fun` parses as a return type) | L | Med | Return type inference needs ordering and cycle handling and affects metadata | [#22](https://github.com/ok3mad/roslyn/issues/22) |
-| 11 | `mutable` parameter in `fun` | `fun F(mutable int x)` | plain parameter | small | S | Low | `mutable` versus `mut` is open | [#23](https://github.com/ok3mad/roslyn/issues/23) |
+| 4 | `readonly` locals | `readonly int x`, `readonly var x` | local plus the same check | small: the modifier already parses, with CS0106; Sharper drops that error for variable declarations | S | Done | Completes the mutability grid. `for`, `foreach`, deconstruction and `out` left out (no modifier slot; `val` covers them) | [#16](https://github.com/ok3mad/roslyn/issues/16) |
+| 5 | `val` lambda parameter | `(val x) => ...` | lambda plus the same check | none (`val x` already parses as a typed parameter) | S | Done | A type named `val` keeps the C# meaning; anonymous methods and local functions are out of scope (see [step 4](#feature-2-step-4-val-lambda-parameters)) | [#17](https://github.com/ok3mad/roslyn/issues/17) |
+| 6 | `val` in patterns | `is { Length: val n }` | `var n` pattern plus the same check | yes: in a pattern the parser turns `val` into a keyword, as it does `var` (`LanguageParser_Patterns.cs`) | S | Done | Decided: `val` is always a keyword in patterns, like `var`. Breaks a type pattern on a type named `val`, so the sharpener escapes it as `@val`. `val i` in an arm is a binding pattern, since arms hold only patterns (#14) | [#18](https://github.com/ok3mad/roslyn/issues/18) |
+| 7 | Sequence type | `int[..]` | `IEnumerable<int>` | small: `ScanType` accepts `[..]`; `ScanCast` keeps `(a[..])` an element access | S | Done | `new T[..]` keeps its C# meaning ([#64](https://github.com/ok3mad/roslyn/issues/64)); accepted break: `F<a[..]>(x)` is a generic call ([#66](https://github.com/ok3mad/roslyn/issues/66)). See [Feature 3](#feature-3-sequence-type-t) | [#19](https://github.com/ok3mad/roslyn/issues/19) |
+| 8 | Task tilde | `T~`, `void~`, `int[..]~` | `Task<T>`, `Task` | yes (a postfix `~` after a type, next to `?` and `*`; `~` has no binary meaning, so no disambiguation) | S–M | Prototype | Spelling `~` chosen over the hat `^` (XOR is valid in tuples, `is` and `as`). Confirmed on six applications; `ValueTask` stays unsugared (0.4% of their async declarations). A new syntax node, `TaskTypeSyntax`; see the [feature page](../features/task-type.md) | [#20](https://github.com/ok3mad/roslyn/issues/20) |
+| 9 | Function types | `(A, B) -> R`, `() -> T` | `Func<...>`, `Action<...>` | yes: a new syntax node, `FunctionTypeSyntax`, and a one-pass tuple-or-function lookahead | M | Prototype | Decided: `->` only in types, lambdas keep `=>`. Follow-ups: `ref` parameters [#56](https://github.com/ok3mad/roslyn/issues/56), names [#57](https://github.com/ok3mad/roslyn/issues/57), `((F))?` [#58](https://github.com/ok3mad/roslyn/issues/58), patterns [#59](https://github.com/ok3mad/roslyn/issues/59) | [#21](https://github.com/ok3mad/roslyn/issues/21) |
+| 10 | Inferred return type | `static infer Hello(int id) => ...` | method with the inferred return type | none (`infer` parses as a type name) | L, in steps R1 to R5 | Med | Ordering and cycles. Allowed on public members too, with no warning. Replaces the expression-bodied `fun` | [#22](https://github.com/ok3mad/roslyn/issues/22) |
+| 11 | `readonly` parameters | `void F(readonly int x)` | plain parameter plus the `val` no-reassignment check | none (`readonly` already parses as a parameter modifier, and C# reports an error without `ref`) | S | Med | Completes the mutability grid with #4 and #5. Replaces the `mutable` parameter in `fun`: immutable-by-default parameters and a `mutable` marker are a strictness ladder setting now, not syntax | [#23](https://github.com/ok3mad/roslyn/issues/23) |
+| 15 | Inferred parameter types | `public infer Load(infer userId) => ...`, `infer timeout = TimeSpan.FromSeconds(5)` | method with the inferred types | none (`infer x` parses as a typed parameter) | S to XL, in steps P1 to P8 | Med | Copied from an overridden member, a default value, a function type or a call that pins one type, never from shape. Generic by default is open. Replaces untyped `fun` parameters inferred from arms | [#27](https://github.com/ok3mad/roslyn/issues/27) |
 
 ### Phase 2: functional core
 
@@ -111,8 +120,7 @@ The brainstorm proposes 28 pieces of syntax (#28, discard arguments, is still to
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 12 | Implicit `it` | `xs.Select(Process(it, a))`, `when: it is X` | lambda `x => ...` | none | M–L | Med | Where the implicit lambda begins and ends without braces; innermost wins; an existing `it` keeps its C# meaning | [#24](https://github.com/ok3mad/roslyn/issues/24) |
 | 13 | Pipe, without lifting | `x \|> F`, `x \|> F(it, y)` | nested call | yes (new `\|>` token) | M | Med–High | A bare stage versus a stage that uses `it` | [#25](https://github.com/ok3mad/roslyn/issues/25) |
-| 14 | `fun` with ordered arms | `fun Fib(i) { 0 or 1 => 1, >=2 => ... }` | method with a switch expression | yes (new body form) | L | Med | Decided direction; switches over the parameter tuple; the lowered switch needs a final unreachable arm | [#26](https://github.com/ok3mad/roslyn/issues/26) |
-| 15 | Untyped `fun` parameters | `fun Fib(i)` | parameter typed from the arms | yes | XL | Low | An inferred domain hides a missing arm; public `fun`s may need annotations | [#27](https://github.com/ok3mad/roslyn/issues/27) |
+| 14 | Parameter switch body | `int Sign(int i) => switch { <0 => -1, 0 => 0, >0 => 1 };` | `i switch { ... }`, or a switch over the parameter tuple | yes (`switch` with no governing expression) | M | Med | Ordered arms are decided, the spelling is the leading candidate. Parameter types stay explicit, so it needs no inference; exhaustiveness is C#'s. Replaces the `fun` block of arms, which a statement block could not be told apart from | [#26](https://github.com/ok3mad/roslyn/issues/26) |
 | 16 | `try` expression | `try F(url) catch { HttpRequestException { ... } => ..., }` | try/catch with spilling | yes (`try` in expression position) | M–L | Med | The result type needs unions (#19); no `finally` | [#28](https://github.com/ok3mad/roslyn/issues/28) |
 | 17 | Lambda to single-method interface | `Render(user, id => new Profile())` | generated sealed class | none | M | Med | Only where C# reports an error today; the class needs a readable name for stack traces | [#29](https://github.com/ok3mad/roslyn/issues/29) |
 | 18 | Interface initializer | `new IProfiles { Load = id => ... }`, `_ = Unexpected` | generated class | none (binder only) | M | Med | Builds on #17 | [#30](https://github.com/ok3mad/roslyn/issues/30) |
@@ -121,14 +129,14 @@ The brainstorm proposes 28 pieces of syntax (#28, discard arguments, is still to
 
 | # | Syntax | Example | Lowers to | Parser change | Size | Certainty | Main risk or open point | Issue |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 19 | Inferred or structural unions | `(Profile \| Unavailable)^` | not decided | yes | XL | Low | Spelling never discussed; CLR representation open (nominal, tagged or erased to `object`) | [#31](https://github.com/ok3mad/roslyn/issues/31) |
+| 19 | Inferred or structural unions | `(Profile \| Unavailable)~` | not decided | yes | XL | Low | Spelling never discussed; CLR representation open (nominal, tagged or erased to `object`) | [#31](https://github.com/ok3mad/roslyn/issues/31) |
 | 20 | Lifting in pipes and arguments | `users.Find(id) \|> Render(it, p)` | await, `Select` or union passthrough | none | XL | Low | Implicit versus an explicit marker; breaks down at generic and `object` parameters | [#32](https://github.com/ok3mad/roslyn/issues/32) |
 | 21 | Refined types and members | `decimal Amount is >0`, `int is >=0` | plain type plus boundary checks | yes (pattern in a type position) | XL | Low–Med | Proof obligations at call sites; runtime guards for C# callers | [#33](https://github.com/ok3mad/roslyn/issues/33) |
 | 22 | Opaque patterns | `is > 0 and <= max` | pattern plus a `when` guard | none (relational patterns already parse any expression) | M, plus purity | Med | Sound only with purity (#24) | [#34](https://github.com/ok3mad/roslyn/issues/34) |
 | 23 | Extractor patterns | `s is Parse(val n and >0)` | call plus a sub-pattern | none | M–L | Low | Clashes with a positional pattern on a type named `Parse` | [#35](https://github.com/ok3mad/roslyn/issues/35) |
-| 24 | `pure` and `total` modifiers | `total fun ...`, `pure(provider)` | erased, plus attributes | small | XL (syntax alone S) | Low | Needs the whole effect checker and bindings for existing .NET code | [#36](https://github.com/ok3mad/roslyn/issues/36) |
-| 25 | Member declared on another type | `static fun Currency.Parse(string s)` | C# 14 extension block | yes | M | Low | Appears only in an example | [#37](https://github.com/ok3mad/roslyn/issues/37) |
-| 26 | Arms as a lambda body | `{ 42 => ..., _ => ... }` | lambda with a switch expression | yes | M | Low | The brainstorm says it is not designed yet | [#38](https://github.com/ok3mad/roslyn/issues/38) |
+| 24 | `pure` and `total` modifiers | `total int Fib(...)`, `pure(provider)` | erased, plus attributes | small | XL (syntax alone S) | Low | Needs the whole effect checker and bindings for existing .NET code | [#36](https://github.com/ok3mad/roslyn/issues/36) |
+| 25 | Member declared on another type | `static infer Currency.Parse(string s)` | C# 14 extension block | yes | M | Low | Appears only in an example; without `fun` it is spelled like an explicit interface implementation | [#37](https://github.com/ok3mad/roslyn/issues/37) |
+| 26 | Switch body on a lambda | `id => switch { 42 => ..., _ => ... }` | lambda with a switch expression | yes (shared with #14) | S once #14 exists | Med | The parameter switch body applied to lambdas | [#38](https://github.com/ok3mad/roslyn/issues/38) |
 | 27 | `assume` escape hatch | `assume x is >0` | runtime check | yes | S–M | Low | Only an open question so far | [#39](https://github.com/ok3mad/roslyn/issues/39) |
 
 ### Proposed, to be discussed
@@ -142,12 +150,51 @@ Not listed: `union Name(A, B)` comes from C# 15, and `collect`, `Retry` and `Une
 ### Suggested order
 
 1. `val` (#2, #3, #6), in three steps: `val x = e` locals (binder only), then deconstruction and designations (parser), then patterns (keyword). It exercises the gated parser, the first deliberate break with its `@val` escape, and new semantics on an existing symbol, none of which the first PoC touched. The no-reassignment check reuses the read-only local check behind CS1656.
-2. `T[..]` (#7). Useful, but it repeats the first PoC's lesson (a binder rewrite onto an existing type), so it teaches little.
-3. `T^` and `->` function types (#8, #9).
-4. Expression-bodied `fun` (#10), the first real inference work.
-5. Rows 19 onward wait for the union representation and the purity design.
+2. `T[..]` (#7), done. Its binder rewrite onto a BCL type is the pattern for the other short type forms (see [Feature 3](#feature-3-sequence-type-t)).
+3. `T~` (#8) and function types (#9), done.
+4. `readonly` parameters (#11), small, and the parameter switch body (#14, with #26), which needs no inference.
+5. Type inference (#10 and #15), the first real inference work, in the steps of the
+   [work breakdown](#type-inference-work-breakdown).
+6. Rows 19 onward wait for the union representation and the purity design.
 
-Before the type-syntax rows, decide whether `->` is also the lambda arrow. The brainstorm examples use it both ways.
+Decided before the type-syntax rows: `->` is not a lambda arrow, only the arrow of function types (see Decisions).
+
+Rows 10, 11, 14 and 15 used to be parts of one `fun` declaration, and rows 24 and 25 used its keyword. They are separate features on ordinary methods now, and each can be built alone; see [Functions as separate elements](brainstorm.md#functions-as-separate-elements). `fun` itself is parked for a later "functional all in" mode, whose meaning is decided once these pieces have settled.
+
+### Type inference work breakdown
+
+Rows 10 and 15 are split into steps that each fit one branch and one PR, like the three `val` steps. The design is in
+the brainstorm: [`infer`](brainstorm.md#infer-the-type-is-inferred),
+[Inferred return type](brainstorm.md#inferred-return-type) and
+[Inferred parameter types](brainstorm.md#inferred-parameter-types), whose sources 1 to 5 the parameter steps refer to.
+Every step covers binding, the semantic model (the declared symbol shows the inferred type), IOperation, nullable
+analysis of the inferred type, and tests next to the C# with the type written out.
+
+Return type (#10):
+
+| Step | Scope | Size | Open point |
+| --- | --- | --- | --- |
+| R1 | `infer` as a return type: gating, a type named `infer` wins, CS0246 with the flag off. Expression bodies of private methods and local functions that call only methods with written return types | S–M | The error when nothing can be inferred (`null`, a method group) |
+| R2 | Block bodies: several `return` statements with the best common type, no return value as `void`, iterators, `async` | M | Nullable annotation of the result when one `return` is maybe-null |
+| R3 | Methods with inferred return types calling each other: binding order across members, cycle and recursion errors | L | Whether a recursive method with a non-recursive `return` is allowed later |
+| R4 | Every member kind and accessibility: public and protected members, `virtual`, `partial`, operators, metadata emission, Edit and Continue (a body edit that changes the type is a signature change) | M | None for public members: they infer like any other (decided) |
+| R5 | IDE: Quick Info and inlay hints show the inferred type, a fixer writes it out | M | |
+
+Parameter types (#15):
+
+| Step | Scope | Size | Open point |
+| --- | --- | --- | --- |
+| P1 | `infer` as a parameter type, with source 2: the default value's type. `null`, `default` and target-typed values give an error | S | |
+| P2 | Source 1: the overridden or implemented member gives the parameter and return types. Members are matched by name and parameter count before their types are known; more than one candidate is an error | M | Explicit interface implementations; a partial `infer` signature where some types are written |
+| P3 | `readonly infer x` | S | Whether `val x` is its shorthand on method parameters |
+| P4 | Source 4, first cut: the parameter passed directly as an argument to a call with exactly one candidate (method, constructor, delegate). Needs binding the body with a placeholder type | L | How the placeholder interacts with lambdas and local functions in the body |
+| P5 | Source 4 with overloads: every applicable candidate takes the same type at that position, including generic methods whose type arguments come from other arguments | L | |
+| P6 | Source 4, other pinning uses: assignment to a typed local, field or property, `return x` from a method with a written return type, `ref` and `out` arguments. Several uses must agree, and the error names each one | M | |
+| P7 | Source 3: a function type the method is converted to, local functions first, then private methods | L | Conversions that appear after the declaration in the same method |
+| P8 | Source 5: decide generic by default or an error, then build it | M if generic | Undecided; see the brainstorm |
+
+Suggested order: R1, P1, P2, P3, R2, R3, P4, P5, P6, P7, R4, R5, and P8 once it is decided. P4 to P6 are the
+expensive core; everything before them needs no change to how bodies are bound.
 
 ## Feature 2, step 1: `val` locals
 
@@ -200,6 +247,124 @@ Merged as #4. The first Sharper parser change: one helper (`IsIdentifierVarOrSha
 
 `val` followed by a designation in a pattern (`is val x`, `case val x:`, `val x =>`, `val (a, b)`, `(val a, var b)`, `{ P: val p }`) is a var pattern whose keyword token is `SyntaxKind.ValKeyword` (first a `VarKeyword` token with the text `val`; replaced so code that rebuilds a token from its kind keeps `val`). `VarPatternSyntax` is reused, so no syntax node is added. Its variables cannot be reassigned. As for `var`, `val` is a keyword in patterns even where a type named `val` exists; that surfaces as the existing error CS8508 rather than a change of meaning. `is val` without a designation and `is @val x` keep their C# meaning.
 
+## Feature 2, step 4: `val` lambda parameters
+
+`(val x) => ...` declares an implicitly typed lambda parameter that cannot be reassigned (issue #17). No parser change:
+with the flag on or off, `val x` parses as a parameter whose type is the identifier `val`, in every lambda form. The
+binder (`GetSharperValLambdaParameters` in `Binder_Lambda.cs`) looks `val` up as `var` locals do: if no type named `val`
+binds, the parameter counts as implicitly typed, so it is inferred from the target delegate like `(x) => ...`, and
+`LambdaParameterSymbol.IsSharperVal` makes it read-only. Writes go through the shared value check
+(`CheckParameterValueKind`), and struct copies through `IsSharperValValue`, so a val parameter reuses every rule of a val
+local.
+
+| Question | Decision |
+| --- | --- |
+| A type named `val` in scope | C# wins: `(val x)` is an explicitly typed parameter of that type, as without the flag. |
+| Writes | CS1656 and CS1657 with the 'val variable' cause, CS1654 for struct fields, also from nested lambdas. |
+| Struct members | A non-readonly member runs on a copy and warns (CS20003), also when captured, after `await` and in patterns. |
+| `(val a, b)` | Allowed: both are implicitly typed. |
+| `(val a, int b)`, `(int a, val b)` | CS0748, as for `(a, int b)`: C# does not mix implicit and explicit parameters. |
+| `async`, `static`, an explicit return type (`long (val x) => ...`), expression trees | Allowed, as for `(x) => ...`. |
+| `var f = (val x) => x` | CS8917, as for `(x) => x`: a natural type needs explicit parameter types. |
+| `(ref val x)`, `(out val x)` | Allowed: writes through the ref work. `x = ref y` on a `ref val` parameter is CS20006, as for a `ref val` local. |
+| `(in val x)` | Allowed; writes are CS8331, as for `(in x)`. |
+| `(scoped val x)` | Allowed: a scoped parameter that cannot be reassigned. |
+| `(params val x)` | CS9272, as for `(params x)`. |
+| `(val x = 1)` | CS9098, as for `(x = 1)`: implicitly typed parameters cannot have default values. |
+| `delegate (val x) { }`, `void Local(val x)` | Out of scope: their parameters are always explicitly typed, so `val` is a type name there (CS0246), as in C#. |
+| Semantic model and IOperation | The parameter is an ordinary `IParameterSymbol`; `GetTypeInfo` and `GetSymbolInfo` on `val` give the inferred type, as for `var`. IOperation is unchanged. |
+
+Implicitly typed lambda parameters were detected by their missing type syntax (`p.Type == null`) in three places, all
+of which now also count a val parameter: the explicit-or-implicit check (`CheckParenthesizedLambdaParameters`), the
+explicitly typed parameter list in `AnalyzeAnonymousFunction`, and the `params` check in
+`ParameterHelpers.CheckParameterModifiers`, which `Binder_Lambda.cs` repeats for val.
+
+Tests: 14 new Sharper tests (91 in all) pass, also with `ROSLYN_TEST_IOPERATION=1`. Regression run (net10.0, Debug) of
+the C# Semantic, Symbol, IOperation, Syntax and Emit test projects: 54,449 passed, 0 failed.
+
+## Feature 3: sequence type `T[..]`
+
+`T[..]` is an alias for `IEnumerable<T>` in every type position, on branch `sharper/sequence-type`
+([feature page](../features/sequence-type.md)). It adds no syntax node, bound node or public API, and needs no
+lowering: the binder resolves the syntax to the constructed BCL type, so everything after binding sees
+`IEnumerable<T>`.
+
+### Rewriting a type form onto a BCL type
+
+This is the pattern for Sharper's short type forms. Function types (#21) were built in parallel and follow it with a new syntax node: `BindFunctionType` constructs `Func` or `Action` with the same `ConstructNamedType` call. The task type (#20) follows it too, with the syntax node `TaskTypeSyntax` and `BindSharperTaskType`.
+
+1. **Syntax.** Reuse a C# node that already parses the form, and give the Sharper reading one gated predicate on
+   it. `T[..]` is an `ArrayTypeSyntax` whose rank holds a range with no operands; `ArrayRankSpecifierSyntax.IsSharperSequence`
+   decides, and every other place (binder, semantic model, local declarations) asks it. A form with no C# parse (the task
+   suffix, `->` in a type) needs a new node instead, and with it public API (see `FunctionTypeSyntax`).
+2. **Parser.** `ParseType` usually parses the form already, but statements, casts, generic arguments in
+   expressions and tuple elements first scan with `ScanType`, which must accept the form too. Then check every
+   caller that turns a scanned type into a decision (`ScanCast`, `ScanPossibleTypeArgumentList`) for valid C#
+   expressions that would change meaning, and do not return `ScanTypeFlags.MustBeType` for a form that is also an
+   expression.
+3. **Binder.** Bind the type arguments as usual, get the generic definition with `GetSpecialType` or
+   `GetWellKnownType` (they report a missing type), then call `BindSharperTypeAlias` (`Binder_SharperTypes.cs`). It
+   constructs the type through `ConstructNamedType`, which checks constraints now or leaves them to the declaring
+   symbol where the binder suppresses checks (signatures), exactly as for the type written out. Set the nullable
+   annotation from the form's last token, as the C# form would.
+4. **Places that read the syntax directly.** Local declarations bind array sizes as "invalid dimensions" for the
+   semantic model (`Binder_Statements.cs`), and the semantic model would bind the `..` as `Range.All`
+   (`CSharpSemanticModel.CanGetSemanticInfo`). Both skip a sequence rank.
+5. **Tests.** Compare each Sharper form with its C# twin: member signatures and local symbols across all type
+   positions, diagnostics for invalid type arguments, nullable warnings, metadata seen from a C# compilation, and C#
+   expressions that the scan change must leave alone.
+
+### What it taught
+
+1. **The lexer has no `..` token.** It produces two `.` tokens, which the parser merges (`IsAtDotDotToken`,
+   `EatDotDotToken`). A check for `SyntaxKind.DotDotToken` on the current token never matches.
+2. **Declarations are decided by scanning, not parsing.** `int[..] x` already parsed in members and parameters, and
+   even as a local, but `Func<int[..], int> f` and `(int, int[..]) t` did not, because the statement scanner
+   rejected them. Test the form inside a generic argument and a tuple, not only at the top.
+3. **"Type or expression" ambiguities move.** Accepting a form in `ScanType` hands it to the cast heuristic, which
+   treats an ambiguous type before `(`, `!` or an identifier as a cast. Every expression form the type form overlaps
+   with (`a[..]`, `a?[..]`) needs a test with each token that can follow a parenthesized expression.
+4. **A small accepted break can come from the scanner.** `F<a[..]>(x)` follows the C# rule for `F<a>(x)` and becomes
+   a generic call. It only differs from C# with user-defined comparison operators, so it is accepted and listed
+   for the sharpener.
+
+## Feature 4: `readonly` locals
+
+`readonly int x = e;` and `readonly var x = e;` declare locals that cannot be reassigned, merged from
+`sharper/readonly-locals` ([#16](https://github.com/ok3mad/roslyn/issues/16), feature page
+[readonly-locals.md](../features/readonly-locals.md)). `readonly var x` means exactly `val x`.
+
+**Probe.** The parser already accepts `readonly` as a local declaration modifier (`ParseLocalDeclarationStatementModifiers`)
+and attaches CS0106 to the token; after `using` it attaches CS9229. A `for` initializer, `foreach`, a deconstruction and
+an `out` argument have no modifier list, so `readonly` there is a cascade of syntax errors. In a script, a top-level
+`readonly int t = 1;` is a C# readonly field.
+
+**Change.** With the feature on, the parser skips the error on `readonly` and adds it back where the same modifier list
+ends up on a local function (`TryParseLocalFunctionStatementBody`) or next to `const`. `SourceLocalSymbol.IsSharperReadOnly`
+reads the modifier from the declaration statement and makes `IsWritableVariable` false, which reuses the whole `val`
+machinery: the write checks, `ReportReadonlyLocalError` (cause 'readonly local') and the struct copy
+(`Binder.IsSharperValValue`). With the flag off, the parser is unchanged and the C# errors stay.
+
+| Question | Decision | Why |
+| --- | --- | --- |
+| Meaning | Not a writable variable, like `val`; `readonly var x` is `val x` | The brainstorm's mutability grid |
+| Messages | CS1656, CS1657 and CS1654 with the cause 'readonly local'; CS20010 (the readonly-local form of CS20003) for a member call on a copy | The user wrote `readonly`, not `val`. A separate warning code keeps CS20003's text unchanged for `val` |
+| No initializer | Error CS20011 for an explicitly typed `readonly` local; `readonly var x;` keeps CS0818 | Nothing can assign the local later, so the declaration is the place to say so |
+| `using readonly var` | Allowed, cause 'readonly local' | Covered by the issue; CS9229 still applies to every other modifier |
+| `for` initializer | Not supported; stays a syntax error | `ForStatementSyntax` has no modifier slot, so it needs a public syntax API change, for a loop variable the loop usually increments. `for (val i = ...)` works |
+| `foreach`, deconstruction, `out` | Not supported; stay syntax errors | No modifier slot; `val` covers each of them |
+| `const readonly` | CS0106 on `readonly`, as without Sharper | A constant is already read-only |
+| `readonly ref int r` | Allowed: no ref reassignment (CS1656), writes through the ref allowed | Matches C#'s `readonly ref` fields and the brainstorm's "one meaning of readonly"; same as `ref val` |
+| `ref readonly int r` | Unchanged C# | Already valid C#, so the C# meaning wins |
+| `readonly ref readonly int r` | Both: no writes through the ref (CS0131, as for `ref readonly`) and no ref reassignment | Matches C#'s `readonly ref readonly` fields |
+| `readonly scoped` | Allowed | `scoped readonly` stays a syntax error, as for any modifier after `scoped` |
+| `readonly val x` | Allowed, means `val x` | Redundant but harmless |
+| Local functions | CS0106 kept | `readonly` does not apply to them |
+| Script top-level fields | Unchanged C# readonly fields | Already C#; the C# meaning wins |
+
+Tests: 17 `ReadonlyLocal_*` tests (19 cases) in `SharperTests.cs`; all 95 Sharper tests pass, also with `ROSLYN_TEST_IOPERATION=1`.
+Regression run of the C# compiler tests (net10.0, Debug, 10 projects; WinRT not run): 88,398 passed, 0 failed.
+
 ## Follow-ups
 
 Sharper diagnostics were renumbered from `SharperErrorCodes.Base` (20000): CS9402, CS9403 and CS9404 became CS20001, CS20002 and CS20003, and this document uses the new numbers throughout.
@@ -212,16 +377,30 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 - [ ] Support `dotnet run app.cx`. File-based apps live in the SDK and only accept `.cs` files, so this needs an SDK change; until then the language server treats a loose `.cx` file as a miscellaneous file, never a file-based app.
 - [x] Add `*.cx` to the default `Compile` items (the `Microsoft.Net.Compilers.Toolset` props).
 - [ ] Decide whether `dynamic` should choose range or spread at runtime, under the sharpening rules. [#42](https://github.com/ok3mad/roslyn/issues/42)
-- [ ] Decide whether async iterators should ever support spreads. [#43](https://github.com/ok3mad/roslyn/issues/43)
+- [x] Decide whether async iterators should ever support spreads: never for an asynchronous source. [#43](https://github.com/ok3mad/roslyn/issues/43)
+- [ ] Support spreading a synchronous source in an async iterator. [#49](https://github.com/ok3mad/roslyn/issues/49)
 - [x] Give ref-struct sources a spread-specific error instead of CS4007. [#44](https://github.com/ok3mad/roslyn/issues/44)
-- [ ] Verify the spread with Edit and Continue: the generated try/finally and the yield share one syntax offset. [#45](https://github.com/ok3mad/roslyn/issues/45)
+- [x] Verify the spread with Edit and Continue: the generated try/finally and the yield share one syntax offset. Fixed with a second state ordinal, and the IDE no longer matches a spread with a plain yield return. [#45](https://github.com/ok3mad/roslyn/issues/45)
 - [ ] Design a real IOperation shape once the syntax settles. [#46](https://github.com/ok3mad/roslyn/issues/46)
 - [ ] Avoid the O(depth) cost of recursive spreads with a delegating state machine. [#47](https://github.com/ok3mad/roslyn/issues/47)
 - [x] Number Sharper diagnostics from their own base, `SharperErrorCodes.Base` = 20000 (CS20001 and up), far from upstream.
 - [x] Full C# compiler regression run (net10.0, Debug): 88,327 tests passed and 0 failed across 10 test projects. WinRT was not run; it targets .NET Framework only.
-- [ ] Infer whether a struct member mutates `this`, and silence CS20003 for members that do not. Until then, every call to a non-`readonly` member of a `val` warns, including interface members on a generic `val` (`g.Get()`).
+- [ ] Infer whether a struct member mutates `this`, and silence CS20003 for members that do not. Until then, every call to a non-`readonly` member of a `val` warns, including interface members on a generic `val` (`g.Get()`). [#84](https://github.com/ok3mad/roslyn/issues/84); its default severity until then is [#85](https://github.com/ok3mad/roslyn/issues/85).
 - [x] Copy and warn for the pattern-based members that bypassed the shared check: `await`/`GetAwaiter`, implicit Index and Range indexers, list patterns and property patterns. Collection spreads and `using` already copy their operand.
-- [ ] Build the sharpening infrastructure and move Sharper to the `.cx` extension. The accepted breaks need it: `val` as a keyword in patterns, and `val (a, b) = e` as a declaration. The sharpener rewrites those to `@val`, and the extension keeps plain `.cs` files on C# semantics.
+- [ ] Build the sharpening infrastructure and move Sharper to the `.cx` extension. The accepted breaks need it: `val` as a keyword in patterns, and `val (a, b) = e` as a declaration. The sharpener rewrites those to `@val`, and the extension keeps plain `.cs` files on C# semantics. The `.cx` part is done (see above); escaping `val` is [#86](https://github.com/ok3mad/roslyn/issues/86).
 - [x] Give `val` its own messages: CS20004 and CS20005 (the `val` forms of CS8508 and CS8136), CS20006 for ref reassignment, and the 'val variable' cause also for `foreach` and `using` variables.
 - [x] Script fields: `val` is a read-only inferred field, like `var` plus read-only.
 - [x] Give `val` its own token kind: `SyntaxKind.ValKeyword` (8466, the top free slot below `ElifKeyword`, guarded by a test), a contextual keyword like `var`, used by val patterns.
+- [ ] `val`: IDE support (classification, Quick Info, completion, hints, and refactorings that write `var`). [#87](https://github.com/ok3mad/roslyn/issues/87)
+- [ ] `val`: decide whether to expose val-ness in the public API (`ILocalSymbol` has no read-only flag). [#88](https://github.com/ok3mad/roslyn/issues/88)
+- [ ] `val`: analyzer and fixer "local is never reassigned, use `val`". [#89](https://github.com/ok3mad/roslyn/issues/89)
+- [ ] `val`: verify Edit and Continue with `val` locals and their struct copies. [#90](https://github.com/ok3mad/roslyn/issues/90)
+- [ ] Test `/nowarn` and `.editorconfig` with five-digit Sharper IDs. [#91](https://github.com/ok3mad/roslyn/issues/91)
+- [ ] Decide immutability depth: binding, value or deep (a type-level immutability marker). [#92](https://github.com/ok3mad/roslyn/issues/92)
+- [ ] Sequence type: decide whether array creation should accept sequence elements (`new int[3][..]`, today CS0178, or `new int[..][3]`). [#64](https://github.com/ok3mad/roslyn/issues/64)
+- [ ] Sequence type: report an invalid element type on the element type rather than the whole sequence type (same cause as #62 for function types). [#65](https://github.com/ok3mad/roslyn/issues/65)
+- [ ] Sharpener: rewrite `F<a[..]>(x)` (two comparisons in C#) as `F < (a[..]) > (x)`, the sequence type's accepted break. [#66](https://github.com/ok3mad/roslyn/issues/66)
+- [ ] `readonly` locals: decide `readonly` in `for` initializers, `foreach`, deconstruction and `out` (no modifier slot; a public syntax change). [#95](https://github.com/ok3mad/roslyn/issues/95)
+- [ ] `readonly` locals: IDE support (completion, refactorings that drop or break `readonly`). [#96](https://github.com/ok3mad/roslyn/issues/96)
+- [ ] `readonly` parameters, the grid's remaining explicitly typed corner. [#97](https://github.com/ok3mad/roslyn/issues/97)
+- [ ] `readonly` locals share the `val` follow-ups: silence CS20010 with CS20003 (#84), the "never reassigned" fixer can offer `readonly int` (#89), and the public API (#88) and Edit and Continue (#90) items cover them too.

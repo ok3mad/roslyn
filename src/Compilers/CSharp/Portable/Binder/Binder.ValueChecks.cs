@@ -1392,6 +1392,21 @@ namespace Microsoft.CodeAnalysis.CSharp
 
             ParameterSymbol parameterSymbol = parameter.ParameterSymbol;
 
+            // A Sharper (val x) lambda parameter cannot be reassigned, like a val local; a ref val can still be written through.
+            if (parameterSymbol is LambdaParameterSymbol { IsSharperVal: true })
+            {
+                if (parameterSymbol.RefKind == RefKind.None && RequiresAssignableVariable(valueKind))
+                {
+                    ReportReadonlyVariableError(node, parameterSymbol.Name, MessageID.IDS_VALLOCAL, valueKind, checkingReceiver, diagnostics);
+                    return false;
+                }
+                else if (parameterSymbol.RefKind != RefKind.None && RequiresRefAssignableVariable(valueKind))
+                {
+                    Error(diagnostics, ErrorCode.ERR_SharperValRefReassignment, node, parameterSymbol.Name);
+                    return false;
+                }
+            }
+
             // all parameters can be passed by ref/out or assigned to
             // except "in" and "ref readonly" parameters, which are readonly
             if (parameterSymbol.RefKind is RefKind.In or RefKind.RefReadOnlyParameter && RequiresAssignableVariable(valueKind))
@@ -3440,6 +3455,11 @@ namespace Microsoft.CodeAnalysis.CSharp
 
                 cause = MessageID.IDS_VALLOCAL;
             }
+            else if (local is SourceLocalSymbol { IsSharperReadOnly: true } && (local.RefKind == RefKind.None || RequiresRefAssignableVariable(kind)))
+            {
+                // On a ref local, readonly forbids ref reassignment; a write through 'readonly ref readonly' reports as for 'ref readonly'.
+                cause = MessageID.IDS_READONLYLOCAL;
+            }
             else if (local.IsForEach)
             {
                 cause = MessageID.IDS_FOREACHLOCAL;
@@ -3461,7 +3481,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             ReportReadonlyVariableError(node, local, cause, kind, checkingReceiver, diagnostics);
         }
 
-        private static void ReportReadonlyVariableError(SyntaxNode node, Symbol variable, MessageID cause, BindValueKind kind, bool checkingReceiver, BindingDiagnosticBag diagnostics)
+        private static void ReportReadonlyVariableError(SyntaxNode node, object variable, MessageID cause, BindValueKind kind, bool checkingReceiver, BindingDiagnosticBag diagnostics)
         {
             ErrorCode[] ReadOnlyLocalErrors =
             {

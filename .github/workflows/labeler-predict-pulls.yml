@@ -7,6 +7,7 @@
 name: "Labeler: Predict (Pulls)"
 
 on:
+  # Sharper: triggers other than workflow_dispatch are turned off (.github/skills/sync-upstream).
   # Per to the following documentation:
   # https://docs.github.com/en/actions/writing-workflows/choosing-when-your-workflow-runs/events-that-trigger-workflows#pull_request_target
   #
@@ -17,16 +18,16 @@ on:
   # like label or comment on pull requests from forks.
   #
   # Only automatically predict area labels when pull requests are first opened
-  pull_request_target:
-    types: opened
+  # sharper-off: pull_request_target:
+  # sharper-off:   types: opened
 
     # Configure the branches that need to have PRs labeled
-    branches:
-      - main
+  # sharper-off:   branches:
+  # sharper-off:     - main
 
   # Poll for open pull requests that need labels every 5 minutes
-  schedule:
-    - cron: "*/5 * * * *"
+  # sharper-off: schedule:
+  # sharper-off:   - cron: "*/5 * * * *"
 
   # Allow dispatching the workflow via the Actions UI, specifying ranges of numbers
   # If no pull request numbers are provided, it behaves as a polling event

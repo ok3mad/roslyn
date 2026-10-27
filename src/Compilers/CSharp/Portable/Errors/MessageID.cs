@@ -317,6 +317,7 @@ namespace Microsoft.CodeAnalysis.CSharp
 
         IDS_FeatureSharper = MessageBase + 12865,
         IDS_VALLOCAL = MessageBase + 12866,
+        IDS_READONLYLOCAL = MessageBase + 12867,
     }
 
     // Message IDs may refer to strings that need to be localized.

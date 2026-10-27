@@ -100,6 +100,13 @@ namespace Microsoft.CodeAnalysis.CSharp
                         // FunctionPointerTypeSyntax has no direct children that are ExpressionSyntaxes
                         throw ExceptionUtilities.Unreachable();
 
+                    case FunctionType:
+                        // The parameter types are under FunctionPointerParameter.
+                        return ((FunctionTypeSyntax)parent).ReturnType == node;
+
+                    case TaskType:
+                        return ((TaskTypeSyntax)parent).ElementType == node;
+
                     case PredefinedType:
                         return true;
 

@@ -7,9 +7,10 @@
 name: "Labeler: Predict (Issues)"
 
 on:
+  # Sharper: triggers other than workflow_dispatch are turned off (.github/skills/sync-upstream).
   # Only automatically predict area labels when issues are first opened
-  issues:
-    types: opened
+  # sharper-off: issues:
+  # sharper-off:   types: opened
 
   # Allow dispatching the workflow via the Actions UI, specifying ranges of numbers
   workflow_dispatch:

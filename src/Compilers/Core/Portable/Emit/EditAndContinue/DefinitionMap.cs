@@ -381,7 +381,14 @@ namespace Microsoft.CodeAnalysis.Emit
                 if (!debugInfo.StateMachineStates.IsDefaultOrEmpty)
                 {
                     firstUnusedIncreasingStateMachineState = debugInfo.StateMachineStates.Max(s => s.StateNumber) + 1;
-                    firstUnusedDecreasingStateMachineState = debugInfo.StateMachineStates.Min(s => s.StateNumber) - 1;
+
+                    // As in StateMachineStatesDebugInfo.Create: a state machine without negative states has no decreasing states,
+                    // and the next generation starts them at the first decreasing state of its kind.
+                    var minState = debugInfo.StateMachineStates.Min(s => s.StateNumber) - 1;
+                    if (minState < 0)
+                    {
+                        firstUnusedDecreasingStateMachineState = minState;
+                    }
                 }
 
                 ITypeSymbolInternal? stateMachineType = TryGetStateMachineType(methodHandle);

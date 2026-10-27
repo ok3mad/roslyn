@@ -573,6 +573,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 case ErrorCode.WRN_RedundantPattern:
                 case ErrorCode.WRN_SharperDynamicRangeNotSpread:
                 case ErrorCode.WRN_SharperValMemberCallOnCopy:
+                case ErrorCode.WRN_SharperReadOnlyLocalMemberCallOnCopy:
                     return 1;
                 default:
                     return 0;
@@ -2612,6 +2613,11 @@ namespace Microsoft.CodeAnalysis.CSharp
                 or ErrorCode.ERR_SharperValMayNotBindToType
                 or ErrorCode.ERR_SharperValDeconstructionDisallowsSpecificType
                 or ErrorCode.ERR_SharperValRefReassignment
+                or ErrorCode.ERR_SharperFunctionTypeParameterName
+                or ErrorCode.ERR_SharperFunctionTypeParameterModifier
+                or ErrorCode.ERR_SharperFunctionTypeTooManyParameters
+                or ErrorCode.WRN_SharperReadOnlyLocalMemberCallOnCopy
+                or ErrorCode.ERR_SharperReadOnlyLocalWithNoInitializer
                 or ErrorCode.ERR_SharperSpreadRefStructEnumerator
                     => false,
             };

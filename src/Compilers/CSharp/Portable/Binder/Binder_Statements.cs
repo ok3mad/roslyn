@@ -1175,6 +1175,14 @@ namespace Microsoft.CodeAnalysis.CSharp
                 if (ReferenceEquals(equalsClauseSyntax, null))
                 {
                     initializerOpt = null;
+
+                    // A readonly ref local already reports ERR_ByReferenceVariableMustBeInitialized, and a statement with syntax
+                    // errors (readonly in a tuple or a for initializer) is not a readonly local the user wrote.
+                    if (localSymbol is { IsSharperReadOnly: true, RefKind: RefKind.None } && !declarator.Parent.Parent.ContainsDiagnostics)
+                    {
+                        Error(diagnostics, ErrorCode.ERR_SharperReadOnlyLocalWithNoInitializer, declarator);
+                        hasErrors = true;
+                    }
                 }
                 else
                 {
@@ -1261,6 +1269,12 @@ namespace Microsoft.CodeAnalysis.CSharp
 
                 typeSyntax.VisitRankSpecifiers((rankSpecifier, args) =>
                 {
+                    if (rankSpecifier.IsSharperSequence)
+                    {
+                        // The `..` of a Sharper sequence type `T[..]` is part of the type, not a dimension.
+                        return;
+                    }
+
                     bool _ = false;
                     foreach (var expressionSyntax in rankSpecifier.Sizes)
                     {

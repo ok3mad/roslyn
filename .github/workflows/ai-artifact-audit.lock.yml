@@ -52,8 +52,9 @@
 
 name: "AI Artifact Audit"
 on:
-  schedule:
-    - cron: "38 17 * * 1"  # Friendly format: weekly on monday (scattered)
+  # Sharper: triggers other than workflow_dispatch are turned off (.github/skills/sync-upstream).
+  # sharper-off: schedule:
+  # sharper-off:   - cron: "38 17 * * 1"  # Friendly format: weekly on monday (scattered)
   workflow_dispatch:
     inputs:
       aw_context:
