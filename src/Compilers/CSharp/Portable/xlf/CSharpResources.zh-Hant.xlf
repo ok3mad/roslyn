@@ -3377,6 +3377,11 @@
         <target state="new">readonly local</target>
         <note />
       </trans-unit>
+      <trans-unit id="IDS_READONLYPARAMETER">
+        <source>readonly parameter</source>
+        <target state="new">readonly parameter</target>
+        <note />
+      </trans-unit>
       <trans-unit id="IDS_SK_ARRAY">
         <source>array</source>
         <target state="translated">陣列</target>
@@ -4165,6 +4170,16 @@
       <trans-unit id="WRN_SharperReadOnlyLocalMemberCallOnCopy_Title">
         <source>Call to a non-readonly member on a readonly local runs on a copy</source>
         <target state="new">Call to a non-readonly member on a readonly local runs on a copy</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WRN_SharperReadOnlyParameterMemberCallOnCopy">
+        <source>Call to non-readonly member '{0}' on readonly parameter '{1}' runs on a copy, so '{1}' is not changed.</source>
+        <target state="new">Call to non-readonly member '{0}' on readonly parameter '{1}' runs on a copy, so '{1}' is not changed.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WRN_SharperReadOnlyParameterMemberCallOnCopy_Title">
+        <source>Call to a non-readonly member on a readonly parameter runs on a copy</source>
+        <target state="new">Call to a non-readonly member on a readonly parameter runs on a copy</target>
         <note />
       </trans-unit>
       <trans-unit id="WRN_SharperValMemberCallOnCopy">

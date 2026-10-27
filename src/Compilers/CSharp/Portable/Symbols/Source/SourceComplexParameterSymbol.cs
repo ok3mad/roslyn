@@ -29,6 +29,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             ParamsParameter = 0x02, // Value of this flag is either derived from HasParamsModifier, or inherited from overridden member 
             ExtensionThisParameter = 0x04,
             DefaultParameter = 0x08,
+            SharperReadOnly = 0x10,
         }
 
         private readonly SyntaxReference _syntaxRef;
@@ -79,6 +80,11 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 _parameterSyntaxKind |= ParameterFlags.DefaultParameter;
             }
 
+            if (parameterSyntax != null && ParameterHelpers.IsSharperReadOnly(parameterSyntax))
+            {
+                _parameterSyntaxKind |= ParameterFlags.SharperReadOnly;
+            }
+
             _lazyDefaultSyntaxValue = ConstantValue.Unset;
         }
 
@@ -89,6 +95,12 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         private ParameterSyntax ParameterSyntax => (ParameterSyntax)_syntaxRef?.GetSyntax();
 
         public override bool IsDiscard => false;
+
+        /// <summary>
+        /// True if the parameter is declared with Sharper's <c>readonly</c> modifier (<c>readonly int x</c>), so it cannot be reassigned.
+        /// It is a rule about the body only: it is not emitted and plays no part in the signature.
+        /// </summary>
+        internal bool IsSharperReadOnly => (_parameterSyntaxKind & ParameterFlags.SharperReadOnly) != 0;
 
 #nullable enable
         internal sealed override ConstantValue? ExplicitDefaultConstantValue

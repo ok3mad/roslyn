@@ -4586,5 +4586,659 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             var localFunction = (LocalFunctionStatementSyntax)SyntaxFactory.ParseStatement("readonly void F() { }", options: options);
             Assert.True(localFunction.Modifiers.Single().ContainsDiagnostics);
         }
+
+        [Fact]
+        public void ReadonlyParameter_Basic()
+        {
+            // readonly works on every kind of parameter list with a body, and the parameters read as usual.
+            var source = """
+                using System;
+
+                var c = new C(1);
+                c.M(2);
+                Console.Write(c[3]);
+                Console.Write((c + 4).P);
+                Console.Write(5.Ext());
+                Func<int, int> f = (readonly int x) => x + 1;
+                Console.Write(f(5));
+                Func<int, int> g = delegate (readonly int x) { return x + 2; };
+                Console.Write(g(5));
+                Local(8);
+                Console.Write(C.Sum(1, 2, 6));
+                Console.Write(C.Default());
+                Console.Write(new P(10).Get());
+                Console.Write(new R(11).X);
+
+                static void Local(readonly int x) => Console.Write(x);
+
+                class C
+                {
+                    public int P;
+                    public C(readonly int p) { P = p; Console.Write(p); }
+                    public void M(readonly int x) => Console.Write(x);
+                    public int this[readonly int i] => i;
+                    public static C operator +(readonly C c, readonly int i) => new C(c.P + i);
+                    public static int Sum(readonly params int[] xs) => xs.Length + xs[2];
+                    public static int Default(readonly int x = 7) => x;
+                }
+
+                static class E
+                {
+                    public static int Ext(readonly this int x) => x + 1;
+                }
+
+                class P(readonly int x)
+                {
+                    public int Get() => x;
+                }
+
+                record R(readonly int X);
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "123556678971011" : null).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void ReadonlyParameter_FeatureDisabled()
+        {
+            // Without Sharper, readonly without ref keeps the C# error, and the parameter stays writable.
+            var source = """
+                class C
+                {
+                    void M(readonly int x)
+                    {
+                        x = 1;
+                        System.Func<int, int> f = (readonly int y) => y = 2;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: TestOptions.Regular, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (3,12): error CS9190: 'readonly' modifier must be specified after 'ref'.
+                //     void M(readonly int x)
+                Diagnostic(ErrorCode.ERR_RefReadOnlyWrongOrdering, "readonly").WithLocation(3, 12),
+                // (6,36): error CS9190: 'readonly' modifier must be specified after 'ref'.
+                //         System.Func<int, int> f = (readonly int y) => y = 2;
+                Diagnostic(ErrorCode.ERR_RefReadOnlyWrongOrdering, "readonly").WithLocation(6, 36));
+        }
+
+        [Fact]
+        public void ReadonlyParameter_Writes()
+        {
+            // Each write to the readonly parameter next to the same write to its plain twin, which is allowed.
+            var source = """
+                using System;
+
+                class C
+                {
+                    static void Ref(ref int i) { }
+                    static void Out(out int i) { i = 0; }
+                    static void In(in int i) { }
+
+                    void M(readonly int x, int y, readonly string s, string t)
+                    {
+                        x = 2;
+                        y = 2;
+                        x += 1;
+                        y += 1;
+                        x++;
+                        y++;
+                        --x;
+                        --y;
+                        Ref(ref x);
+                        Ref(ref y);
+                        Out(out x);
+                        Out(out y);
+                        In(in x);
+                        In(in y);
+                        ref int r = ref x;
+                        ref int q = ref y;
+                        ref readonly int rr = ref x;
+                        Action a = () => x = 3;
+                        Action b = () => y = 3;
+                        void Local() { x = 4; }
+                        void Local2() { y = 4; }
+                        s ??= "a";
+                        t ??= "a";
+                        (x, y) = (5, 5);
+                    }
+
+                    C(readonly int x, int y) { x = 1; y = 1; }
+                    int this[readonly int i, int j] { get { i = 1; j = 1; return 0; } set { i = value; j = value; } }
+                    public static C operator -(readonly C c, C d) { c = null; d = null; return null; }
+                    void LocalAndLambda()
+                    {
+                        void Local(readonly int x, int y) { x = 1; y = 1; }
+                        Action<int, int> f = (readonly int x, int y) => { x = 1; y = 1; };
+                        Action<int, int> g = delegate (readonly int x, int y) { x = 1; y = 1; };
+                        Local(0, 0);
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (11,9): error CS1656: Cannot assign to 'x' because it is a 'readonly parameter'
+                //         x = 2;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly parameter").WithLocation(11, 9),
+                // (13,9): error CS1656: Cannot assign to 'x' because it is a 'readonly parameter'
+                //         x += 1;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly parameter").WithLocation(13, 9),
+                // (15,9): error CS1656: Cannot assign to 'x' because it is a 'readonly parameter'
+                //         x++;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly parameter").WithLocation(15, 9),
+                // (17,11): error CS1656: Cannot assign to 'x' because it is a 'readonly parameter'
+                //         --x;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly parameter").WithLocation(17, 11),
+                // (19,17): error CS1657: Cannot use 'x' as a ref or out value because it is a 'readonly parameter'
+                //         Ref(ref x);
+                Diagnostic(ErrorCode.ERR_RefReadonlyLocalCause, "x").WithArguments("x", "readonly parameter").WithLocation(19, 17),
+                // (21,17): error CS1657: Cannot use 'x' as a ref or out value because it is a 'readonly parameter'
+                //         Out(out x);
+                Diagnostic(ErrorCode.ERR_RefReadonlyLocalCause, "x").WithArguments("x", "readonly parameter").WithLocation(21, 17),
+                // (25,25): error CS1657: Cannot use 'x' as a ref or out value because it is a 'readonly parameter'
+                //         ref int r = ref x;
+                Diagnostic(ErrorCode.ERR_RefReadonlyLocalCause, "x").WithArguments("x", "readonly parameter").WithLocation(25, 25),
+                // (28,26): error CS1656: Cannot assign to 'x' because it is a 'readonly parameter'
+                //         Action a = () => x = 3;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly parameter").WithLocation(28, 26),
+                // (30,14): warning CS8321: The local function 'Local' is declared but never used
+                //         void Local() { x = 4; }
+                Diagnostic(ErrorCode.WRN_UnreferencedLocalFunction, "Local").WithArguments("Local").WithLocation(30, 14),
+                // (30,24): error CS1656: Cannot assign to 'x' because it is a 'readonly parameter'
+                //         void Local() { x = 4; }
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly parameter").WithLocation(30, 24),
+                // (31,14): warning CS8321: The local function 'Local2' is declared but never used
+                //         void Local2() { y = 4; }
+                Diagnostic(ErrorCode.WRN_UnreferencedLocalFunction, "Local2").WithArguments("Local2").WithLocation(31, 14),
+                // (32,9): error CS1656: Cannot assign to 's' because it is a 'readonly parameter'
+                //         s ??= "a";
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "s").WithArguments("s", "readonly parameter").WithLocation(32, 9),
+                // (34,10): error CS1656: Cannot assign to 'x' because it is a 'readonly parameter'
+                //         (x, y) = (5, 5);
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly parameter").WithLocation(34, 10),
+                // (37,32): error CS1656: Cannot assign to 'x' because it is a 'readonly parameter'
+                //     C(readonly int x, int y) { x = 1; y = 1; }
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly parameter").WithLocation(37, 32),
+                // (39,53): error CS1656: Cannot assign to 'c' because it is a 'readonly parameter'
+                //     public static C operator -(readonly C c, C d) { c = null; d = null; return null; }
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "c").WithArguments("c", "readonly parameter").WithLocation(39, 53),
+                // (42,45): error CS1656: Cannot assign to 'x' because it is a 'readonly parameter'
+                //         void Local(readonly int x, int y) { x = 1; y = 1; }
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly parameter").WithLocation(42, 45),
+                // (43,59): error CS1656: Cannot assign to 'x' because it is a 'readonly parameter'
+                //         Action<int, int> f = (readonly int x, int y) => { x = 1; y = 1; };
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly parameter").WithLocation(43, 59),
+                // (44,65): error CS1656: Cannot assign to 'x' because it is a 'readonly parameter'
+                //         Action<int, int> g = delegate (readonly int x, int y) { x = 1; y = 1; };
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly parameter").WithLocation(44, 65));
+        }
+
+        [Fact]
+        public void ReadonlyParameter_StructFieldAssignment()
+        {
+            var source = """
+                struct S { public int F; public int P { get; set; } }
+
+                class C
+                {
+                    void M(readonly S v, S w)
+                    {
+                        v.F = 1;
+                        w.F = 1;
+                        v.P = 1;
+                        w.P = 1;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (7,9): error CS1654: Cannot modify members of 'v' because it is a 'readonly parameter'
+                //         v.F = 1;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocal2Cause, "v.F").WithArguments("v", "readonly parameter").WithLocation(7, 9),
+                // (9,9): error CS1654: Cannot modify members of 'v' because it is a 'readonly parameter'
+                //         v.P = 1;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocal2Cause, "v.P").WithArguments("v", "readonly parameter").WithLocation(9, 9));
+        }
+
+        [Fact]
+        public void ReadonlyParameter_Ref()
+        {
+            // readonly on a ref, in or out parameter forbids ref reassignment and keeps the C# rules for writes through the ref,
+            // as for readonly ref locals. ref readonly keeps its C# meaning, and readonly ref readonly is both.
+            var source = """
+                class C
+                {
+                    static int j;
+
+                    void M(readonly ref int r1, ref readonly int r2, readonly ref readonly int r3, readonly in int r4, readonly out int r5, ref int r6)
+                    {
+                        r5 = 5;
+                        r1 = 5;
+                        r2 = 5;
+                        r3 = 5;
+                        r4 = 5;
+                        r6 = 5;
+                        r1 = ref j;
+                        r2 = ref j;
+                        r3 = ref j;
+                        r4 = ref j;
+                        r5 = ref j;
+                        r6 = ref j;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (9,9): error CS8331: Cannot assign to variable 'r2' or use it as the right hand side of a ref assignment because it is a readonly variable
+                //         r2 = 5;
+                Diagnostic(ErrorCode.ERR_AssignReadonlyNotField, "r2").WithArguments("variable", "r2").WithLocation(9, 9),
+                // (10,9): error CS8331: Cannot assign to variable 'r3' or use it as the right hand side of a ref assignment because it is a readonly variable
+                //         r3 = 5;
+                Diagnostic(ErrorCode.ERR_AssignReadonlyNotField, "r3").WithArguments("variable", "r3").WithLocation(10, 9),
+                // (11,9): error CS8331: Cannot assign to variable 'r4' or use it as the right hand side of a ref assignment because it is a readonly variable
+                //         r4 = 5;
+                Diagnostic(ErrorCode.ERR_AssignReadonlyNotField, "r4").WithArguments("variable", "r4").WithLocation(11, 9),
+                // (13,9): error CS1656: Cannot assign to 'r1' because it is a 'readonly parameter'
+                //         r1 = ref j;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "r1").WithArguments("r1", "readonly parameter").WithLocation(13, 9),
+                // (15,9): error CS1656: Cannot assign to 'r3' because it is a 'readonly parameter'
+                //         r3 = ref j;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "r3").WithArguments("r3", "readonly parameter").WithLocation(15, 9),
+                // (16,9): error CS1656: Cannot assign to 'r4' because it is a 'readonly parameter'
+                //         r4 = ref j;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "r4").WithArguments("r4", "readonly parameter").WithLocation(16, 9),
+                // (17,9): error CS1656: Cannot assign to 'r5' because it is a 'readonly parameter'
+                //         r5 = ref j;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "r5").WithArguments("r5", "readonly parameter").WithLocation(17, 9));
+        }
+
+        [Fact]
+        public void ReadonlyParameter_Modifiers()
+        {
+            // readonly must come first. Elsewhere, and on extension block receivers and function pointers, it keeps the C# errors.
+            var source = """
+                using System;
+
+                unsafe class C
+                {
+                    void M1(readonly scoped Span<int> s) { s = default; }
+                    void M2(scoped readonly Span<int> s) { }
+                    void M3(readonly readonly int x) { }
+                    void M4(in readonly int x) { }
+                    void M5(readonly ref readonly readonly int x) { }
+                    void M6(params readonly int[] x) { }
+                    void M7(delegate*<readonly int, void> f) { }
+                    void M8()
+                    {
+                        Action<int> f = (readonly x) => { x = 1; };
+                        Action<int> g = (readonly int x) => { x = 1; };
+                    }
+                }
+
+                static class E
+                {
+                    public static void Ext1(this readonly int x) { }
+                    public static void Ext2(readonly this ref int x) { x = 1; x = ref x; }
+                    extension(readonly int x)
+                    {
+                        public void Ext3() { }
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, options: TestOptions.UnsafeDebugDll).VerifyDiagnostics(
+                // (5,44): error CS1656: Cannot assign to 's' because it is a 'readonly parameter'
+                //     void M1(readonly scoped Span<int> s) { s = default; }
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "s").WithArguments("s", "readonly parameter").WithLocation(5, 44),
+                // (6,20): error CS9350: The 'readonly' modifier cannot immediately follow the 'scoped' modifier.
+                //     void M2(scoped readonly Span<int> s) { }
+                Diagnostic(ErrorCode.ERR_InvalidModifierAfterScoped, "readonly").WithArguments("readonly").WithLocation(6, 20),
+                // (6,20): error CS9190: 'readonly' modifier must be specified after 'ref'.
+                //     void M2(scoped readonly Span<int> s) { }
+                Diagnostic(ErrorCode.ERR_RefReadOnlyWrongOrdering, "readonly").WithLocation(6, 20),
+                // (7,22): error CS1107: A parameter can only have one 'readonly' modifier
+                //     void M3(readonly readonly int x) { }
+                Diagnostic(ErrorCode.ERR_DupParamMod, "readonly").WithArguments("readonly").WithLocation(7, 22),
+                // (8,16): error CS9190: 'readonly' modifier must be specified after 'ref'.
+                //     void M4(in readonly int x) { }
+                Diagnostic(ErrorCode.ERR_RefReadOnlyWrongOrdering, "readonly").WithLocation(8, 16),
+                // (9,35): error CS1107: A parameter can only have one 'readonly' modifier
+                //     void M5(readonly ref readonly readonly int x) { }
+                Diagnostic(ErrorCode.ERR_DupParamMod, "readonly").WithArguments("readonly").WithLocation(9, 35),
+                // (10,20): error CS9190: 'readonly' modifier must be specified after 'ref'.
+                //     void M6(params readonly int[] x) { }
+                Diagnostic(ErrorCode.ERR_RefReadOnlyWrongOrdering, "readonly").WithLocation(10, 20),
+                // (11,23): error CS9190: 'readonly' modifier must be specified after 'ref'.
+                //     void M7(delegate*<readonly int, void> f) { }
+                Diagnostic(ErrorCode.ERR_RefReadOnlyWrongOrdering, "readonly").WithLocation(11, 23),
+                // (14,43): error CS1656: Cannot assign to 'x' because it is a 'readonly parameter'
+                //         Action<int> f = (readonly x) => { x = 1; };
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly parameter").WithLocation(14, 43),
+                // (15,47): error CS1656: Cannot assign to 'x' because it is a 'readonly parameter'
+                //         Action<int> g = (readonly int x) => { x = 1; };
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly parameter").WithLocation(15, 47),
+                // (21,34): error CS9190: 'readonly' modifier must be specified after 'ref'.
+                //     public static void Ext1(this readonly int x) { }
+                Diagnostic(ErrorCode.ERR_RefReadOnlyWrongOrdering, "readonly").WithLocation(21, 34),
+                // (22,63): error CS1656: Cannot assign to 'x' because it is a 'readonly parameter'
+                //     public static void Ext2(readonly this ref int x) { x = 1; x = ref x; }
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly parameter").WithLocation(22, 63),
+                // (23,15): error CS9190: 'readonly' modifier must be specified after 'ref'.
+                //     extension(readonly int x)
+                Diagnostic(ErrorCode.ERR_RefReadOnlyWrongOrdering, "readonly").WithLocation(23, 15));
+        }
+
+        [Fact]
+        public void ReadonlyParameter_NotPartOfSignature()
+        {
+            // readonly is a rule about the body: overriding, implementing, partial methods, delegate conversions and
+            // overload resolution ignore it, and it is not emitted.
+            var source = """
+                using System;
+
+                abstract class B
+                {
+                    public abstract int M(int x);
+                    public virtual int N(readonly int x) => x;
+                    public abstract int A(readonly int x);
+                }
+
+                interface I { int M(readonly int x); }
+
+                partial class C : B, I
+                {
+                    public override int M(readonly int x) => x;
+                    public override int N(int x) { x++; return x; }
+                    public override int A(int x) { x++; return x; }
+                    int I.M(int x) { x++; return x; }
+                    partial void P(readonly int x);
+                    partial void P(int x) { x = 1; }
+                }
+
+                delegate int D(readonly int x);
+
+                class Program
+                {
+                    static int F(int x) => x;
+                    static int G(readonly int x) => x;
+                    static void H(int x) { }
+                    static void H(readonly int x) { }
+
+                    static void Main()
+                    {
+                        D d1 = F;
+                        Func<int, int> d2 = G;
+                        D d3 = (int x) => x;
+                        Func<int, int> d4 = (readonly int x) => x;
+                        Console.Write(d1(1) + d2(2) + d3(3) + d4(4) + new C().N(5));
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (29,17): error CS0111: Type 'Program' already defines a member called 'H' with the same parameter types
+                //     static void H(readonly int x) { }
+                Diagnostic(ErrorCode.ERR_MemberAlreadyExists, "H").WithArguments("H", "Program").WithLocation(29, 17));
+        }
+
+        [Fact]
+        public void ReadonlyParameter_StructMemberCallOnCopy()
+        {
+            // As for readonly locals, a non-readonly member runs on a copy and warns, also when captured or hoisted, and for members found by pattern.
+            var source = """
+                using System;
+                using System.Collections.Generic;
+                using System.Threading.Tasks;
+
+                await M(new S(), new S());
+                Console.Write(";");
+                var p = new P(new S());
+                p.Run();
+
+                static async Task M(readonly S v, S w)
+                {
+                    v.Mutate();
+                    Console.Write(v.F);
+                    _ = v.Getter;
+                    Console.Write(v.F);
+                    foreach (var x in v) { }
+                    Console.Write(v.F);
+                    v.ReadOnlyMethod();
+                    Action f = () => { v.Mutate(); Console.Write(v.F); };
+                    f();
+                    await Task.Yield();
+                    v.Mutate();
+                    Console.Write(v.F);
+                    if (v is { Getter: 1 }) { }
+                    Console.Write(v.F);
+                    w.Mutate();
+                    Console.Write(w.F);
+                }
+
+                class P(readonly S s)
+                {
+                    public void Run() { s.Mutate(); Console.Write(s.F); }
+                }
+
+                struct S
+                {
+                    public int F;
+                    public void Mutate() { F++; }
+                    public int Getter { get { F++; return F; } }
+                    public readonly void ReadOnlyMethod() { }
+                    public IEnumerator<int> GetEnumerator() { F++; return new List<int>().GetEnumerator(); }
+                }
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "0000001;0" : null).VerifyDiagnostics(
+                // (12,5): warning CS20013: Call to non-readonly member 'S.Mutate()' on readonly parameter 'v' runs on a copy, so 'v' is not changed.
+                //     v.Mutate();
+                Diagnostic(ErrorCode.WRN_SharperReadOnlyParameterMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v").WithLocation(12, 5),
+                // (14,9): warning CS20013: Call to non-readonly member 'S.Getter.get' on readonly parameter 'v' runs on a copy, so 'v' is not changed.
+                //     _ = v.Getter;
+                Diagnostic(ErrorCode.WRN_SharperReadOnlyParameterMemberCallOnCopy, "v").WithArguments("S.Getter.get", "v").WithLocation(14, 9),
+                // (16,23): warning CS20013: Call to non-readonly member 'S.GetEnumerator()' on readonly parameter 'v' runs on a copy, so 'v' is not changed.
+                //     foreach (var x in v) { }
+                Diagnostic(ErrorCode.WRN_SharperReadOnlyParameterMemberCallOnCopy, "v").WithArguments("S.GetEnumerator()", "v").WithLocation(16, 23),
+                // (19,24): warning CS20013: Call to non-readonly member 'S.Mutate()' on readonly parameter 'v' runs on a copy, so 'v' is not changed.
+                //     Action f = () => { v.Mutate(); Console.Write(v.F); };
+                Diagnostic(ErrorCode.WRN_SharperReadOnlyParameterMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v").WithLocation(19, 24),
+                // (22,5): warning CS20013: Call to non-readonly member 'S.Mutate()' on readonly parameter 'v' runs on a copy, so 'v' is not changed.
+                //     v.Mutate();
+                Diagnostic(ErrorCode.WRN_SharperReadOnlyParameterMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v").WithLocation(22, 5),
+                // (24,9): warning CS20013: Call to non-readonly member 'S.Getter.get' on readonly parameter 'v' runs on a copy, so 'v' is not changed.
+                //     if (v is { Getter: 1 }) { }
+                Diagnostic(ErrorCode.WRN_SharperReadOnlyParameterMemberCallOnCopy, "v").WithArguments("S.Getter.get", "v").WithLocation(24, 9),
+                // (32,25): warning CS20013: Call to non-readonly member 'S.Mutate()' on readonly parameter 's' runs on a copy, so 's' is not changed.
+                //     public void Run() { s.Mutate(); Console.Write(s.F); }
+                Diagnostic(ErrorCode.WRN_SharperReadOnlyParameterMemberCallOnCopy, "s").WithArguments("S.Mutate()", "s").WithLocation(32, 25));
+        }
+
+        [Fact]
+        public void ReadonlyParameter_PrimaryConstructor()
+        {
+            // A captured readonly primary constructor parameter cannot be written in members or initializers, and its field is readonly.
+            var source = """
+                class C(readonly int x, int y)
+                {
+                    int A = x++;
+                    int B = y++;
+                    void M() { x = 1; y = 1; }
+                    int Get() => x + y;
+                }
+
+                struct S(readonly int x)
+                {
+                    void M() { x = 1; }
+                    int Get() => x;
+                }
+
+                record R(readonly int X)
+                {
+                    int Y = X++;
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics(
+                // (3,13): error CS1656: Cannot assign to 'x' because it is a 'readonly parameter'
+                //     int A = x++;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly parameter").WithLocation(3, 13),
+                // (5,16): error CS1656: Cannot assign to 'x' because it is a 'readonly parameter'
+                //     void M() { x = 1; y = 1; }
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly parameter").WithLocation(5, 16),
+                // (11,16): error CS1656: Cannot assign to 'x' because it is a 'readonly parameter'
+                //     void M() { x = 1; }
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly parameter").WithLocation(11, 16),
+                // (17,13): error CS1656: Cannot assign to 'X' because it is a 'readonly parameter'
+                //     int Y = X++;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "X").WithArguments("X", "readonly parameter").WithLocation(17, 13));
+        }
+
+        [Fact]
+        public void ReadonlyParameter_PrimaryConstructor_Field()
+        {
+            var source = """
+                class C(readonly int x, int y)
+                {
+                    public int Get() => x + y;
+                }
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, options: TestOptions.DebugDll.WithMetadataImportOptions(MetadataImportOptions.All), symbolValidator: module =>
+            {
+                var c = module.GlobalNamespace.GetTypeMember("C");
+                Assert.True(c.GetField("<x>P").IsReadOnly);
+                Assert.False(c.GetField("<y>P").IsReadOnly);
+            }).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void ReadonlyParameter_Metadata()
+        {
+            // Nothing is emitted for readonly: plain C# sees ordinary parameters, and can override and call the members.
+            var library = """
+                public class B
+                {
+                    public virtual int M(readonly int x, readonly ref int r, readonly in int i, readonly out int o) { o = x; return r + i; }
+                }
+                """;
+            var libraryComp = CreateCompilation(library, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            libraryComp.VerifyDiagnostics();
+
+            var parameters = libraryComp.GetMember<MethodSymbol>("B.M").Parameters;
+            Assert.Equal([RefKind.None, RefKind.Ref, RefKind.In, RefKind.Out], parameters.Select(p => p.RefKind));
+            Assert.All(parameters, p => Assert.Equal(ScopedKind.None, p.DeclaredScope));
+
+            var source = """
+                class C : B
+                {
+                    public override int M(int x, ref int r, in int i, out int o) { x++; o = 1; return x; }
+
+                    static void Main()
+                    {
+                        int r = 2;
+                        System.Console.Write(new B().M(1, ref r, 3, out int o) + o);
+                        System.Console.Write(new C().M(1, ref r, 3, out o) + o);
+                    }
+                }
+                """;
+            foreach (var reference in new[] { libraryComp.ToMetadataReference(), libraryComp.EmitToImageReference() })
+            {
+                CompileAndVerify(source, references: [reference], parseOptions: TestOptions.Regular, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "63" : null).VerifyDiagnostics();
+            }
+
+            CompileAndVerify(libraryComp, symbolValidator: module =>
+            {
+                var method = module.GlobalNamespace.GetMember<MethodSymbol>("B.M");
+                Assert.All(method.Parameters, p => Assert.Empty(p.GetAttributes()));
+                Assert.Equal([RefKind.None, RefKind.Ref, RefKind.In, RefKind.Out], method.Parameters.Select(p => p.RefKind));
+            });
+        }
+
+        [Fact]
+        public void ReadonlyParameter_Nullable()
+        {
+            var source = """
+                #nullable enable
+                class C
+                {
+                    void M(readonly string? maybe, readonly string s)
+                    {
+                        _ = maybe.Length;
+                        if (maybe is not null) _ = maybe.Length;
+                        _ = s.Length;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (6,13): warning CS8602: Dereference of a possibly null reference.
+                //         _ = maybe.Length;
+                Diagnostic(ErrorCode.WRN_NullReferenceReceiver, "maybe").WithLocation(6, 13));
+        }
+
+        [Fact]
+        public void ReadonlyParameter_SemanticModel()
+        {
+            // The parameter is an ordinary IParameterSymbol; (readonly x) => ... is implicitly typed, like (val x) => ....
+            var source = """
+                using System;
+
+                class C
+                {
+                    void M(readonly int x, readonly ref int r)
+                    {
+                        Func<int, int> f = (readonly y) => y;
+                    }
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics();
+            var tree = comp.SyntaxTrees.Single();
+            var model = comp.GetSemanticModel(tree);
+            var parameters = tree.GetRoot().DescendantNodes().OfType<ParameterSyntax>().Select(p => model.GetDeclaredSymbol(p)).ToArray();
+            Assert.Equal(["System.Int32 x", "ref System.Int32 r", "System.Int32 y"], parameters.Select(p => p.ToTestDisplayString()));
+            Assert.Equal([RefKind.None, RefKind.Ref, RefKind.None], parameters.Select(p => p.RefKind));
+        }
+
+        [Fact]
+        public void ReadonlyParameter_IOperation()
+        {
+            var source = """
+                class C
+                {
+                    int M(readonly int x)
+                    /*<bind>*/{
+                        return x + 1;
+                    }/*</bind>*/
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            var expectedOperationTree = """
+                IBlockOperation (1 statements) (OperationKind.Block, Type: null) (Syntax: '{ ... }')
+                  IReturnOperation (OperationKind.Return, Type: null) (Syntax: 'return x + 1;')
+                    ReturnedValue:
+                      IBinaryOperation (BinaryOperatorKind.Add) (OperationKind.Binary, Type: System.Int32) (Syntax: 'x + 1')
+                        Left:
+                          IParameterReferenceOperation: x (OperationKind.ParameterReference, Type: System.Int32) (Syntax: 'x')
+                        Right:
+                          ILiteralOperation (OperationKind.Literal, Type: System.Int32, Constant: 1) (Syntax: '1')
+                """;
+            VerifyOperationTreeAndDiagnosticsForTest<BlockSyntax>(comp, expectedOperationTree, []);
+        }
+
+        [Fact]
+        public void ReadonlyParameter_DataFlow()
+        {
+            var source = """
+                class C
+                {
+                    int M(readonly int x, int y)
+                    {
+                        y = x;
+                        return y;
+                    }
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics();
+            var tree = comp.SyntaxTrees.Single();
+            var model = comp.GetSemanticModel(tree);
+            var statement = tree.GetRoot().DescendantNodes().OfType<ExpressionStatementSyntax>().Single();
+            var dataFlow = model.AnalyzeDataFlow(statement);
+            Assert.Equal("x", string.Join(", ", dataFlow.ReadInside.Select(s => s.Name)));
+            Assert.Equal("y", string.Join(", ", dataFlow.WrittenInside.Select(s => s.Name)));
+            Assert.Equal("this, x, y", string.Join(", ", dataFlow.WrittenOutside.Select(s => s.Name)));
+        }
     }
 }

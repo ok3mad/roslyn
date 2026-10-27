@@ -11,7 +11,7 @@ by the C# compiler itself: new syntax binds to bound nodes and lowers to ordinar
 checklist distilled from the first features: `yield return ..xs` (a new bound node; the commits merged from
 `sharper/gating`), `val` locals (a contextual keyword on an existing symbol; merged from `sharper/val`, later extended to
 deconstruction, patterns and lambda parameters), `readonly`
-locals (a modifier C# rejected, reusing the `val` checks) and the sequence type `T[..]` (a type form that binds to a
+locals and parameters (a modifier C# rejected, reusing the `val` checks) and the sequence type `T[..]` (a type form that binds to a
 BCL type; `sharper/sequence-type`). See `SharperTests.cs` for all of them.
 
 ## When to Use
@@ -175,7 +175,12 @@ implementation plan, "Feature 3"):
    to the token, so no binder change can lift it. Gate the error in the parser, then add it back wherever the same
    modifier list builds another construct (`readonly` locals: the local function path and `const readonly`). Check that
    every position the feature should cover has a slot for the modifier: a `for` initializer has none, and adding one
-   is a public syntax API change.
+   is a public syntax API change. Other modifiers are rejected by the binder instead: `readonly` on a parameter parses
+   (for `ref readonly`), and `ParameterHelpers.CheckParameterModifiers` reports CS9190.
+21. **Simple symbols keep no syntax.** A rule read from a parameter's syntax needs the syntax on the symbol, but
+   `SourceParameterSymbol.Create` makes a parameter with no modifiers, attributes or default a
+   `SourceSimpleParameterSymbol`, which drops it. Add the condition there so such parameters stay complex
+   (`readonly` parameters), or carry the decision in a flag, as `LambdaParameterSymbol.IsSharperVal` does.
 
 ## Testing
 

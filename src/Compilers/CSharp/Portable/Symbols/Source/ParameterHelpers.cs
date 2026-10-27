@@ -584,6 +584,19 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
         internal static Location GetParameterLocation(ParameterSymbol parameter) => parameter.GetNonNullSyntaxNode().Location;
 
+        /// <summary>
+        /// True if the parameter starts with Sharper's <c>readonly</c> modifier (<c>readonly int x</c>, <c>readonly ref int x</c>),
+        /// so it cannot be reassigned, like a <c>readonly</c> local. A <c>readonly</c> after <c>ref</c> keeps its C# meaning.
+        /// Extension block receivers (shared by the members of the block) and function pointer parameters (no body) keep the C# error.
+        /// </summary>
+        internal static bool IsSharperReadOnly(BaseParameterSyntax parameter)
+        {
+            return parameter is ParameterSyntax { Parent.Parent: not ExtensionBlockDeclarationSyntax } &&
+                parameter.Modifiers.Count > 0 &&
+                parameter.Modifiers[0].IsKind(SyntaxKind.ReadOnlyKeyword) &&
+                parameter.IsFeatureEnabled(MessageID.IDS_FeatureSharper);
+        }
+
         internal static void CheckParameterModifiers(
             BaseParameterSyntax parameter,
             BindingDiagnosticBag diagnostics,
@@ -792,7 +805,13 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                         break;
 
                     case SyntaxKind.ReadOnlyKeyword:
-                        if (seenReadonly)
+                        if (i == 0 && IsSharperReadOnly(parameter))
+                        {
+                            // Sharper: a leading readonly makes the parameter impossible to reassign.
+                            break;
+                        }
+
+                        if (seenReadonly || (i == 1 && IsSharperReadOnly(parameter)))
                         {
                             addERR_DupParamMod(diagnostics, modifier);
                         }

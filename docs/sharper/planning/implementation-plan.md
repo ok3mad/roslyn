@@ -92,7 +92,7 @@ A new construct's real cost is in the places that never mention it. Model it on 
 
 ## Syntax roadmap
 
-The brainstorm proposes 28 pieces of syntax (#28, discard arguments, is still to be discussed). Each row has a GitHub issue, collected under the tracking issue [#12](https://github.com/ok3mad/roslyn/issues/12). Eight are done: `yield return ..xs`, `val` in locals, deconstruction, patterns and lambda parameters, `readonly` locals, the sequence type `T[..]` and function types `(A, B) -> R`. Everything that depends on unions or purity waits for those designs.
+The brainstorm proposes 28 pieces of syntax (#28, discard arguments, is still to be discussed). Each row has a GitHub issue, collected under the tracking issue [#12](https://github.com/ok3mad/roslyn/issues/12). Nine are done: `yield return ..xs`, `val` in locals, deconstruction, patterns and lambda parameters, `readonly` locals and parameters, the sequence type `T[..]` and function types `(A, B) -> R`. Everything that depends on unions or purity waits for those designs.
 
 - **Size**, relative to the `yield return ..xs` PoC. **S**: about that size (no parser change, one bound node, reused lowering). **M**: a gated parser change, or a new lowering with its own rules. **L**: new inference or binding rules that interact with overload resolution or signature binding. **XL**: a new checker layer (refinements, unions, effects).
 - **Certainty**. **High**: decided in the brainstorm, spelling stable. **Med**: the leading direction, details or spelling open. **Low**: only sketched in examples, contradicted elsewhere, or blocked on an open question.
@@ -111,7 +111,7 @@ The brainstorm proposes 28 pieces of syntax (#28, discard arguments, is still to
 | 8 | Task tilde | `T~`, `void~`, `int[..]~` | `Task<T>`, `Task` | yes (a postfix `~` after a type, next to `?` and `*`; `~` has no binary meaning, so no disambiguation) | S–M | Prototype | Spelling `~` chosen over the hat `^` (XOR is valid in tuples, `is` and `as`). Confirmed on six applications; `ValueTask` stays unsugared (0.4% of their async declarations). A new syntax node, `TaskTypeSyntax`; see the [feature page](../features/task-type.md) | [#20](https://github.com/ok3mad/roslyn/issues/20) |
 | 9 | Function types | `(A, B) -> R`, `() -> T` | `Func<...>`, `Action<...>` | yes: a new syntax node, `FunctionTypeSyntax`, and a one-pass tuple-or-function lookahead | M | Prototype | Decided: `->` only in types, lambdas keep `=>`. Follow-ups: `ref` parameters [#56](https://github.com/ok3mad/roslyn/issues/56), names [#57](https://github.com/ok3mad/roslyn/issues/57), `((F))?` [#58](https://github.com/ok3mad/roslyn/issues/58), patterns [#59](https://github.com/ok3mad/roslyn/issues/59) | [#21](https://github.com/ok3mad/roslyn/issues/21) |
 | 10 | Inferred return type | `static infer Hello(int id) => ...` | method with the inferred return type | none (`infer` parses as a type name) | L, in steps R1 to R5 | Med | Ordering and cycles. Allowed on public members too, with no warning. Replaces the expression-bodied `fun` | [#22](https://github.com/ok3mad/roslyn/issues/22) |
-| 11 | `readonly` parameters | `void F(readonly int x)` | plain parameter plus the `val` no-reassignment check | none (`readonly` already parses as a parameter modifier, and C# reports an error without `ref`) | S | Med | Completes the mutability grid with #4 and #5. Replaces the `mutable` parameter in `fun`: immutable-by-default parameters and a `mutable` marker are a strictness ladder setting now, not syntax | [#23](https://github.com/ok3mad/roslyn/issues/23) |
+| 11 | `readonly` parameters | `void F(readonly int x)` | plain parameter plus the `val` no-reassignment check | none (`readonly` already parses as a parameter modifier; C#'s error without `ref`, CS9190, comes from the binder) | S | Prototype | Completes the mutability grid with #4 and #5. Not part of the signature; `readonly ref` forbids ref reassignment, as for locals. Replaces the `mutable` parameter in `fun`: immutable-by-default parameters and a `mutable` marker are a strictness ladder setting now, not syntax. See [Feature 5](#feature-5-readonly-parameters) | [#23](https://github.com/ok3mad/roslyn/issues/23), [#97](https://github.com/ok3mad/roslyn/issues/97) |
 | 15 | Inferred parameter types | `public infer Load(infer userId) => ...`, `infer timeout = TimeSpan.FromSeconds(5)` | method with the inferred types | none (`infer x` parses as a typed parameter) | S to XL, in steps P1 to P8 | Med | Copied from an overridden member, a default value, a function type or a call that pins one type, never from shape. Generic by default is open. Replaces untyped `fun` parameters inferred from arms | [#27](https://github.com/ok3mad/roslyn/issues/27) |
 
 ### Phase 2: functional core
@@ -152,7 +152,7 @@ Not listed: `union Name(A, B)` comes from C# 15, and `collect`, `Retry` and `Une
 1. `val` (#2, #3, #6), in three steps: `val x = e` locals (binder only), then deconstruction and designations (parser), then patterns (keyword). It exercises the gated parser, the first deliberate break with its `@val` escape, and new semantics on an existing symbol, none of which the first PoC touched. The no-reassignment check reuses the read-only local check behind CS1656.
 2. `T[..]` (#7), done. Its binder rewrite onto a BCL type is the pattern for the other short type forms (see [Feature 3](#feature-3-sequence-type-t)).
 3. `T~` (#8) and function types (#9), done.
-4. `readonly` parameters (#11), small, and the parameter switch body (#14, with #26), which needs no inference.
+4. `readonly` parameters (#11), done, and the parameter switch body (#14, with #26), which needs no inference.
 5. Type inference (#10 and #15), the first real inference work, in the steps of the
    [work breakdown](#type-inference-work-breakdown).
 6. Rows 19 onward wait for the union representation and the purity design.
@@ -365,6 +365,47 @@ machinery: the write checks, `ReportReadonlyLocalError` (cause 'readonly local')
 Tests: 17 `ReadonlyLocal_*` tests (19 cases) in `SharperTests.cs`; all 95 Sharper tests pass, also with `ROSLYN_TEST_IOPERATION=1`.
 Regression run of the C# compiler tests (net10.0, Debug, 10 projects; WinRT not run): 88,398 passed, 0 failed.
 
+## Feature 5: `readonly` parameters
+
+`void F(readonly int x)` declares a parameter that cannot be reassigned, on branch `sharper/readonly-parameters`
+([#23](https://github.com/ok3mad/roslyn/issues/23), [#97](https://github.com/ok3mad/roslyn/issues/97), feature page
+[readonly-parameters.md](../features/readonly-parameters.md)).
+
+**Probe.** The parser already accepts `readonly` as a parameter modifier everywhere, for C#'s `ref readonly`
+parameters, and `GetModifiers` reads it only right after `ref`. C#'s error for any other `readonly`, CS9190 ("must be
+specified after 'ref'"), comes from the binder (`ParameterHelpers.CheckParameterModifiers`), unlike `readonly` locals,
+whose CS0106 the parser attaches. Implicitly typed lambda parameters with modifiers (C# 14) already parse, so
+`(readonly x) => ...` needed nothing of its own.
+
+**Change.** `ParameterHelpers.IsSharperReadOnly` (a leading `readonly`, the feature on, not an extension block
+receiver) lets `CheckParameterModifiers` skip CS9190. `SourceComplexParameterSymbolBase.IsSharperReadOnly` carries it to
+the symbol; `SourceParameterSymbol.Create` never makes such a parameter a `SourceSimpleParameterSymbol`, which keeps no
+syntax. The rest reuses the `val` lambda parameter machinery: `CheckParameterValueKind` reports the 'readonly
+parameter' cause, `Binder.IsSharperValValue` makes struct copies, and `ReportSharperValReceiverCopy` picks CS20013.
+
+| Question | Decision | Why |
+| --- | --- | --- |
+| Positions | Methods, local functions, lambdas, anonymous methods, constructors, primary constructors (records too), indexers, operators, delegates; `params` and extension method `this` parameters | Every parameter list that belongs to a body, plus bodiless declarations where it is harmless |
+| Spelling next to `ref readonly` | `readonly` first means "cannot be reassigned"; `readonly ref` forbids ref reassignment and allows writes through the ref; `ref readonly` keeps its C# meaning; `readonly ref readonly` is both | The same reading as for locals and C#'s `readonly ref` fields |
+| Order | `readonly` must be the first modifier (`readonly scoped`, `readonly this`, `readonly params`); elsewhere CS9190 stays | One position, as for locals, and no clash with `ref readonly`. `scoped readonly` was already an error |
+| Part of the signature | No: nothing in metadata, no effect on overriding, implementation, partial methods, delegate conversions or overloads (`H(int)` and `H(readonly int)` clash, CS0111) | It is a rule about the body. C#'s `scoped` takes part in those checks because it changes what callers may pass; `readonly` changes nothing a caller can see |
+| Partial methods | The implementing declaration decides | It holds the body |
+| Bodiless members (abstract, interface, delegate) | Allowed, no effect | Follows from "not part of the signature"; an error would need a new code for a harmless modifier |
+| Struct parameters | Copy and warn, CS20013 (the parameter form of CS20010), also captured, hoisted and in patterns | Same as `val` and `readonly` locals; a separate code keeps CS20010's text, which names a local |
+| `out` | Allowed: must be assigned as usual, no ref reassignment | The `readonly ref` reading, and the same as `(out val x)` |
+| `in` | Allowed: no ref reassignment; writes are CS8331, as for `in` | Same |
+| `(readonly x) => ...` | Allowed: implicitly typed, like `(val x) => ...` | C# 14 already parses modifiers on implicitly typed lambda parameters |
+| Primary constructor parameters | Writes are errors in initializers and members; a captured parameter's field is `readonly` | The field then matches the rule, as in a `readonly struct` |
+| Extension block receivers, function pointers | CS9190 kept | A receiver is shared by the block's members; a function pointer has no body |
+| Flag off | CS9190, exactly as in C# | No change without Sharper |
+| `fun` parameters (#97) | Not redundant | `fun` was dropped from the roadmap; immutable-by-default parameters are a strictness ladder setting, where `readonly` stays the opt-in form |
+
+Diagnostics: one new warning, CS20013. CS20012 is left to the ref struct spread error of
+[#51](https://github.com/ok3mad/roslyn/pull/51), which is not merged yet; whichever merges second takes the next free
+number.
+
+Tests: 15 `ReadonlyParameter_*` tests in `SharperTests.cs`; all 172 Sharper test cases pass, also with `ROSLYN_TEST_IOPERATION=1`.
+
 ## Follow-ups
 
 Sharper diagnostics were renumbered from `SharperErrorCodes.Base` (20000): CS9402, CS9403 and CS9404 became CS20001, CS20002 and CS20003, and this document uses the new numbers throughout.
@@ -402,5 +443,6 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 - [ ] Sharpener: rewrite `F<a[..]>(x)` (two comparisons in C#) as `F < (a[..]) > (x)`, the sequence type's accepted break. [#66](https://github.com/ok3mad/roslyn/issues/66)
 - [ ] `readonly` locals: decide `readonly` in `for` initializers, `foreach`, deconstruction and `out` (no modifier slot; a public syntax change). [#95](https://github.com/ok3mad/roslyn/issues/95)
 - [ ] `readonly` locals: IDE support (completion, refactorings that drop or break `readonly`). [#96](https://github.com/ok3mad/roslyn/issues/96)
-- [ ] `readonly` parameters, the grid's remaining explicitly typed corner. [#97](https://github.com/ok3mad/roslyn/issues/97)
+- [x] `readonly` parameters, the grid's remaining explicitly typed corner. [#97](https://github.com/ok3mad/roslyn/issues/97)
+- [ ] `readonly` parameters: IDE support, and the public API question of #88 (`IParameterSymbol` has no read-only flag). CS20013 shares the #84 follow-up.
 - [ ] `readonly` locals share the `val` follow-ups: silence CS20010 with CS20003 (#84), the "never reassigned" fixer can offer `readonly int` (#89), and the public API (#88) and Edit and Continue (#90) items cover them too.

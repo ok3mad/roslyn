@@ -2526,6 +2526,8 @@ namespace Microsoft.CodeAnalysis.CSharp
         ERR_SharperFunctionTypeTooManyParameters = SharperErrorCodes.Base + 9,
         WRN_SharperReadOnlyLocalMemberCallOnCopy = SharperErrorCodes.Base + 10,
         ERR_SharperReadOnlyLocalWithNoInitializer = SharperErrorCodes.Base + 11,
+        // SharperErrorCodes.Base + 12 is taken by the ref struct spread error (#51).
+        WRN_SharperReadOnlyParameterMemberCallOnCopy = SharperErrorCodes.Base + 13,
 
         // Note: you will need to do the following after adding errors:
         //  1) Update ErrorFacts.IsBuildOnlyDiagnostic (src/Compilers/CSharp/Portable/Errors/ErrorFacts.cs)

@@ -349,6 +349,7 @@
                 case ErrorCode.WRN_SharperDynamicRangeNotSpread:
                 case ErrorCode.WRN_SharperValMemberCallOnCopy:
                 case ErrorCode.WRN_SharperReadOnlyLocalMemberCallOnCopy:
+                case ErrorCode.WRN_SharperReadOnlyParameterMemberCallOnCopy:
                     return true;
                 default:
                     return false;
