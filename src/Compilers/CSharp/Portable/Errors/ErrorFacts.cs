@@ -2618,6 +2618,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 or ErrorCode.ERR_SharperFunctionTypeTooManyParameters
                 or ErrorCode.WRN_SharperReadOnlyLocalMemberCallOnCopy
                 or ErrorCode.ERR_SharperReadOnlyLocalWithNoInitializer
+                or ErrorCode.ERR_SharperSpreadRefStructEnumerator
                 or ErrorCode.ERR_SharperInferNoType
                 or ErrorCode.ERR_SharperInferNotSupportedYet
                 or ErrorCode.ERR_SharperInferNoBody

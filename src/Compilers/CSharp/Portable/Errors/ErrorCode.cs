@@ -2526,6 +2526,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         ERR_SharperFunctionTypeTooManyParameters = SharperErrorCodes.Base + 9,
         WRN_SharperReadOnlyLocalMemberCallOnCopy = SharperErrorCodes.Base + 10,
         ERR_SharperReadOnlyLocalWithNoInitializer = SharperErrorCodes.Base + 11,
+        ERR_SharperSpreadRefStructEnumerator = SharperErrorCodes.Base + 12,
         ERR_SharperInferNoType = SharperErrorCodes.Base + 13,
         ERR_SharperInferNotSupportedYet = SharperErrorCodes.Base + 14,
         ERR_SharperInferNoBody = SharperErrorCodes.Base + 15,

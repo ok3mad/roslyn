@@ -351,6 +351,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 case SyntaxKind.FunctionPointerType:
                 case SyntaxKind.FunctionType:
                 case SyntaxKind.TaskType:
+                case SyntaxKind.ParenthesizedType:
                     return true;
                 default:
                     return IsName(kind);

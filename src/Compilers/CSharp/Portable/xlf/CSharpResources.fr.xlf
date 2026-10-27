@@ -2647,6 +2647,11 @@
         <target state="new">A spread 'yield return ..' cannot be used in an async iterator.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperSpreadRefStructEnumerator">
+        <source>A spread 'yield return ..' cannot enumerate '{0}' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead.</source>
+        <target state="new">A spread 'yield return ..' cannot enumerate '{0}' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperValDeconstructionDisallowsSpecificType">
         <source>Deconstruction 'val (...)' form disallows a specific type for 'val'. Use '@val' for the type.</source>
         <target state="new">Deconstruction 'val (...)' form disallows a specific type for 'val'. Use '@val' for the type.</target>

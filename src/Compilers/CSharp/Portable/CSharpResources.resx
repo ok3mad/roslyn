@@ -8314,6 +8314,9 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
   <data name="ERR_SharperReadOnlyLocalWithNoInitializer" xml:space="preserve">
     <value>A readonly local must be initialized in its declaration, because it cannot be assigned later.</value>
   </data>
+  <data name="ERR_SharperSpreadRefStructEnumerator" xml:space="preserve">
+    <value>A spread 'yield return ..' cannot enumerate '{0}' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead.</value>
+  </data>
   <data name="ERR_SharperInferNoType" xml:space="preserve">
     <value>Cannot infer the return type of '{0}', because its body ({1}) has no type. Write the return type.</value>
   </data>
