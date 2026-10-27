@@ -55,6 +55,7 @@ namespace Microsoft.CodeAnalysis.CSharp
 
             var namesBuilder = ArrayBuilder<string>.GetInstance();
             ImmutableArray<bool> discardsOpt = default;
+            ImmutableArray<bool> sharperValsOpt = default;
             SeparatedSyntaxList<ParameterSyntax>? parameterSyntaxListOpt = null;
             bool hasSignature;
 
@@ -86,7 +87,8 @@ namespace Microsoft.CodeAnalysis.CSharp
                     }
 
                     parameterSyntaxListOpt = paren.ParameterList.Parameters;
-                    CheckParenthesizedLambdaParameters(parameterSyntaxListOpt.Value, diagnostics);
+                    sharperValsOpt = GetSharperValLambdaParameters(parameterSyntaxListOpt.Value);
+                    CheckParenthesizedLambdaParameters(parameterSyntaxListOpt.Value, sharperValsOpt, diagnostics);
                     break;
                 case SyntaxKind.AnonymousMethodExpression:
                     // delegate (int x) { }
@@ -123,7 +125,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             if (parameterSyntaxListOpt is { } parameterSyntaxList)
             {
                 var isAnonymousMethod = syntax.IsKind(SyntaxKind.AnonymousMethodExpression);
-                var hasExplicitlyTypedParameterList = parameterSyntaxList.All(static p => p.Type != null);
+                var hasExplicitlyTypedParameterList = parameterSyntaxList.All(static p => p.Type != null) && sharperValsOpt.IsDefault;
 
                 var typesBuilder = ArrayBuilder<TypeWithAnnotations>.GetInstance();
                 var refKindsBuilder = ArrayBuilder<RefKind>.GetInstance();
@@ -177,12 +179,19 @@ namespace Microsoft.CodeAnalysis.CSharp
                         continue;
                     }
 
-                    var typeOpt = p.Type is not null ? BindType(p.Type, diagnostics) : default;
+                    // A Sharper (val x) parameter is implicitly typed, like (x).
+                    var typeOpt = p.Type is not null && !IsSharperValParameter(sharperValsOpt, i) ? BindType(p.Type, diagnostics) : default;
 
                     var refKind = ParameterHelpers.GetModifiers(p.Modifiers, ignoreParams: false, out _, out var paramsKeyword, out _, out var scope);
                     var isParams = paramsKeyword.Kind() != SyntaxKind.None;
 
                     ParameterHelpers.CheckParameterModifiers(p, diagnostics, isAnonymousMethod ? ParameterContext.AnonymousMethod : ParameterContext.Lambda);
+
+                    if (isParams && IsSharperValParameter(sharperValsOpt, i))
+                    {
+                        // CheckParameterModifiers finds implicitly typed parameters by their missing type syntax.
+                        diagnostics.Add(ErrorCode.ERR_ImplicitlyTypedParamsParameter, paramsKeyword, p.Identifier.Text);
+                    }
 
                     ParameterHelpers.ReportParameterErrors(
                         owner: null, syntax: p, ordinal: i, lastParameterIndex: n - 1, isParams: isParams, typeWithAnnotations: typeOpt,
@@ -253,7 +262,7 @@ namespace Microsoft.CodeAnalysis.CSharp
 
             namesBuilder.Free();
 
-            return UnboundLambda.Create(syntax, this, diagnostics.AccumulatesDependencies, returnRefKind, refCustomModifiers, returnType, parameterAttributes, refKinds, scopes, types, names, discardsOpt, parameterSyntaxListOpt, defaultValues, isAsync: isAsync, isStatic: isStatic);
+            return UnboundLambda.Create(syntax, this, diagnostics.AccumulatesDependencies, returnRefKind, refCustomModifiers, returnType, parameterAttributes, refKinds, scopes, types, names, discardsOpt, sharperValsOpt, parameterSyntaxListOpt, defaultValues, isAsync: isAsync, isStatic: isStatic);
 
             static ImmutableArray<bool> computeDiscards(SeparatedSyntaxList<ParameterSyntax> parameters, int underscoresCount)
             {
@@ -321,23 +330,57 @@ namespace Microsoft.CodeAnalysis.CSharp
             return (refKind, refCustomModifiers, returnType);
         }
 
+        /// <summary>
+        /// Finds the Sharper <c>(val x) => ...</c> parameters: like a <c>val</c> local, a <c>val</c> that binds to no type
+        /// declares an implicitly typed parameter that cannot be reassigned, and a type named <c>val</c> in scope keeps its
+        /// C# meaning. Returns default if there are none.
+        /// </summary>
+        private ImmutableArray<bool> GetSharperValLambdaParameters(SeparatedSyntaxList<ParameterSyntax> parameterSyntaxList)
+        {
+            ArrayBuilder<bool>? builder = null;
+            for (int i = 0; i < parameterSyntaxList.Count; i++)
+            {
+                if (parameterSyntaxList[i].Type is { IsVal: true } type)
+                {
+                    // Lookup only; if val binds to a type, binding the parameter type reports its diagnostics.
+                    BindTypeOrAliasOrKeyword((IdentifierNameSyntax)type, BindingDiagnosticBag.Discarded, out bool isKeyword);
+                    if (isKeyword)
+                    {
+                        builder ??= ArrayBuilder<bool>.GetInstance(parameterSyntaxList.Count, fillWithValue: false);
+                        builder[i] = true;
+                    }
+                }
+            }
+
+            return builder?.ToImmutableAndFree() ?? default;
+        }
+
+        private static bool IsSharperValParameter(ImmutableArray<bool> sharperValsOpt, int index) => !sharperValsOpt.IsDefault && sharperValsOpt[index];
+
         private static void CheckParenthesizedLambdaParameters(
-            SeparatedSyntaxList<ParameterSyntax> parameterSyntaxList, BindingDiagnosticBag diagnostics)
+            SeparatedSyntaxList<ParameterSyntax> parameterSyntaxList, ImmutableArray<bool> sharperValsOpt, BindingDiagnosticBag diagnostics)
         {
             if (parameterSyntaxList.Count > 0)
             {
-                // If one parameter has a type, then all parameters must have a type.
-                var requiresTypes = parameterSyntaxList.Any(static p => p.Type != null);
-
-                foreach (var parameter in parameterSyntaxList)
+                // If one parameter has a type, then all parameters must have a type. A Sharper (val x) parameter has none.
+                bool hasType(int i) => parameterSyntaxList[i].Type != null && !IsSharperValParameter(sharperValsOpt, i);
+                var requiresTypes = false;
+                for (int i = 0; i < parameterSyntaxList.Count; i++)
                 {
+                    requiresTypes |= hasType(i);
+                }
+
+                for (int i = 0; i < parameterSyntaxList.Count; i++)
+                {
+                    var parameter = parameterSyntaxList[i];
+
                     // Ignore parameters with missing names.  We'll have already reported an error
                     // about them in the parser.
                     if (!parameter.Identifier.IsMissing)
                     {
                         if (requiresTypes)
                         {
-                            if (parameter.Type is null)
+                            if (!hasType(i))
                             {
                                 diagnostics.Add(ErrorCode.ERR_InconsistentLambdaParameterUsage,
                                     parameter.Identifier.GetLocation());
@@ -353,7 +396,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                         }
 
                         // Check if `(ref i) => ...` is supported by this language version.
-                        if (parameter.Modifiers.Count > 0 && parameter.Type is null)
+                        if (parameter.Modifiers.Count > 0 && !hasType(i))
                         {
                             CheckFeatureAvailability(parameter, MessageID.IDS_FeatureSimpleLambdaParameterModifiers, diagnostics);
                         }

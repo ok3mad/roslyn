@@ -23,9 +23,9 @@ reassigned, `readonly int x` and `readonly var x` cannot, and `val x` is shortha
 
 - Every write is an error: assignment, compound assignment, `++`/`--`, passing as `ref` or `out`, and writes to fields
   of a struct local (CS1656, CS1657, CS1654).
-- A non-readonly member of a struct `readonly` local runs on a copy and warns: CS20007, the readonly-local form of
+- A non-readonly member of a struct `readonly` local runs on a copy and warns: CS20010, the readonly-local form of
   CS20003. Members found by pattern (`GetEnumerator`, property patterns) do the same.
-- A `readonly` local must have an initializer (CS20008), because nothing can assign it later. `readonly var x;` reports
+- A `readonly` local must have an initializer (CS20011), because nothing can assign it later. `readonly var x;` reports
   `var`'s CS0818 instead.
 - `readonly var` reports the same errors as `var` where `var` cannot be used (no initializer, `null`, several
   declarators).

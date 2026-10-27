@@ -2984,5 +2984,14 @@ namespace Microsoft.CodeAnalysis.CSharp
         /// <summary>Creates a new EnumDeclarationSyntax instance.</summary>
         public static EnumDeclarationSyntax EnumDeclaration(string identifier)
             => SyntaxFactory.EnumDeclaration(default, default(SyntaxTokenList), SyntaxFactory.Token(SyntaxKind.EnumKeyword), SyntaxFactory.Identifier(identifier), null, SyntaxFactory.Token(SyntaxKind.OpenBraceToken), default, SyntaxFactory.Token(SyntaxKind.CloseBraceToken), default);
+
+        /// <summary>Creates a new VarPatternSyntax instance.</summary>
+        /// <remarks>
+        /// Sharper: <see cref="VarPatternSyntax.VarKeyword"/> also accepts <see cref="SyntaxKind.ValKeyword"/>, so the syntax
+        /// generator no longer emits this overload, which fills in a token only when a field has one kind. It is kept by
+        /// hand because it is shipped public API, and it creates a <c>var</c> pattern, as in upstream Roslyn.
+        /// </remarks>
+        public static VarPatternSyntax VarPattern(VariableDesignationSyntax designation)
+            => SyntaxFactory.VarPattern(SyntaxFactory.Token(SyntaxKind.VarKeyword), designation);
     }
 }

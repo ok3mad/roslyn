@@ -8269,6 +8269,15 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
   <data name="ERR_SharperValRefReassignment" xml:space="preserve">
     <value>Cannot ref-assign '{0}' because it is a ref val: it always refers to the same variable. Writes through '{0}' are allowed.</value>
   </data>
+  <data name="ERR_SharperFunctionTypeParameterName" xml:space="preserve">
+    <value>A function type cannot name its parameters. Remove the name '{0}'.</value>
+  </data>
+  <data name="ERR_SharperFunctionTypeParameterModifier" xml:space="preserve">
+    <value>A function type parameter cannot be '{0}', because a function type is a 'System.Func' or 'System.Action' delegate.</value>
+  </data>
+  <data name="ERR_SharperFunctionTypeTooManyParameters" xml:space="preserve">
+    <value>A function type cannot have more than {0} parameters, because no 'System.Func' or 'System.Action' delegate has more.</value>
+  </data>
   <data name="WRN_SharperReadOnlyLocalMemberCallOnCopy" xml:space="preserve">
     <value>Call to non-readonly member '{0}' on readonly local '{1}' runs on a copy, so '{1}' is not changed.</value>
   </data>
