@@ -500,6 +500,14 @@ namespace Microsoft.CodeAnalysis.CSharp
                         return TypeWithAnnotations.Create(AreNullableAnnotationsEnabled(taskTypeSyntax.TildeToken), BindSharperTaskType(taskTypeSyntax, diagnostics, basesBeingResolved));
                     }
 
+                case SyntaxKind.ParenthesizedType:
+                    {
+                        // Sharper: `((A) -> R)` is the function type it encloses; the parentheses only let a suffix apply to it.
+                        var parenthesizedTypeSyntax = (ParenthesizedTypeSyntax)syntax;
+                        MessageID.IDS_FeatureSharper.CheckFeatureAvailability(diagnostics, parenthesizedTypeSyntax.OpenParenToken);
+                        return BindType(parenthesizedTypeSyntax.Type, diagnostics, basesBeingResolved, suppressUseSiteDiagnostics);
+                    }
+
                 case SyntaxKind.RefType:
                     {
                         // ref needs to be handled by the caller
