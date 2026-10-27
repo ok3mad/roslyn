@@ -405,6 +405,7 @@ Diagnostics: one new warning, CS20013. CS20012 is left to the ref struct spread 
 number.
 
 Tests: 15 `ReadonlyParameter_*` tests in `SharperTests.cs`; all 172 Sharper test cases pass, also with `ROSLYN_TEST_IOPERATION=1`.
+Regression run (net10.0, Debug) of the C# Syntax, Symbol and Semantic test projects: 44,720 passed, 0 failed.
 
 ## Follow-ups
 
