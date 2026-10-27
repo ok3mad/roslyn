@@ -119,7 +119,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 }
                 else
                 {
-                    diagnostics.Add(ErrorCode.ERR_SharperInferUsesInferredMethod, _inferSyntax.Location, _method, frame.UsedInferredMethod);
+                    diagnostics.Add(ErrorCode.ERR_SharperInferUsesInferredMethod, _inferSyntax.Location, _method, frame.UsedInferredMethod!);
                 }
 
                 type = CreateErrorType();

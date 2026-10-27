@@ -65,7 +65,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             Debug.Assert(inferSyntax.IsInfer);
 
             var bodyDiagnostics = BindingDiagnosticBag.GetInstance(withDiagnostics: true, withDependencies: diagnostics.AccumulatesDependencies);
-            ExpressionSyntax expressionSyntax = body.Expression.CheckAndUnwrapRefExpression(bodyDiagnostics, out RefKind refKind);
+            ExpressionSyntax expressionSyntax = body.Expression.CheckAndUnwrapRefExpression(bodyDiagnostics, out RefKind refKind)!;
             BoundExpression value = BindValue(expressionSyntax, bodyDiagnostics, BindValueKind.RValue);
             bool bodyHasErrors = bodyDiagnostics.HasAnyErrors() || refKind != RefKind.None;
 
