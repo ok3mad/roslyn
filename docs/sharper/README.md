@@ -155,4 +155,5 @@ for every compilation.
 ## Not covered yet
 
 Sharper currently changes only the C# compiler. The IDE (completion, classification, refactorings), the language
-server, Visual Basic, Razor and the expression evaluator know nothing about Sharper syntax yet.
+server, Visual Basic, Razor and the expression evaluator know nothing about Sharper syntax yet, except that Edit and
+Continue tells a spread `yield return ..xs` from a plain yield return.

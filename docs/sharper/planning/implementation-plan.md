@@ -38,6 +38,7 @@ In pipeline order. Paths are under `src/Compilers/CSharp/Portable` unless noted.
 | IOperation | `Operations/CSharpOperationFactory.cs`, `BoundTree/Statement.cs` | `OperationKind.None` with xs as its child, the documented feature-branch approach. A real shape is an API decision. |
 | Lowering | `Lowering/LocalRewriter/LocalRewriter_Yield.cs`, `_ForStatement.cs`, `_WhileStatement.cs` | Expanded with the shared foreach helpers into a loop of plain yield returns. The loop helpers have node-kind allowlists. |
 | Diagnostics | `Errors/ErrorCode.cs`, `ErrorFacts.cs`, `CSharpResources.resx` + `.xlf` | CS20001 (async) and CS20002 (dynamic). A checklist at the end of `ErrorCode.cs` lists every place to update. |
+| Edit and Continue | `Lowering/IteratorRewriter/IteratorMethodToStateMachineRewriter.cs` (`PushFrame`), `Core/Portable/Emit/EditAndContinue/DefinitionMap.cs`, `src/Features/CSharp/Portable/EditAndContinue/SyntaxComparer.cs` | States are mapped by syntax offset and relative ordinal (`AwaitDebugId`); the spread's finalize state takes ordinal 1 of the yield's syntax. The IDE matcher gives the spread its own label, so it never maps to a plain yield return. |
 | Tests | `Test/Semantic/Semantics/SharperTests.cs` | Diagnostics, runtime output, nullable, IOperation, flow graph, region analysis. |
 
 ## Known traps
@@ -52,6 +53,7 @@ Each trap was probed before deciding how to handle it.
 | Ref-struct sources (spans, inline arrays) | Rejected with CS4007 about `Span<int>.Enumerator`, which the user never wrote. | Kept as is; a clearer error is a follow-up. |
 | `dynamic` | In an iterator of `object`, `..d` is valid C# (d converts to `Index` at runtime), so it stays a range and throws when d holds a sequence. In an iterator of `int` it spreads. | Warning CS20002. Deciding at runtime is the correct long-term semantics, but changes what valid C# does today. |
 | Both bindings fail (`..5`) | The spread error (CS9212) explains it better than the range error. | Spread error wins. |
+| Edit and Continue | The generated `try`/`finally` and the yield return both had the yield's syntax and ordinal 0, so the next generation mapped the yield to the finalize state and crashed. Adding a spread (or a plain `foreach`) to an iterator without a finalize state also crashed: the PDB path started finalize states at 0. | The finalize state takes ordinal 1; `DefinitionMap` starts decreasing states as the in-memory path does. |
 
 ## Decisions
 
@@ -304,7 +306,7 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 - [ ] Decide whether `dynamic` should choose range or spread at runtime, under the sharpening rules. [#42](https://github.com/ok3mad/roslyn/issues/42)
 - [ ] Decide whether async iterators should ever support spreads. [#43](https://github.com/ok3mad/roslyn/issues/43)
 - [ ] Give ref-struct sources a spread-specific error instead of CS4007. [#44](https://github.com/ok3mad/roslyn/issues/44)
-- [ ] Verify the spread with Edit and Continue: the generated try/finally and the yield share one syntax offset. [#45](https://github.com/ok3mad/roslyn/issues/45)
+- [x] Verify the spread with Edit and Continue: the generated try/finally and the yield share one syntax offset. Fixed with a second state ordinal, and the IDE no longer matches a spread with a plain yield return. [#45](https://github.com/ok3mad/roslyn/issues/45)
 - [ ] Design a real IOperation shape once the syntax settles. [#46](https://github.com/ok3mad/roslyn/issues/46)
 - [ ] Avoid the O(depth) cost of recursive spreads with a delegating state machine. [#47](https://github.com/ok3mad/roslyn/issues/47)
 - [x] Number Sharper diagnostics from their own base, `SharperErrorCodes.Base` = 20000 (CS20001 and up), far from upstream.
