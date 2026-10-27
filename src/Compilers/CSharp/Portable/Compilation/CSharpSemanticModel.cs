@@ -98,6 +98,10 @@ namespace Microsoft.CodeAnalysis.CSharp
 
                     goto default;
 
+                case SyntaxKind.RangeExpression when node.Parent is ArrayRankSpecifierSyntax { IsSharperSequence: true }:
+                    // The `..` of a Sharper sequence type `T[..]` is part of the type, not an expression.
+                    return false;
+
                 case SyntaxKind.OmittedTypeArgument:
                 case SyntaxKind.RefExpression:
                 case SyntaxKind.RefType:

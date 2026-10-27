@@ -1337,6 +1337,85 @@ internal sealed partial class NullableTypeSyntax : TypeSyntax
         => new NullableTypeSyntax(this.Kind, this.elementType, this.questionToken, GetDiagnostics(), annotations);
 }
 
+/// <summary>Class which represents the syntax node for a Sharper task type, such as int~.</summary>
+internal sealed partial class TaskTypeSyntax : TypeSyntax
+{
+    internal readonly TypeSyntax elementType;
+    internal readonly SyntaxToken tildeToken;
+
+    internal TaskTypeSyntax(SyntaxKind kind, TypeSyntax elementType, SyntaxToken tildeToken, DiagnosticInfo[]? diagnostics, SyntaxAnnotation[]? annotations)
+      : base(kind, diagnostics, annotations)
+    {
+        this.SlotCount = 2;
+        this.AdjustFlagsAndWidth(elementType);
+        this.elementType = elementType;
+        this.AdjustFlagsAndWidth(tildeToken);
+        this.tildeToken = tildeToken;
+    }
+
+    internal TaskTypeSyntax(SyntaxKind kind, TypeSyntax elementType, SyntaxToken tildeToken, SyntaxFactoryContext context)
+      : base(kind)
+    {
+        this.SetFactoryContext(context);
+        this.SlotCount = 2;
+        this.AdjustFlagsAndWidth(elementType);
+        this.elementType = elementType;
+        this.AdjustFlagsAndWidth(tildeToken);
+        this.tildeToken = tildeToken;
+    }
+
+    internal TaskTypeSyntax(SyntaxKind kind, TypeSyntax elementType, SyntaxToken tildeToken)
+      : base(kind)
+    {
+        this.SlotCount = 2;
+        this.AdjustFlagsAndWidth(elementType);
+        this.elementType = elementType;
+        this.AdjustFlagsAndWidth(tildeToken);
+        this.tildeToken = tildeToken;
+    }
+
+    /// <summary>TypeSyntax node representing the result type of the task, which may be void.</summary>
+    public TypeSyntax ElementType => this.elementType;
+    /// <summary>SyntaxToken representing the tilde.</summary>
+    public SyntaxToken TildeToken => this.tildeToken;
+
+    internal override GreenNode? GetSlot(int index)
+        => index switch
+        {
+            0 => this.elementType,
+            1 => this.tildeToken,
+            _ => null,
+        };
+
+    internal override SyntaxNode CreateRed(SyntaxNode? parent, int position) => new CSharp.Syntax.TaskTypeSyntax(this, parent, position);
+
+    public override void Accept(CSharpSyntaxVisitor visitor) => visitor.VisitTaskType(this);
+    public override TResult Accept<TResult>(CSharpSyntaxVisitor<TResult> visitor) => visitor.VisitTaskType(this);
+
+    public TaskTypeSyntax Update(TypeSyntax elementType, SyntaxToken tildeToken)
+    {
+        if (elementType != this.ElementType || tildeToken != this.TildeToken)
+        {
+            var newNode = SyntaxFactory.TaskType(elementType, tildeToken);
+            var diags = GetDiagnostics();
+            if (diags?.Length > 0)
+                newNode = newNode.WithDiagnosticsGreen(diags);
+            var annotations = GetAnnotations();
+            if (annotations?.Length > 0)
+                newNode = newNode.WithAnnotationsGreen(annotations);
+            return newNode;
+        }
+
+        return this;
+    }
+
+    internal override GreenNode SetDiagnostics(DiagnosticInfo[]? diagnostics)
+        => new TaskTypeSyntax(this.Kind, this.elementType, this.tildeToken, diagnostics, GetAnnotations());
+
+    internal override GreenNode SetAnnotations(SyntaxAnnotation[]? annotations)
+        => new TaskTypeSyntax(this.Kind, this.elementType, this.tildeToken, GetDiagnostics(), annotations);
+}
+
 /// <summary>Class which represents the syntax node for tuple type.</summary>
 internal sealed partial class TupleTypeSyntax : TypeSyntax
 {
@@ -1432,6 +1511,124 @@ internal sealed partial class TupleTypeSyntax : TypeSyntax
 
     internal override GreenNode SetAnnotations(SyntaxAnnotation[]? annotations)
         => new TupleTypeSyntax(this.Kind, this.openParenToken, this.elements, this.closeParenToken, GetDiagnostics(), annotations);
+}
+
+/// <summary>Class which represents the syntax node for a Sharper function type, such as (int, int) -&gt; int.</summary>
+internal sealed partial class FunctionTypeSyntax : TypeSyntax
+{
+    internal readonly SyntaxToken openParenToken;
+    internal readonly GreenNode? parameters;
+    internal readonly SyntaxToken closeParenToken;
+    internal readonly SyntaxToken arrowToken;
+    internal readonly TypeSyntax returnType;
+
+    internal FunctionTypeSyntax(SyntaxKind kind, SyntaxToken openParenToken, GreenNode? parameters, SyntaxToken closeParenToken, SyntaxToken arrowToken, TypeSyntax returnType, DiagnosticInfo[]? diagnostics, SyntaxAnnotation[]? annotations)
+      : base(kind, diagnostics, annotations)
+    {
+        this.SlotCount = 5;
+        this.AdjustFlagsAndWidth(openParenToken);
+        this.openParenToken = openParenToken;
+        if (parameters != null)
+        {
+            this.AdjustFlagsAndWidth(parameters);
+            this.parameters = parameters;
+        }
+        this.AdjustFlagsAndWidth(closeParenToken);
+        this.closeParenToken = closeParenToken;
+        this.AdjustFlagsAndWidth(arrowToken);
+        this.arrowToken = arrowToken;
+        this.AdjustFlagsAndWidth(returnType);
+        this.returnType = returnType;
+    }
+
+    internal FunctionTypeSyntax(SyntaxKind kind, SyntaxToken openParenToken, GreenNode? parameters, SyntaxToken closeParenToken, SyntaxToken arrowToken, TypeSyntax returnType, SyntaxFactoryContext context)
+      : base(kind)
+    {
+        this.SetFactoryContext(context);
+        this.SlotCount = 5;
+        this.AdjustFlagsAndWidth(openParenToken);
+        this.openParenToken = openParenToken;
+        if (parameters != null)
+        {
+            this.AdjustFlagsAndWidth(parameters);
+            this.parameters = parameters;
+        }
+        this.AdjustFlagsAndWidth(closeParenToken);
+        this.closeParenToken = closeParenToken;
+        this.AdjustFlagsAndWidth(arrowToken);
+        this.arrowToken = arrowToken;
+        this.AdjustFlagsAndWidth(returnType);
+        this.returnType = returnType;
+    }
+
+    internal FunctionTypeSyntax(SyntaxKind kind, SyntaxToken openParenToken, GreenNode? parameters, SyntaxToken closeParenToken, SyntaxToken arrowToken, TypeSyntax returnType)
+      : base(kind)
+    {
+        this.SlotCount = 5;
+        this.AdjustFlagsAndWidth(openParenToken);
+        this.openParenToken = openParenToken;
+        if (parameters != null)
+        {
+            this.AdjustFlagsAndWidth(parameters);
+            this.parameters = parameters;
+        }
+        this.AdjustFlagsAndWidth(closeParenToken);
+        this.closeParenToken = closeParenToken;
+        this.AdjustFlagsAndWidth(arrowToken);
+        this.arrowToken = arrowToken;
+        this.AdjustFlagsAndWidth(returnType);
+        this.returnType = returnType;
+    }
+
+    /// <summary>SyntaxToken representing the open parenthesis.</summary>
+    public SyntaxToken OpenParenToken => this.openParenToken;
+    /// <summary>SeparatedSyntaxList of the parameter types.</summary>
+    public CoreSyntax.SeparatedSyntaxList<FunctionPointerParameterSyntax> Parameters => new CoreSyntax.SeparatedSyntaxList<FunctionPointerParameterSyntax>(new CoreSyntax.SyntaxList<CSharpSyntaxNode>(this.parameters));
+    /// <summary>SyntaxToken representing the close parenthesis.</summary>
+    public SyntaxToken CloseParenToken => this.closeParenToken;
+    /// <summary>SyntaxToken representing the arrow.</summary>
+    public SyntaxToken ArrowToken => this.arrowToken;
+    /// <summary>TypeSyntax node representing the return type, which may be void.</summary>
+    public TypeSyntax ReturnType => this.returnType;
+
+    internal override GreenNode? GetSlot(int index)
+        => index switch
+        {
+            0 => this.openParenToken,
+            1 => this.parameters,
+            2 => this.closeParenToken,
+            3 => this.arrowToken,
+            4 => this.returnType,
+            _ => null,
+        };
+
+    internal override SyntaxNode CreateRed(SyntaxNode? parent, int position) => new CSharp.Syntax.FunctionTypeSyntax(this, parent, position);
+
+    public override void Accept(CSharpSyntaxVisitor visitor) => visitor.VisitFunctionType(this);
+    public override TResult Accept<TResult>(CSharpSyntaxVisitor<TResult> visitor) => visitor.VisitFunctionType(this);
+
+    public FunctionTypeSyntax Update(SyntaxToken openParenToken, CoreSyntax.SeparatedSyntaxList<FunctionPointerParameterSyntax> parameters, SyntaxToken closeParenToken, SyntaxToken arrowToken, TypeSyntax returnType)
+    {
+        if (openParenToken != this.OpenParenToken || parameters != this.Parameters || closeParenToken != this.CloseParenToken || arrowToken != this.ArrowToken || returnType != this.ReturnType)
+        {
+            var newNode = SyntaxFactory.FunctionType(openParenToken, parameters, closeParenToken, arrowToken, returnType);
+            var diags = GetDiagnostics();
+            if (diags?.Length > 0)
+                newNode = newNode.WithDiagnosticsGreen(diags);
+            var annotations = GetAnnotations();
+            if (annotations?.Length > 0)
+                newNode = newNode.WithAnnotationsGreen(annotations);
+            return newNode;
+        }
+
+        return this;
+    }
+
+    internal override GreenNode SetDiagnostics(DiagnosticInfo[]? diagnostics)
+        => new FunctionTypeSyntax(this.Kind, this.openParenToken, this.parameters, this.closeParenToken, this.arrowToken, this.returnType, diagnostics, GetAnnotations());
+
+    internal override GreenNode SetAnnotations(SyntaxAnnotation[]? annotations)
+        => new FunctionTypeSyntax(this.Kind, this.openParenToken, this.parameters, this.closeParenToken, this.arrowToken, this.returnType, GetDiagnostics(), annotations);
 }
 
 /// <summary>Tuple type element.</summary>
@@ -27428,7 +27625,9 @@ internal partial class CSharpSyntaxVisitor<TResult>
     public virtual TResult VisitFunctionPointerUnmanagedCallingConventionList(FunctionPointerUnmanagedCallingConventionListSyntax node) => this.DefaultVisit(node);
     public virtual TResult VisitFunctionPointerUnmanagedCallingConvention(FunctionPointerUnmanagedCallingConventionSyntax node) => this.DefaultVisit(node);
     public virtual TResult VisitNullableType(NullableTypeSyntax node) => this.DefaultVisit(node);
+    public virtual TResult VisitTaskType(TaskTypeSyntax node) => this.DefaultVisit(node);
     public virtual TResult VisitTupleType(TupleTypeSyntax node) => this.DefaultVisit(node);
+    public virtual TResult VisitFunctionType(FunctionTypeSyntax node) => this.DefaultVisit(node);
     public virtual TResult VisitTupleElement(TupleElementSyntax node) => this.DefaultVisit(node);
     public virtual TResult VisitOmittedTypeArgument(OmittedTypeArgumentSyntax node) => this.DefaultVisit(node);
     public virtual TResult VisitRefType(RefTypeSyntax node) => this.DefaultVisit(node);
@@ -27682,7 +27881,9 @@ internal partial class CSharpSyntaxVisitor
     public virtual void VisitFunctionPointerUnmanagedCallingConventionList(FunctionPointerUnmanagedCallingConventionListSyntax node) => this.DefaultVisit(node);
     public virtual void VisitFunctionPointerUnmanagedCallingConvention(FunctionPointerUnmanagedCallingConventionSyntax node) => this.DefaultVisit(node);
     public virtual void VisitNullableType(NullableTypeSyntax node) => this.DefaultVisit(node);
+    public virtual void VisitTaskType(TaskTypeSyntax node) => this.DefaultVisit(node);
     public virtual void VisitTupleType(TupleTypeSyntax node) => this.DefaultVisit(node);
+    public virtual void VisitFunctionType(FunctionTypeSyntax node) => this.DefaultVisit(node);
     public virtual void VisitTupleElement(TupleElementSyntax node) => this.DefaultVisit(node);
     public virtual void VisitOmittedTypeArgument(OmittedTypeArgumentSyntax node) => this.DefaultVisit(node);
     public virtual void VisitRefType(RefTypeSyntax node) => this.DefaultVisit(node);
@@ -27966,8 +28167,14 @@ internal partial class CSharpSyntaxRewriter : CSharpSyntaxVisitor<CSharpSyntaxNo
     public override CSharpSyntaxNode VisitNullableType(NullableTypeSyntax node)
         => node.Update((TypeSyntax)Visit(node.ElementType), (SyntaxToken)Visit(node.QuestionToken));
 
+    public override CSharpSyntaxNode VisitTaskType(TaskTypeSyntax node)
+        => node.Update((TypeSyntax)Visit(node.ElementType), (SyntaxToken)Visit(node.TildeToken));
+
     public override CSharpSyntaxNode VisitTupleType(TupleTypeSyntax node)
         => node.Update((SyntaxToken)Visit(node.OpenParenToken), VisitList(node.Elements), (SyntaxToken)Visit(node.CloseParenToken));
+
+    public override CSharpSyntaxNode VisitFunctionType(FunctionTypeSyntax node)
+        => node.Update((SyntaxToken)Visit(node.OpenParenToken), VisitList(node.Parameters), (SyntaxToken)Visit(node.CloseParenToken), (SyntaxToken)Visit(node.ArrowToken), (TypeSyntax)Visit(node.ReturnType));
 
     public override CSharpSyntaxNode VisitTupleElement(TupleElementSyntax node)
         => node.Update((TypeSyntax)Visit(node.Type), (SyntaxToken)Visit(node.Identifier));
@@ -29016,6 +29223,27 @@ internal partial class ContextAwareSyntax
         return result;
     }
 
+    public TaskTypeSyntax TaskType(TypeSyntax elementType, SyntaxToken tildeToken)
+    {
+#if DEBUG
+        if (elementType == null) throw new ArgumentNullException(nameof(elementType));
+        if (tildeToken == null) throw new ArgumentNullException(nameof(tildeToken));
+        if (tildeToken.Kind != SyntaxKind.TildeToken) throw new ArgumentException(nameof(tildeToken));
+#endif
+
+        int hash;
+        var cached = CSharpSyntaxNodeCache.TryGetNode((int)SyntaxKind.TaskType, elementType, tildeToken, this.context, out hash);
+        if (cached != null) return (TaskTypeSyntax)cached;
+
+        var result = new TaskTypeSyntax(SyntaxKind.TaskType, elementType, tildeToken, this.context);
+        if (hash >= 0)
+        {
+            SyntaxNodeCache.AddNode(result, hash);
+        }
+
+        return result;
+    }
+
     public TupleTypeSyntax TupleType(SyntaxToken openParenToken, CoreSyntax.SeparatedSyntaxList<TupleElementSyntax> elements, SyntaxToken closeParenToken)
     {
 #if DEBUG
@@ -29036,6 +29264,21 @@ internal partial class ContextAwareSyntax
         }
 
         return result;
+    }
+
+    public FunctionTypeSyntax FunctionType(SyntaxToken openParenToken, CoreSyntax.SeparatedSyntaxList<FunctionPointerParameterSyntax> parameters, SyntaxToken closeParenToken, SyntaxToken arrowToken, TypeSyntax returnType)
+    {
+#if DEBUG
+        if (openParenToken == null) throw new ArgumentNullException(nameof(openParenToken));
+        if (openParenToken.Kind != SyntaxKind.OpenParenToken) throw new ArgumentException(nameof(openParenToken));
+        if (closeParenToken == null) throw new ArgumentNullException(nameof(closeParenToken));
+        if (closeParenToken.Kind != SyntaxKind.CloseParenToken) throw new ArgumentException(nameof(closeParenToken));
+        if (arrowToken == null) throw new ArgumentNullException(nameof(arrowToken));
+        if (arrowToken.Kind != SyntaxKind.MinusGreaterThanToken) throw new ArgumentException(nameof(arrowToken));
+        if (returnType == null) throw new ArgumentNullException(nameof(returnType));
+#endif
+
+        return new FunctionTypeSyntax(SyntaxKind.FunctionType, openParenToken, parameters.Node, closeParenToken, arrowToken, returnType, this.context);
     }
 
     public TupleElementSyntax TupleElement(TypeSyntax type, SyntaxToken? identifier)
@@ -34443,6 +34686,27 @@ internal static partial class SyntaxFactory
         return result;
     }
 
+    public static TaskTypeSyntax TaskType(TypeSyntax elementType, SyntaxToken tildeToken)
+    {
+#if DEBUG
+        if (elementType == null) throw new ArgumentNullException(nameof(elementType));
+        if (tildeToken == null) throw new ArgumentNullException(nameof(tildeToken));
+        if (tildeToken.Kind != SyntaxKind.TildeToken) throw new ArgumentException(nameof(tildeToken));
+#endif
+
+        int hash;
+        var cached = SyntaxNodeCache.TryGetNode((int)SyntaxKind.TaskType, elementType, tildeToken, out hash);
+        if (cached != null) return (TaskTypeSyntax)cached;
+
+        var result = new TaskTypeSyntax(SyntaxKind.TaskType, elementType, tildeToken);
+        if (hash >= 0)
+        {
+            SyntaxNodeCache.AddNode(result, hash);
+        }
+
+        return result;
+    }
+
     public static TupleTypeSyntax TupleType(SyntaxToken openParenToken, CoreSyntax.SeparatedSyntaxList<TupleElementSyntax> elements, SyntaxToken closeParenToken)
     {
 #if DEBUG
@@ -34463,6 +34727,21 @@ internal static partial class SyntaxFactory
         }
 
         return result;
+    }
+
+    public static FunctionTypeSyntax FunctionType(SyntaxToken openParenToken, CoreSyntax.SeparatedSyntaxList<FunctionPointerParameterSyntax> parameters, SyntaxToken closeParenToken, SyntaxToken arrowToken, TypeSyntax returnType)
+    {
+#if DEBUG
+        if (openParenToken == null) throw new ArgumentNullException(nameof(openParenToken));
+        if (openParenToken.Kind != SyntaxKind.OpenParenToken) throw new ArgumentException(nameof(openParenToken));
+        if (closeParenToken == null) throw new ArgumentNullException(nameof(closeParenToken));
+        if (closeParenToken.Kind != SyntaxKind.CloseParenToken) throw new ArgumentException(nameof(closeParenToken));
+        if (arrowToken == null) throw new ArgumentNullException(nameof(arrowToken));
+        if (arrowToken.Kind != SyntaxKind.MinusGreaterThanToken) throw new ArgumentException(nameof(arrowToken));
+        if (returnType == null) throw new ArgumentNullException(nameof(returnType));
+#endif
+
+        return new FunctionTypeSyntax(SyntaxKind.FunctionType, openParenToken, parameters.Node, closeParenToken, arrowToken, returnType);
     }
 
     public static TupleElementSyntax TupleElement(TypeSyntax type, SyntaxToken? identifier)
