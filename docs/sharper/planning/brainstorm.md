@@ -52,7 +52,7 @@ The working name is **Sharper** (the language) or **SharperLang** (for public na
 
 Sharper should read like C# with less ceremony; the sketches below are guesses to react to, not a spec, and the syntax is far from consistent: for example the examples spell inferred union types as A | B, which was never discussed (patterns use or, and C# 15 declares union Name(A, B)). Everything else is plain C#, so existing code stays valid.
 
-- **Functions are ordinary methods.** What the earlier `fun` declaration bundled is split into separate features that each work on any method, local function or lambda (see [Functions as separate elements](#functions-as-separate-elements)): `infer` in place of a return or parameter type, `readonly` parameters, and a parameter switch body `=> switch { ... }` with ordered arms. `fun` itself is parked for a later "functional all in" mode.
+- **Functions are ordinary methods.** What the earlier `fun` declaration bundled is split into separate features that each work on any method, local function or lambda (see [Functions as separate elements](#functions-as-separate-elements)): `infer` in place of a return or parameter type and `readonly` parameters. `fun` itself is parked for a later "functional all in" mode.
 - **`val`** is an immutable binding, used in declarations and patterns: `val (small, large) = ...`.
 - **`it`** is the implicit parameter of any single-parameter lambda or pipe stage, as in Kotlin. Innermost wins, and an explicit parameter is the escape hatch.
 - **`|>`** is the pipe. A stage that expects `T` can receive a `Task<T>`, a sequence of `T`, or a union containing `T`, and the pipe lifts it. A stage containing `it` is an expression; a bare stage is a function applied to the value.
@@ -97,8 +97,6 @@ separate feature on ordinary methods, local functions and, where it fits, lambda
 | Inferred return type | `static infer Hello(int id) => $"Hello, {id}!";` | method with the inferred type | nothing | #10 |
 | Inferred parameter types | `public infer Load(infer userId) => ...` in a class implementing `IProfiles` | method with the inferred types | depends on the source, see below | #15 |
 | `readonly` parameters | `void F(readonly int x)` | plain parameter plus the `val` no-reassignment check | nothing | #11 |
-| Parameter switch body | `int Sign(int i) => switch { <0 => -1, 0 => 0, >0 => 1 };` | `i switch { ... }`, or `(a, b) switch { ... }` for several parameters | nothing | #14 |
-| Switch body on a lambda | `id => switch { 42 => new Profile(), _ => new Unavailable() }` | lambda with a switch expression | the parameter switch body | #26 |
 | `pure` and `total` | `total int Fib(int i is >=0) => ...` | erased, plus attributes | the effect checker | #24 |
 | Member declared on another type | `static infer Currency.Parse(string s) => ...` | C# 14 extension block | nothing | #25 |
 
@@ -169,36 +167,6 @@ already names, in this order, and two sources that disagree are an error that na
   metadata and in stack traces, and a later use that pins the type changes its arity. The alternative is an error
   that asks for the type. Undecided.
 
-### Parameter switch body
-
-The ordered arms become an expression body: a switch expression with no governing expression, whose subject is the
-parameter list (one parameter alone, several as a tuple). The first matching arm wins, exactly as in C#.
-
-```
-static Outcome Apply(State state, Event ev) => switch
-{
-    (Draft s, Submit e) => ...,
-    (State s, Cancel e) => ...
-};
-```
-
-- **It is visibly a switch**, so a C# reader knows the semantics at once, and it ends with `;` like any expression
-  body. A statement block never looks like a block of arms, so the parser does not have to guess.
-- **No breaking change.** `switch` at the start of an expression is an error in C# today.
-- **Parameter types stay explicit,** so the arms are checked against them, and exhaustiveness is C#'s (CS8509,
-  which the strictness ladder may raise to an error). A Sharper error that lists every missing case is a separate
-  improvement to the exhaustiveness check, not part of this syntax.
-- **Arms are not a source of parameter types.** The earlier draft inferred a parameter's type from the arm
-  patterns, but that mixed two questions: the CLR type and the refined domain (`int is >=0`). The CLR type comes
-  from the sources above; inferring a domain from the arms belongs to refined types (#21), if anywhere, and has its
-  own trap (a forgotten arm narrows the domain instead of reporting an error).
-- **The same form works on lambdas,** which settles arms as a lambda body: `id => switch { 42 => ..., _ => ... }`.
-- **`val i` in an arm** is a binding pattern, since arms only hold patterns. That answers the open question about
-  `val i` in a clause.
-- **Which parameters are switched on.** All of them, in order. A function that matches on only some of its
-  parameters writes an ordinary `(a, b) switch { ... }` body. Whether an attribute or modifier could exclude a
-  parameter is open.
-
 ### What happened to the rest
 
 - **Immutable-by-default parameters** and `mutable`: a strictness ladder setting, not a declaration form (see
@@ -213,7 +181,7 @@ static Outcome Apply(State state, Event ev) => switch
 
 `fun` is free now, and it is too good a keyword to spend on one small feature. It is kept for later as the way to
 go functional all in: a declaration that opts into the functional defaults together, such as immutable parameters,
-purity and totality checks and ordered arms. What exactly "all in" means is decided only after those pieces exist
+purity and totality checks. What exactly "all in" means is decided only after those pieces exist
 and have settled, and it has to stay a combination of them, never a meaning of its own. Until then `fun` has no
 meaning in Sharper, and code that uses it as a name keeps working.
 
@@ -249,7 +217,7 @@ Idiomatic C# passes interfaces where a functional style would pass functions, pa
 - **Details.** Return types lift (a plain `Profile` where `(Profile | Unavailable)~` is expected), effects are checked against a `pure` contract on the interface method, captured variables become fields, non-capturing lambdas can be cached as singletons, and the generated class gets a readable name for stack traces.
 - **Reverse direction.** A single-method interface converts to the matching function type, and for a multi-method interface you name the method group, as in `profiles.Load`, which C# already converts to a delegate. With `Render` taking `(int) -> (Profile | Unavailable)~`, the call site becomes `users.Find(id) |> Render(it, profiles.Load)`, with no thunk.
 - **Initializer shape.** `new IProfiles { Load = id => ... }` lowers to the same kind of generated class and covers most stubbing, which makes most mocking libraries unnecessary for that purpose. An unassigned member is a compile error unless the interface supplies a default, and a standard `Unexpected` marker (`_ = Unexpected`) gives the strict mode of mock libraries, throwing with the member name.
-- **Argument matching.** The ordered-arms block from the state machine could serve as a lambda body, so `When(42).Returns(...)` becomes `{ 42 => new Profile { ... }, _ => new Unavailable() }`. The syntax for arms as a lambda body is not designed yet.
+- **Argument matching.** A switch expression in the lambda body does the job, so `When(42).Returns(...)` becomes `id => id switch { 42 => new Profile { ... }, _ => new Unavailable() }`.
 - **What it does not cover:** interaction verification (was `Load` called twice?), which works by capturing a list in the lambda, and auto-mocking of very large interfaces.
 
 ## Discard arguments (proposed, not yet discussed)
@@ -368,10 +336,10 @@ Four samples, roughly from smallest to largest. The syntax is a working guess.
 
 ### Fib
 
-Each element can be added on its own. With only the parameter switch body, the parameter is a plain `int`, so the arms must cover negative numbers too:
+With a plain `int` parameter, the arms must cover negative numbers too:
 
 ```
-static int Fib(int i) => switch
+static int Fib(int i) => i switch
 {
     0 or 1 => 1,
     >=2    => Fib(i - 1) + Fib(i - 2),
@@ -382,18 +350,18 @@ static int Fib(int i) => switch
 With refined types, the domain is written out, and `Fib(-1)` is an error at the call site rather than a missing case:
 
 ```
-static int Fib(int i is >=0) => switch
+static int Fib(int i is >=0) => i switch
 {
     0 or 1 => 1,
     >=2    => Fib(i - 1) + Fib(i - 2)
 };
 ```
 
-The return type stays explicit because `Fib` is recursive. In the lowered C# of the refined version, the switch needs a final unreachable arm because C# only sees `int`. An earlier draft also left out the type of `i` and inferred `int is >=0` from the arms; arms are no longer a source of parameter types (see [Parameter switch body](#parameter-switch-body)), so the domain is written out.
+The return type stays explicit because `Fib` is recursive. In the lowered C# of the refined version, the switch needs a final unreachable arm because C# only sees `int`. An earlier draft also left out the type of `i` and inferred `int is >=0` from the arms; arms are not a source of parameter types (see [Inferred domains swallow exhaustiveness](#open-questions)), so the domain is written out.
 
 ### Order state machine
 
-Ordered arms pay off when the arms are long. A parameter switch body is a switch expression over the parameters, so the first matching arm wins, exactly as in C#. The records for states, events and outcomes are elided in both versions; `Submitted` has a computed `Total`.
+The transition table is an ordinary C# switch expression over the tuple of parameters, so the first matching arm wins. The records for states, events and outcomes are elided in both versions; `Submitted` has a computed `Total`.
 
 Sharper:
 
@@ -401,7 +369,7 @@ Sharper:
 union State(Draft, Submitted, Paid, Shipped, Cancelled);
 union Event(Submit, Pay, Ship, Cancel);
 
-static infer Apply(State state, Event ev) => switch
+static infer Apply(State state, Event ev) => (state, ev) switch
 {
     (Draft s, Submit e) =>
         s.Items.Count > 0
@@ -468,7 +436,7 @@ static Outcome OnShip(Paid s, Ship e) =>
 
 An honest comparison:
 
-- **Shape.** Nearly one to one. Ordered arms are a C# switch expression, and the Sharper body only drops the return type and the tuple construction. The arm bodies are the same, long or short.
+- **Shape.** One to one. Both are the same C# switch expression, and the Sharper version only drops the return type. The arm bodies are the same, long or short.
 - **Declarations.** Sharper's `union` deliberately matches C# 15's, so those lines convert directly.
 - **The outcome union.** C# needs `Outcome` declared with all eight cases and kept in sync by hand, while Sharper infers the result type from the arm bodies. That inference is the structural-union question parked earlier.
 - **Exhaustiveness.** Both are exhaustive over unions without a `_` arm. When a pair is missing, C# gives a warning (CS8509) that names one example pattern unless warnings are promoted to errors, while Sharper reports an error that lists all the missing pairs. I have not verified how RC1 treats tuples of two unions.
@@ -773,7 +741,7 @@ What is settled so far, what was tried and dropped, and what waits for a later s
 
 - Lower to plain C# through Roslyn, with Sharper's own checker enforcing the strictness before lowering.
 - Phase one is friendlier inference plus explicit immutability (`val`), leaning towards proper deep immutability.
-- A multi-case function is one declaration with ordered arms, a switch expression over its parameters, so evaluation order is the same as in C#. The leading spelling is the parameter switch body `=> switch { ... }`. Arms are not a source of parameter types. Plain C# parameter declarations stay valid and mean the same thing when there is nothing to refine.
+- A multi-case function is an ordinary C# switch expression over its parameters (`(a, b) switch { ... }`), so evaluation order is the same as in C#. Arms are not a source of parameter types. Plain C# parameter declarations stay valid and mean the same thing when there is nothing to refine.
 - Functions are ordinary methods, and the parts of the earlier `fun` are separate features (see [Functions as separate elements](#functions-as-separate-elements)). `fun` is parked for a later "functional all in" mode.
 - `infer` stands in place of an inferred return or parameter type. Parameter types are copied from a type that a signature or a value names (an overridden member, a default value, a function type, a call that pins one type), never from the shape of their uses.
 - Inferred types are allowed on public members, with no warning: whoever cares about a published API writes its types out.
@@ -794,7 +762,8 @@ What is settled so far, what was tried and dropped, and what waits for a later s
 - Auto-upgrading `Fib(3L)` to wider numeric types: too much machinery for the benefit.
 - Checked arithmetic by default: slower than C# and not pragmatic.
 - `finally` and multi-argument lifting.
-- Overloads declared through arms, and separate repeated `fun` clauses, which are replaced by one switch body of ordered arms.
+- Overloads declared through arms, and separate repeated `fun` clauses: they interact badly with overload resolution, and overlapping patterns across clauses have no clear meaning. A C# switch expression over the parameters does the job.
+- The parameter switch body, `int Sign(int i) => switch { ... }`, and the same form on a lambda, `id => switch { ... }`. Rejected: once the clauses above were dropped, all it saved over `i switch` or `(a, b) switch` was the governing expression. It made nothing stricter, and it needed its own rules for `out`, ref struct and missing parameters.
 - The `fun` declaration. It bundled return type inference, immutable-by-default parameters, ordered arms, inferred parameter domains, a strict scope and the effect modifiers, so none of them could be built or judged alone. Each is now a separate element on ordinary methods (see [Functions as separate elements](#functions-as-separate-elements)), and the defaults moved to the strictness ladder. The keyword itself is parked, not dropped.
 - `var` as an inferred return type: `var` means variable, and a return type is not one. Replaced by `infer`.
 - Parameter types inferred from a function's callers: editing one caller would change the callee, and that is whole-program inference.
@@ -810,7 +779,7 @@ What is settled so far, what was tried and dropped, and what waits for a later s
 - The lowering rule for `..rest` on types that are not sliceable.
 - Local mutation that does not escape (in-place quicksort), including escape analysis and a "mutates its argument" effect.
 - Structural unions versus erasure to `object`, and parallel versus sequential batches.
-- A few more passes through all the concepts before any syntax is finalized: how union types are spelled, the deep-dive questions in the open questions, and the unsettled spellings (arms as a lambda body, a lift marker).
+- A few more passes through all the concepts before any syntax is finalized: how union types are spelled, the deep-dive questions in the open questions, and the unsettled spellings (a lift marker).
 
 ## Open Questions
 
