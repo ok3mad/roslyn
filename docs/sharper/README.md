@@ -63,7 +63,8 @@ glob. `<EnableDefaultCompileItems>false</EnableDefaultCompileItems>` and `<Compi
 for `.cs` files. Do not also include `*.cx` in the project, or the SDK reports duplicate `Compile` items.
 
 The language server treats `.cx` files as C# (`LanguageInfoProvider`), and reloads a project when a `.cx` file is
-added to or removed from its directory.
+added to or removed from its directory. [Sharper in VS Code](vscode.md) shows how to use it, with a release workflow
+and a devcontainer.
 
 Not done yet:
 
