@@ -494,6 +494,12 @@ namespace Microsoft.CodeAnalysis.CSharp
                         return TypeWithAnnotations.Create(AreNullableAnnotationsEnabled(functionTypeSyntax.ArrowToken), BindFunctionType(functionTypeSyntax, diagnostics, basesBeingResolved));
                     }
 
+                case SyntaxKind.TaskType:
+                    {
+                        var taskTypeSyntax = (TaskTypeSyntax)syntax;
+                        return TypeWithAnnotations.Create(AreNullableAnnotationsEnabled(taskTypeSyntax.TildeToken), BindSharperTaskType(taskTypeSyntax, diagnostics, basesBeingResolved));
+                    }
+
                 case SyntaxKind.RefType:
                     {
                         // ref needs to be handled by the caller

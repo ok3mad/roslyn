@@ -832,6 +832,51 @@ public sealed partial class NullableTypeSyntax : TypeSyntax
     public NullableTypeSyntax WithQuestionToken(SyntaxToken questionToken) => Update(this.ElementType, questionToken);
 }
 
+/// <summary>Class which represents the syntax node for a Sharper task type, such as int~.</summary>
+/// <remarks>
+/// <para>This node is associated with the following syntax kinds:</para>
+/// <list type="bullet">
+/// <item><description><see cref="SyntaxKind.TaskType"/></description></item>
+/// </list>
+/// </remarks>
+public sealed partial class TaskTypeSyntax : TypeSyntax
+{
+    private TypeSyntax? elementType;
+
+    internal TaskTypeSyntax(InternalSyntax.CSharpSyntaxNode green, SyntaxNode? parent, int position)
+      : base(green, parent, position)
+    {
+    }
+
+    /// <summary>TypeSyntax node representing the result type of the task, which may be void.</summary>
+    public TypeSyntax ElementType => GetRedAtZero(ref this.elementType)!;
+
+    /// <summary>SyntaxToken representing the tilde.</summary>
+    public SyntaxToken TildeToken => new SyntaxToken(this, ((InternalSyntax.TaskTypeSyntax)this.Green).tildeToken, GetChildPosition(1), GetChildIndex(1));
+
+    internal override SyntaxNode? GetNodeSlot(int index) => index == 0 ? GetRedAtZero(ref this.elementType)! : null;
+
+    internal override SyntaxNode? GetCachedSlot(int index) => index == 0 ? this.elementType : null;
+
+    public override void Accept(CSharpSyntaxVisitor visitor) => visitor.VisitTaskType(this);
+    public override TResult? Accept<TResult>(CSharpSyntaxVisitor<TResult> visitor) where TResult : default => visitor.VisitTaskType(this);
+
+    public TaskTypeSyntax Update(TypeSyntax elementType, SyntaxToken tildeToken)
+    {
+        if (elementType != this.ElementType || tildeToken != this.TildeToken)
+        {
+            var newNode = SyntaxFactory.TaskType(elementType, tildeToken);
+            var annotations = GetAnnotations();
+            return annotations?.Length > 0 ? newNode.WithAnnotations(annotations) : newNode;
+        }
+
+        return this;
+    }
+
+    public TaskTypeSyntax WithElementType(TypeSyntax elementType) => Update(elementType, this.TildeToken);
+    public TaskTypeSyntax WithTildeToken(SyntaxToken tildeToken) => Update(this.ElementType, tildeToken);
+}
+
 /// <summary>Class which represents the syntax node for tuple type.</summary>
 /// <remarks>
 /// <para>This node is associated with the following syntax kinds:</para>

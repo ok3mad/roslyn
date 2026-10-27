@@ -61,6 +61,9 @@ public partial class CSharpSyntaxVisitor<TResult>
     /// <summary>Called when the visitor visits a NullableTypeSyntax node.</summary>
     public virtual TResult? VisitNullableType(NullableTypeSyntax node) => this.DefaultVisit(node);
 
+    /// <summary>Called when the visitor visits a TaskTypeSyntax node.</summary>
+    public virtual TResult? VisitTaskType(TaskTypeSyntax node) => this.DefaultVisit(node);
+
     /// <summary>Called when the visitor visits a TupleTypeSyntax node.</summary>
     public virtual TResult? VisitTupleType(TupleTypeSyntax node) => this.DefaultVisit(node);
 
@@ -818,6 +821,9 @@ public partial class CSharpSyntaxVisitor
     /// <summary>Called when the visitor visits a NullableTypeSyntax node.</summary>
     public virtual void VisitNullableType(NullableTypeSyntax node) => this.DefaultVisit(node);
 
+    /// <summary>Called when the visitor visits a TaskTypeSyntax node.</summary>
+    public virtual void VisitTaskType(TaskTypeSyntax node) => this.DefaultVisit(node);
+
     /// <summary>Called when the visitor visits a TupleTypeSyntax node.</summary>
     public virtual void VisitTupleType(TupleTypeSyntax node) => this.DefaultVisit(node);
 
@@ -1574,6 +1580,9 @@ public partial class CSharpSyntaxRewriter : CSharpSyntaxVisitor<SyntaxNode?>
 
     public override SyntaxNode? VisitNullableType(NullableTypeSyntax node)
         => node.Update((TypeSyntax?)Visit(node.ElementType) ?? throw new ArgumentNullException("elementType"), VisitToken(node.QuestionToken));
+
+    public override SyntaxNode? VisitTaskType(TaskTypeSyntax node)
+        => node.Update((TypeSyntax?)Visit(node.ElementType) ?? throw new ArgumentNullException("elementType"), VisitToken(node.TildeToken));
 
     public override SyntaxNode? VisitTupleType(TupleTypeSyntax node)
         => node.Update(VisitToken(node.OpenParenToken), VisitList(node.Elements), VisitToken(node.CloseParenToken));
@@ -2494,6 +2503,18 @@ public static partial class SyntaxFactory
     /// <summary>Creates a new NullableTypeSyntax instance.</summary>
     public static NullableTypeSyntax NullableType(TypeSyntax elementType)
         => SyntaxFactory.NullableType(elementType, SyntaxFactory.Token(SyntaxKind.QuestionToken));
+
+    /// <summary>Creates a new TaskTypeSyntax instance.</summary>
+    public static TaskTypeSyntax TaskType(TypeSyntax elementType, SyntaxToken tildeToken)
+    {
+        if (elementType == null) throw new ArgumentNullException(nameof(elementType));
+        if (tildeToken.Kind() != SyntaxKind.TildeToken) throw new ArgumentException(nameof(tildeToken));
+        return (TaskTypeSyntax)Syntax.InternalSyntax.SyntaxFactory.TaskType((Syntax.InternalSyntax.TypeSyntax)elementType.Green, (Syntax.InternalSyntax.SyntaxToken)tildeToken.Node!).CreateRed();
+    }
+
+    /// <summary>Creates a new TaskTypeSyntax instance.</summary>
+    public static TaskTypeSyntax TaskType(TypeSyntax elementType)
+        => SyntaxFactory.TaskType(elementType, SyntaxFactory.Token(SyntaxKind.TildeToken));
 
     /// <summary>Creates a new TupleTypeSyntax instance.</summary>
     public static TupleTypeSyntax TupleType(SyntaxToken openParenToken, SeparatedSyntaxList<TupleElementSyntax> elements, SyntaxToken closeParenToken)

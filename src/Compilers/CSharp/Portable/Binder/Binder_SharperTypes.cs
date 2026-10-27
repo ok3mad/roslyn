@@ -83,6 +83,24 @@ namespace Microsoft.CodeAnalysis.CSharp
         }
 
         /// <summary>
+        /// Binds the Sharper task type <c>T~</c> to <c>System.Threading.Tasks.Task&lt;T&gt;</c>, and <c>void~</c> to the
+        /// non-generic <c>System.Threading.Tasks.Task</c>.
+        /// </summary>
+        private NamedTypeSymbol BindSharperTaskType(TaskTypeSyntax syntax, BindingDiagnosticBag diagnostics, ConsList<TypeSymbol> basesBeingResolved)
+        {
+            MessageID.IDS_FeatureSharper.CheckFeatureAvailability(diagnostics, syntax.TildeToken);
+
+            if (syntax.ElementType is PredefinedTypeSyntax { Keyword.RawKind: (int)SyntaxKind.VoidKeyword })
+            {
+                return GetWellKnownType(WellKnownType.System_Threading_Tasks_Task, diagnostics, syntax);
+            }
+
+            var resultType = BindTypeArgument(syntax.ElementType, diagnostics, basesBeingResolved);
+            var definition = GetWellKnownType(WellKnownType.System_Threading_Tasks_Task_T, diagnostics, syntax);
+            return BindSharperTypeAlias(definition, [resultType], syntax, basesBeingResolved, diagnostics);
+        }
+
+        /// <summary>
         /// Constructs the BCL generic type that a Sharper type form stands for. Constraints are checked as for a
         /// type written out in C#: here, or by the declaring symbol where the binder suppresses constraint checks (in
         /// signatures). Diagnostics are reported on <paramref name="syntax"/>, the whole type form, since the type

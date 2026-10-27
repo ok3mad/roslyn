@@ -104,6 +104,9 @@ namespace Microsoft.CodeAnalysis.CSharp
                         // The parameter types are under FunctionPointerParameter.
                         return ((FunctionTypeSyntax)parent).ReturnType == node;
 
+                    case TaskType:
+                        return ((TaskTypeSyntax)parent).ElementType == node;
+
                     case PredefinedType:
                         return true;
 

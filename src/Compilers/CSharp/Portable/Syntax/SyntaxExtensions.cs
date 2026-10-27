@@ -444,6 +444,10 @@ namespace Microsoft.CodeAnalysis.CSharp
                             stack.Push(paramType);
                         }
                         break;
+                    case SyntaxKind.TaskType:
+                        var taskTypeSyntax = (TaskTypeSyntax)type;
+                        stack.Push(taskTypeSyntax.ElementType);
+                        break;
                     case SyntaxKind.FunctionType:
                         var functionTypeSyntax = (FunctionTypeSyntax)type;
                         stack.Push(functionTypeSyntax.ReturnType);

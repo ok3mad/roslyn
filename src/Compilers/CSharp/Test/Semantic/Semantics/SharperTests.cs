@@ -2412,6 +2412,332 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         }
 
         [Fact]
+        public void TaskType_Basic()
+        {
+            var source = """
+                #nullable enable
+                using System;
+                using System.Threading.Tasks;
+
+                int~ answer = Answer();
+                void~ done = Run();
+                string?~ maybe = Maybe(false);
+                Console.Write(await answer);
+                await done;
+                Console.Write(" " + (await maybe is null));
+                Console.Write(" " + await Local());
+                int~ Local() => Task.FromResult(7);
+
+                // Each task type is the Task it stands for.
+                Console.Write(" " + (typeof(int~) == typeof(Task<int>)));
+                Console.Write(" " + (typeof(void~) == typeof(Task)));
+                Console.Write(" " + (typeof(int[..]~) == typeof(Task<System.Collections.Generic.IEnumerable<int>>)));
+                Console.Write(" " + (typeof(int~[..]) == typeof(System.Collections.Generic.IEnumerable<Task<int>>)));
+                Console.Write(" " + (typeof(int~[]) == typeof(Task<int>[])));
+                Console.Write(" " + (typeof(int[]~) == typeof(Task<int[]>)));
+                Console.Write(" " + (typeof(int~~) == typeof(Task<Task<int>>)));
+                Console.Write(" " + (typeof((int) -> int~) == typeof(Func<int, Task<int>>)));
+                Console.Write(" " + (typeof(() -> void~) == typeof(Func<Task>)));
+
+                static async int~ Answer() { await Task.Yield(); return 42; }
+                static async void~ Run() => await Task.Yield();
+                static async string?~ Maybe(bool b) { await Task.Yield(); return b ? "x" : null; }
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90,
+                expectedOutput: ExecutionConditionUtil.IsCoreClr ? "42 True 7 True True True True True True True True True" : null).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void TaskType_TypePositions()
+        {
+            var source = """
+                using System;
+                using System.Collections.Generic;
+                using System.Threading.Tasks;
+                using IntTask = int~;
+
+                var c = new C();
+                c.Field = Task.FromResult(1);
+                c.Property = Task.CompletedTask;
+                var list = new List<int~> { Task.FromResult(2), c.Field };
+                int~[] array = new int~[2];
+                array[0] = Task.FromResult(3);
+                IntTask alias = Task.FromResult(4);
+                object o = alias;
+                var cast = (int~)o;
+                var asTask = o as int~;
+                var isTask = o is int~ t ? t : null;
+                var defaultTask = default(int~);
+                (int~ a, string b) tuple = (Task.FromResult(5), "b");
+                (int~ x, int y) = (Task.FromResult(6), 0);
+                foreach (int~ each in list) { }
+                C.Out(out int~ outTask);
+                var lambda = int~ (int i) => Task.FromResult(i);
+                var asyncLambda = async void~ () => await Task.Yield();
+                await asyncLambda();
+
+                Console.Write(await c.Field);
+                Console.Write(" " + await list[0] + await array[0] + await alias + await cast + await asTask! + await isTask!);
+                Console.Write(" " + (defaultTask is null));
+                Console.Write(" " + await tuple.a + await x + await outTask + await lambda(8));
+                Console.Write(" " + await C.Generic<string>(Task.FromResult("g")));
+
+                class C
+                {
+                    public int~ Field = Task.FromResult(0);
+                    public void~ Property { get; set; } = Task.CompletedTask;
+                    public static void Out(out int~ t) => t = Task.FromResult(7);
+                    public static T~ Generic<T>(T~ t) => t;
+                }
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90,
+                expectedOutput: ExecutionConditionUtil.IsCoreClr ? "1 234444 True 5678 g" : null).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void TaskType_IdentityWithTask()
+        {
+            // A task type is its Task, so the two spellings convert both ways and clash as overloads.
+            var source = """
+                using System.Threading.Tasks;
+
+                class C
+                {
+                    void M(int~ t) { Task<int> u = t; t = u; }
+                    void M(Task<int> t) { }
+                    void N(void~ t) { Task u = t; t = u; }
+                    void N(Task t) { }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (6,10): error CS0111: Type 'C' already defines a member called 'M' with the same parameter types
+                //     void M(Task<int> t) { }
+                Diagnostic(ErrorCode.ERR_MemberAlreadyExists, "M").WithArguments("M", "C").WithLocation(6, 10),
+                // (8,10): error CS0111: Type 'C' already defines a member called 'N' with the same parameter types
+                //     void N(Task t) { }
+                Diagnostic(ErrorCode.ERR_MemberAlreadyExists, "N").WithArguments("N", "C").WithLocation(8, 10));
+        }
+
+        [Fact]
+        public void TaskType_Nullable()
+        {
+            var source = """
+                #nullable enable
+                using System.Threading.Tasks;
+
+                class C
+                {
+                    async string?~ F() { await Task.Yield(); return null; }
+                    async Task<string?> FTwin() { await Task.Yield(); return null; }
+                    async string~ G() { await Task.Yield(); return null; }
+                    async Task<string> GTwin() { await Task.Yield(); return null; }
+                    async void M()
+                    {
+                        string s = await F();
+                        string sTwin = await FTwin();
+                    }
+                    string~? H() => null;
+                    Task<string>? HTwin() => null;
+                    string~ I() => null;
+                    Task<string> ITwin() => null;
+                    void~? J() => null;
+                }
+                """;
+            // The same warnings as for the Task twins.
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (8,52): warning CS8603: Possible null reference return.
+                //     async string~ G() { await Task.Yield(); return null; }
+                Diagnostic(ErrorCode.WRN_NullReferenceReturn, "null").WithLocation(8, 52),
+                // (9,61): warning CS8603: Possible null reference return.
+                //     async Task<string> GTwin() { await Task.Yield(); return null; }
+                Diagnostic(ErrorCode.WRN_NullReferenceReturn, "null").WithLocation(9, 61),
+                // (12,20): warning CS8600: Converting null literal or possible null value to non-nullable type.
+                //         string s = await F();
+                Diagnostic(ErrorCode.WRN_ConvertingNullableToNonNullable, "await F()").WithLocation(12, 20),
+                // (13,24): warning CS8600: Converting null literal or possible null value to non-nullable type.
+                //         string sTwin = await FTwin();
+                Diagnostic(ErrorCode.WRN_ConvertingNullableToNonNullable, "await FTwin()").WithLocation(13, 24),
+                // (17,20): warning CS8603: Possible null reference return.
+                //     string~ I() => null;
+                Diagnostic(ErrorCode.WRN_NullReferenceReturn, "null").WithLocation(17, 20),
+                // (18,29): warning CS8603: Possible null reference return.
+                //     Task<string> ITwin() => null;
+                Diagnostic(ErrorCode.WRN_NullReferenceReturn, "null").WithLocation(18, 29));
+        }
+
+        [Fact]
+        public void TaskType_Errors()
+        {
+            var source = """
+                #pragma warning disable CS0169 // The field is never used
+                unsafe class C
+                {
+                    int*~ pointer;
+                    System.Threading.Tasks.Task<int*> pointerTwin;
+                    System.Span<int>~ span;
+                    System.Threading.Tasks.Task<System.Span<int>> spanTwin;
+                    System.Console~ staticResult;
+                    System.Threading.Tasks.Task<System.Console> staticResultTwin;
+                    void~ ok;
+                    void M()
+                    {
+                        int*~ local = null;
+                        System.Threading.Tasks.Task<int*> localTwin = null;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, options: TestOptions.UnsafeReleaseDll).VerifyDiagnostics(
+                // (4,11): error CS0306: The type 'int*' may not be used as a type argument
+                //     int*~ pointer;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "pointer").WithArguments("int*").WithLocation(4, 11),
+                // (5,39): error CS0306: The type 'int*' may not be used as a type argument
+                //     System.Threading.Tasks.Task<int*> pointerTwin;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "pointerTwin").WithArguments("int*").WithLocation(5, 39),
+                // (6,23): error CS9244: The type 'Span<int>' may not be a ref struct or a type parameter allowing ref structs in order to use it as parameter 'TResult' in the generic type or method 'Task<TResult>'
+                //     System.Span<int>~ span;
+                Diagnostic(ErrorCode.ERR_NotRefStructConstraintNotSatisfied, "span").WithArguments("System.Threading.Tasks.Task<TResult>", "TResult", "System.Span<int>").WithLocation(6, 23),
+                // (7,51): error CS9244: The type 'Span<int>' may not be a ref struct or a type parameter allowing ref structs in order to use it as parameter 'TResult' in the generic type or method 'Task<TResult>'
+                //     System.Threading.Tasks.Task<System.Span<int>> spanTwin;
+                Diagnostic(ErrorCode.ERR_NotRefStructConstraintNotSatisfied, "spanTwin").WithArguments("System.Threading.Tasks.Task<TResult>", "TResult", "System.Span<int>").WithLocation(7, 51),
+                // (8,21): error CS0718: 'Console': static types cannot be used as type arguments
+                //     System.Console~ staticResult;
+                Diagnostic(ErrorCode.ERR_GenericArgIsStaticClass, "staticResult").WithArguments("System.Console").WithLocation(8, 21),
+                // (9,49): error CS0718: 'Console': static types cannot be used as type arguments
+                //     System.Threading.Tasks.Task<System.Console> staticResultTwin;
+                Diagnostic(ErrorCode.ERR_GenericArgIsStaticClass, "staticResultTwin").WithArguments("System.Console").WithLocation(9, 49),
+                // (13,9): error CS0306: The type 'int*' may not be used as a type argument
+                //         int*~ local = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*~").WithArguments("int*").WithLocation(13, 9),
+                // (13,15): warning CS0219: The variable 'local' is assigned but its value is never used
+                //         int*~ local = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "local").WithArguments("local").WithLocation(13, 15),
+                // (14,37): error CS0306: The type 'int*' may not be used as a type argument
+                //         System.Threading.Tasks.Task<int*> localTwin = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(14, 37),
+                // (14,43): warning CS0219: The variable 'localTwin' is assigned but its value is never used
+                //         System.Threading.Tasks.Task<int*> localTwin = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "localTwin").WithArguments("localTwin").WithLocation(14, 43));
+        }
+
+        [Fact]
+        public void TaskType_Disabled()
+        {
+            // Without Sharper, the task type reports the usual C# errors.
+            var source = """
+                class C
+                {
+                    void M()
+                    {
+                        int~ t = null;
+                        void~ u = null;
+                    }
+                }
+                """;
+            CreateCompilation(source, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (5,12): error CS1001: Identifier expected
+                //         int~ t = null;
+                Diagnostic(ErrorCode.ERR_IdentifierExpected, "~").WithLocation(5, 12),
+                // (5,12): error CS1002: ; expected
+                //         int~ t = null;
+                Diagnostic(ErrorCode.ERR_SemicolonExpected, "~").WithLocation(5, 12),
+                // (5,14): error CS0103: The name 't' does not exist in the current context
+                //         int~ t = null;
+                Diagnostic(ErrorCode.ERR_NameNotInContext, "t").WithArguments("t").WithLocation(5, 14),
+                // (6,9): error CS1547: Keyword 'void' cannot be used in this context
+                //         void~ u = null;
+                Diagnostic(ErrorCode.ERR_NoVoidHere, "void").WithLocation(6, 9),
+                // (6,13): error CS1001: Identifier expected
+                //         void~ u = null;
+                Diagnostic(ErrorCode.ERR_IdentifierExpected, "~").WithLocation(6, 13),
+                // (6,13): error CS1002: ; expected
+                //         void~ u = null;
+                Diagnostic(ErrorCode.ERR_SemicolonExpected, "~").WithLocation(6, 13),
+                // (6,15): error CS0103: The name 'u' does not exist in the current context
+                //         void~ u = null;
+                Diagnostic(ErrorCode.ERR_NameNotInContext, "u").WithArguments("u").WithLocation(6, 15));
+        }
+
+        [Fact]
+        public void TaskType_FactoryWithoutSharper()
+        {
+            // A task type built with SyntaxFactory in a C# tree reports that Sharper is not enabled.
+            var tree = SyntaxFactory.ParseSyntaxTree("class C { int~ F; }", s_sharperOptions);
+            var csharpTree = tree.WithRootAndOptions(tree.GetRoot(), TestOptions.Regular);
+            CreateCompilation(csharpTree, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (1,14): error CS8058: Feature 'Sharper' is experimental and unsupported; use '/features:sharper' to enable.
+                // class C { int~ F; }
+                Diagnostic(ErrorCode.ERR_FeatureIsExperimental, "~").WithArguments("Sharper", "sharper").WithLocation(1, 14),
+                // (1,16): warning CS0169: The field 'C.F' is never used
+                // class C { int~ F; }
+                Diagnostic(ErrorCode.WRN_UnreferencedField, "F").WithArguments("C.F").WithLocation(1, 16));
+        }
+
+        [Theory]
+        [CombinatorialData]
+        public void TaskType_Parsing(bool sharper)
+        {
+            var options = sharper ? s_sharperOptions : TestOptions.Regular;
+
+            // Every one of these is a syntax error in C#.
+            foreach (var text in new[] { "User~ x = y;", "User~ x;", "void~ x;", "User?~ x;", "User~? x;", "User~[] x;", "User[]~ x;", "User~~ x;", "List<User~> x;", "(int~, string) x;", "(User~ u, int n) = y;", "(List<int>~ a, int b) = y;", "int~ F() => null;", "using (User~ x = y) { }", "for (User~ x = y; ; ) { }", "foreach (User~ x in y) { }", "M(out User~ x);", "x = (User~)y;", "x = y is User~ u;", "x = y as User~;", "x = typeof(void~);", "x = new User~[3];", "x = F<User~>(y);" })
+            {
+                var statement = SyntaxFactory.ParseStatement(text, options: options);
+                Assert.True(sharper != statement.ContainsDiagnostics, text);
+                Assert.True(sharper == statement.DescendantNodes().OfType<TaskTypeSyntax>().Any(), text);
+            }
+
+            // `A.B < C > ~x;` parses in C# as a comparison, which is not a valid statement (CS0201), so the declaration
+            // takes nothing from C#.
+            var generic = SyntaxFactory.ParseStatement("A.B<C>~ x;", options: options);
+            Assert.False(generic.ContainsDiagnostics);
+            Assert.Equal(sharper ? SyntaxKind.LocalDeclarationStatement : SyntaxKind.ExpressionStatement, generic.Kind());
+        }
+
+        [Theory]
+        [CombinatorialData]
+        public void TaskType_Parsing_KeepsCSharpMeaning(bool sharper)
+        {
+            // `~` keeps its C# meaning, the prefix complement, with or without Sharper.
+            var options = sharper ? s_sharperOptions : TestOptions.Regular;
+            foreach (var text in new[] { "x = ~y;", "x = (T)~y;", "x = c ? ~y : z;", "x = y is T ? ~a : b;", "x = y as T ? ~a : b;", "using (c ? ~x : y) { }", "x = (A < B > ~c, d);", "x = (a, A < B > ~c);", "M(A < B > ~c);", "x = a < b > ~c;", "x = F<T>(~y);", "x = y[~i];" })
+            {
+                var statement = SyntaxFactory.ParseStatement(text, options: options);
+                Assert.False(statement.ContainsDiagnostics, text);
+                Assert.Empty(statement.DescendantNodes().OfType<TaskTypeSyntax>());
+            }
+        }
+
+        [Fact]
+        public void TaskType_SemanticModel()
+        {
+            var source = """
+                class C
+                {
+                    string~ F;
+                    void~ G;
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            var tree = comp.SyntaxTrees.Single();
+            var model = comp.GetSemanticModel(tree);
+            var taskTypes = tree.GetRoot().DescendantNodes().OfType<TaskTypeSyntax>().ToArray();
+            Assert.Equal("System.Threading.Tasks.Task<System.String>", model.GetTypeInfo(taskTypes[0]).Type.ToTestDisplayString());
+            Assert.Equal("System.Threading.Tasks.Task<System.String>", model.GetSymbolInfo(taskTypes[0]).Symbol.ToTestDisplayString());
+            Assert.Equal("System.String", model.GetTypeInfo(taskTypes[0].ElementType).Type.ToTestDisplayString());
+            Assert.Equal("System.Threading.Tasks.Task", model.GetTypeInfo(taskTypes[1]).Type.ToTestDisplayString());
+            Assert.True(SyntaxFacts.IsInTypeOnlyContext(taskTypes[0].ElementType));
+            Assert.True(SyntaxFacts.IsTypeSyntax(SyntaxKind.TaskType));
+        }
+
+        [Fact]
+        public void TaskType_SyntaxKind()
+        {
+            // Sharper syntax nodes sit apart from the upstream ones; an upstream merge must not reuse the value.
+            Assert.Equal(9901, (int)SyntaxKind.TaskType);
+            Assert.Single(Enum.GetValues(typeof(SyntaxKind)).Cast<SyntaxKind>(), k => (int)k == (int)SyntaxKind.TaskType);
+        }
+
+        [Fact]
         public void ValKeyword_SyntaxKind()
         {
             // ValKeyword sits apart from the upstream contextual keywords; an upstream merge must not reuse its value

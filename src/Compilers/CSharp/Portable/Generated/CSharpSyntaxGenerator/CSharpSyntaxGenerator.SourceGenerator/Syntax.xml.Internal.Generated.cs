@@ -1337,6 +1337,85 @@ internal sealed partial class NullableTypeSyntax : TypeSyntax
         => new NullableTypeSyntax(this.Kind, this.elementType, this.questionToken, GetDiagnostics(), annotations);
 }
 
+/// <summary>Class which represents the syntax node for a Sharper task type, such as int~.</summary>
+internal sealed partial class TaskTypeSyntax : TypeSyntax
+{
+    internal readonly TypeSyntax elementType;
+    internal readonly SyntaxToken tildeToken;
+
+    internal TaskTypeSyntax(SyntaxKind kind, TypeSyntax elementType, SyntaxToken tildeToken, DiagnosticInfo[]? diagnostics, SyntaxAnnotation[]? annotations)
+      : base(kind, diagnostics, annotations)
+    {
+        this.SlotCount = 2;
+        this.AdjustFlagsAndWidth(elementType);
+        this.elementType = elementType;
+        this.AdjustFlagsAndWidth(tildeToken);
+        this.tildeToken = tildeToken;
+    }
+
+    internal TaskTypeSyntax(SyntaxKind kind, TypeSyntax elementType, SyntaxToken tildeToken, SyntaxFactoryContext context)
+      : base(kind)
+    {
+        this.SetFactoryContext(context);
+        this.SlotCount = 2;
+        this.AdjustFlagsAndWidth(elementType);
+        this.elementType = elementType;
+        this.AdjustFlagsAndWidth(tildeToken);
+        this.tildeToken = tildeToken;
+    }
+
+    internal TaskTypeSyntax(SyntaxKind kind, TypeSyntax elementType, SyntaxToken tildeToken)
+      : base(kind)
+    {
+        this.SlotCount = 2;
+        this.AdjustFlagsAndWidth(elementType);
+        this.elementType = elementType;
+        this.AdjustFlagsAndWidth(tildeToken);
+        this.tildeToken = tildeToken;
+    }
+
+    /// <summary>TypeSyntax node representing the result type of the task, which may be void.</summary>
+    public TypeSyntax ElementType => this.elementType;
+    /// <summary>SyntaxToken representing the tilde.</summary>
+    public SyntaxToken TildeToken => this.tildeToken;
+
+    internal override GreenNode? GetSlot(int index)
+        => index switch
+        {
+            0 => this.elementType,
+            1 => this.tildeToken,
+            _ => null,
+        };
+
+    internal override SyntaxNode CreateRed(SyntaxNode? parent, int position) => new CSharp.Syntax.TaskTypeSyntax(this, parent, position);
+
+    public override void Accept(CSharpSyntaxVisitor visitor) => visitor.VisitTaskType(this);
+    public override TResult Accept<TResult>(CSharpSyntaxVisitor<TResult> visitor) => visitor.VisitTaskType(this);
+
+    public TaskTypeSyntax Update(TypeSyntax elementType, SyntaxToken tildeToken)
+    {
+        if (elementType != this.ElementType || tildeToken != this.TildeToken)
+        {
+            var newNode = SyntaxFactory.TaskType(elementType, tildeToken);
+            var diags = GetDiagnostics();
+            if (diags?.Length > 0)
+                newNode = newNode.WithDiagnosticsGreen(diags);
+            var annotations = GetAnnotations();
+            if (annotations?.Length > 0)
+                newNode = newNode.WithAnnotationsGreen(annotations);
+            return newNode;
+        }
+
+        return this;
+    }
+
+    internal override GreenNode SetDiagnostics(DiagnosticInfo[]? diagnostics)
+        => new TaskTypeSyntax(this.Kind, this.elementType, this.tildeToken, diagnostics, GetAnnotations());
+
+    internal override GreenNode SetAnnotations(SyntaxAnnotation[]? annotations)
+        => new TaskTypeSyntax(this.Kind, this.elementType, this.tildeToken, GetDiagnostics(), annotations);
+}
+
 /// <summary>Class which represents the syntax node for tuple type.</summary>
 internal sealed partial class TupleTypeSyntax : TypeSyntax
 {
@@ -27546,6 +27625,7 @@ internal partial class CSharpSyntaxVisitor<TResult>
     public virtual TResult VisitFunctionPointerUnmanagedCallingConventionList(FunctionPointerUnmanagedCallingConventionListSyntax node) => this.DefaultVisit(node);
     public virtual TResult VisitFunctionPointerUnmanagedCallingConvention(FunctionPointerUnmanagedCallingConventionSyntax node) => this.DefaultVisit(node);
     public virtual TResult VisitNullableType(NullableTypeSyntax node) => this.DefaultVisit(node);
+    public virtual TResult VisitTaskType(TaskTypeSyntax node) => this.DefaultVisit(node);
     public virtual TResult VisitTupleType(TupleTypeSyntax node) => this.DefaultVisit(node);
     public virtual TResult VisitFunctionType(FunctionTypeSyntax node) => this.DefaultVisit(node);
     public virtual TResult VisitTupleElement(TupleElementSyntax node) => this.DefaultVisit(node);
@@ -27801,6 +27881,7 @@ internal partial class CSharpSyntaxVisitor
     public virtual void VisitFunctionPointerUnmanagedCallingConventionList(FunctionPointerUnmanagedCallingConventionListSyntax node) => this.DefaultVisit(node);
     public virtual void VisitFunctionPointerUnmanagedCallingConvention(FunctionPointerUnmanagedCallingConventionSyntax node) => this.DefaultVisit(node);
     public virtual void VisitNullableType(NullableTypeSyntax node) => this.DefaultVisit(node);
+    public virtual void VisitTaskType(TaskTypeSyntax node) => this.DefaultVisit(node);
     public virtual void VisitTupleType(TupleTypeSyntax node) => this.DefaultVisit(node);
     public virtual void VisitFunctionType(FunctionTypeSyntax node) => this.DefaultVisit(node);
     public virtual void VisitTupleElement(TupleElementSyntax node) => this.DefaultVisit(node);
@@ -28085,6 +28166,9 @@ internal partial class CSharpSyntaxRewriter : CSharpSyntaxVisitor<CSharpSyntaxNo
 
     public override CSharpSyntaxNode VisitNullableType(NullableTypeSyntax node)
         => node.Update((TypeSyntax)Visit(node.ElementType), (SyntaxToken)Visit(node.QuestionToken));
+
+    public override CSharpSyntaxNode VisitTaskType(TaskTypeSyntax node)
+        => node.Update((TypeSyntax)Visit(node.ElementType), (SyntaxToken)Visit(node.TildeToken));
 
     public override CSharpSyntaxNode VisitTupleType(TupleTypeSyntax node)
         => node.Update((SyntaxToken)Visit(node.OpenParenToken), VisitList(node.Elements), (SyntaxToken)Visit(node.CloseParenToken));
@@ -29131,6 +29215,27 @@ internal partial class ContextAwareSyntax
         if (cached != null) return (NullableTypeSyntax)cached;
 
         var result = new NullableTypeSyntax(SyntaxKind.NullableType, elementType, questionToken, this.context);
+        if (hash >= 0)
+        {
+            SyntaxNodeCache.AddNode(result, hash);
+        }
+
+        return result;
+    }
+
+    public TaskTypeSyntax TaskType(TypeSyntax elementType, SyntaxToken tildeToken)
+    {
+#if DEBUG
+        if (elementType == null) throw new ArgumentNullException(nameof(elementType));
+        if (tildeToken == null) throw new ArgumentNullException(nameof(tildeToken));
+        if (tildeToken.Kind != SyntaxKind.TildeToken) throw new ArgumentException(nameof(tildeToken));
+#endif
+
+        int hash;
+        var cached = CSharpSyntaxNodeCache.TryGetNode((int)SyntaxKind.TaskType, elementType, tildeToken, this.context, out hash);
+        if (cached != null) return (TaskTypeSyntax)cached;
+
+        var result = new TaskTypeSyntax(SyntaxKind.TaskType, elementType, tildeToken, this.context);
         if (hash >= 0)
         {
             SyntaxNodeCache.AddNode(result, hash);
@@ -34573,6 +34678,27 @@ internal static partial class SyntaxFactory
         if (cached != null) return (NullableTypeSyntax)cached;
 
         var result = new NullableTypeSyntax(SyntaxKind.NullableType, elementType, questionToken);
+        if (hash >= 0)
+        {
+            SyntaxNodeCache.AddNode(result, hash);
+        }
+
+        return result;
+    }
+
+    public static TaskTypeSyntax TaskType(TypeSyntax elementType, SyntaxToken tildeToken)
+    {
+#if DEBUG
+        if (elementType == null) throw new ArgumentNullException(nameof(elementType));
+        if (tildeToken == null) throw new ArgumentNullException(nameof(tildeToken));
+        if (tildeToken.Kind != SyntaxKind.TildeToken) throw new ArgumentException(nameof(tildeToken));
+#endif
+
+        int hash;
+        var cached = SyntaxNodeCache.TryGetNode((int)SyntaxKind.TaskType, elementType, tildeToken, out hash);
+        if (cached != null) return (TaskTypeSyntax)cached;
+
+        var result = new TaskTypeSyntax(SyntaxKind.TaskType, elementType, tildeToken);
         if (hash >= 0)
         {
             SyntaxNodeCache.AddNode(result, hash);

@@ -222,11 +222,12 @@ meaning in Sharper, and code that uses it as a name keeps working.
 Inference keeps most types out of sight, but the wrapper types show up in public signatures constantly, so they get short forms. These are aliases for the BCL types, so lowering is trivial, the sharpener never introduces them, and an analyzer with a fixer can suggest them.
 
 - **`T[..]`** is `IEnumerable<T>`: a lazy, unsized sequence, next to `T[]`, a real array.
-- **`T^`** (the hat) is `Task<T>`, and `void^` is the non-generic `Task`. It is the leading candidate, to be confirmed by trying it on real signatures. `Task<>` is at least about one percent of raw source in async-heavy code, so a short marker improves readability even without any other Sharper feature. It beat `~` (felt unsettling), `async T` (breaks the reading flow) and trailing dots (too close to `T[..]`).
+- **`T~`** (the tilde) is `Task<T>`, and `void~` is the non-generic `Task`. `T~` is a running task (hot), not a lazy value. Tried on real signatures (#20): in six open-source applications (eShop, eShopOnWeb, CleanArchitecture, bitwarden, nopCommerce, jellyfin) it covers 99.6% of the async declarations. The common results (`IActionResult~`, `bool~`, `Order?~`, `IList<Order>~`) read well. `void~` is a third of them and is the weakest form, but it keeps a file from mixing `Task` with the short forms.
+- **Why not the hat.** `T^` was the earlier candidate. `^` is already XOR and index-from-end, and XOR is valid C# in tuples (`(a ^ b, c)`), after `is` and `as`, so the hat could not be used there. `~` has no binary or postfix meaning in C#, so every `T~` is a syntax error today and the suffix works in every type position. Its other meanings are weak for C# readers: Haskell lazy patterns (hence the "hot, not lazy" note above) and pre-1.0 Rust owned pointers. `async T` breaks the reading flow, and trailing dots are too close to `T[..]`. `$`, `#`, `` ` ``, `@`, `'`, `!`, `%` and `&` were checked and ruled out.
 - **`(A, B) -> R`** is `Func<A, B, R>`, and `() -> T` is a thunk. `=>` stays reserved for bodies, lambdas included: `->` is only a type arrow, because `x -> F(x)` is already a pointer member access in C#.
-- **Stacking** reads left to right, innermost first: `int[..]^` is `Task<IEnumerable<int>>`, `int^[..]` is `IEnumerable<Task<int>>`, and `(int) -> int^` is `Func<int, Task<int>>`.
-- **Parsing:** a postfix hat in a type position is resolved by lookahead, as C# does for `T? x`. The existing `^1` index-from-end is a prefix in expressions, so there is no clash.
-- **Not sugared:** `ValueTask<T>` is rare enough to stay spelled out, and `IAsyncEnumerable<T>` is avoided in practice. A stream is inferred in a pipeline when needed, and async streams are not a focus.
+- **Stacking** reads left to right, innermost first: `int[..]~` is `Task<IEnumerable<int>>`, `int~[..]` is `IEnumerable<Task<int>>`, `User?~` is `Task<User?>`, `User~?` is a nullable `Task<User>`, and `(int) -> int~` is `Func<int, Task<int>>`.
+- **Parsing:** a postfix `~` after a type, next to `?`, `*` and `[]`. Unlike `T* x`, which C# already reads as a declaration because the multiplication can never be a statement, `~` has no binary meaning at all, so there is nothing to disambiguate.
+- **Not sugared:** `ValueTask<T>` stays spelled out. It is 0.4% of the async declarations in the six applications above, mostly where an interface imposes it (`DisposeAsync`, EF Core interceptors); it is common only in performance-sensitive libraries such as Roslyn (22%). `IAsyncEnumerable<T>` is avoided in practice. A stream is inferred in a pipeline when needed, and async streams are not a focus.
 
 ## Sequences and yield
 
@@ -245,8 +246,8 @@ Idiomatic C# passes interfaces where a functional style would pass functions, pa
 
 - **Lambda to interface.** `Render(user, id => new Profile { Plan = "Pro" })` works where `IProfiles` is expected. It lowers to a generated sealed class implementing the interface. Eligible interfaces have exactly one abstract method, default members do not count, and generic methods are excluded.
 - **Purely additive.** The conversion applies only where C# currently reports an error, so a lambda with a delegate overload still binds to the delegate. This keeps the no-semantic-breaking-changes rule, and the conversion never appears in sharpened code.
-- **Details.** Return types lift (a plain `Profile` where `(Profile | Unavailable)^` is expected), effects are checked against a `pure` contract on the interface method, captured variables become fields, non-capturing lambdas can be cached as singletons, and the generated class gets a readable name for stack traces.
-- **Reverse direction.** A single-method interface converts to the matching function type, and for a multi-method interface you name the method group, as in `profiles.Load`, which C# already converts to a delegate. With `Render` taking `(int) -> (Profile | Unavailable)^`, the call site becomes `users.Find(id) |> Render(it, profiles.Load)`, with no thunk.
+- **Details.** Return types lift (a plain `Profile` where `(Profile | Unavailable)~` is expected), effects are checked against a `pure` contract on the interface method, captured variables become fields, non-capturing lambdas can be cached as singletons, and the generated class gets a readable name for stack traces.
+- **Reverse direction.** A single-method interface converts to the matching function type, and for a multi-method interface you name the method group, as in `profiles.Load`, which C# already converts to a delegate. With `Render` taking `(int) -> (Profile | Unavailable)~`, the call site becomes `users.Find(id) |> Render(it, profiles.Load)`, with no thunk.
 - **Initializer shape.** `new IProfiles { Load = id => ... }` lowers to the same kind of generated class and covers most stubbing, which makes most mocking libraries unnecessary for that purpose. An unassigned member is a compile error unless the interface supplies a default, and a standard `Unexpected` marker (`_ = Unexpected`) gives the strict mode of mock libraries, throwing with the member name.
 - **Argument matching.** The ordered-arms block from the state machine could serve as a lambda body, so `When(42).Returns(...)` becomes `{ 42 => new Profile { ... }, _ => new Unavailable() }`. The syntax for arms as a lambda body is not designed yet.
 - **What it does not cover:** interaction verification (was `Load` called twice?), which works by capturing a list in the lambda, and auto-mocking of very large interfaces.
@@ -260,7 +261,7 @@ A `_` in argument position asks the compiler to fill in the argument from the ca
 repeated everywhere and is easy to forget.
 
 ```
-async void^ Sync(Store store, CancellationToken ct)
+async void~ Sync(Store store, CancellationToken ct)
 {
     val items = await store.LoadAsync(_);       // ct is the only CancellationToken in scope
     await store.SaveAsync(items, _);
@@ -573,10 +574,10 @@ public async Task GivesUpWhenProfilesStayUnavailable()
 }
 ```
 
-Sharper with the same structure as the interface version, after sharpening and the fixers. The interface stays, and the hat, the pipe and the inferred result union do the rest:
+Sharper with the same structure as the interface version, after sharpening and the fixers. The interface stays, and the task tilde, the pipe and the inferred result union do the rest:
 
 ```
-interface IProfiles { (Profile | Unavailable)^ Load(int userId); }
+interface IProfiles { (Profile | Unavailable)~ Load(int userId); }
 
 static infer Render(User user, IProfiles profiles) =>
     Retry(() => profiles.Load(user.Id), times: 3, when: it is Unavailable)
@@ -591,7 +592,7 @@ class FakeProfiles((Profile | Unavailable) result) : IProfiles
 }
 
 [Fact]
-public void^ RendersThePlan() =>
+public void~ RendersThePlan() =>
     Assert.Equal("Hello, Ada (Pro)!",
         Render(new User { Name = "Ada" }, new FakeProfiles(new Profile { Plan = "Pro" })));
 ```
@@ -599,22 +600,22 @@ public void^ RendersThePlan() =>
 Sharper in the functional style, where the interface becomes a function parameter:
 
 ```
-static infer Render(User user, () -> (Profile | Unavailable)^ load) =>
+static infer Render(User user, () -> (Profile | Unavailable)~ load) =>
     Retry(load, times: 3, when: it is Unavailable)
         |> $"Hello, {user.Name} ({it.Plan})!";
 
 static infer Hello(int id, IUsers users, IProfiles profiles) =>
     users.Find(id)
         |> Render(it, () => profiles.Load(it.Id));
-    // inferred: (string | NotFound | Unavailable)^
+    // inferred: (string | NotFound | Unavailable)~
 
 [Fact]
-public void^ RendersThePlan() =>
+public void~ RendersThePlan() =>
     Assert.Equal("Hello, Ada (Pro)!",
         Render(new User { Name = "Ada" }, new Profile { Plan = "Pro" }));
 
 [Fact]
-public void^ GivesUpWhenProfilesStayUnavailable() =>
+public void~ GivesUpWhenProfilesStayUnavailable() =>
     Assert.IsType<Unavailable>(
         Render(new User { Name = "Ada" }, new Unavailable()));
 ```
@@ -625,7 +626,7 @@ What it shows:
 - **The honest C# baseline is the interface.** Most C# developers would write `IProfiles`, partly for DI conventions and partly because, without inference, passing functions means spelling out `Func<int, Task<ProfileResult>>` and `Task.FromResult` everywhere. The functional C# version is structurally better, narrower and easier to test, but it hurts the eyes.
 - **That is the pitch.** Sharper does not forbid interfaces. It makes the narrow, functional version as cheap to write as the interface one, so the better structure stops costing readability.
 - **One stage is fine in C#.** Each stage costs an `await`, a test and a forwarding `return`, so the function grows linearly and nests. Forwarding an error needs a named case in every stage, and the tidier `is not User user` idiom throws the error away. The trailing `throw` exists because switch statements over unions also have to cover `null`; that is as reported for RC1 and not verified here.
-- **Parameter types decide how much a function owns (current direction).** Lifting only happens on a type mismatch, so a wrapper-typed parameter opts out of it. `T` is a finished value and the pipe lifts. `T^` is a running task, hot and one-shot, so two task parameters run concurrently and the body combines them explicitly (for example with `collect`). `() -> T` is a lazy recipe. `() -> T^` is a restartable async recipe, which is what retry, timeout and fallback need. Whether the parameter type alone decides, or an explicit marker is needed, is still open.
+- **Parameter types decide how much a function owns (current direction).** Lifting only happens on a type mismatch, so a wrapper-typed parameter opts out of it. `T` is a finished value and the pipe lifts. `T~` is a running task, hot and one-shot, so two task parameters run concurrently and the body combines them explicitly (for example with `collect`). `() -> T` is a lazy recipe. `() -> T~` is a restartable async recipe, which is what retry, timeout and fallback need. Whether the parameter type alone decides, or an explicit marker is needed, is still open.
 - **`it` inside a thunk** still means the stage value, because `it` only binds in single-parameter lambdas and a thunk has none.
 - **Tests.** In the functional Sharper version a plain value embeds into any effect, so the test passes `new Profile { Plan = "Pro" }` where a restartable async recipe is expected, and `new Unavailable()` becomes a recipe that always fails. The interface versions still need a fake class (in Sharper its `Load` can return a plain value, which is lifted), and the functional C# version needs `Task.FromResult` plumbing. That a test boundary fails on an error case is a runner convention that is not settled.
 - **Interfaces as parameters.** Passing an interface hands over every method, while a recipe hands over one capability, and the checker cannot see the implementation behind an interface call. Interface methods would default to impure, and a Sharper-declared interface could mark a method `pure` as a contract for its implementers. A lambda converting to a single-method interface, as in Java, is an open idea.
@@ -761,7 +762,7 @@ TypeScript was a big inspiration, including its attitude of taming a messy legac
 
 - **Copy the adoption playbook:** a strictness ladder per file or project, file-by-file migration, `.d.ts`-style bindings, and an escape hatch.
 - **Model `assume` on `@ts-expect-error`.** It suppresses a check and then fails the build once the checker can prove the fact itself, so escape hatches do not rot and stay searchable.
-- **Be careful with non-erasable syntax.** As I recall, TypeScript later added a flag to forbid features that need real transformation (enums, namespaces), because they broke the "types are just erased" promise. Nearly everything Sharper adds is non-erasable by nature (arm blocks, pipes, `it`, the hat), so each addition must earn its place with a readable lowering and the round-trip guarantee, and the total count should stay small.
+- **Be careful with non-erasable syntax.** As I recall, TypeScript later added a flag to forbid features that need real transformation (enums, namespaces), because they broke the "types are just erased" promise. Nearly everything Sharper adds is non-erasable by nature (arm blocks, pipes, `it`, the task tilde), so each addition must earn its place with a readable lowering and the round-trip guarantee, and the total count should stay small.
 - **The object root is C#'s deepest legacy.** `ToString`, `GetHashCode`, `Equals` and the ability to lock on any object come with every type. For the effect system it means virtual calls on root members, such as string interpolation of a value, would count as impure by default. An idea to explore: attest the root members as pure by contract (the .NET design guidelines say they should not throw or have side effects), flag overrides that violate it, and allow `lock` only on a dedicated lock type.
 
 ## Decisions, dropped ideas and parked topics
@@ -782,7 +783,7 @@ What is settled so far, what was tried and dropped, and what waits for a later s
 - `Parse` functions live on the types and take only raw strings, while constructors take typed values.
 - Exceptions are handled with `try expr catch { ... }`, and there is no `finally`; low-level code lives in C#.
 - Sorting and similar functions take an explicit comparator function instead of generic constraints.
-- Short type forms: `T[..]` for sequences, the hat (`T^`) for `Task<T>` as the leading candidate, and `() -> T` for functions.
+- Short type forms: `T[..]` for sequences, `T~` for `Task<T>` (`void~` for `Task`; `ValueTask` stays spelled out), and `() -> T` for functions.
 - `->` is only the arrow of function types; lambdas keep `=>`. A function type is `Func` or `Action`, never a synthesized delegate (see [function types](../features/function-types.md)).
 - Purity has three levels (impure, pure, total), and `total` is a checked assertion with inference for easy cases.
 - The sharpener is minimal and total, cleanup belongs to analyzers and fixers, and lowering undoes sharpening.
@@ -809,7 +810,7 @@ What is settled so far, what was tried and dropped, and what waits for a later s
 - The lowering rule for `..rest` on types that are not sliceable.
 - Local mutation that does not escape (in-place quicksort), including escape analysis and a "mutates its argument" effect.
 - Structural unions versus erasure to `object`, and parallel versus sequential batches.
-- A few more passes through all the concepts before any syntax is finalized: how union types are spelled, the deep-dive questions in the open questions, and the unsettled spellings (the hat, arms as a lambda body, a lift marker).
+- A few more passes through all the concepts before any syntax is finalized: how union types are spelled, the deep-dive questions in the open questions, and the unsettled spellings (arms as a lambda body, a lift marker).
 
 ## Open Questions
 
@@ -822,8 +823,8 @@ What is settled so far, what was tried and dropped, and what waits for a later s
 - Which effect conversions are safe enough to infer automatically, and which need a manual converter?
 - **Untagged unions and generics (deep dive).** If an error case passes through pipes, generic code over `T | NotFound` cannot tell whether `T` is itself `NotFound`, so behavior changes with the instantiation and nested options collapse. C# 15 unions have the same trap. One candidate is to let only declared error cases pass through, treat an unconstrained `T` as never an error, and reject instantiating it with one.
 - **Implicit lifting versus an explicit marker (deep dive).** Should the parameter type alone decide whether a pipe stage lifts, or should lifting be spelled out? Implicit lifting is a type-directed coercion, errors from a lift that did not fire will be confusing, and inlay hints in the IDE only partly help.
-- **`T^` is a hot task (deep dive).** Creating it starts the effect, so the type does not describe a computation. `^` means "may suspend", not "impure", and purity is a separate flag. How this relates to cold recipes (`() -> T^`) and to a single coherent effect story is open.
-- **Structural unions versus reified generics (deep dive).** TypeScript can be structural because erasure is free in JavaScript, but on the CLR generics, overloads, reflection and C# callers all see real types. `A | B` needs a canonical CLR type, yet in generic code the normal form of `T | NotFound` depends on `T` (it should collapse when `T` is `NotFound`), and `Profile^` to `(Profile | Unavailable)^` or `List<Profile>` to `List<Profile | X>` are not CLR conversions. This is a choice, not a fix: nominal or tagged unions in generic positions, erasure to `object` (boxing, opaque to C#), or copying conversions. It subsumes the untagged-unions question above.
+- **`T~` is a hot task (deep dive).** Creating it starts the effect, so the type does not describe a computation. `~` means "may suspend", not "impure", and purity is a separate flag. How this relates to cold recipes (`() -> T~`) and to a single coherent effect story is open. It does not block the spelling: `T~` is a plain alias for `Task<T>`, which is already hot in C#. Shipping it does fix one thing, though: `~` can never later become a different type (a cold computation, `ValueTask` or "any awaitable") without breaking every signature written with it.
+- **Structural unions versus reified generics (deep dive).** TypeScript can be structural because erasure is free in JavaScript, but on the CLR generics, overloads, reflection and C# callers all see real types. `A | B` needs a canonical CLR type, yet in generic code the normal form of `T | NotFound` depends on `T` (it should collapse when `T` is `NotFound`), and `Profile~` to `(Profile | Unavailable)~` or `List<Profile>` to `List<Profile | X>` are not CLR conversions. This is a choice, not a fix: nominal or tagged unions in generic positions, erasure to `object` (boxing, opaque to C#), or copying conversions. It subsumes the untagged-unions question above.
 - **Purity needs deep immutability (deep dive).** "Depends only on its arguments" is undefined when an argument is a reference to mutable data, so memoization, hoisting, lazy collection expressions and the rule that `T[..]` promises neither laziness nor eagerness all break on a mutable `List`, and any `List` converts to `T[..]` because it aliases `IEnumerable<T>`. Nullable reference types get away with an unsound erased layer because it never changes codegen, while Sharper's facts would drive optimizations. The choice: make immutability the foundation and treat purity as meaningful only over representationally immutable data (readonly all the way down, verified in IL), or keep the facts advisory and give up the optimizations.
 - **Implicit lifting stops at generics and `object` (deep dive).** Lifting fires on a type mismatch, but a generic `Log<T>(T x)` or an `object` parameter accepts a `Task` with no mismatch, and with the object root every value fits there. A library adding an overload can silently flip a call site between lifting and not lifting. At minimum generic and `object` positions need an explicit lift marker, which largely answers the implicit-versus-explicit question above.
 - **Inferred domains swallow exhaustiveness.** If a refined domain were ever inferred from arm patterns, a forgotten arm would narrow the domain instead of raising a non-exhaustive error, and the errors would surface at call sites instead. That is why arms are not a source of parameter types; domains are written out.

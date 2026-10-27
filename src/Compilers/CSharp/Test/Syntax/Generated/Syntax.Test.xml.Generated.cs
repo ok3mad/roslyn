@@ -55,6 +55,9 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         private static Syntax.InternalSyntax.NullableTypeSyntax GenerateNullableType()
             => InternalSyntaxFactory.NullableType(GenerateIdentifierName(), InternalSyntaxFactory.Token(SyntaxKind.QuestionToken));
 
+        private static Syntax.InternalSyntax.TaskTypeSyntax GenerateTaskType()
+            => InternalSyntaxFactory.TaskType(GenerateIdentifierName(), InternalSyntaxFactory.Token(SyntaxKind.TildeToken));
+
         private static Syntax.InternalSyntax.TupleTypeSyntax GenerateTupleType()
             => InternalSyntaxFactory.TupleType(InternalSyntaxFactory.Token(SyntaxKind.OpenParenToken), new Microsoft.CodeAnalysis.Syntax.InternalSyntax.SeparatedSyntaxList<Syntax.InternalSyntax.TupleElementSyntax>(), InternalSyntaxFactory.Token(SyntaxKind.CloseParenToken));
 
@@ -931,6 +934,17 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
 
             Assert.NotNull(node.ElementType);
             Assert.Equal(SyntaxKind.QuestionToken, node.QuestionToken.Kind);
+
+            AttachAndCheckDiagnostics(node);
+        }
+
+        [Fact]
+        public void TestTaskTypeFactoryAndProperties()
+        {
+            var node = GenerateTaskType();
+
+            Assert.NotNull(node.ElementType);
+            Assert.Equal(SyntaxKind.TildeToken, node.TildeToken.Kind);
 
             AttachAndCheckDiagnostics(node);
         }
@@ -4390,6 +4404,32 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         public void TestNullableTypeIdentityRewriter()
         {
             var oldNode = GenerateNullableType();
+            var rewriter = new IdentityRewriter();
+            var newNode = rewriter.Visit(oldNode);
+
+            Assert.Same(oldNode, newNode);
+        }
+
+        [Fact]
+        public void TestTaskTypeTokenDeleteRewriter()
+        {
+            var oldNode = GenerateTaskType();
+            var rewriter = new TokenDeleteRewriter();
+            var newNode = rewriter.Visit(oldNode);
+
+            if(!oldNode.IsMissing)
+            {
+                Assert.NotEqual(oldNode, newNode);
+            }
+
+            Assert.NotNull(newNode);
+            Assert.True(newNode.IsMissing, "No tokens => missing");
+        }
+
+        [Fact]
+        public void TestTaskTypeIdentityRewriter()
+        {
+            var oldNode = GenerateTaskType();
             var rewriter = new IdentityRewriter();
             var newNode = rewriter.Visit(oldNode);
 
@@ -10582,6 +10622,9 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         private static NullableTypeSyntax GenerateNullableType()
             => SyntaxFactory.NullableType(GenerateIdentifierName(), SyntaxFactory.Token(SyntaxKind.QuestionToken));
 
+        private static TaskTypeSyntax GenerateTaskType()
+            => SyntaxFactory.TaskType(GenerateIdentifierName(), SyntaxFactory.Token(SyntaxKind.TildeToken));
+
         private static TupleTypeSyntax GenerateTupleType()
             => SyntaxFactory.TupleType(SyntaxFactory.Token(SyntaxKind.OpenParenToken), new SeparatedSyntaxList<TupleElementSyntax>(), SyntaxFactory.Token(SyntaxKind.CloseParenToken));
 
@@ -11459,6 +11502,17 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             Assert.NotNull(node.ElementType);
             Assert.Equal(SyntaxKind.QuestionToken, node.QuestionToken.Kind());
             var newNode = node.WithElementType(node.ElementType).WithQuestionToken(node.QuestionToken);
+            Assert.Equal(node, newNode);
+        }
+
+        [Fact]
+        public void TestTaskTypeFactoryAndProperties()
+        {
+            var node = GenerateTaskType();
+
+            Assert.NotNull(node.ElementType);
+            Assert.Equal(SyntaxKind.TildeToken, node.TildeToken.Kind());
+            var newNode = node.WithElementType(node.ElementType).WithTildeToken(node.TildeToken);
             Assert.Equal(node, newNode);
         }
 
@@ -14917,6 +14971,32 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         public void TestNullableTypeIdentityRewriter()
         {
             var oldNode = GenerateNullableType();
+            var rewriter = new IdentityRewriter();
+            var newNode = rewriter.Visit(oldNode);
+
+            Assert.Same(oldNode, newNode);
+        }
+
+        [Fact]
+        public void TestTaskTypeTokenDeleteRewriter()
+        {
+            var oldNode = GenerateTaskType();
+            var rewriter = new TokenDeleteRewriter();
+            var newNode = rewriter.Visit(oldNode);
+
+            if(!oldNode.IsMissing)
+            {
+                Assert.NotEqual(oldNode, newNode);
+            }
+
+            Assert.NotNull(newNode);
+            Assert.True(newNode.IsMissing, "No tokens => missing");
+        }
+
+        [Fact]
+        public void TestTaskTypeIdentityRewriter()
+        {
+            var oldNode = GenerateTaskType();
             var rewriter = new IdentityRewriter();
             var newNode = rewriter.Visit(oldNode);
 

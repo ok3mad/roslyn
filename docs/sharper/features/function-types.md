@@ -29,7 +29,7 @@ parameters.
   access, so `x -> F(x)` is still `(*x).F(x)`.
 - **The arrow is right-associative:** `(int) -> (int) -> int` is `Func<int, Func<int, int>>`.
 - **A suffix applies to the return type:** `(int) -> int?` is `Func<int, int?>`, and `(int) -> int[]` is
-  `Func<int, int[]>`. The same goes for `T^` (#20) and `T[..]` (#19) once they exist.
+  `Func<int, int[]>`. The same goes for `T[..]` (#19) and `T~` (#20).
 - **Parameters are types,** without names or modifiers. A parameter of tuple type needs its own parentheses:
   `((int, int)) -> int`.
 - **Constraints are those of `Func` and `Action`:** a pointer or a static type cannot be a parameter or return type
