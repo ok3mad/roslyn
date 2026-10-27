@@ -3661,6 +3661,34 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 Diagnostic(ErrorCode.ERR_CannotInferDelegateType, "(y) => y").WithLocation(10, 17));
         }
 
+        [Theory]
+        [CombinatorialData]
+        public void ValLambda_SimpleLambdaNeedsParentheses(bool sharper)
+        {
+            // Like C#'s parameter modifiers, val needs the parenthesized form: val x => x is the same syntax error with or without
+            // Sharper. A clearer error is https://github.com/ok3mad/roslyn/issues/98.
+            var source = """
+                using System;
+                class C
+                {
+                    void M()
+                    {
+                        Func<int, int> f = val x => x;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: sharper ? s_sharperOptions : TestOptions.Regular, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (6,28): error CS0103: The name 'val' does not exist in the current context
+                //         Func<int, int> f = val x => x;
+                Diagnostic(ErrorCode.ERR_NameNotInContext, "val").WithArguments("val").WithLocation(6, 28),
+                // (6,32): error CS1002: ; expected
+                //         Func<int, int> f = val x => x;
+                Diagnostic(ErrorCode.ERR_SemicolonExpected, "x").WithLocation(6, 32),
+                // (6,32): error CS0201: Only assignment, call, increment, decrement, await, and new object expressions can be used as a statement
+                //         Func<int, int> f = val x => x;
+                Diagnostic(ErrorCode.ERR_IllegalStatement, "x => x").WithLocation(6, 32));
+        }
+
         [Fact]
         public void ValLambda_StructCopies()
         {

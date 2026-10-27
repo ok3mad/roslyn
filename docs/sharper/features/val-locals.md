@@ -66,6 +66,8 @@ Func<int, int> f = (val x) => { x = 0; return x; };   // error CS1656: Cannot as
   parameter is written through, and `x = ref y` is CS20006.
 - It follows C#'s rules for implicitly typed parameters: `(val a, b)` is fine, `(val a, int b)` is CS0748,
   `(val x = 1)` is CS9098, `(params val x)` is CS9272, and `var f = (val x) => x` has no natural type (CS8917).
+- The parentheses are required, as for C#'s modifiers: `val x => x` is a syntax error
+  ([#98](https://github.com/ok3mad/roslyn/issues/98) is a clearer message).
 - Anonymous methods (`delegate (val x) { }`) and local functions take only explicitly typed parameters, so `val` is
   a type name there, as in C#.
 
@@ -100,5 +102,4 @@ without a designation is still a type test.
 - **Edit and Continue** has not been verified with `val` ([#90](https://github.com/ok3mad/roslyn/issues/90)).
 - **Deeper immutability:** `val` makes the binding read-only, and a struct value with it, but not the object behind a
   reference. A type-level marker is an open question ([#92](https://github.com/ok3mad/roslyn/issues/92)).
-- **Not started:** `readonly` locals ([#16](https://github.com/ok3mad/roslyn/issues/16)) and `val` lambda parameters
-  ([#17](https://github.com/ok3mad/roslyn/issues/17)).
+- **Not started:** `readonly` locals ([#16](https://github.com/ok3mad/roslyn/issues/16)).
