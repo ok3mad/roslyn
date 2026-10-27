@@ -112,6 +112,7 @@ internal sealed class SyntaxComparer(
         WhenClause,                        // tied to parent
 
         YieldReturnStatement,              // tied to parent
+        YieldReturnSpreadStatement,        // tied to parent
         YieldBreakStatement,               // tied to parent
         GotoStatement,
         GotoCaseStatement,
@@ -212,6 +213,7 @@ internal sealed class SyntaxComparer(
             case Label.FinallyClause:
             case Label.ForStatementPart:
             case Label.YieldReturnStatement:
+            case Label.YieldReturnSpreadStatement:
             case Label.YieldBreakStatement:
             case Label.FromClauseLambda:
             case Label.LetClauseLambda:
@@ -370,7 +372,9 @@ internal sealed class SyntaxComparer(
                 return Label.YieldBreakStatement;
 
             case SyntaxKind.YieldReturnStatement:
-                return Label.YieldReturnStatement;
+                // Sharper: a spread `yield return ..xs` is a loop with its own state machine states and hoisted enumerator,
+                // so it is distinct from a yield return of a single value, as yield break is.
+                return IsSharperYieldReturnSpread(node) ? Label.YieldReturnSpreadStatement : Label.YieldReturnStatement;
 
             case SyntaxKind.DoStatement:
                 return Label.DoStatement;
@@ -558,6 +562,14 @@ internal sealed class SyntaxComparer(
         // contain a lambda, isLeaf must be false for statement syntax.
         return Label.Ignored;
     }
+
+    /// <summary>
+    /// True for `yield return ..e;` with the Sharper feature on. The spread is decided when binding (where `..e` is not a
+    /// valid range), so this also includes the rare ranges of that form in Sharper code.
+    /// </summary>
+    private static bool IsSharperYieldReturnSpread(SyntaxNode? node)
+        => node is YieldStatementSyntax { Expression: RangeExpressionSyntax { LeftOperand: null, RightOperand: not null } } &&
+           node.SyntaxTree.Options.Features.ContainsKey("sharper");
 
     private static Label ClassifyTopSyntax(SyntaxKind kind, SyntaxNode? node, out bool isLeaf)
     {

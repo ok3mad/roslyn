@@ -2597,6 +2597,21 @@
         <target state="translated">Element „{0}” nie może być zapieczętowany, ponieważ zawierający go rekord nie jest zapieczętowany.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperFunctionTypeParameterModifier">
+        <source>A function type parameter cannot be '{0}', because a function type is a 'System.Func' or 'System.Action' delegate.</source>
+        <target state="new">A function type parameter cannot be '{0}', because a function type is a 'System.Func' or 'System.Action' delegate.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperFunctionTypeParameterName">
+        <source>A function type cannot name its parameters. Remove the name '{0}'.</source>
+        <target state="new">A function type cannot name its parameters. Remove the name '{0}'.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperFunctionTypeTooManyParameters">
+        <source>A function type cannot have more than {0} parameters, because no 'System.Func' or 'System.Action' delegate has more.</source>
+        <target state="new">A function type cannot have more than {0} parameters, because no 'System.Func' or 'System.Action' delegate has more.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperReadOnlyLocalWithNoInitializer">
         <source>A readonly local must be initialized in its declaration, because it cannot be assigned later.</source>
         <target state="new">A readonly local must be initialized in its declaration, because it cannot be assigned later.</target>

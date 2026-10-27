@@ -2613,6 +2613,9 @@ namespace Microsoft.CodeAnalysis.CSharp
                 or ErrorCode.ERR_SharperValMayNotBindToType
                 or ErrorCode.ERR_SharperValDeconstructionDisallowsSpecificType
                 or ErrorCode.ERR_SharperValRefReassignment
+                or ErrorCode.ERR_SharperFunctionTypeParameterName
+                or ErrorCode.ERR_SharperFunctionTypeParameterModifier
+                or ErrorCode.ERR_SharperFunctionTypeTooManyParameters
                 or ErrorCode.WRN_SharperReadOnlyLocalMemberCallOnCopy
                 or ErrorCode.ERR_SharperReadOnlyLocalWithNoInitializer
                     => false,

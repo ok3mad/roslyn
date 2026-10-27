@@ -1,6 +1,6 @@
 # `readonly` locals
 
-**Status:** Prototype, on branch `sharper/readonly-locals`. Requires `/features:sharper`. Issue:
+**Status:** Prototype, merged into `main`. Requires `/features:sharper`. Issue:
 [#16](https://github.com/ok3mad/roslyn/issues/16).
 
 ## Summary
@@ -23,9 +23,9 @@ reassigned, `readonly int x` and `readonly var x` cannot, and `val x` is shortha
 
 - Every write is an error: assignment, compound assignment, `++`/`--`, passing as `ref` or `out`, and writes to fields
   of a struct local (CS1656, CS1657, CS1654).
-- A non-readonly member of a struct `readonly` local runs on a copy and warns: CS20007, the readonly-local form of
+- A non-readonly member of a struct `readonly` local runs on a copy and warns: CS20010, the readonly-local form of
   CS20003. Members found by pattern (`GetEnumerator`, property patterns) do the same.
-- A `readonly` local must have an initializer (CS20008), because nothing can assign it later. `readonly var x;` reports
+- A `readonly` local must have an initializer (CS20011), because nothing can assign it later. `readonly var x;` reports
   `var`'s CS0818 instead.
 - `readonly var` reports the same errors as `var` where `var` cannot be used (no initializer, `null`, several
   declarators).
@@ -58,12 +58,17 @@ assignment). Sharper does not change that.
 ## Not covered
 
 These have no place for a modifier in the C# syntax tree, so they stay syntax errors. `val` covers the inferred cases.
+Whether to support them is [#95](https://github.com/ok3mad/roslyn/issues/95).
 
 - `for (readonly int i = 0; ...)`: `ForStatementSyntax` has no modifiers. Supporting it needs a public syntax API
   change, for a loop variable that the loop usually increments. `for (val i = ...; ...)` works.
 - `foreach (readonly int x in xs)`: use `foreach (val x in xs)`. A foreach variable is already read-only in C#.
 - `readonly var (a, b) = e` and `(readonly int a, readonly var b) = e`: use `val (a, b) = e`.
 - `out readonly int n`: use `out val n`.
+
+The IDE does not know `readonly` locals yet ([#96](https://github.com/ok3mad/roslyn/issues/96)), and parameters have no
+`readonly` form ([#97](https://github.com/ok3mad/roslyn/issues/97)). CS20010 warns for every non-readonly member, like
+CS20003 ([#84](https://github.com/ok3mad/roslyn/issues/84)).
 
 ## Code
 
