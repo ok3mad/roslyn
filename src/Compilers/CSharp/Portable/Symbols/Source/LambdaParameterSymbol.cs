@@ -25,17 +25,24 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
            string name,
            bool isDiscard,
            bool hasParamsModifier,
-           Location location)
+           Location location,
+           bool isSharperVal = false)
            : base(owner, ordinal, refKind, name, location, syntaxRef, hasParamsModifier: hasParamsModifier, isParams: hasParamsModifier, isExtensionMethodThis: false, scope)
         {
             _parameterType = parameterType;
             _attributeLists = attributeLists;
             IsDiscard = isDiscard;
+            IsSharperVal = isSharperVal;
         }
 
         public override TypeWithAnnotations TypeWithAnnotations => _parameterType;
 
         public override bool IsDiscard { get; }
+
+        /// <summary>
+        /// True for a Sharper <c>(val x) => ...</c> parameter: implicitly typed, and it cannot be reassigned, like a <c>val</c> local.
+        /// </summary>
+        internal bool IsSharperVal { get; }
 
         public override ImmutableArray<CustomModifier> RefCustomModifiers
         {

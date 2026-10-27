@@ -3387,6 +3387,454 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             csharp.VerifyDiagnostics(expected.Select(d => d.WithLocation(d.LocationLine + 1, d.LocationCharacter)).ToArray());
         }
 
+
+        [Fact]
+        public void ValLambda_Basic()
+        {
+            // (val x) => ... is an implicitly typed lambda parameter, like (x) => ..., in every lambda form.
+            var source = """
+                using System;
+                using System.Linq;
+                using System.Linq.Expressions;
+                using System.Threading.Tasks;
+
+                Func<int, int> f = (val x) => x * 2;
+                Console.Write(f(1));
+                Console.Write(string.Concat(new[] { 1, 2 }.Select((val x) => x * 3)));
+                Func<int, int, int> g = (val a, val b) => a + b;
+                Console.Write(g(1, 2));
+                Func<int, int, int> h = (val a, b) => a + b;
+                Console.Write(h(1, 3));
+                Func<int, Task<int>> t = async (val x) => { await Task.Yield(); return x; };
+                Console.Write(await t(5));
+                Func<int, int> s = static (val x) => x + 5;
+                Console.Write(s(1));
+                Func<int, long> r = long (val x) => x + 6;
+                Console.Write(r(1));
+                Expression<Func<int, int>> e = (val x) => x + 7;
+                Console.Write(e.Compile()(1));
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "236345678" : null).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void ValLambda_Writes()
+        {
+            // Each write to the val parameter next to the same write to its implicitly typed twin, which is allowed.
+            var source = """
+                using System;
+
+                delegate void D(int i);
+                struct S { public int F; public int P { get; set; } public void Mutate() { F++; } }
+
+                class C
+                {
+                    static void Ref(ref int i) { }
+                    static void Out(out int i) { i = 0; }
+
+                    void M()
+                    {
+                        D a = (val x) => { x = 1; x += 1; x++; Ref(ref x); Out(out x); ref int r = ref x; Action l = () => x = 2; };
+                        D b = (y) => { y = 1; y += 1; y++; Ref(ref y); Out(out y); ref int r = ref y; Action l = () => y = 2; };
+                        Action<S> c = (val v) => { v.F = 1; v.P = 1; v.Mutate(); };
+                        Action<S> e = (w) => { w.F = 1; w.P = 1; w.Mutate(); };
+                        Action<string> n = (val s) => { s ??= ""; };
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (13,28): error CS1656: Cannot assign to 'x' because it is a 'val variable'
+                //         D a = (val x) => { x = 1; x += 1; x++; Ref(ref x); Out(out x); ref int r = ref x; Action l = () => x = 2; };
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "val variable").WithLocation(13, 28),
+                // (13,35): error CS1656: Cannot assign to 'x' because it is a 'val variable'
+                //         D a = (val x) => { x = 1; x += 1; x++; Ref(ref x); Out(out x); ref int r = ref x; Action l = () => x = 2; };
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "val variable").WithLocation(13, 35),
+                // (13,43): error CS1656: Cannot assign to 'x' because it is a 'val variable'
+                //         D a = (val x) => { x = 1; x += 1; x++; Ref(ref x); Out(out x); ref int r = ref x; Action l = () => x = 2; };
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "val variable").WithLocation(13, 43),
+                // (13,56): error CS1657: Cannot use 'x' as a ref or out value because it is a 'val variable'
+                //         D a = (val x) => { x = 1; x += 1; x++; Ref(ref x); Out(out x); ref int r = ref x; Action l = () => x = 2; };
+                Diagnostic(ErrorCode.ERR_RefReadonlyLocalCause, "x").WithArguments("x", "val variable").WithLocation(13, 56),
+                // (13,68): error CS1657: Cannot use 'x' as a ref or out value because it is a 'val variable'
+                //         D a = (val x) => { x = 1; x += 1; x++; Ref(ref x); Out(out x); ref int r = ref x; Action l = () => x = 2; };
+                Diagnostic(ErrorCode.ERR_RefReadonlyLocalCause, "x").WithArguments("x", "val variable").WithLocation(13, 68),
+                // (13,88): error CS1657: Cannot use 'x' as a ref or out value because it is a 'val variable'
+                //         D a = (val x) => { x = 1; x += 1; x++; Ref(ref x); Out(out x); ref int r = ref x; Action l = () => x = 2; };
+                Diagnostic(ErrorCode.ERR_RefReadonlyLocalCause, "x").WithArguments("x", "val variable").WithLocation(13, 88),
+                // (13,108): error CS1656: Cannot assign to 'x' because it is a 'val variable'
+                //         D a = (val x) => { x = 1; x += 1; x++; Ref(ref x); Out(out x); ref int r = ref x; Action l = () => x = 2; };
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "val variable").WithLocation(13, 108),
+                // (15,36): error CS1654: Cannot modify members of 'v' because it is a 'val variable'
+                //         Action<S> c = (val v) => { v.F = 1; v.P = 1; v.Mutate(); };
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocal2Cause, "v.F").WithArguments("v", "val variable").WithLocation(15, 36),
+                // (15,45): error CS1654: Cannot modify members of 'v' because it is a 'val variable'
+                //         Action<S> c = (val v) => { v.F = 1; v.P = 1; v.Mutate(); };
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocal2Cause, "v.P").WithArguments("v", "val variable").WithLocation(15, 45),
+                // (15,54): warning CS20003: Call to non-readonly member 'S.Mutate()' on val variable 'v' runs on a copy, so 'v' is not changed.
+                //         Action<S> c = (val v) => { v.F = 1; v.P = 1; v.Mutate(); };
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v").WithLocation(15, 54),
+                // (17,41): error CS1656: Cannot assign to 's' because it is a 'val variable'
+                //         Action<string> n = (val s) => { s ??= ""; };
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "s").WithArguments("s", "val variable").WithLocation(17, 41));
+        }
+
+        [Fact]
+        public void ValLambda_FeatureDisabled()
+        {
+            var source = """
+                using System;
+                class C
+                {
+                    void M()
+                    {
+                        Func<int, int> f = (val x) => x;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: TestOptions.Regular, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (6,29): error CS0246: The type or namespace name 'val' could not be found (are you missing a using directive or an assembly reference?)
+                //         Func<int, int> f = (val x) => x;
+                Diagnostic(ErrorCode.ERR_SingleTypeNameNotFound, "val").WithArguments("val").WithLocation(6, 29));
+        }
+
+        [Theory]
+        [CombinatorialData]
+        public void ValLambda_TypeNamedValWins(bool sharper)
+        {
+            // With a type named val in scope, (val x) is an explicitly typed parameter of that type, which can be reassigned.
+            var source = """
+                using System;
+
+                class val { }
+
+                class C
+                {
+                    void M()
+                    {
+                        Func<val, val> f = (val x) => { x = new val(); return x; };
+                        Func<int, int> g = (val x) => x;
+                        Func<val, int, int> h = (val x, y) => 0;
+                        Func<val, int, int> i = (val x, int y) => 0;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: sharper ? s_sharperOptions : TestOptions.Regular, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (3,7): warning CS8981: The type name 'val' only contains lower-cased ascii characters. Such names may become reserved for the language.
+                // class val { }
+                Diagnostic(ErrorCode.WRN_LowerCaseTypeName, "val").WithArguments("val").WithLocation(3, 7),
+                // (10,33): error CS1678: Parameter 1 is declared as type 'val' but should be 'int'
+                //         Func<int, int> g = (val x) => x;
+                Diagnostic(ErrorCode.ERR_BadParamType, "x").WithArguments("1", "", "val", "", "int").WithLocation(10, 33),
+                // (10,36): error CS1661: Cannot convert lambda expression to type 'Func<int, int>' because the parameter types do not match the delegate parameter types
+                //         Func<int, int> g = (val x) => x;
+                Diagnostic(ErrorCode.ERR_CantConvAnonMethParams, "=>").WithArguments("lambda expression", "System.Func<int, int>").WithLocation(10, 36),
+                // (11,41): error CS0748: Inconsistent lambda parameter usage; parameter types must be all explicit or all implicit
+                //         Func<val, int, int> h = (val x, y) => 0;
+                Diagnostic(ErrorCode.ERR_InconsistentLambdaParameterUsage, "y").WithLocation(11, 41));
+        }
+
+        [Fact]
+        public void ValLambda_MixedParameters()
+        {
+            // val parameters are implicitly typed, so they mix with (x) but not with (int x), as C# requires.
+            var source = """
+                using System;
+                class C
+                {
+                    void M()
+                    {
+                        Func<int, int, int> f = (val x, y) => x + y;
+                        Func<int, int, int> g = (val x, int y) => x + y;
+                        Func<int, int, int> h = (int x, val y) => x + y;
+                        Func<int, int, int> i = (x, int y) => x + y;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (7,38): error CS0748: Inconsistent lambda parameter usage; parameter types must be all explicit or all implicit
+                //         Func<int, int, int> g = (val x, int y) => x + y;
+                Diagnostic(ErrorCode.ERR_InconsistentLambdaParameterUsage, "x").WithLocation(7, 38),
+                // (8,45): error CS0748: Inconsistent lambda parameter usage; parameter types must be all explicit or all implicit
+                //         Func<int, int, int> h = (int x, val y) => x + y;
+                Diagnostic(ErrorCode.ERR_InconsistentLambdaParameterUsage, "y").WithLocation(8, 45),
+                // (9,34): error CS0748: Inconsistent lambda parameter usage; parameter types must be all explicit or all implicit
+                //         Func<int, int, int> i = (x, int y) => x + y;
+                Diagnostic(ErrorCode.ERR_InconsistentLambdaParameterUsage, "x").WithLocation(9, 34));
+        }
+
+        [Fact]
+        public void ValLambda_Modifiers()
+        {
+            // val combines with the modifiers C# allows on implicitly typed lambda parameters, and reports the same errors.
+            var source = """
+                using System;
+                delegate void R(ref int i);
+                delegate void O(out int i);
+                delegate void I(in int i);
+                delegate void Sp(scoped Span<int> s);
+                delegate void P(params int[] a);
+                delegate void Def(int i = 1);
+
+                class C
+                {
+                    void M()
+                    {
+                        int j = 0;
+                        R r = (ref val x) => { x = 1; x = ref j; };
+                        R r2 = (ref y) => { y = 1; y = ref j; };
+                        O o = (out val x) => { x = 1; };
+                        I i = (in val x) => { x = 1; };
+                        I i2 = (in y) => { y = 1; };
+                        Sp s = (scoped val x) => { x = default; x[0] = 1; };
+                        Sp s2 = (scoped y) => { y = default; };
+                        P p = (params val x) => { };
+                        P p2 = (params y) => { };
+                        Def d = (val x = 1) => { };
+                        Def d2 = (y = 1) => { };
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (14,39): error CS20006: Cannot ref-assign 'x' because it is a ref val: it always refers to the same variable. Writes through 'x' are allowed.
+                //         R r = (ref val x) => { x = 1; x = ref j; };
+                Diagnostic(ErrorCode.ERR_SharperValRefReassignment, "x").WithArguments("x").WithLocation(14, 39),
+                // (15,36): error CS8374: Cannot ref-assign 'j' to 'y' because 'j' has a narrower escape scope than 'y'.
+                //         R r2 = (ref y) => { y = 1; y = ref j; };
+                Diagnostic(ErrorCode.ERR_RefAssignNarrower, "y = ref j").WithArguments("y", "j").WithLocation(15, 36),
+                // (17,31): error CS8331: Cannot assign to variable 'x' or use it as the right hand side of a ref assignment because it is a readonly variable
+                //         I i = (in val x) => { x = 1; };
+                Diagnostic(ErrorCode.ERR_AssignReadonlyNotField, "x").WithArguments("variable", "x").WithLocation(17, 31),
+                // (18,28): error CS8331: Cannot assign to variable 'y' or use it as the right hand side of a ref assignment because it is a readonly variable
+                //         I i2 = (in y) => { y = 1; };
+                Diagnostic(ErrorCode.ERR_AssignReadonlyNotField, "y").WithArguments("variable", "y").WithLocation(18, 28),
+                // (19,36): error CS1656: Cannot assign to 'x' because it is a 'val variable'
+                //         Sp s = (scoped val x) => { x = default; x[0] = 1; };
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "val variable").WithLocation(19, 36),
+                // (21,16): error CS9272: Implicitly typed lambda parameter 'x' cannot have the 'params' modifier.
+                //         P p = (params val x) => { };
+                Diagnostic(ErrorCode.ERR_ImplicitlyTypedParamsParameter, "params").WithArguments("x").WithLocation(21, 16),
+                // (22,17): error CS9272: Implicitly typed lambda parameter 'y' cannot have the 'params' modifier.
+                //         P p2 = (params y) => { };
+                Diagnostic(ErrorCode.ERR_ImplicitlyTypedParamsParameter, "params").WithArguments("y").WithLocation(22, 17),
+                // (23,22): error CS9098: Implicitly typed lambda parameter 'x' cannot have a default value.
+                //         Def d = (val x = 1) => { };
+                Diagnostic(ErrorCode.ERR_ImplicitlyTypedDefaultParameter, "x").WithArguments("x").WithLocation(23, 22),
+                // (24,19): error CS9098: Implicitly typed lambda parameter 'y' cannot have a default value.
+                //         Def d2 = (y = 1) => { };
+                Diagnostic(ErrorCode.ERR_ImplicitlyTypedDefaultParameter, "y").WithArguments("y").WithLocation(24, 19));
+        }
+
+        [Fact]
+        public void ValLambda_NotInAnonymousMethodsOrLocalFunctions()
+        {
+            // Their parameters are always explicitly typed, so val there is a type name, as in C#. Natural types need explicit
+            // parameter types too, as for (x) => x.
+            var source = """
+                using System;
+                class C
+                {
+                    void M()
+                    {
+                        Action<int> e = delegate (val x) { };
+                        void Local(val x) { }
+                        Local(1);
+                        var f = (val x) => x;
+                        var g = (y) => y;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (6,35): error CS0246: The type or namespace name 'val' could not be found (are you missing a using directive or an assembly reference?)
+                //         Action<int> e = delegate (val x) { };
+                Diagnostic(ErrorCode.ERR_SingleTypeNameNotFound, "val").WithArguments("val").WithLocation(6, 35),
+                // (7,20): error CS0246: The type or namespace name 'val' could not be found (are you missing a using directive or an assembly reference?)
+                //         void Local(val x) { }
+                Diagnostic(ErrorCode.ERR_SingleTypeNameNotFound, "val").WithArguments("val").WithLocation(7, 20),
+                // (8,15): error CS1503: Argument 1: cannot convert from 'int' to 'val'
+                //         Local(1);
+                Diagnostic(ErrorCode.ERR_BadArgType, "1").WithArguments("1", "int", "val").WithLocation(8, 15),
+                // (9,17): error CS8917: The delegate type could not be inferred.
+                //         var f = (val x) => x;
+                Diagnostic(ErrorCode.ERR_CannotInferDelegateType, "(val x) => x").WithLocation(9, 17),
+                // (10,17): error CS8917: The delegate type could not be inferred.
+                //         var g = (y) => y;
+                Diagnostic(ErrorCode.ERR_CannotInferDelegateType, "(y) => y").WithLocation(10, 17));
+        }
+
+        [Fact]
+        public void ValLambda_StructCopies()
+        {
+            // A non-readonly member of a val struct parameter runs on a copy and warns, also when captured, across await and in
+            // patterns. A ref val parameter is written through.
+            var source = """
+                using System;
+                using System.Threading.Tasks;
+
+                Action<S> m = (val s) => { s.Mutate(); Console.Write(s.F); Func<int> c = () => { s.Mutate(); return s.F; }; Console.Write(c()); };
+                m(new S());
+                Func<S, Task<int>> t = async (val s) => { await Task.Yield(); s.Mutate(); return s.F; };
+                Console.Write(await t(new S()));
+                Func<S, int> p = (val s) => s is { P: 1 } ? s.F : -1;
+                Console.Write(p(new S()));
+                R r = (ref val s) => s.Mutate();
+                var w = new S();
+                r(ref w);
+                Console.Write(w.F);
+                Action<S> q = (s) => { s.Mutate(); Console.Write(s.F); };
+                q(new S());
+
+                delegate void R(ref S s);
+                struct S
+                {
+                    public int F;
+                    public void Mutate() { F++; }
+                    public int P { get { F++; return F; } }
+                }
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "000011" : null).VerifyDiagnostics(
+                // (4,28): warning CS20003: Call to non-readonly member 'S.Mutate()' on val variable 's' runs on a copy, so 's' is not changed.
+                // Action<S> m = (val s) => { s.Mutate(); Console.Write(s.F); Func<int> c = () => { s.Mutate(); return s.F; }; Console.Write(c()); };
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "s").WithArguments("S.Mutate()", "s").WithLocation(4, 28),
+                // (4,82): warning CS20003: Call to non-readonly member 'S.Mutate()' on val variable 's' runs on a copy, so 's' is not changed.
+                // Action<S> m = (val s) => { s.Mutate(); Console.Write(s.F); Func<int> c = () => { s.Mutate(); return s.F; }; Console.Write(c()); };
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "s").WithArguments("S.Mutate()", "s").WithLocation(4, 82),
+                // (6,63): warning CS20003: Call to non-readonly member 'S.Mutate()' on val variable 's' runs on a copy, so 's' is not changed.
+                // Func<S, Task<int>> t = async (val s) => { await Task.Yield(); s.Mutate(); return s.F; };
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "s").WithArguments("S.Mutate()", "s").WithLocation(6, 63),
+                // (8,29): warning CS20003: Call to non-readonly member 'S.P.get' on val variable 's' runs on a copy, so 's' is not changed.
+                // Func<S, int> p = (val s) => s is { P: 1 } ? s.F : -1;
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "s").WithArguments("S.P.get", "s").WithLocation(8, 29));
+        }
+
+        [Fact]
+        public void ValLambda_Nullable()
+        {
+            var source = """
+                #nullable enable
+                using System;
+                class C
+                {
+                    void M()
+                    {
+                        Func<string?, int> f = (val x) => x.Length;
+                        Func<string?, int> g = (y) => y.Length;
+                        Func<string, int> h = (val x) => x.Length;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (7,43): warning CS8602: Dereference of a possibly null reference.
+                //         Func<string?, int> f = (val x) => x.Length;
+                Diagnostic(ErrorCode.WRN_NullReferenceReceiver, "x").WithLocation(7, 43),
+                // (8,39): warning CS8602: Dereference of a possibly null reference.
+                //         Func<string?, int> g = (y) => y.Length;
+                Diagnostic(ErrorCode.WRN_NullReferenceReceiver, "y").WithLocation(8, 39));
+        }
+
+        [Fact]
+        public void ValLambda_SemanticModel()
+        {
+            // The val keyword reports the inferred type, as var does for locals, and the parameter is an ordinary parameter.
+            var source = """
+                #nullable enable
+                using System;
+                class C
+                {
+                    void M()
+                    {
+                        Func<int, int> f = (val x) => x;
+                        Func<string?, int> g = (val s) => 0;
+                        Func<int, int> h = (y) => y;
+                    }
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics();
+            var tree = comp.SyntaxTrees[0];
+            var model = comp.GetSemanticModel(tree);
+            var parameters = tree.GetRoot().DescendantNodes().OfType<ParameterSyntax>().ToArray();
+
+            var x = model.GetDeclaredSymbol(parameters[0]);
+            Assert.Equal("System.Int32 x", x.ToTestDisplayString());
+            Assert.Equal(RefKind.None, x.RefKind);
+            Assert.False(x.IsImplicitlyDeclared);
+            Assert.Equal("System.Int32", model.GetTypeInfo(parameters[0].Type).Type.ToTestDisplayString());
+            Assert.Equal("System.Int32", model.GetSymbolInfo(parameters[0].Type).Symbol.ToTestDisplayString());
+            Assert.Null(model.GetAliasInfo((IdentifierNameSyntax)parameters[0].Type));
+
+            var s = model.GetDeclaredSymbol(parameters[1]);
+            Assert.Equal("System.String? s", s.ToTestDisplayString());
+            Assert.Equal(CodeAnalysis.NullableAnnotation.Annotated, model.GetTypeInfo(parameters[1].Type).Nullability.Annotation);
+            Assert.Equal(model.GetDeclaredSymbol(parameters[2]).Type, x.Type);
+            Assert.Equal(x, model.GetSymbolInfo(tree.GetRoot().DescendantNodes().OfType<ParenthesizedLambdaExpressionSyntax>().First().ExpressionBody).Symbol);
+        }
+
+        [Fact]
+        public void ValLambda_IOperation()
+        {
+            var source = """
+                using System;
+                class C
+                {
+                    void M()
+                    {
+                        Func<int, int> f = /*<bind>*/(val x) => x/*</bind>*/;
+                    }
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            var expectedOperationTree = """
+                IAnonymousFunctionOperation (Symbol: lambda expression) (OperationKind.AnonymousFunction, Type: null) (Syntax: '(val x) => x')
+                  IBlockOperation (1 statements) (OperationKind.Block, Type: null, IsImplicit) (Syntax: 'x')
+                    IReturnOperation (OperationKind.Return, Type: null, IsImplicit) (Syntax: 'x')
+                      ReturnedValue:
+                        IParameterReferenceOperation: x (OperationKind.ParameterReference, Type: System.Int32) (Syntax: 'x')
+                """;
+            VerifyOperationTreeAndDiagnosticsForTest<ParenthesizedLambdaExpressionSyntax>(comp, expectedOperationTree, []);
+        }
+
+        [Theory]
+        [CombinatorialData]
+        public void ValLambda_Parsing(bool sharper)
+        {
+            // No parser change: (val x) already parses as a parameter whose type is the identifier val; the binder decides.
+            var options = sharper ? s_sharperOptions : TestOptions.Regular;
+            foreach (var text in new[] { "(val x) => x", "async (val x) => x", "static (val x) => x", "(scoped val x) => x", "(ref val x) => x", "(val x = 1) => x", "(val a, b) => a" })
+            {
+                var lambda = (ParenthesizedLambdaExpressionSyntax)SyntaxFactory.ParseExpression(text, options: options);
+                Assert.Empty(lambda.GetDiagnostics());
+                var type = (IdentifierNameSyntax)lambda.ParameterList.Parameters[0].Type;
+                Assert.Equal("val", type.Identifier.Text);
+                Assert.Equal(SyntaxKind.IdentifierToken, type.Identifier.Kind());
+            }
+        }
+
+        [Fact]
+        public void ValLambda_RegionAnalysis()
+        {
+            var source = """
+                using System;
+                class C
+                {
+                    void M()
+                    {
+                        Func<int, int> f = (val x) => x + 1;
+                    }
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics();
+            var tree = comp.SyntaxTrees[0];
+            var model = comp.GetSemanticModel(tree);
+            var lambda = tree.GetRoot().DescendantNodes().OfType<ParenthesizedLambdaExpressionSyntax>().Single();
+            var dataFlow = model.AnalyzeDataFlow(lambda.ExpressionBody);
+            Assert.True(dataFlow.Succeeded);
+            Assert.Equal("x", string.Join(", ", dataFlow.ReadInside.Select(s => s.Name)));
+            Assert.Empty(dataFlow.WrittenInside);
+            dataFlow = model.AnalyzeDataFlow(lambda);
+            Assert.Equal("x", string.Join(", ", dataFlow.VariablesDeclared.Select(s => s.Name)));
+        }
+
         [Fact]
         public void ReadonlyLocal_Basic()
         {
