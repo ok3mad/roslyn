@@ -1,8 +1,9 @@
 name: Update FBA sources
 
 on:
-  schedule:
-    - cron: '23 6 * * *'
+  # Sharper: triggers other than workflow_dispatch are turned off (.github/skills/sync-upstream).
+  # sharper-off: schedule:
+  # sharper-off:   - cron: '23 6 * * *'
   workflow_dispatch:
 
 permissions:

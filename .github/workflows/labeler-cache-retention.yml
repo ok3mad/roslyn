@@ -10,8 +10,9 @@ name: "Labeler: Cache Retention"
 # https://docs.github.com/actions/writing-workflows/choosing-what-your-workflow-does/caching-dependencies-to-speed-up-workflows#usage-limits-and-eviction-policy
 
 on:
-  schedule:
-    - cron: "24 19 * * *" # 19:24 every day (arbitrary time daily)
+  # Sharper: triggers other than workflow_dispatch are turned off (.github/skills/sync-upstream).
+  # sharper-off: schedule:
+  # sharper-off:   - cron: "24 19 * * *" # 19:24 every day (arbitrary time daily)
 
   workflow_dispatch:
     inputs:

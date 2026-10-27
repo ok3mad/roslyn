@@ -61,8 +61,14 @@ public partial class CSharpSyntaxVisitor<TResult>
     /// <summary>Called when the visitor visits a NullableTypeSyntax node.</summary>
     public virtual TResult? VisitNullableType(NullableTypeSyntax node) => this.DefaultVisit(node);
 
+    /// <summary>Called when the visitor visits a TaskTypeSyntax node.</summary>
+    public virtual TResult? VisitTaskType(TaskTypeSyntax node) => this.DefaultVisit(node);
+
     /// <summary>Called when the visitor visits a TupleTypeSyntax node.</summary>
     public virtual TResult? VisitTupleType(TupleTypeSyntax node) => this.DefaultVisit(node);
+
+    /// <summary>Called when the visitor visits a FunctionTypeSyntax node.</summary>
+    public virtual TResult? VisitFunctionType(FunctionTypeSyntax node) => this.DefaultVisit(node);
 
     /// <summary>Called when the visitor visits a TupleElementSyntax node.</summary>
     public virtual TResult? VisitTupleElement(TupleElementSyntax node) => this.DefaultVisit(node);
@@ -815,8 +821,14 @@ public partial class CSharpSyntaxVisitor
     /// <summary>Called when the visitor visits a NullableTypeSyntax node.</summary>
     public virtual void VisitNullableType(NullableTypeSyntax node) => this.DefaultVisit(node);
 
+    /// <summary>Called when the visitor visits a TaskTypeSyntax node.</summary>
+    public virtual void VisitTaskType(TaskTypeSyntax node) => this.DefaultVisit(node);
+
     /// <summary>Called when the visitor visits a TupleTypeSyntax node.</summary>
     public virtual void VisitTupleType(TupleTypeSyntax node) => this.DefaultVisit(node);
+
+    /// <summary>Called when the visitor visits a FunctionTypeSyntax node.</summary>
+    public virtual void VisitFunctionType(FunctionTypeSyntax node) => this.DefaultVisit(node);
 
     /// <summary>Called when the visitor visits a TupleElementSyntax node.</summary>
     public virtual void VisitTupleElement(TupleElementSyntax node) => this.DefaultVisit(node);
@@ -1569,8 +1581,14 @@ public partial class CSharpSyntaxRewriter : CSharpSyntaxVisitor<SyntaxNode?>
     public override SyntaxNode? VisitNullableType(NullableTypeSyntax node)
         => node.Update((TypeSyntax?)Visit(node.ElementType) ?? throw new ArgumentNullException("elementType"), VisitToken(node.QuestionToken));
 
+    public override SyntaxNode? VisitTaskType(TaskTypeSyntax node)
+        => node.Update((TypeSyntax?)Visit(node.ElementType) ?? throw new ArgumentNullException("elementType"), VisitToken(node.TildeToken));
+
     public override SyntaxNode? VisitTupleType(TupleTypeSyntax node)
         => node.Update(VisitToken(node.OpenParenToken), VisitList(node.Elements), VisitToken(node.CloseParenToken));
+
+    public override SyntaxNode? VisitFunctionType(FunctionTypeSyntax node)
+        => node.Update(VisitToken(node.OpenParenToken), VisitList(node.Parameters), VisitToken(node.CloseParenToken), VisitToken(node.ArrowToken), (TypeSyntax?)Visit(node.ReturnType) ?? throw new ArgumentNullException("returnType"));
 
     public override SyntaxNode? VisitTupleElement(TupleElementSyntax node)
         => node.Update((TypeSyntax?)Visit(node.Type) ?? throw new ArgumentNullException("type"), VisitToken(node.Identifier));
@@ -2486,6 +2504,18 @@ public static partial class SyntaxFactory
     public static NullableTypeSyntax NullableType(TypeSyntax elementType)
         => SyntaxFactory.NullableType(elementType, SyntaxFactory.Token(SyntaxKind.QuestionToken));
 
+    /// <summary>Creates a new TaskTypeSyntax instance.</summary>
+    public static TaskTypeSyntax TaskType(TypeSyntax elementType, SyntaxToken tildeToken)
+    {
+        if (elementType == null) throw new ArgumentNullException(nameof(elementType));
+        if (tildeToken.Kind() != SyntaxKind.TildeToken) throw new ArgumentException(nameof(tildeToken));
+        return (TaskTypeSyntax)Syntax.InternalSyntax.SyntaxFactory.TaskType((Syntax.InternalSyntax.TypeSyntax)elementType.Green, (Syntax.InternalSyntax.SyntaxToken)tildeToken.Node!).CreateRed();
+    }
+
+    /// <summary>Creates a new TaskTypeSyntax instance.</summary>
+    public static TaskTypeSyntax TaskType(TypeSyntax elementType)
+        => SyntaxFactory.TaskType(elementType, SyntaxFactory.Token(SyntaxKind.TildeToken));
+
     /// <summary>Creates a new TupleTypeSyntax instance.</summary>
     public static TupleTypeSyntax TupleType(SyntaxToken openParenToken, SeparatedSyntaxList<TupleElementSyntax> elements, SyntaxToken closeParenToken)
     {
@@ -2497,6 +2527,24 @@ public static partial class SyntaxFactory
     /// <summary>Creates a new TupleTypeSyntax instance.</summary>
     public static TupleTypeSyntax TupleType(SeparatedSyntaxList<TupleElementSyntax> elements = default)
         => SyntaxFactory.TupleType(SyntaxFactory.Token(SyntaxKind.OpenParenToken), elements, SyntaxFactory.Token(SyntaxKind.CloseParenToken));
+
+    /// <summary>Creates a new FunctionTypeSyntax instance.</summary>
+    public static FunctionTypeSyntax FunctionType(SyntaxToken openParenToken, SeparatedSyntaxList<FunctionPointerParameterSyntax> parameters, SyntaxToken closeParenToken, SyntaxToken arrowToken, TypeSyntax returnType)
+    {
+        if (openParenToken.Kind() != SyntaxKind.OpenParenToken) throw new ArgumentException(nameof(openParenToken));
+        if (closeParenToken.Kind() != SyntaxKind.CloseParenToken) throw new ArgumentException(nameof(closeParenToken));
+        if (arrowToken.Kind() != SyntaxKind.MinusGreaterThanToken) throw new ArgumentException(nameof(arrowToken));
+        if (returnType == null) throw new ArgumentNullException(nameof(returnType));
+        return (FunctionTypeSyntax)Syntax.InternalSyntax.SyntaxFactory.FunctionType((Syntax.InternalSyntax.SyntaxToken)openParenToken.Node!, parameters.Node.ToGreenSeparatedList<Syntax.InternalSyntax.FunctionPointerParameterSyntax>(), (Syntax.InternalSyntax.SyntaxToken)closeParenToken.Node!, (Syntax.InternalSyntax.SyntaxToken)arrowToken.Node!, (Syntax.InternalSyntax.TypeSyntax)returnType.Green).CreateRed();
+    }
+
+    /// <summary>Creates a new FunctionTypeSyntax instance.</summary>
+    public static FunctionTypeSyntax FunctionType(SeparatedSyntaxList<FunctionPointerParameterSyntax> parameters, TypeSyntax returnType)
+        => SyntaxFactory.FunctionType(SyntaxFactory.Token(SyntaxKind.OpenParenToken), parameters, SyntaxFactory.Token(SyntaxKind.CloseParenToken), SyntaxFactory.Token(SyntaxKind.MinusGreaterThanToken), returnType);
+
+    /// <summary>Creates a new FunctionTypeSyntax instance.</summary>
+    public static FunctionTypeSyntax FunctionType(TypeSyntax returnType)
+        => SyntaxFactory.FunctionType(SyntaxFactory.Token(SyntaxKind.OpenParenToken), default, SyntaxFactory.Token(SyntaxKind.CloseParenToken), SyntaxFactory.Token(SyntaxKind.MinusGreaterThanToken), returnType);
 
     /// <summary>Creates a new TupleElementSyntax instance.</summary>
     public static TupleElementSyntax TupleElement(TypeSyntax type, SyntaxToken identifier)

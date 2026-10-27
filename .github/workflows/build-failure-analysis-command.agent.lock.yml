@@ -60,10 +60,12 @@
 
 name: "Build Failure Analysis (command)"
 on:
-  issue_comment:
-    types:
-      - created
-      - edited
+  # Sharper: triggers other than workflow_dispatch are turned off (.github/skills/sync-upstream).
+  workflow_dispatch:
+  # sharper-off: issue_comment:
+  # sharper-off:   types:
+  # sharper-off:     - created
+  # sharper-off:     - edited
 # roles: # Roles processed as role check in pre-activation job
 # - admin # Roles processed as role check in pre-activation job
 # - maintainer # Roles processed as role check in pre-activation job

@@ -53,6 +53,11 @@ namespace Microsoft.CodeAnalysis.CSharp
         /// </summary>
         private StateMachineState _nextFinalizeState;
 
+        /// <summary>
+        /// Identifies the finalize state of a spread `yield return ..xs` among the states of its syntax node (see <see cref="PushFrame"/>).
+        /// </summary>
+        private static readonly AwaitDebugId s_yieldReturnSpreadFinalizeStateId = new AwaitDebugId(RelativeStateOrdinal: 1);
+
         internal IteratorMethodToStateMachineRewriter(
             SyntheticBoundNodeFactory F,
             MethodSymbol originalMethod,
@@ -470,12 +475,17 @@ namespace Microsoft.CodeAnalysis.CSharp
         {
             var syntax = statement.Syntax;
 
-            if (slotAllocator?.TryGetPreviousStateMachineState(syntax, awaitId: default, out var finalizeState) != true)
+            // Sharper: the try/finally lowered from a spread `yield return ..xs` (LocalRewriter.VisitYieldReturnSpreadStatement)
+            // has the syntax of the yield return, which also has a resumable state. Edit and Continue maps states by syntax offset
+            // and relative ordinal, so the finalize state takes the second ordinal of the syntax node.
+            var awaitId = syntax.IsKind(SyntaxKind.YieldReturnStatement) ? s_yieldReturnSpreadFinalizeStateId : default;
+
+            if (slotAllocator?.TryGetPreviousStateMachineState(syntax, awaitId, out var finalizeState) != true)
             {
                 finalizeState = _nextFinalizeState--;
             }
 
-            AddStateDebugInfo(syntax, awaitId: default, finalizeState);
+            AddStateDebugInfo(syntax, awaitId, finalizeState);
 
             var finallyMethod = MakeSynthesizedFinally(finalizeState);
             var newFrame = new IteratorFinallyFrame(_currentFinallyFrame, finalizeState, finallyMethod, _yieldsInTryAnalysis.Labels(statement));

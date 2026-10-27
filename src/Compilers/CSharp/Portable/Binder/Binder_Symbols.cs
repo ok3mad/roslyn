@@ -488,6 +488,18 @@ namespace Microsoft.CodeAnalysis.CSharp
                         return TypeWithAnnotations.Create(AreNullableAnnotationsEnabled(tupleTypeSyntax.CloseParenToken), BindTupleType(tupleTypeSyntax, diagnostics, basesBeingResolved));
                     }
 
+                case SyntaxKind.FunctionType:
+                    {
+                        var functionTypeSyntax = (FunctionTypeSyntax)syntax;
+                        return TypeWithAnnotations.Create(AreNullableAnnotationsEnabled(functionTypeSyntax.ArrowToken), BindFunctionType(functionTypeSyntax, diagnostics, basesBeingResolved));
+                    }
+
+                case SyntaxKind.TaskType:
+                    {
+                        var taskTypeSyntax = (TaskTypeSyntax)syntax;
+                        return TypeWithAnnotations.Create(AreNullableAnnotationsEnabled(taskTypeSyntax.TildeToken), BindSharperTaskType(taskTypeSyntax, diagnostics, basesBeingResolved));
+                    }
+
                 case SyntaxKind.RefType:
                     {
                         // ref needs to be handled by the caller
@@ -645,10 +657,21 @@ namespace Microsoft.CodeAnalysis.CSharp
             bool disallowRestrictedTypes)
         {
             TypeWithAnnotations type = BindType(node.ElementType, diagnostics, basesBeingResolved);
+            if (HasSharperSequenceRank(node))
+            {
+                return BindSharperSequenceType(node, type, diagnostics, basesBeingResolved, disallowRestrictedTypes);
+            }
+
+            CheckArrayElementType(node.ElementType, type, diagnostics, disallowRestrictedTypes);
+            return BindArrayRanks(node, type, start: 0, end: node.RankSpecifiers.Count, permitDimensions, diagnostics);
+        }
+
+        private void CheckArrayElementType(TypeSyntax elementTypeSyntax, TypeWithAnnotations type, BindingDiagnosticBag diagnostics, bool disallowRestrictedTypes)
+        {
             if (type.IsStatic)
             {
                 // CS0719: '{0}': array elements cannot be of static type
-                Error(diagnostics, ErrorCode.ERR_ArrayOfStaticClass, node.ElementType, type.Type);
+                Error(diagnostics, ErrorCode.ERR_ArrayOfStaticClass, elementTypeSyntax, type.Type);
             }
 
             if (disallowRestrictedTypes)
@@ -659,16 +682,22 @@ namespace Microsoft.CodeAnalysis.CSharp
                     if (type.IsRestrictedType())
                     {
                         // CS0611: Array elements cannot be of type '{0}'
-                        Error(diagnostics, ErrorCode.ERR_ArrayElementCantBeRefAny, node.ElementType, type.Type);
+                        Error(diagnostics, ErrorCode.ERR_ArrayElementCantBeRefAny, elementTypeSyntax, type.Type);
                     }
                 }
                 else
                 {
-                    diagnostics.Add(new LazyArrayElementCantBeRefAnyDiagnosticInfo(type), node.ElementType.GetLocation());
+                    diagnostics.Add(new LazyArrayElementCantBeRefAnyDiagnosticInfo(type), elementTypeSyntax.GetLocation());
                 }
             }
+        }
 
-            for (int i = node.RankSpecifiers.Count - 1; i >= 0; i--)
+        /// <summary>
+        /// Wraps <paramref name="type"/> in the array ranks <c>[start, end)</c> of <paramref name="node"/>, the last one innermost.
+        /// </summary>
+        private TypeWithAnnotations BindArrayRanks(ArrayTypeSyntax node, TypeWithAnnotations type, int start, int end, bool permitDimensions, BindingDiagnosticBag diagnostics)
+        {
+            for (int i = end - 1; i >= start; i--)
             {
                 var rankSpecifier = node.RankSpecifiers[i];
                 var dimension = rankSpecifier.Sizes;
@@ -684,6 +713,61 @@ namespace Microsoft.CodeAnalysis.CSharp
             }
 
             return type;
+        }
+
+        /// <summary>
+        /// Sharper: binds the function type <c>(A, B) -> R</c> to <c>System.Func&lt;A, B, R&gt;</c>, and <c>(A, B) -> void</c> to
+        /// <c>System.Action&lt;A, B&gt;</c>.
+        /// </summary>
+        private TypeSymbol BindFunctionType(FunctionTypeSyntax syntax, BindingDiagnosticBag diagnostics, ConsList<TypeSymbol> basesBeingResolved)
+        {
+            MessageID.IDS_FeatureSharper.CheckFeatureAvailability(diagnostics, syntax.ArrowToken);
+
+            var typeArguments = ArrayBuilder<TypeWithAnnotations>.GetInstance(syntax.Parameters.Count + 1);
+            foreach (var parameter in syntax.Parameters)
+            {
+                // PROTOTYPE(sharper): ref, out and in parameters need a delegate other than Func and Action
+                // (https://github.com/ok3mad/roslyn/issues/56).
+                foreach (var modifier in parameter.Modifiers)
+                {
+                    diagnostics.Add(ErrorCode.ERR_SharperFunctionTypeParameterModifier, modifier.GetLocation(), modifier.Text);
+                }
+
+                Debug.Assert(parameter.Type is { });
+                typeArguments.Add(BindTypeArgument(parameter.Type, diagnostics, basesBeingResolved));
+            }
+
+            // The parser reports void anywhere but in the return type.
+            var returnType = BindTypeArgument(syntax.ReturnType, diagnostics, basesBeingResolved);
+            bool returnsVoid = returnType.IsVoidType();
+            if (!returnsVoid)
+            {
+                typeArguments.Add(returnType);
+            }
+
+            var wellKnownType = returnsVoid
+                ? WellKnownTypes.GetWellKnownActionDelegate(invokeArgumentCount: syntax.Parameters.Count)
+                : WellKnownTypes.GetWellKnownFunctionDelegate(invokeArgumentCount: syntax.Parameters.Count);
+
+            if (wellKnownType == WellKnownType.Unknown)
+            {
+                // PROTOTYPE(sharper): more than 16 parameters need a delegate other than Func and Action
+                // (https://github.com/ok3mad/roslyn/issues/56).
+                Debug.Assert(syntax.Parameters.Count > 16);
+                diagnostics.Add(ErrorCode.ERR_SharperFunctionTypeTooManyParameters, syntax.Location, 16);
+                typeArguments.Free();
+                return new ExtendedErrorTypeSymbol(this.Compilation, name: "", arity: 0, errorInfo: null, unreported: false);
+            }
+
+            var delegateType = GetWellKnownType(wellKnownType, diagnostics, syntax);
+            if (typeArguments.Count == 0)
+            {
+                typeArguments.Free();
+                return delegateType;
+            }
+
+            // Constraint errors, such as a pointer type argument, are reported on the whole function type.
+            return ConstructNamedType(delegateType, syntax, typeArgumentsSyntax: default, typeArguments.ToImmutableAndFree(), basesBeingResolved, diagnostics);
         }
 
         private TypeSymbol BindTupleType(TupleTypeSyntax syntax, BindingDiagnosticBag diagnostics, ConsList<TypeSymbol> basesBeingResolved)

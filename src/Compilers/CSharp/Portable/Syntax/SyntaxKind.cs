@@ -953,5 +953,12 @@ namespace Microsoft.CodeAnalysis.CSharp
         WithElement = 9081,
 
         UnionDeclaration = 9082,
+
+        // Sharper syntax nodes start at 9900, counting up, so upstream can keep adding its own from 9083 up. SharperTests
+        // checks that no other SyntaxKind takes these values.
+        /// <summary>Represents Sharper's function type, such as <c>(int, int) -> int</c>.</summary>
+        FunctionType = 9900,
+        /// <summary>Represents Sharper's task type, such as <c>int~</c> or <c>void~</c>.</summary>
+        TaskType = 9901,
     }
 }

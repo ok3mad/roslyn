@@ -98,6 +98,10 @@ namespace Microsoft.CodeAnalysis.CSharp
 
                     goto default;
 
+                case SyntaxKind.RangeExpression when node.Parent is ArrayRankSpecifierSyntax { IsSharperSequence: true }:
+                    // The `..` of a Sharper sequence type `T[..]` is part of the type, not an expression.
+                    return false;
+
                 case SyntaxKind.OmittedTypeArgument:
                 case SyntaxKind.RefExpression:
                 case SyntaxKind.RefType:
@@ -558,6 +562,10 @@ namespace Microsoft.CodeAnalysis.CSharp
                         break;
                 }
             }
+            else if (GetSharperValLambdaParameter(expression, cancellationToken) is { } valParameter)
+            {
+                return GetSymbolInfoFromSymbolOrNone(valParameter.Type);
+            }
             else if (expression is DeclarationExpressionSyntax declaration)
             {
                 if (declaration.Designation.Kind() != SyntaxKind.SingleVariableDesignation)
@@ -1000,8 +1008,27 @@ namespace Microsoft.CodeAnalysis.CSharp
                         break;
                 }
             }
+            else if (GetSharperValLambdaParameter(expression, cancellationToken) is { } valParameter)
+            {
+                var parameterType = valParameter.Type.GetSymbol();
+                var nullabilityInfo = valParameter.NullableAnnotation.ToNullabilityInfo(parameterType);
+                return new CSharpTypeInfo(parameterType, parameterType, nullabilityInfo, nullabilityInfo, Conversion.Identity);
+            }
 
             return GetTypeInfoWorker(expression, cancellationToken);
+        }
+
+        /// <summary>
+        /// If <paramref name="expression"/> is the <c>val</c> of a Sharper <c>(val x) => ...</c> lambda parameter, returns that
+        /// parameter. Like <c>var</c>, the <c>val</c> stands for the inferred type.
+        /// </summary>
+        private IParameterSymbol GetSharperValLambdaParameter(ExpressionSyntax expression, CancellationToken cancellationToken)
+        {
+            return expression is TypeSyntax { IsVal: true, Parent: ParameterSyntax { Parent.Parent: ParenthesizedLambdaExpressionSyntax } parameter } &&
+                GetDeclaredSymbol(parameter, cancellationToken) is { } parameterSymbol &&
+                parameterSymbol.GetSymbol() is LambdaParameterSymbol { IsSharperVal: true }
+                ? parameterSymbol
+                : null;
         }
 
         /// <summary>
