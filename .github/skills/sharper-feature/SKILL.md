@@ -51,7 +51,9 @@ BCL type; `sharper/sequence-type`). See `SharperTests.cs` for all of them.
    Kind checks (`BoundKind.X`, `is BoundX`) hide in flow analysis, lowering helpers and region analysis, and
    several of them throw or assert on unknown kinds.
 4. Implement layer by layer (below), re-running the tests after each one. The next failure names the next layer.
-5. **Before merging, make the analyzer build clean** (see Testing). Test runs and plain builds skip the analyzers, so
+5. **Before merging a parser change, run the parser tests with Sharper on** (`ROSLYN_TEST_SHARPER=1`, see Testing)
+   and sort every failure that is not on the last run's list.
+6. **Before merging, make the analyzer build clean** (see Testing). Test runs and plain builds skip the analyzers, so
    public API changes (RS0016, RS0017) show up only there. An error that is already on `main` still blocks: fix it or
    link its issue in the PR.
 
@@ -189,6 +191,9 @@ implementation plan, "Feature 3"):
   analysis (`AnalyzeControlFlow`, `AnalyzeDataFlow`).
 - Run the Sharper tests with `ROSLYN_TEST_IOPERATION=1` as well: every compilation then also validates IOperation,
   the semantic model and the control flow graph.
+- After a parser change, run the whole Syntax test project with `ROSLYN_TEST_SHARPER=1`, which turns Sharper on for
+  every parse (design rule 2: valid C# must parse the same). Compare the failures with the last run's list in the
+  implementation plan's follow-ups; each new one is a bug or, if it fits the rule, a new accepted break.
 - Before merging, build with the analyzers on, which the test runs skip: it reports public API changes (RS0016,
   RS0017) and other analyzer errors.
   `dotnet build src/Compilers/CSharp/Portable/Microsoft.CodeAnalysis.CSharp.csproj -p:RunAnalyzersDuringBuild=true`
@@ -199,4 +204,5 @@ implementation plan, "Feature 3"):
 export PATH=$PWD/.dotnet:$PATH DOTNET_ROOT=$PWD/.dotnet
 dotnet test src/Compilers/CSharp/Test/Semantic/Microsoft.CodeAnalysis.CSharp.Semantic.UnitTests.csproj -f net10.0 --filter "FullyQualifiedName~SharperTests"
 ROSLYN_TEST_IOPERATION=1 dotnet test src/Compilers/CSharp/Test/Semantic/Microsoft.CodeAnalysis.CSharp.Semantic.UnitTests.csproj -f net10.0 --filter "FullyQualifiedName~SharperTests"
+ROSLYN_TEST_SHARPER=1 dotnet test src/Compilers/CSharp/Test/Syntax/Microsoft.CodeAnalysis.CSharp.Syntax.UnitTests.csproj -f net10.0
 ```
