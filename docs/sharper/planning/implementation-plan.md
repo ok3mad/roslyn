@@ -17,7 +17,7 @@ The PoC works: behind `/features:sharper`, `yield return ..xs` compiles, runs an
 
 - 27 Sharper tests cover runtime output, diagnostics, nullable warnings, IOperation, the control flow graph and region analysis. They also pass with the IOperation test hook (`ROSLYN_TEST_IOPERATION=1`).
 - The feature reached every layer of the pipeline, but most of the work was in places no grep for the feature name finds (see the map and the lessons below).
-- Async iterators are deliberately unsupported (a clear error), and `dynamic` gets a warning instead of a runtime decision.
+- Async iterators are unsupported for now (a clear error), and `dynamic` gets a warning instead of a runtime decision.
 
 ## Probe feature: `yield return ..xs`
 
@@ -48,8 +48,8 @@ Each trap was probed before deciding how to handle it.
 | Trap | What the probe showed | How the PoC handles it |
 | --- | --- | --- |
 | Range ambiguity | `..i` is valid C# in iterators of `Range` and of `object` (boxed). | C# is tried first and wins; covered by tests for both element types. |
-| Async iterator, sync source | Compiler crash: the async rewriter only accepts `try` blocks with certain syntax, for Edit and Continue. | Error CS20001. May never be supported. |
-| Async iterator, async source | Misleading "foreach statement cannot operate…" error; would need an implicit `await foreach`. | Same CS20001. |
+| Async iterator, sync source | Compiler crash: the async rewriter only accepts `try` blocks with certain syntax, for Edit and Continue. | Error CS20001 for now. To be supported ([#49](https://github.com/ok3mad/roslyn/issues/49)). |
+| Async iterator, async source | Misleading "foreach statement cannot operate…" error; would need an implicit `await foreach`. | Same CS20001. Never supported ([#43](https://github.com/ok3mad/roslyn/issues/43)). |
 | Ref-struct sources (spans, inline arrays) | Rejected with CS4007 about `Span<int>.Enumerator`, which the user never wrote. | Kept as is; a clearer error is a follow-up. |
 | `dynamic` | In an iterator of `object`, `..d` is valid C# (d converts to `Index` at runtime), so it stays a range and throws when d holds a sequence. In an iterator of `int` it spreads. | Warning CS20002. Deciding at runtime is the correct long-term semantics, but changes what valid C# does today. |
 | Both bindings fail (`..5`) | The spread error (CS9212) explains it better than the range error. | Spread error wins. |
@@ -65,7 +65,7 @@ Each trap was probed before deciding how to handle it.
 | Element conversion | Implicit, like `yield return x`. | A foreach-style explicit cast would silently accept `..objects` in an `IEnumerable<int>` iterator. |
 | Nullable warnings | CS8602 for a maybe-null source, CS8603 for maybe-null elements. | Same warnings as the C# the spread stands for; CS8619 was too generic. |
 | IOperation | `OperationKind.None` for now. | A real shape is public API; wait until the syntax settles. |
-| Async iterators | Not supported (CS20001). | Needs Edit and Continue work and a hidden `await`; may never be wanted. |
+| Async iterators | A synchronous source is to be supported ([#49](https://github.com/ok3mad/roslyn/issues/49)); an asynchronous source never is, and stays CS20001 ([#43](https://github.com/ok3mad/roslyn/issues/43)). | A synchronous source is a legitimate spread and only needs lowering work. Spreading an `IAsyncEnumerable<T>` would insert an `await` the user never wrote, so there is no marker form either. |
 | `dynamic` | Keep the range meaning, warn (CS20002). | A runtime decision changes the behavior of valid C#. |
 | val in patterns | A keyword in patterns, parsed like var (option 1). | Keeps val and var consistent. It breaks type patterns on a type named val, so the sharpener escapes those as @val. The alternative, reinterpreting a type pattern in the binder, kept C# meaning but diverged from var. |
 | Sequence type stacking | Left to right, innermost first: each `[..]` wraps everything to its left (`int[..][]` is `IEnumerable<int>[]`); plain array ranks between two `[..]` keep the C# order. | The brainstorm's rule for all type suffixes (`int[..]~`, `int~[..]`), and the reading order of `T?[]`. The C# array order would make `int[..][]` a sequence of arrays. |
@@ -304,7 +304,8 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 - [ ] Support `dotnet run app.cx`. File-based apps live in the SDK and only accept `.cs` files, so this needs an SDK change; until then the language server treats a loose `.cx` file as a miscellaneous file, never a file-based app.
 - [x] Add `*.cx` to the default `Compile` items (the `Microsoft.Net.Compilers.Toolset` props).
 - [ ] Decide whether `dynamic` should choose range or spread at runtime, under the sharpening rules. [#42](https://github.com/ok3mad/roslyn/issues/42)
-- [ ] Decide whether async iterators should ever support spreads. [#43](https://github.com/ok3mad/roslyn/issues/43)
+- [x] Decide whether async iterators should ever support spreads: never for an asynchronous source. [#43](https://github.com/ok3mad/roslyn/issues/43)
+- [ ] Support spreading a synchronous source in an async iterator. [#49](https://github.com/ok3mad/roslyn/issues/49)
 - [ ] Give ref-struct sources a spread-specific error instead of CS4007. [#44](https://github.com/ok3mad/roslyn/issues/44)
 - [x] Verify the spread with Edit and Continue: the generated try/finally and the yield share one syntax offset. Fixed with a second state ordinal, and the IDE no longer matches a spread with a plain yield return. [#45](https://github.com/ok3mad/roslyn/issues/45)
 - [ ] Design a real IOperation shape once the syntax settles. [#46](https://github.com/ok3mad/roslyn/issues/46)

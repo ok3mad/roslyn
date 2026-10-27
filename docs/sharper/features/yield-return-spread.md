@@ -52,8 +52,9 @@ IEnumerable<T> Walk(Node<T> node)
 
 ## Limitations
 
-- **Async iterators:** not supported (CS20001), whether the source is synchronous or asynchronous. An async source
-  would mean a hidden `await foreach`. Whether to support them is [#43](https://github.com/ok3mad/roslyn/issues/43).
+- **Async iterators:** not supported yet (CS20001), whether the source is synchronous or asynchronous. A synchronous
+  source is to be supported ([#49](https://github.com/ok3mad/roslyn/issues/49)). An asynchronous source never will be,
+  because it would insert an `await` the user never wrote ([#43](https://github.com/ok3mad/roslyn/issues/43)).
 - **`dynamic` operands:** `..d` converts `d` to `Index` at runtime, so it is valid C# and stays a range. The compiler
   warns (CS20002); convert `d` to a sequence type to spread it. Where a range is not valid (for example an iterator of
   `int`), `..d` spreads and enumerates `d` dynamically. Deciding at runtime instead is [#42](https://github.com/ok3mad/roslyn/issues/42).
