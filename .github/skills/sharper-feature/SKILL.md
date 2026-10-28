@@ -252,6 +252,8 @@ unless they are the inference's own. The design and the plan for the later steps
 - After a parser change, run the whole Syntax test project with `ROSLYN_TEST_SHARPER=1`, which turns Sharper on for
   every parse (design rule 2: valid C# must parse the same). Compare the failures with the last run's list in the
   implementation plan's follow-ups; each new one is a bug or, if it fits the rule, a new accepted break.
+- The Semantic test project must build with 0 warnings (`dotnet build <csproj> -warnaserror`); it is nullable-enabled,
+  so use `!` on semantic model results such as `GetDeclaredSymbol` and `SymbolInfo.Symbol`.
 - Before merging, build with the analyzers on, which the test runs skip: it reports public API changes (RS0016,
   RS0017) and other analyzer errors.
   `dotnet build src/Compilers/CSharp/Portable/Microsoft.CodeAnalysis.CSharp.csproj -p:RunAnalyzersDuringBuild=true`

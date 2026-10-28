@@ -5494,19 +5494,19 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             var model = comp.GetSemanticModel(tree);
             var parameters = tree.GetRoot().DescendantNodes().OfType<ParameterSyntax>().ToArray();
 
-            var x = model.GetDeclaredSymbol(parameters[0]);
+            var x = model.GetDeclaredSymbol(parameters[0])!;
             Assert.Equal("System.Int32 x", x.ToTestDisplayString());
             Assert.Equal(RefKind.None, x.RefKind);
             Assert.False(x.IsImplicitlyDeclared);
-            Assert.Equal("System.Int32", model.GetTypeInfo(parameters[0].Type).Type.ToTestDisplayString());
-            Assert.Equal("System.Int32", model.GetSymbolInfo(parameters[0].Type).Symbol.ToTestDisplayString());
-            Assert.Null(model.GetAliasInfo((IdentifierNameSyntax)parameters[0].Type));
+            Assert.Equal("System.Int32", model.GetTypeInfo(parameters[0].Type!).Type.ToTestDisplayString());
+            Assert.Equal("System.Int32", model.GetSymbolInfo(parameters[0].Type!).Symbol.ToTestDisplayString());
+            Assert.Null(model.GetAliasInfo((IdentifierNameSyntax)parameters[0].Type!));
 
-            var s = model.GetDeclaredSymbol(parameters[1]);
+            var s = model.GetDeclaredSymbol(parameters[1])!;
             Assert.Equal("System.String? s", s.ToTestDisplayString());
-            Assert.Equal(CodeAnalysis.NullableAnnotation.Annotated, model.GetTypeInfo(parameters[1].Type).Nullability.Annotation);
-            Assert.Equal(model.GetDeclaredSymbol(parameters[2]).Type, x.Type);
-            Assert.Equal(x, model.GetSymbolInfo(tree.GetRoot().DescendantNodes().OfType<ParenthesizedLambdaExpressionSyntax>().First().ExpressionBody).Symbol);
+            Assert.Equal(CodeAnalysis.NullableAnnotation.Annotated, model.GetTypeInfo(parameters[1].Type!).Nullability.Annotation);
+            Assert.Equal(model.GetDeclaredSymbol(parameters[2])!.Type, x.Type);
+            Assert.Equal(x, model.GetSymbolInfo(tree.GetRoot().DescendantNodes().OfType<ParenthesizedLambdaExpressionSyntax>().First().ExpressionBody!).Symbol);
         }
 
         [Fact]
@@ -5543,7 +5543,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             {
                 var lambda = (ParenthesizedLambdaExpressionSyntax)SyntaxFactory.ParseExpression(text, options: options);
                 Assert.Empty(lambda.GetDiagnostics());
-                var type = (IdentifierNameSyntax)lambda.ParameterList.Parameters[0].Type;
+                var type = (IdentifierNameSyntax)lambda.ParameterList.Parameters[0].Type!;
                 Assert.Equal("val", type.Identifier.Text);
                 Assert.Equal(SyntaxKind.IdentifierToken, type.Identifier.Kind());
             }
@@ -5567,7 +5567,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             var tree = comp.SyntaxTrees[0];
             var model = comp.GetSemanticModel(tree);
             var lambda = tree.GetRoot().DescendantNodes().OfType<ParenthesizedLambdaExpressionSyntax>().Single();
-            var dataFlow = model.AnalyzeDataFlow(lambda.ExpressionBody);
+            var dataFlow = model.AnalyzeDataFlow(lambda.ExpressionBody!);
             Assert.True(dataFlow.Succeeded);
             Assert.Equal("x", string.Join(", ", dataFlow.ReadInside.Select(s => s.Name)));
             Assert.Empty(dataFlow.WrittenInside);
@@ -6275,7 +6275,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             {
                 Assert.Equal(SyntaxKind.ReadOnlyKeyword, declaration.Modifiers.Single().Kind());
                 Assert.Equal("System.Int32", model.GetTypeInfo(declaration.Declaration.Type).Type.ToTestDisplayString());
-                var local = (ILocalSymbol)model.GetDeclaredSymbol(declaration.Declaration.Variables[0]);
+                var local = (ILocalSymbol)model.GetDeclaredSymbol(declaration.Declaration.Variables[0])!;
                 Assert.False(local.IsConst);
                 Assert.Equal(RefKind.None, local.RefKind);
             }
@@ -6926,7 +6926,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             comp.VerifyDiagnostics();
             var tree = comp.SyntaxTrees.Single();
             var model = comp.GetSemanticModel(tree);
-            var parameters = tree.GetRoot().DescendantNodes().OfType<ParameterSyntax>().Select(p => model.GetDeclaredSymbol(p)).ToArray();
+            var parameters = tree.GetRoot().DescendantNodes().OfType<ParameterSyntax>().Select(p => model.GetDeclaredSymbol(p)!).ToArray();
             Assert.Equal(["System.Int32 x", "ref System.Int32 r", "System.Int32 y"], parameters.Select(p => p.ToTestDisplayString()));
             Assert.Equal([RefKind.None, RefKind.Ref, RefKind.None], parameters.Select(p => p.RefKind));
         }
@@ -7617,8 +7617,8 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             var model = comp.GetSemanticModel(tree);
             var methods = tree.GetRoot().DescendantNodes().OfType<MethodDeclarationSyntax>().ToArray();
             var localFunctions = tree.GetRoot().DescendantNodes().OfType<LocalFunctionStatementSyntax>().ToArray();
-            verify(model.GetDeclaredSymbol(methods[0]), methods[0].ReturnType, model.GetDeclaredSymbol(methods[1]), methods[1].ReturnType);
-            verify(model.GetDeclaredSymbol(localFunctions[0]), localFunctions[0].ReturnType, model.GetDeclaredSymbol(localFunctions[1]), localFunctions[1].ReturnType);
+            verify(model.GetDeclaredSymbol(methods[0])!, methods[0].ReturnType, model.GetDeclaredSymbol(methods[1])!, methods[1].ReturnType);
+            verify(model.GetDeclaredSymbol(localFunctions[0])!, localFunctions[0].ReturnType, model.GetDeclaredSymbol(localFunctions[1])!, localFunctions[1].ReturnType);
 
             void verify(IMethodSymbol method, TypeSyntax infer, IMethodSymbol twin, TypeSyntax twinType)
             {
@@ -7630,7 +7630,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 var typeInfo = model.GetTypeInfo(infer);
                 var twinTypeInfo = model.GetTypeInfo(twinType);
                 Assert.Equal(method.ReturnType.ToTestDisplayString(), typeInfo.Type.ToTestDisplayString());
-                Assert.True(twinTypeInfo.Type.Equals(typeInfo.Type, SymbolEqualityComparer.Default));
+                Assert.True(twinTypeInfo.Type!.Equals(typeInfo.Type, SymbolEqualityComparer.Default));
                 Assert.Equal(method.ReturnNullableAnnotation, typeInfo.Nullability.Annotation);
                 Assert.True(twinTypeInfo.Type.Equals(model.GetSymbolInfo(infer).Symbol, SymbolEqualityComparer.Default));
             }
@@ -7994,7 +7994,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             var tree = comp.SyntaxTrees[0];
             var model = comp.GetSemanticModel(tree);
             var it = tree.GetRoot().DescendantNodes().OfType<IdentifierNameSyntax>().Single(n => n.Identifier.Text == "it");
-            var symbol = (IParameterSymbol)model.GetSymbolInfo(it).Symbol;
+            var symbol = (IParameterSymbol)model.GetSymbolInfo(it).Symbol!;
             Assert.Equal("System.Int32 it", symbol.ToTestDisplayString());
             Assert.Equal(MethodKind.AnonymousFunction, ((IMethodSymbol)symbol.ContainingSymbol).MethodKind);
             Assert.Equal("System.Int32", model.GetTypeInfo(it).Type.ToTestDisplayString());
@@ -8002,13 +8002,13 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             // lambda does not see 'it' yet (#123).
             Assert.DoesNotContain(model.LookupSymbols(it.SpanStart), s => s.Name == "it");
 
-            var argument = (BinaryExpressionSyntax)it.Parent;
+            var argument = (BinaryExpressionSyntax)it.Parent!;
             // The lambda shares its syntax with its body, the argument expression, like a query clause's lambda.
-            var operation = model.GetOperation(argument);
+            var operation = model.GetOperation(argument)!;
             Assert.Equal(OperationKind.Binary, operation.Kind);
             while (operation is not Microsoft.CodeAnalysis.Operations.IAnonymousFunctionOperation)
             {
-                operation = operation.Parent;
+                operation = operation.Parent!;
             }
 
             Assert.True(operation.IsImplicit);
