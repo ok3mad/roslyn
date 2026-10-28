@@ -909,7 +909,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         [Fact]
         public void YieldReturnSpread_AsyncIterator_RefStructSource()
         {
-            // As in a synchronous iterator, a span's enumerator cannot live across the yields. A clearer error is #44.
+            // As in a synchronous iterator, a span's enumerator cannot live across the yields.
             var source = """
                 using System;
                 using System.Collections.Generic;
@@ -925,9 +925,9 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyEmitDiagnostics(
-                // (10,9): error CS4007: Instance of type 'System.Span<int>.Enumerator' cannot be preserved across 'await' or 'yield' boundary.
+                // (10,24): error CS20012: A spread 'yield return ..' cannot enumerate 'Span<int>' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead.
                 //         yield return ..xs.AsSpan();
-                Diagnostic(ErrorCode.ERR_ByRefTypeAndAwait, "yield return ..xs.AsSpan();").WithArguments("System.Span<int>.Enumerator").WithLocation(10, 9));
+                Diagnostic(ErrorCode.ERR_SharperSpreadRefStructEnumerator, "xs.AsSpan()").WithArguments("System.Span<int>").WithLocation(10, 24));
         }
 
         [Fact]
@@ -978,7 +978,8 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         [Fact]
         public void YieldReturnSpread_RefStructSource()
         {
-            // A span's enumerator cannot live across the yields.
+            // A span's enumerator cannot live across the yields. The spread says so, instead of CS4007 about
+            // Span<int>.Enumerator, which the user never wrote.
             var source = """
                 using System;
                 using System.Collections.Generic;
@@ -992,9 +993,217 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyEmitDiagnostics(
-                // (8,9): error CS4007: Instance of type 'System.Span<int>.Enumerator' cannot be preserved across 'await' or 'yield' boundary.
+                // (8,24): error CS20012: A spread 'yield return ..' cannot enumerate 'Span<int>' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead.
                 //         yield return ..xs.AsSpan();
-                Diagnostic(ErrorCode.ERR_ByRefTypeAndAwait, "yield return ..xs.AsSpan();").WithArguments("System.Span<int>.Enumerator").WithLocation(8, 9));
+                Diagnostic(ErrorCode.ERR_SharperSpreadRefStructEnumerator, "xs.AsSpan()").WithArguments("System.Span<int>").WithLocation(8, 24));
+        }
+
+        [Fact]
+        public void YieldReturnSpread_RefStructSource_CSharp()
+        {
+            // The C# the spread stands for.
+            var source = """
+                using System;
+                using System.Collections.Generic;
+
+                class C
+                {
+                    static IEnumerable<int> Spread(int[] xs)
+                    {
+                        foreach (var x in xs.AsSpan())
+                            yield return x;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyEmitDiagnostics(
+                // (8,9): error CS4007: Instance of type 'System.Span<int>' cannot be preserved across 'await' or 'yield' boundary.
+                //         foreach (var x in xs.AsSpan())
+                Diagnostic(ErrorCode.ERR_ByRefTypeAndAwait, @"foreach (var x in xs.AsSpan())
+            yield return x;").WithArguments("System.Span<int>").WithLocation(8, 9));
+        }
+
+        [Fact]
+        public void YieldReturnSpread_RefStructSource_ReadOnlySpan()
+        {
+            // The element conversion (string to int) would fail too; only the spread error is reported.
+            var source = """
+                using System;
+                using System.Collections.Generic;
+
+                class C
+                {
+                    static IEnumerable<int> Spread(string s, int[] xs)
+                    {
+                        yield return ..s.AsSpan();
+                        yield return ..new ReadOnlySpan<int>(xs);
+                        yield return ..new ReadOnlySpan<string>([s]);
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyEmitDiagnostics(
+                // (8,24): error CS20012: A spread 'yield return ..' cannot enumerate 'ReadOnlySpan<char>' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead.
+                //         yield return ..s.AsSpan();
+                Diagnostic(ErrorCode.ERR_SharperSpreadRefStructEnumerator, "s.AsSpan()").WithArguments("System.ReadOnlySpan<char>").WithLocation(8, 24),
+                // (9,24): error CS20012: A spread 'yield return ..' cannot enumerate 'ReadOnlySpan<int>' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead.
+                //         yield return ..new ReadOnlySpan<int>(xs);
+                Diagnostic(ErrorCode.ERR_SharperSpreadRefStructEnumerator, "new ReadOnlySpan<int>(xs)").WithArguments("System.ReadOnlySpan<int>").WithLocation(9, 24),
+                // (10,24): error CS20012: A spread 'yield return ..' cannot enumerate 'ReadOnlySpan<string>' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead.
+                //         yield return ..new ReadOnlySpan<string>([s]);
+                Diagnostic(ErrorCode.ERR_SharperSpreadRefStructEnumerator, "new ReadOnlySpan<string>([s])").WithArguments("System.ReadOnlySpan<string>").WithLocation(10, 24));
+        }
+
+        [Fact]
+        public void YieldReturnSpread_RefStructSource_InlineArray()
+        {
+            // An inline array is not a ref struct, but it is enumerated through a span.
+            var source = """
+                using System.Collections.Generic;
+                using System.Runtime.CompilerServices;
+
+                class C
+                {
+                    static IEnumerable<int> Spread(Buffer b)
+                    {
+                        yield return ..b;
+                    }
+                }
+
+                [InlineArray(3)]
+                struct Buffer
+                {
+                    private int _element0;
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyEmitDiagnostics(
+                // (8,24): error CS20012: A spread 'yield return ..' cannot enumerate 'Buffer' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead.
+                //         yield return ..b;
+                Diagnostic(ErrorCode.ERR_SharperSpreadRefStructEnumerator, "b").WithArguments("Buffer").WithLocation(8, 24));
+        }
+
+        [Fact]
+        public void YieldReturnSpread_RefStructSource_PatternEnumerator()
+        {
+            // A ref struct collection whose pattern-based GetEnumerator returns a ref struct.
+            var source = """
+                using System.Collections.Generic;
+
+                class C
+                {
+                    static IEnumerable<int> Spread()
+                    {
+                        yield return ..new R();
+                    }
+                }
+
+                ref struct R
+                {
+                    public Enumerator GetEnumerator() => default;
+
+                    public ref struct Enumerator
+                    {
+                        public int Current => 0;
+                        public bool MoveNext() => false;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyEmitDiagnostics(
+                // (7,24): error CS20012: A spread 'yield return ..' cannot enumerate 'R' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead.
+                //         yield return ..new R();
+                Diagnostic(ErrorCode.ERR_SharperSpreadRefStructEnumerator, "new R()").WithArguments("R").WithLocation(7, 24));
+        }
+
+        [Fact]
+        public void YieldReturnSpread_RefStructSource_ClassEnumerator()
+        {
+            // A ref struct collection whose enumerator is a class is fine: only the enumerator lives across the yields.
+            var source = """
+                using System;
+                using System.Collections.Generic;
+
+                foreach (var x in C.Spread())
+                    Console.Write(x);
+
+                class C
+                {
+                    public static IEnumerable<int> Spread()
+                    {
+                        yield return ..new R();
+                    }
+                }
+
+                ref struct R
+                {
+                    public IEnumerator<int> GetEnumerator() => new List<int> { 1, 2, 3 }.GetEnumerator();
+                }
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "123" : null).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void YieldReturnSpread_RefStructEnumerator_ClassSource()
+        {
+            // A class collection whose enumerator is a ref struct is rejected too.
+            var source = """
+                using System.Collections.Generic;
+
+                class C
+                {
+                    static IEnumerable<int> Spread(S s)
+                    {
+                        yield return ..s;
+                    }
+                }
+
+                class S
+                {
+                    public Enumerator GetEnumerator() => default;
+
+                    public ref struct Enumerator
+                    {
+                        public int Current => 0;
+                        public bool MoveNext() => false;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyEmitDiagnostics(
+                // (7,24): error CS20012: A spread 'yield return ..' cannot enumerate 'S' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead.
+                //         yield return ..s;
+                Diagnostic(ErrorCode.ERR_SharperSpreadRefStructEnumerator, "s").WithArguments("S").WithLocation(7, 24));
+        }
+
+        [Fact]
+        public void YieldReturnSpread_RefStructSource_RangeWins()
+        {
+            // A ref struct that converts to Index makes `..r` a valid C# range in an iterator of Range. C# wins: no error.
+            var source = """
+                using System;
+                using System.Collections.Generic;
+
+                foreach (var x in C.Spread())
+                    Console.Write(x);
+
+                class C
+                {
+                    public static IEnumerable<Range> Spread()
+                    {
+                        yield return ..new R();
+                    }
+                }
+
+                ref struct R
+                {
+                    public static implicit operator Index(R r) => 2;
+                    public Enumerator GetEnumerator() => default;
+
+                    public ref struct Enumerator
+                    {
+                        public int Current => 0;
+                        public bool MoveNext() => false;
+                    }
+                }
+                """;
+            // ILVerify: Return type is ByRef, TypedReference, ArgHandle, or ArgIterator (R.GetEnumerator returns a ref struct).
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, verify: Verification.FailsILVerify, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "0..2" : null).VerifyDiagnostics();
         }
 
         [Fact]
@@ -2590,10 +2799,27 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                     {
                         (int*) -> int local = null;
                         System.Func<int*, int> localTwin = null;
+                        (int, System.Span<int>) -> int span2 = null;
+                        System.Func<int, System.Span<int>, int> span2Twin = null;
+                        (int) -> System.Console staticLocal = null;
+                        System.Func<int, System.Console> staticLocalTwin = null;
+                        ((int*) -> int) -> int nested = null;
+                        System.Func<System.Func<int*, int>, int> nestedTwin = null;
+                        (int*[..]) -> int sequence = null;
+                        System.Func<System.Collections.Generic.IEnumerable<int*>, int> sequenceTwin = null;
+                        (int) -> int*~ task = null;
+                        System.Func<int, System.Threading.Tasks.Task<int*>> taskTwin = null;
+                        (S<string>) -> int constrained = null;
+                        System.Func<S<string>, int> constrainedTwin = null;
                     }
+                    void P((int*) -> int p, System.Func<int*, int> pTwin, (S<string>) -> void q, System.Action<S<string>> qTwin) { }
+                    (S<string>) -> int constrainedField;
+                    System.Func<S<string>, int> constrainedFieldTwin;
                 }
+                struct S<T> where T : struct { }
                 """;
-            // Constraint errors are the same as for the Func twins; in a local, they span the whole function type.
+            // Constraint errors are the same as for the Func twins, and are reported at the same place: on the
+            // parameter or return type that stands for the offending type argument.
             CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, options: TestOptions.UnsafeReleaseDll).VerifyDiagnostics(
                 // (4,6): error CS20008: A function type parameter cannot be 'ref', because a function type is a 'System.Func' or 'System.Action' delegate.
                 //     (ref int, out string, in long) -> bool modifiers;
@@ -2631,9 +2857,9 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (13,38): error CS0718: 'Console': static types cannot be used as type arguments
                 //     System.Func<int, System.Console> staticReturnTwin;
                 Diagnostic(ErrorCode.ERR_GenericArgIsStaticClass, "staticReturnTwin").WithArguments("System.Console").WithLocation(13, 38),
-                // (16,9): error CS0306: The type 'int*' may not be used as a type argument
+                // (16,10): error CS0306: The type 'int*' may not be used as a type argument
                 //         (int*) -> int local = null;
-                Diagnostic(ErrorCode.ERR_BadTypeArgument, "(int*) -> int").WithArguments("int*").WithLocation(16, 9),
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(16, 10),
                 // (16,23): warning CS0219: The variable 'local' is assigned but its value is never used
                 //         (int*) -> int local = null;
                 Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "local").WithArguments("local").WithLocation(16, 23),
@@ -2642,7 +2868,91 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(17, 21),
                 // (17,32): warning CS0219: The variable 'localTwin' is assigned but its value is never used
                 //         System.Func<int*, int> localTwin = null;
-                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "localTwin").WithArguments("localTwin").WithLocation(17, 32));
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "localTwin").WithArguments("localTwin").WithLocation(17, 32),
+                // (18,40): warning CS0219: The variable 'span2' is assigned but its value is never used
+                //         (int, System.Span<int>) -> int span2 = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "span2").WithArguments("span2").WithLocation(18, 40),
+                // (19,49): warning CS0219: The variable 'span2Twin' is assigned but its value is never used
+                //         System.Func<int, System.Span<int>, int> span2Twin = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "span2Twin").WithArguments("span2Twin").WithLocation(19, 49),
+                // (20,18): error CS0718: 'Console': static types cannot be used as type arguments
+                //         (int) -> System.Console staticLocal = null;
+                Diagnostic(ErrorCode.ERR_GenericArgIsStaticClass, "System.Console").WithArguments("System.Console").WithLocation(20, 18),
+                // (20,33): warning CS0219: The variable 'staticLocal' is assigned but its value is never used
+                //         (int) -> System.Console staticLocal = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "staticLocal").WithArguments("staticLocal").WithLocation(20, 33),
+                // (21,26): error CS0718: 'Console': static types cannot be used as type arguments
+                //         System.Func<int, System.Console> staticLocalTwin = null;
+                Diagnostic(ErrorCode.ERR_GenericArgIsStaticClass, "System.Console").WithArguments("System.Console").WithLocation(21, 26),
+                // (21,42): warning CS0219: The variable 'staticLocalTwin' is assigned but its value is never used
+                //         System.Func<int, System.Console> staticLocalTwin = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "staticLocalTwin").WithArguments("staticLocalTwin").WithLocation(21, 42),
+                // (22,11): error CS0306: The type 'int*' may not be used as a type argument
+                //         ((int*) -> int) -> int nested = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(22, 11),
+                // (22,32): warning CS0219: The variable 'nested' is assigned but its value is never used
+                //         ((int*) -> int) -> int nested = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "nested").WithArguments("nested").WithLocation(22, 32),
+                // (23,33): error CS0306: The type 'int*' may not be used as a type argument
+                //         System.Func<System.Func<int*, int>, int> nestedTwin = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(23, 33),
+                // (23,50): warning CS0219: The variable 'nestedTwin' is assigned but its value is never used
+                //         System.Func<System.Func<int*, int>, int> nestedTwin = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "nestedTwin").WithArguments("nestedTwin").WithLocation(23, 50),
+                // (24,10): error CS0306: The type 'int*' may not be used as a type argument
+                //         (int*[..]) -> int sequence = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(24, 10),
+                // (24,27): warning CS0219: The variable 'sequence' is assigned but its value is never used
+                //         (int*[..]) -> int sequence = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "sequence").WithArguments("sequence").WithLocation(24, 27),
+                // (25,60): error CS0306: The type 'int*' may not be used as a type argument
+                //         System.Func<System.Collections.Generic.IEnumerable<int*>, int> sequenceTwin = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(25, 60),
+                // (25,72): warning CS0219: The variable 'sequenceTwin' is assigned but its value is never used
+                //         System.Func<System.Collections.Generic.IEnumerable<int*>, int> sequenceTwin = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "sequenceTwin").WithArguments("sequenceTwin").WithLocation(25, 72),
+                // (26,18): error CS0306: The type 'int*' may not be used as a type argument
+                //         (int) -> int*~ task = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(26, 18),
+                // (26,24): warning CS0219: The variable 'task' is assigned but its value is never used
+                //         (int) -> int*~ task = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "task").WithArguments("task").WithLocation(26, 24),
+                // (27,54): error CS0306: The type 'int*' may not be used as a type argument
+                //         System.Func<int, System.Threading.Tasks.Task<int*>> taskTwin = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(27, 54),
+                // (27,61): warning CS0219: The variable 'taskTwin' is assigned but its value is never used
+                //         System.Func<int, System.Threading.Tasks.Task<int*>> taskTwin = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "taskTwin").WithArguments("taskTwin").WithLocation(27, 61),
+                // (28,12): error CS0453: The type 'string' must be a non-nullable value type in order to use it as parameter 'T' in the generic type or method 'S<T>'
+                //         (S<string>) -> int constrained = null;
+                Diagnostic(ErrorCode.ERR_ValConstraintNotSatisfied, "string").WithArguments("S<T>", "T", "string").WithLocation(28, 12),
+                // (28,28): warning CS0219: The variable 'constrained' is assigned but its value is never used
+                //         (S<string>) -> int constrained = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "constrained").WithArguments("constrained").WithLocation(28, 28),
+                // (29,23): error CS0453: The type 'string' must be a non-nullable value type in order to use it as parameter 'T' in the generic type or method 'S<T>'
+                //         System.Func<S<string>, int> constrainedTwin = null;
+                Diagnostic(ErrorCode.ERR_ValConstraintNotSatisfied, "string").WithArguments("S<T>", "T", "string").WithLocation(29, 23),
+                // (29,37): warning CS0219: The variable 'constrainedTwin' is assigned but its value is never used
+                //         System.Func<S<string>, int> constrainedTwin = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "constrainedTwin").WithArguments("constrainedTwin").WithLocation(29, 37),
+                // (31,26): error CS0306: The type 'int*' may not be used as a type argument
+                //     void P((int*) -> int p, System.Func<int*, int> pTwin, (S<string>) -> void q, System.Action<S<string>> qTwin) { }
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "p").WithArguments("int*").WithLocation(31, 26),
+                // (31,52): error CS0306: The type 'int*' may not be used as a type argument
+                //     void P((int*) -> int p, System.Func<int*, int> pTwin, (S<string>) -> void q, System.Action<S<string>> qTwin) { }
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "pTwin").WithArguments("int*").WithLocation(31, 52),
+                // (31,79): error CS0453: The type 'string' must be a non-nullable value type in order to use it as parameter 'T' in the generic type or method 'S<T>'
+                //     void P((int*) -> int p, System.Func<int*, int> pTwin, (S<string>) -> void q, System.Action<S<string>> qTwin) { }
+                Diagnostic(ErrorCode.ERR_ValConstraintNotSatisfied, "q").WithArguments("S<T>", "T", "string").WithLocation(31, 79),
+                // (31,107): error CS0453: The type 'string' must be a non-nullable value type in order to use it as parameter 'T' in the generic type or method 'S<T>'
+                //     void P((int*) -> int p, System.Func<int*, int> pTwin, (S<string>) -> void q, System.Action<S<string>> qTwin) { }
+                Diagnostic(ErrorCode.ERR_ValConstraintNotSatisfied, "qTwin").WithArguments("S<T>", "T", "string").WithLocation(31, 107),
+                // (32,24): error CS0453: The type 'string' must be a non-nullable value type in order to use it as parameter 'T' in the generic type or method 'S<T>'
+                //     (S<string>) -> int constrainedField;
+                Diagnostic(ErrorCode.ERR_ValConstraintNotSatisfied, "constrainedField").WithArguments("S<T>", "T", "string").WithLocation(32, 24),
+                // (33,33): error CS0453: The type 'string' must be a non-nullable value type in order to use it as parameter 'T' in the generic type or method 'S<T>'
+                //     System.Func<S<string>, int> constrainedFieldTwin;
+                Diagnostic(ErrorCode.ERR_ValConstraintNotSatisfied, "constrainedFieldTwin").WithArguments("S<T>", "T", "string").WithLocation(33, 33));
         }
 
         [Fact]
@@ -2770,6 +3080,22 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             }
         }
 
+        [Theory]
+        [CombinatorialData]
+        public void FunctionType_Parsing_RefTupleElement(bool sharper)
+        {
+            // C# scans a 'ref' tuple element as part of the tuple type and reports the 'ref', so Sharper must too.
+            // Found by the parser tests with ROSLYN_TEST_SHARPER (RefReadonlyTests.RefReadonlyReturn_UnexpectedBindTime).
+            var options = sharper ? s_sharperOptions : TestOptions.Regular;
+            foreach (var text in new[] { "(ref readonly int, ref readonly int Alice)? t = null;", "(ref int, int) t = default;" })
+            {
+                var statement = SyntaxFactory.ParseStatement(text, options: options);
+                Assert.Equal(SyntaxKind.LocalDeclarationStatement, statement.Kind());
+                Assert.IsAssignableFrom<TupleTypeSyntax>(((LocalDeclarationStatementSyntax)statement).Declaration.Type.DescendantNodesAndSelf().First(n => n is TupleTypeSyntax));
+                Assert.All(statement.GetDiagnostics(), d => Assert.Equal((int)ErrorCode.ERR_UnexpectedToken, d.Code));
+            }
+        }
+
         [Fact]
         public void FunctionType_Parsing_DeeplyNestedParentheses()
         {
@@ -2844,6 +3170,650 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             // Sharper syntax nodes sit apart from the upstream ones; an upstream merge must not reuse the value.
             Assert.Equal(9900, (int)SyntaxKind.FunctionType);
             Assert.Single(Enum.GetValues(typeof(SyntaxKind)).Cast<SyntaxKind>(), k => (int)k == (int)SyntaxKind.FunctionType);
+        }
+
+        [Fact]
+        public void FunctionType_Parenthesized_Basic()
+        {
+            // Parentheses let a suffix apply to the whole function type: ((int) -> int)? is Func<int, int>?.
+            var source = """
+                #nullable enable
+                using System;
+                using System.Collections.Generic;
+                using System.Threading.Tasks;
+
+                ((int) -> int)? none = null;
+                ((int) -> int)[] handlers = [i => i + 1, i => i * 2];
+                ((int) -> int)~ pending = Task.FromResult<(int) -> int>(i => -i);
+                List<((string) -> void)?> actions = [null, s => Console.Write(" " + s)];
+                () -> ((int) -> int)[] factory = () => handlers;
+
+                Console.Write(none is null);
+                Console.Write(" " + handlers[0](1) + handlers[1](5));
+                Console.Write(" " + (await pending)(3));
+                actions[1]?.Invoke("action");
+                Console.Write(" " + factory().Length);
+                Console.Write(" " + Apply(handlers, 10));
+                Console.Write(" " + (typeof(((int) -> int)[]) == typeof(Func<int, int>[])));
+                Console.Write(" " + (typeof(((int) -> int)~) == typeof(Task<Func<int, int>>)));
+                Console.Write(" " + (typeof(((int) -> int)[..]) == typeof(IEnumerable<Func<int, int>>)));
+                Console.Write(" " + (typeof(((int) -> int)) == typeof(Func<int, int>)));
+
+                static int Apply(((int) -> int)[] fs, int x)
+                {
+                    foreach (((int) -> int)? f in fs) { x = f?.Invoke(x) ?? x; }
+                    return x;
+                }
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90,
+                expectedOutput: ExecutionConditionUtil.IsCoreClr ? "True 210 -3 action 2 22 True True True True" : null).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void FunctionType_Parenthesized_TypePositions()
+        {
+            // Each parenthesized function type is the type written with Func, Action, Task and IEnumerable.
+            var source = """
+                #nullable enable
+                using System;
+                using System.Collections.Generic;
+                using System.Threading.Tasks;
+                using Handlers = ((int) -> int)[];
+
+                #pragma warning disable CS0169, CS0649, CS8618 // The field is never used, assigned or initialized
+                class C
+                {
+                    ((int) -> int)? A; Func<int, int>? ATwin;
+                    ((int) -> int)[] B; Func<int, int>[] BTwin;
+                    ((int) -> int)~ T; Task<Func<int, int>> TTwin;
+                    ((int) -> int)[]? D; Func<int, int>[]? DTwin;
+                    ((int) -> int)~? E; Task<Func<int, int>>? ETwin;
+                    ((int) -> int)?[] F; Func<int, int>?[] FTwin;
+                    ((int) -> int?)? G; Func<int, int?>? GTwin;
+                    ((int) -> int)[,] H; Func<int, int>[,] HTwin;
+                    ((int) -> int)[..] I; IEnumerable<Func<int, int>> ITwin;
+                    ((string) -> void)? J; Action<string>? JTwin;
+                    (((int) -> int)?) -> int K; Func<Func<int, int>?, int> KTwin;
+                    (int) -> ((int) -> int)? L; Func<int, Func<int, int>?> LTwin;
+                    ((int) -> (int) -> int)? M; Func<int, Func<int, int>>? MTwin;
+                    (((int) -> int)[], string) N; (Func<int, int>[], string) NTwin;
+                    List<((int) -> int)?> O; List<Func<int, int>?> OTwin;
+                    Handlers P; Func<int, int>[] PTwin;
+                    ((int, int) -> int)? Q; Func<int, int, int>? QTwin;
+                    (() -> void)[] R; Action[] RTwin;
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics();
+
+            var c = comp.GetMember<NamedTypeSymbol>("C");
+            var fields = c.GetMembers().OfType<FieldSymbol>().ToArray();
+            Assert.Equal(36, fields.Length);
+            for (int i = 0; i < fields.Length; i += 2)
+            {
+                Assert.Equal(fields[i].Name + "Twin", fields[i + 1].Name);
+                Assert.Equal(fields[i + 1].TypeWithAnnotations.ToTestDisplayString(includeNonNullable: true), fields[i].TypeWithAnnotations.ToTestDisplayString(includeNonNullable: true));
+            }
+        }
+
+        [Fact]
+        public void FunctionType_Parenthesized_Locals()
+        {
+            // The same in local positions, compared with the local of the twin.
+            var source = """
+                #nullable enable
+                using System;
+                using System.Threading.Tasks;
+
+                class C
+                {
+                    async Task M(object o, ((int) -> int)?[] fs)
+                    {
+                        #pragma warning disable CS0219 // The variable is assigned but its value is never used
+                        ((int) -> int)? a = null; Func<int, int>? aTwin = null;
+                        var b = (((int) -> int)[])o; var bTwin = (Func<int, int>[])o;
+                        var c = o as ((int) -> int)[]; var cTwin = o as Func<int, int>[];
+                        var d = default(((int) -> int)~); var dTwin = default(Task<Func<int, int>>);
+                        var e = new ((int) -> int)[3]; var eTwin = new Func<int, int>[3];
+                        foreach (((int) -> int)? f in fs) { } foreach (Func<int, int>? fTwin in fs) { }
+                        G(out ((int) -> int)[] g); G(out Func<int, int>[] gTwin);
+                        (((int) -> int)[] h, int i) = (new ((int) -> int)[0], 1); (Func<int, int>[] hTwin, int iTwin) = (new Func<int, int>[0], 1);
+                        using (((int) -> int)~? j = null) { } using (Task<Func<int, int>>? jTwin = null) { }
+                        ((int) -> int)? k = await Task.FromResult<((int) -> int)?>(null); Func<int, int>? kTwin = await Task.FromResult<Func<int, int>?>(null);
+                        var l = (((int) -> int)? x) => x; var lTwin = (Func<int, int>? xTwin) => xTwin;
+                    }
+
+                    void G(out ((int) -> int)[] g) => g = [];
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics();
+
+            var tree = comp.SyntaxTrees.Single();
+            var model = comp.GetSemanticModel(tree);
+            var locals = tree.GetRoot().DescendantNodes()
+                .Where(n => n is VariableDeclaratorSyntax or SingleVariableDesignationSyntax or ForEachStatementSyntax or ParameterSyntax { Parent.Parent: ParenthesizedLambdaExpressionSyntax })
+                .Select(n => model.GetDeclaredSymbol(n))
+                .OfType<ISymbol>()
+                .Where(s => s is ILocalSymbol or IParameterSymbol { ContainingSymbol: IMethodSymbol { MethodKind: MethodKind.AnonymousFunction } })
+                .ToDictionary(s => s.Name, s => s switch { ILocalSymbol l => l.Type.ToTestDisplayString(includeNonNullable: true), IParameterSymbol p => p.Type.ToTestDisplayString(includeNonNullable: true), _ => null });
+            Assert.Equal(26, locals.Count);
+            foreach (var (name, type) in locals)
+            {
+                if (!name.EndsWith("Twin"))
+                {
+                    Assert.Equal(locals[name + "Twin"], type);
+                }
+            }
+        }
+
+        [Fact]
+        public void FunctionType_Parenthesized_Nullable()
+        {
+            var source = """
+                #nullable enable
+                using System;
+
+                ((int) -> int)? f = null;
+                Func<int, int>? g = null;
+                f(1);
+                g(1);
+                ((int) -> int)[] fs = [null];
+                Func<int, int>[] gs = [null];
+                """;
+            // The same warnings as for the Func twins.
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (6,1): warning CS8602: Dereference of a possibly null reference.
+                // f(1);
+                Diagnostic(ErrorCode.WRN_NullReferenceReceiver, "f").WithLocation(6, 1),
+                // (7,1): warning CS8602: Dereference of a possibly null reference.
+                // g(1);
+                Diagnostic(ErrorCode.WRN_NullReferenceReceiver, "g").WithLocation(7, 1),
+                // (8,24): warning CS8625: Cannot convert null literal to non-nullable reference type.
+                // ((int) -> int)[] fs = [null];
+                Diagnostic(ErrorCode.WRN_NullAsNonNullable, "null").WithLocation(8, 24),
+                // (9,24): warning CS8625: Cannot convert null literal to non-nullable reference type.
+                // Func<int, int>[] gs = [null];
+                Diagnostic(ErrorCode.WRN_NullAsNonNullable, "null").WithLocation(9, 24));
+        }
+
+        [Fact]
+        public void FunctionType_Parenthesized_Errors()
+        {
+            // Parentheses are a type only around a function type.
+            foreach (var text in new[] { "((int)) a = null;", "((int) -> int c) d = null;", "(ref (int) -> int) e = null;", "((int, int)) f = null;" })
+            {
+                var statement = SyntaxFactory.ParseStatement(text, options: s_sharperOptions);
+                Assert.Empty(statement.DescendantNodes().OfType<ParenthesizedTypeSyntax>());
+                Assert.NotEqual(SyntaxKind.LocalDeclarationStatement, statement.Kind());
+            }
+        }
+
+        [Fact]
+        public void FunctionType_Parenthesized_Disabled()
+        {
+            // Without Sharper, the parenthesized function type reports the usual C# errors.
+            var source = """
+                class C
+                {
+                    void M()
+                    {
+                        ((int) -> int)? f = null;
+                        ((int) -> int)[] g = null;
+                    }
+                }
+                """;
+            var comp = CreateCompilation(source, targetFramework: TargetFramework.Net90);
+            Assert.NotEmpty(comp.GetDiagnostics());
+            Assert.Empty(comp.SyntaxTrees.Single().GetRoot().DescendantNodes().OfType<ParenthesizedTypeSyntax>());
+            Assert.Empty(comp.SyntaxTrees.Single().GetRoot().DescendantNodes().OfType<FunctionTypeSyntax>());
+        }
+
+        [Fact]
+        public void FunctionType_Parenthesized_FactoryWithoutSharper()
+        {
+            // A parenthesized type built with SyntaxFactory in a C# tree reports that Sharper is not enabled.
+            var tree = SyntaxFactory.ParseSyntaxTree("class C { ((int) -> int)? F; }", s_sharperOptions);
+            var csharpTree = tree.WithRootAndOptions(tree.GetRoot(), TestOptions.Regular);
+            CreateCompilation(csharpTree, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (1,11): error CS8058: Feature 'Sharper' is experimental and unsupported; use '/features:sharper' to enable.
+                // class C { ((int) -> int)? F; }
+                Diagnostic(ErrorCode.ERR_FeatureIsExperimental, "(").WithArguments("Sharper", "sharper").WithLocation(1, 11),
+                // (1,18): error CS8058: Feature 'Sharper' is experimental and unsupported; use '/features:sharper' to enable.
+                // class C { ((int) -> int)? F; }
+                Diagnostic(ErrorCode.ERR_FeatureIsExperimental, "->").WithArguments("Sharper", "sharper").WithLocation(1, 18),
+                // (1,25): warning CS8632: The annotation for nullable reference types should only be used in code within a '#nullable' annotations context.
+                // class C { ((int) -> int)? F; }
+                Diagnostic(ErrorCode.WRN_MissingNonNullTypesContextForAnnotation, "?").WithLocation(1, 25),
+                // (1,27): warning CS0169: The field 'C.F' is never used
+                // class C { ((int) -> int)? F; }
+                Diagnostic(ErrorCode.WRN_UnreferencedField, "F").WithArguments("C.F").WithLocation(1, 27));
+        }
+
+        [Theory]
+        [CombinatorialData]
+        public void FunctionType_Parenthesized_Parsing(bool sharper)
+        {
+            var options = sharper ? s_sharperOptions : TestOptions.Regular;
+
+            // Every one of these is a syntax error in C#.
+            foreach (var text in new[] { "((int) -> int)? f;", "((int) -> int)[] f;", "((int) -> int)~ f;", "((int) -> int)[]? f = null;", "((p) -> F)? x;", "((p) -> F)[] x;", "((p) -> F)~ x;", "(((int) -> int)[] a, int b) = t;", "foreach (((int) -> int)? f in fs) { }", "M(out ((int) -> int)? f);", "x = (((int) -> int)?)y;", "x = (((int) -> int)[])y;", "x = (((int) -> int))y;", "x = y as ((int) -> int)[];", "x = typeof(((int) -> int)[]);", "x = default(((int) -> int)?);", "x = F<((int) -> int)?>(y);", "x = new ((int) -> int)[3];", "((int) -> int)? L() => null;", "x = (((int) -> int)? f) => f;" })
+            {
+                var statement = SyntaxFactory.ParseStatement(text, options: options);
+                Assert.True(sharper != statement.ContainsDiagnostics, text);
+                Assert.True(sharper == statement.DescendantNodes().OfType<ParenthesizedTypeSyntax>().Any(), text);
+            }
+
+            // The suffix applies to the parenthesized type, and the parentheses hold the function type.
+            var declaration = SyntaxFactory.ParseStatement("((int) -> int)? f;", options: options);
+            if (sharper)
+            {
+                var type = (NullableTypeSyntax)((LocalDeclarationStatementSyntax)declaration).Declaration.Type;
+                var parenthesized = (ParenthesizedTypeSyntax)type.ElementType;
+                Assert.Equal(SyntaxKind.FunctionType, parenthesized.Type.Kind());
+                Assert.Equal("int", ((FunctionTypeSyntax)parenthesized.Type).ReturnType.ToString());
+            }
+
+            // A parenthesized function type as a parameter of a function type, and as its return type.
+            declaration = SyntaxFactory.ParseStatement("(((int) -> int)?) -> ((int) -> int)[] f;", options: options);
+            if (sharper)
+            {
+                var type = (FunctionTypeSyntax)((LocalDeclarationStatementSyntax)declaration).Declaration.Type;
+                Assert.Equal(SyntaxKind.NullableType, type.Parameters.Single().Type.Kind());
+                Assert.Equal(SyntaxKind.ArrayType, type.ReturnType.Kind());
+                Assert.False(declaration.ContainsDiagnostics);
+            }
+
+            // A function type taking a function type, which needs no extra parentheses.
+            declaration = SyntaxFactory.ParseStatement("((int) -> int) -> int f;", options: options);
+            if (sharper)
+            {
+                var type = (FunctionTypeSyntax)((LocalDeclarationStatementSyntax)declaration).Declaration.Type;
+                Assert.Equal(SyntaxKind.FunctionType, type.Parameters.Single().Type.Kind());
+            }
+        }
+
+        [Theory]
+        [CombinatorialData]
+        public void FunctionType_Parenthesized_Parsing_KeepsCSharpMeaning(bool sharper)
+        {
+            // A parenthesized pointer member access keeps its C# meaning, with or without Sharper.
+            var options = sharper ? s_sharperOptions : TestOptions.Regular;
+            foreach (var text in new[] { "x = ((p)->F)[i];", "((p)->F)[i] = 1;", "x = ((p)->F)?.X;", "((p)->F)?.M();", "x = ((p)->F)?[i];", "x = ((p)->F) ? a : b;", "x = ((p)->F) ? [a] : b;", "x = c ? ((p)->F) : b;", "((p)->F)(x);", "(((p)->F))(x);", "x = (((p)->F))(y);", "x = (((p)->F<int>))(y);", "x = ((p)->F)!;", "x = (((p)->F))!;", "((p)->F)++;", "x = ((p)->F) * y;", "x = ((p)->F) < y;", "M(((p)->F)?.X, y);", "x = ((p)->F, y);", "x = (((p)->F), y);" })
+            {
+                var statement = SyntaxFactory.ParseStatement(text, options: options);
+                Assert.False(statement.ContainsDiagnostics, text);
+                Assert.Empty(statement.DescendantNodes().OfType<ParenthesizedTypeSyntax>());
+                Assert.Empty(statement.DescendantNodes().OfType<FunctionTypeSyntax>());
+                Assert.Empty(statement.DescendantNodes().OfType<CastExpressionSyntax>());
+                Assert.True(statement.IsEquivalentTo(SyntaxFactory.ParseStatement(text, options: TestOptions.Regular)), text);
+            }
+        }
+
+        [Theory]
+        [CombinatorialData]
+        public void FunctionType_Parenthesized_PointerMemberAccess_KeepsCSharpMeaning(bool sharper)
+        {
+            var source = """
+                using System;
+
+                unsafe
+                {
+                    var s = new S { A = [10, 20], B = true, F = i => i * 10 };
+                    S* p = &s;
+                    Console.Write(((p)->A)[1]);
+                    Console.Write(" " + (((p)->N)?.Length ?? -1));
+                    Console.Write(" " + (((p)->A)?[0]));
+                    Console.Write(" " + (((p)->B) ? "yes" : "no"));
+                    Console.Write(" " + ((p)->F)(1));
+                    Console.Write(" " + (((p)->F))(2));
+                    ((p)->A)[0] = 30;
+                    Console.Write(" " + s.A[0]);
+                }
+
+                struct S { public int[] A; public string N; public bool B; public Func<int, int> F; }
+                """;
+            CompileAndVerify(source, parseOptions: sharper ? s_sharperOptions : TestOptions.Regular, targetFramework: TargetFramework.Net90,
+                options: TestOptions.UnsafeReleaseExe, verify: Verification.Skipped,
+                expectedOutput: ExecutionConditionUtil.IsCoreClr ? "20 -1 10 yes 10 20 30" : null).VerifyDiagnostics(
+                // (6,5): warning CS8500: This takes the address of, gets the size of, or declares a pointer to a managed type ('S')
+                //     S* p = &s;
+                Diagnostic(ErrorCode.WRN_ManagedAddr, "S*").WithArguments("S").WithLocation(6, 5),
+                // (6,12): warning CS8500: This takes the address of, gets the size of, or declares a pointer to a managed type ('S')
+                //     S* p = &s;
+                Diagnostic(ErrorCode.WRN_ManagedAddr, "&s").WithArguments("S").WithLocation(6, 12));
+        }
+
+        [Fact]
+        public void FunctionType_Parenthesized_DeeplyNested()
+        {
+            // Function types nested in parentheses are scanned in one pass, so they do not take exponential time.
+            var depth = 100;
+            var builder = new System.Text.StringBuilder();
+            for (int i = 0; i < depth; i++)
+            {
+                builder.Append("((int) -> ");
+            }
+
+            builder.Append("int");
+            for (int i = 0; i < depth; i++)
+            {
+                builder.Append(")?");
+            }
+
+            builder.Append(" f;");
+            var statement = SyntaxFactory.ParseStatement(builder.ToString(), options: s_sharperOptions);
+            Assert.Equal(SyntaxKind.LocalDeclarationStatement, statement.Kind());
+            Assert.False(statement.ContainsDiagnostics);
+            Assert.Equal(depth, statement.DescendantNodes().OfType<ParenthesizedTypeSyntax>().Count());
+        }
+
+        [Fact]
+        public void FunctionType_Parenthesized_SemanticModel()
+        {
+            var source = """
+                #pragma warning disable CS0169 // The field is never used
+                class C
+                {
+                    ((int) -> string)[] F;
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics();
+
+            var tree = comp.SyntaxTrees.Single();
+            var model = comp.GetSemanticModel(tree);
+            var parenthesized = tree.GetRoot().DescendantNodes().OfType<ParenthesizedTypeSyntax>().Single();
+            Assert.Equal("System.Func<System.Int32, System.String>", model.GetTypeInfo(parenthesized).Type.ToTestDisplayString());
+            Assert.Equal("System.Func<System.Int32, System.String>", model.GetSymbolInfo(parenthesized).Symbol.ToTestDisplayString());
+            Assert.Equal("System.Func<System.Int32, System.String>", model.GetTypeInfo(parenthesized.Type).Type.ToTestDisplayString());
+            Assert.Equal("System.Func<System.Int32, System.String>[]", model.GetTypeInfo(parenthesized.Parent!).Type.ToTestDisplayString());
+            Assert.True(SyntaxFacts.IsInTypeOnlyContext(parenthesized.Type));
+            Assert.True(SyntaxFacts.IsTypeSyntax(SyntaxKind.ParenthesizedType));
+        }
+
+        [Fact]
+        public void FunctionType_Pattern_Basic()
+        {
+            // Function types in declaration, type, recursive, list and property patterns, and in switch statements and
+            // expressions.
+            var source = """
+                using System;
+
+                object[] values = [(Func<int, int>)(i => i + 1), (Action)(() => Console.Write("tick")), new Func<int, int>[] { i => i * 2 }, (Func<string, int>)(s => s.Length), "text"];
+                foreach (var o in values)
+                {
+                    Console.Write(Describe(o) + " " + Classify(o) + " " + (o is (int) -> int ? "func" : "not") + (o is not () -> void) + "; ");
+                }
+
+                Console.Write(values is [(int) -> int first, ..] ? first(10) : -1);
+                Console.Write(new Box(values[0]) is { Value: (int) -> int g } ? " " + g(20) : " none");
+                Console.Write(values[1] is () -> void { } a and not null ? " action" : " none");
+
+                static string Describe(object o) => o switch
+                {
+                    (int) -> int f => "f" + f(1),
+                    () -> void a => Run(a),
+                    ((int) -> int)[] fs => "fs" + fs[0](3),
+                    (string) -> int => "string",
+                    _ => "other",
+                };
+
+                static string Run(() -> void a) { a(); return ""; }
+
+                static string Classify(object o)
+                {
+                    switch (o)
+                    {
+                        case (int) -> int f when f(0) > 0:
+                            return "positive";
+                        case (int) -> int:
+                            return "zero";
+                        case () -> void:
+                            return "action";
+                        default:
+                            return "other";
+                    }
+                }
+
+                record Box(object Value);
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90,
+                expectedOutput: ExecutionConditionUtil.IsCoreClr ? "f2 positive funcTrue; tick action notFalse; fs6 other notTrue; string other notTrue; other other notTrue; 11 21 action" : null).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void FunctionType_Pattern_SameAsFunc()
+        {
+            // A function type pattern reports what its Func twin reports.
+            var source = """
+                #nullable enable
+                using System;
+
+                class C
+                {
+                    void M(object o, Func<int, int> f)
+                    {
+                        switch (o)
+                        {
+                            case Func<int, int>: break;
+                            case (int) -> int: break;
+                        }
+                        switch (o)
+                        {
+                            case (int) -> int: break;
+                            case Func<int, int>: break;
+                        }
+                        _ = o is ((int) -> int)? a;
+                        _ = o is Func<int, int>? b;
+                        _ = f is (int) -> int;
+                        _ = f is Func<int, int>;
+                        _ = o is (ref int) -> int c;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (11,18): error CS8120: The switch case is unreachable. It has already been handled by a previous case or it is impossible to match.
+                //             case (int) -> int: break;
+                Diagnostic(ErrorCode.ERR_SwitchCaseSubsumed, "(int) -> int").WithLocation(11, 18),
+                // (16,18): error CS8120: The switch case is unreachable. It has already been handled by a previous case or it is impossible to match.
+                //             case Func<int, int>: break;
+                Diagnostic(ErrorCode.ERR_SwitchCaseSubsumed, "Func<int, int>").WithLocation(16, 18),
+                // (18,18): error CS8116: It is not legal to use nullable type 'Func<int, int>?' in a pattern; use the underlying type 'Func<int, int>' instead.
+                //         _ = o is ((int) -> int)? a;
+                Diagnostic(ErrorCode.ERR_PatternNullableType, "((int) -> int)?").WithArguments("System.Func<int, int>").WithLocation(18, 18),
+                // (19,18): error CS8116: It is not legal to use nullable type 'Func<int, int>?' in a pattern; use the underlying type 'Func<int, int>' instead.
+                //         _ = o is Func<int, int>? b;
+                Diagnostic(ErrorCode.ERR_PatternNullableType, "Func<int, int>?").WithArguments("System.Func<int, int>").WithLocation(19, 18),
+                // (22,19): error CS20008: A function type parameter cannot be 'ref', because a function type is a 'System.Func' or 'System.Action' delegate.
+                //         _ = o is (ref int) -> int c;
+                Diagnostic(ErrorCode.ERR_SharperFunctionTypeParameterModifier, "ref").WithArguments("ref").WithLocation(22, 19));
+        }
+
+        [Fact]
+        public void FunctionType_Pattern_SemanticModel()
+        {
+            var source = """
+                class C
+                {
+                    bool M(object o) => o is (int, string) -> bool f && f(1, "");
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics();
+
+            var tree = comp.SyntaxTrees.Single();
+            var model = comp.GetSemanticModel(tree);
+            var pattern = tree.GetRoot().DescendantNodes().OfType<DeclarationPatternSyntax>().Single();
+            Assert.Equal(SyntaxKind.FunctionType, pattern.Type.Kind());
+            Assert.Equal("System.Func<System.Int32, System.String, System.Boolean>", model.GetTypeInfo(pattern.Type).Type.ToTestDisplayString());
+            var local = (ILocalSymbol)model.GetDeclaredSymbol(pattern.Designation)!;
+            Assert.Equal("System.Func<System.Int32, System.String, System.Boolean>", local.Type.ToTestDisplayString());
+        }
+
+        [Fact]
+        public void FunctionType_Pattern_IOperation()
+        {
+            var source = """
+                class C
+                {
+                    bool M(object o)
+                    {
+                        return /*<bind>*/o is (int) -> int f/*</bind>*/;
+                    }
+                }
+                """;
+            var expectedOperationTree = """
+                IIsPatternOperation (OperationKind.IsPattern, Type: System.Boolean) (Syntax: 'o is (int) -> int f')
+                  Value:
+                    IParameterReferenceOperation: o (OperationKind.ParameterReference, Type: System.Object) (Syntax: 'o')
+                  Pattern:
+                    IDeclarationPatternOperation (OperationKind.DeclarationPattern, Type: null) (Syntax: '(int) -> int f') (InputType: System.Object, NarrowedType: System.Func<System.Int32, System.Int32>, DeclaredSymbol: System.Func<System.Int32, System.Int32> f, MatchesNull: False)
+                """;
+            VerifyOperationTreeAndDiagnosticsForTest<IsPatternExpressionSyntax>(source, expectedOperationTree, DiagnosticDescription.None,
+                parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+        }
+
+        [Fact]
+        public void FunctionType_Pattern_Disabled()
+        {
+            // Without Sharper, a function type in a pattern reports the usual C# syntax errors.
+            var source = """
+                class C
+                {
+                    bool M(object o) => o is (int) -> int f;
+                    int N(object o) => o switch { () -> void => 1, _ => 0 };
+                }
+                """;
+            var comp = CreateCompilation(source, targetFramework: TargetFramework.Net90);
+            Assert.Contains(comp.GetDiagnostics(), d => d.Severity == DiagnosticSeverity.Error);
+            Assert.Empty(comp.SyntaxTrees.Single().GetRoot().DescendantNodes().OfType<FunctionTypeSyntax>());
+        }
+
+        [Theory]
+        [CombinatorialData]
+        public void FunctionType_Pattern_Parsing(bool sharper)
+        {
+            var options = sharper ? s_sharperOptions : TestOptions.Regular;
+
+            // Every one of these is a syntax error in C#: a parenthesized pattern or expression cannot be followed by `->`.
+            foreach (var text in new[] { "x = o is (int) -> int f;", "x = o is (int) -> int;", "x = o is () -> void;", "x = o is not (int) -> int;", "x = o is (int) -> int { } f;", "x = o is ((int) -> int)[] fs;", "x = o is (int) -> int f and not null;", "x = o is (int) -> (int) -> int f;", "x = o is (int, string) -> bool;", "x = o is (int) -> int ? a : b;", "x = o switch { (int) -> int f => 1, _ => 0 };", "x = o switch { (int) -> int f when f(0) > 0 => 1, _ => 0 };", "switch (o) { case () -> void a: break; }", "switch (o) { case (int) -> int: break; }", "x = o is { P: (int) -> int f };", "x = o is [(int) -> int f, ..];", "x = o is (p)->F;", "x = o is ((p)->F)[];" })
+            {
+                var statement = SyntaxFactory.ParseStatement(text, options: options);
+                Assert.True(sharper != statement.ContainsDiagnostics, text);
+                Assert.True(sharper == statement.DescendantNodes().OfType<FunctionTypeSyntax>().Any(), text);
+            }
+
+            if (sharper)
+            {
+                // `is` with a type, as for `o is Func<int, int>`.
+                var expression = SyntaxFactory.ParseExpression("o is (int) -> int", options: options);
+                Assert.Equal(SyntaxKind.FunctionType, ((BinaryExpressionSyntax)expression).Right.Kind());
+
+                // A conditional, as `o is int ? a : b` is.
+                expression = SyntaxFactory.ParseExpression("o is (int) -> int ? a : b", options: options);
+                var conditional = (ConditionalExpressionSyntax)expression;
+                Assert.Equal("int", ((FunctionTypeSyntax)((BinaryExpressionSyntax)conditional.Condition).Right).ReturnType.ToString());
+
+                // A nullable return type before a designation.
+                expression = SyntaxFactory.ParseExpression("o is (int) -> int? f", options: options);
+                var pattern = (DeclarationPatternSyntax)((IsPatternExpressionSyntax)expression).Pattern;
+                Assert.Equal(SyntaxKind.NullableType, ((FunctionTypeSyntax)pattern.Type).ReturnType.Kind());
+            }
+        }
+
+        [Theory]
+        [CombinatorialData]
+        public void FunctionType_Pattern_Parsing_KeepsCSharpMeaning(bool sharper)
+        {
+            // Patterns that start with `(` keep their C# meaning, with or without Sharper.
+            var options = sharper ? s_sharperOptions : TestOptions.Regular;
+            foreach (var text in new[] { "x = o is (1);", "x = o is (A);", "x = o is (A.B);", "x = o is (int)1;", "x = o is (A, B);", "x = o is (A, B) t;", "x = o is (int, int)[] t;", "x = o is (> 1 and < 3);", "x = o is (var a, var b);", "x = o is (A) { };", "x = o is > (p)->F;", "x = o is p->F;", "x = o is (int)p->F;", "x = o is ((A, B), C);", "x = o switch { (1) => a, (A, B) => b, _ => c };", "switch (o) { case (1): break; case (A, B) t: break; }", "x = o is (A) ? a : b;", "x = o is (A) and B;" })
+            {
+                var statement = SyntaxFactory.ParseStatement(text, options: options);
+                Assert.False(statement.ContainsDiagnostics, text);
+                Assert.Empty(statement.DescendantNodes().OfType<FunctionTypeSyntax>());
+                Assert.True(statement.IsEquivalentTo(SyntaxFactory.ParseStatement(text, options: TestOptions.Regular)), text);
+            }
+        }
+
+        [Theory]
+        [CombinatorialData]
+        public void FunctionType_Pattern_PointerMemberAccess(bool sharper)
+        {
+            // `e is (p)->F` does not compile in C# (a syntax error), and neither with Sharper, where it is a type pattern
+            // with an unknown type. The C# constant pattern is written `e is p->F`, which keeps its meaning.
+            var source = """
+                unsafe class C
+                {
+                    bool M(object e, S* p) => e is (p)->F;
+                    bool N(object e, S* p) => e is p->F;
+                }
+
+                struct S { public int F; }
+                """;
+            var comp = CreateCompilation(source, parseOptions: sharper ? s_sharperOptions : TestOptions.Regular, targetFramework: TargetFramework.Net90,
+                options: TestOptions.UnsafeReleaseDll);
+            if (sharper)
+            {
+                comp.VerifyDiagnostics(
+                    // (3,37): error CS0118: 'p' is a variable but is used like a type
+                    //     bool M(object e, S* p) => e is (p)->F;
+                    Diagnostic(ErrorCode.ERR_BadSKknown, "p").WithArguments("p", "variable", "type").WithLocation(3, 37),
+                    // (3,41): error CS0246: The type or namespace name 'F' could not be found (are you missing a using directive or an assembly reference?)
+                    //     bool M(object e, S* p) => e is (p)->F;
+                    Diagnostic(ErrorCode.ERR_SingleTypeNameNotFound, "F").WithArguments("F").WithLocation(3, 41),
+                    // (4,36): error CS0150: A constant value is expected
+                    //     bool N(object e, S* p) => e is p->F;
+                    Diagnostic(ErrorCode.ERR_ConstantExpected, "p->F").WithLocation(4, 36),
+                    // (7,23): warning CS0649: Field 'S.F' is never assigned to, and will always have its default value 0
+                    // struct S { public int F; }
+                    Diagnostic(ErrorCode.WRN_UnassignedInternalField, "F").WithArguments("S.F", "0").WithLocation(7, 23));
+            }
+            else
+            {
+                comp.VerifyDiagnostics(
+                    // (3,37): error CS0029: Cannot implicitly convert type 'S*' to 'object'
+                    //     bool M(object e, S* p) => e is (p)->F;
+                    Diagnostic(ErrorCode.ERR_NoImplicitConv, "p").WithArguments("S*", "object").WithLocation(3, 37),
+                    // (3,39): error CS1002: ; expected
+                    //     bool M(object e, S* p) => e is (p)->F;
+                    Diagnostic(ErrorCode.ERR_SemicolonExpected, "->").WithLocation(3, 39),
+                    // (3,39): error CS1519: Invalid token '->' in a member declaration
+                    //     bool M(object e, S* p) => e is (p)->F;
+                    Diagnostic(ErrorCode.ERR_InvalidMemberDecl, "->").WithArguments("->").WithLocation(3, 39),
+                    // (3,42): error CS1519: Invalid token ';' in a member declaration
+                    //     bool M(object e, S* p) => e is (p)->F;
+                    Diagnostic(ErrorCode.ERR_InvalidMemberDecl, ";").WithArguments(";").WithLocation(3, 42),
+                    // (3,42): error CS1519: Invalid token ';' in a member declaration
+                    //     bool M(object e, S* p) => e is (p)->F;
+                    Diagnostic(ErrorCode.ERR_InvalidMemberDecl, ";").WithArguments(";").WithLocation(3, 42),
+                    // (4,36): error CS0150: A constant value is expected
+                    //     bool N(object e, S* p) => e is p->F;
+                    Diagnostic(ErrorCode.ERR_ConstantExpected, "p->F").WithLocation(4, 36),
+                    // (7,23): warning CS0649: Field 'S.F' is never assigned to, and will always have its default value 0
+                    // struct S { public int F; }
+                    Diagnostic(ErrorCode.WRN_UnassignedInternalField, "F").WithArguments("S.F", "0").WithLocation(7, 23));
+            }
+        }
+
+        [Fact]
+        public void FunctionType_Pattern_DeeplyNestedParentheses()
+        {
+            // Every pattern that starts with `(` is scanned for a function type, without taking exponential time.
+            var depth = 200;
+            var text = "x = o is " + new string('(', depth) + "1" + new string(')', depth) + ";";
+            var statement = SyntaxFactory.ParseStatement(text, options: s_sharperOptions);
+            Assert.False(statement.ContainsDiagnostics);
+            Assert.True(statement.IsEquivalentTo(SyntaxFactory.ParseStatement(text, options: TestOptions.Regular)));
+        }
+
+        [Fact]
+        public void FunctionType_Parenthesized_SyntaxKind()
+        {
+            // Sharper syntax nodes sit apart from the upstream ones; an upstream merge must not reuse the value.
+            Assert.Equal(9902, (int)SyntaxKind.ParenthesizedType);
+            Assert.Single(Enum.GetValues(typeof(SyntaxKind)).Cast<SyntaxKind>(), k => (int)k == (int)SyntaxKind.ParenthesizedType);
         }
 
         [Fact]
@@ -3018,9 +3988,27 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                     {
                         int*~ local = null;
                         System.Threading.Tasks.Task<int*> localTwin = null;
+                        System.Span<int>~ spanLocal = null;
+                        System.Threading.Tasks.Task<System.Span<int>> spanLocalTwin = null;
+                        System.Console~ staticLocal = null;
+                        System.Threading.Tasks.Task<System.Console> staticLocalTwin = null;
+                        int*~~ nested = null;
+                        System.Threading.Tasks.Task<System.Threading.Tasks.Task<int*>> nestedTwin = null;
+                        int*[..]~ sequence = null;
+                        System.Threading.Tasks.Task<System.Collections.Generic.IEnumerable<int*>> sequenceTwin = null;
+                        (int*) -> int~ function = null;
+                        System.Func<int*, System.Threading.Tasks.Task<int>> functionTwin = null;
+                        S<string>~ constrained = null;
+                        System.Threading.Tasks.Task<S<string>> constrainedTwin = null;
                     }
+                    void P(int*~ p, System.Threading.Tasks.Task<int*> pTwin, S<string>~ q, System.Threading.Tasks.Task<S<string>> qTwin) { }
+                    S<string>~ constrainedField;
+                    System.Threading.Tasks.Task<S<string>> constrainedFieldTwin;
                 }
+                struct S<T> where T : struct { }
                 """;
+            // Constraint errors are the same as for the Task<T> twins, and are reported at the same place: on the
+            // result type.
             CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, options: TestOptions.UnsafeReleaseDll).VerifyDiagnostics(
                 // (4,11): error CS0306: The type 'int*' may not be used as a type argument
                 //     int*~ pointer;
@@ -3042,7 +4030,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 Diagnostic(ErrorCode.ERR_GenericArgIsStaticClass, "staticResultTwin").WithArguments("System.Console").WithLocation(9, 49),
                 // (13,9): error CS0306: The type 'int*' may not be used as a type argument
                 //         int*~ local = null;
-                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*~").WithArguments("int*").WithLocation(13, 9),
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(13, 9),
                 // (13,15): warning CS0219: The variable 'local' is assigned but its value is never used
                 //         int*~ local = null;
                 Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "local").WithArguments("local").WithLocation(13, 15),
@@ -3051,7 +4039,97 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(14, 37),
                 // (14,43): warning CS0219: The variable 'localTwin' is assigned but its value is never used
                 //         System.Threading.Tasks.Task<int*> localTwin = null;
-                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "localTwin").WithArguments("localTwin").WithLocation(14, 43));
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "localTwin").WithArguments("localTwin").WithLocation(14, 43),
+                // (15,9): error CS9244: The type 'Span<int>' may not be a ref struct or a type parameter allowing ref structs in order to use it as parameter 'TResult' in the generic type or method 'Task<TResult>'
+                //         System.Span<int>~ spanLocal = null;
+                Diagnostic(ErrorCode.ERR_NotRefStructConstraintNotSatisfied, "System.Span<int>").WithArguments("System.Threading.Tasks.Task<TResult>", "TResult", "System.Span<int>").WithLocation(15, 9),
+                // (15,27): warning CS0219: The variable 'spanLocal' is assigned but its value is never used
+                //         System.Span<int>~ spanLocal = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "spanLocal").WithArguments("spanLocal").WithLocation(15, 27),
+                // (16,37): error CS9244: The type 'Span<int>' may not be a ref struct or a type parameter allowing ref structs in order to use it as parameter 'TResult' in the generic type or method 'Task<TResult>'
+                //         System.Threading.Tasks.Task<System.Span<int>> spanLocalTwin = null;
+                Diagnostic(ErrorCode.ERR_NotRefStructConstraintNotSatisfied, "System.Span<int>").WithArguments("System.Threading.Tasks.Task<TResult>", "TResult", "System.Span<int>").WithLocation(16, 37),
+                // (16,55): warning CS0219: The variable 'spanLocalTwin' is assigned but its value is never used
+                //         System.Threading.Tasks.Task<System.Span<int>> spanLocalTwin = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "spanLocalTwin").WithArguments("spanLocalTwin").WithLocation(16, 55),
+                // (17,9): error CS0718: 'Console': static types cannot be used as type arguments
+                //         System.Console~ staticLocal = null;
+                Diagnostic(ErrorCode.ERR_GenericArgIsStaticClass, "System.Console").WithArguments("System.Console").WithLocation(17, 9),
+                // (17,25): warning CS0219: The variable 'staticLocal' is assigned but its value is never used
+                //         System.Console~ staticLocal = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "staticLocal").WithArguments("staticLocal").WithLocation(17, 25),
+                // (18,37): error CS0718: 'Console': static types cannot be used as type arguments
+                //         System.Threading.Tasks.Task<System.Console> staticLocalTwin = null;
+                Diagnostic(ErrorCode.ERR_GenericArgIsStaticClass, "System.Console").WithArguments("System.Console").WithLocation(18, 37),
+                // (18,53): warning CS0219: The variable 'staticLocalTwin' is assigned but its value is never used
+                //         System.Threading.Tasks.Task<System.Console> staticLocalTwin = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "staticLocalTwin").WithArguments("staticLocalTwin").WithLocation(18, 53),
+                // (19,9): error CS0306: The type 'int*' may not be used as a type argument
+                //         int*~~ nested = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(19, 9),
+                // (19,16): warning CS0219: The variable 'nested' is assigned but its value is never used
+                //         int*~~ nested = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "nested").WithArguments("nested").WithLocation(19, 16),
+                // (20,65): error CS0306: The type 'int*' may not be used as a type argument
+                //         System.Threading.Tasks.Task<System.Threading.Tasks.Task<int*>> nestedTwin = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(20, 65),
+                // (20,72): warning CS0219: The variable 'nestedTwin' is assigned but its value is never used
+                //         System.Threading.Tasks.Task<System.Threading.Tasks.Task<int*>> nestedTwin = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "nestedTwin").WithArguments("nestedTwin").WithLocation(20, 72),
+                // (21,9): error CS0306: The type 'int*' may not be used as a type argument
+                //         int*[..]~ sequence = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(21, 9),
+                // (21,19): warning CS0219: The variable 'sequence' is assigned but its value is never used
+                //         int*[..]~ sequence = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "sequence").WithArguments("sequence").WithLocation(21, 19),
+                // (22,76): error CS0306: The type 'int*' may not be used as a type argument
+                //         System.Threading.Tasks.Task<System.Collections.Generic.IEnumerable<int*>> sequenceTwin = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(22, 76),
+                // (22,83): warning CS0219: The variable 'sequenceTwin' is assigned but its value is never used
+                //         System.Threading.Tasks.Task<System.Collections.Generic.IEnumerable<int*>> sequenceTwin = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "sequenceTwin").WithArguments("sequenceTwin").WithLocation(22, 83),
+                // (23,10): error CS0306: The type 'int*' may not be used as a type argument
+                //         (int*) -> int~ function = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(23, 10),
+                // (23,24): warning CS0219: The variable 'function' is assigned but its value is never used
+                //         (int*) -> int~ function = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "function").WithArguments("function").WithLocation(23, 24),
+                // (24,21): error CS0306: The type 'int*' may not be used as a type argument
+                //         System.Func<int*, System.Threading.Tasks.Task<int>> functionTwin = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(24, 21),
+                // (24,61): warning CS0219: The variable 'functionTwin' is assigned but its value is never used
+                //         System.Func<int*, System.Threading.Tasks.Task<int>> functionTwin = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "functionTwin").WithArguments("functionTwin").WithLocation(24, 61),
+                // (25,11): error CS0453: The type 'string' must be a non-nullable value type in order to use it as parameter 'T' in the generic type or method 'S<T>'
+                //         S<string>~ constrained = null;
+                Diagnostic(ErrorCode.ERR_ValConstraintNotSatisfied, "string").WithArguments("S<T>", "T", "string").WithLocation(25, 11),
+                // (25,20): warning CS0219: The variable 'constrained' is assigned but its value is never used
+                //         S<string>~ constrained = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "constrained").WithArguments("constrained").WithLocation(25, 20),
+                // (26,39): error CS0453: The type 'string' must be a non-nullable value type in order to use it as parameter 'T' in the generic type or method 'S<T>'
+                //         System.Threading.Tasks.Task<S<string>> constrainedTwin = null;
+                Diagnostic(ErrorCode.ERR_ValConstraintNotSatisfied, "string").WithArguments("S<T>", "T", "string").WithLocation(26, 39),
+                // (26,48): warning CS0219: The variable 'constrainedTwin' is assigned but its value is never used
+                //         System.Threading.Tasks.Task<S<string>> constrainedTwin = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "constrainedTwin").WithArguments("constrainedTwin").WithLocation(26, 48),
+                // (28,18): error CS0306: The type 'int*' may not be used as a type argument
+                //     void P(int*~ p, System.Threading.Tasks.Task<int*> pTwin, S<string>~ q, System.Threading.Tasks.Task<S<string>> qTwin) { }
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "p").WithArguments("int*").WithLocation(28, 18),
+                // (28,55): error CS0306: The type 'int*' may not be used as a type argument
+                //     void P(int*~ p, System.Threading.Tasks.Task<int*> pTwin, S<string>~ q, System.Threading.Tasks.Task<S<string>> qTwin) { }
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "pTwin").WithArguments("int*").WithLocation(28, 55),
+                // (28,73): error CS0453: The type 'string' must be a non-nullable value type in order to use it as parameter 'T' in the generic type or method 'S<T>'
+                //     void P(int*~ p, System.Threading.Tasks.Task<int*> pTwin, S<string>~ q, System.Threading.Tasks.Task<S<string>> qTwin) { }
+                Diagnostic(ErrorCode.ERR_ValConstraintNotSatisfied, "q").WithArguments("S<T>", "T", "string").WithLocation(28, 73),
+                // (28,115): error CS0453: The type 'string' must be a non-nullable value type in order to use it as parameter 'T' in the generic type or method 'S<T>'
+                //     void P(int*~ p, System.Threading.Tasks.Task<int*> pTwin, S<string>~ q, System.Threading.Tasks.Task<S<string>> qTwin) { }
+                Diagnostic(ErrorCode.ERR_ValConstraintNotSatisfied, "qTwin").WithArguments("S<T>", "T", "string").WithLocation(28, 115),
+                // (29,16): error CS0453: The type 'string' must be a non-nullable value type in order to use it as parameter 'T' in the generic type or method 'S<T>'
+                //     S<string>~ constrainedField;
+                Diagnostic(ErrorCode.ERR_ValConstraintNotSatisfied, "constrainedField").WithArguments("S<T>", "T", "string").WithLocation(29, 16),
+                // (30,44): error CS0453: The type 'string' must be a non-nullable value type in order to use it as parameter 'T' in the generic type or method 'S<T>'
+                //     System.Threading.Tasks.Task<S<string>> constrainedFieldTwin;
+                Diagnostic(ErrorCode.ERR_ValConstraintNotSatisfied, "constrainedFieldTwin").WithArguments("S<T>", "T", "string").WithLocation(30, 44));
         }
 
         [Fact]
@@ -3576,11 +4654,35 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                         _ = new int[3][..];
                         System.Console[..] d = null;
                         IEnumerable<System.Console> d2 = null;
+                        unsafe
+                        {
+                            int*[..] e = null;
+                            IEnumerable<int*> e2 = null;
+                            int*[..][..] nested = null;
+                            IEnumerable<IEnumerable<int*>> nested2 = null;
+                            int*[][..] pointerArrays = null;
+                            IEnumerable<int*[]> pointerArrays2 = null;
+                            int*[..][][..] mixed = null;
+                            IEnumerable<IEnumerable<int*>[]> mixed2 = null;
+                            int*~[..] task = null;
+                            IEnumerable<System.Threading.Tasks.Task<int*>> task2 = null;
+                        }
+                        System.Span<int>[..] span = null;
+                        IEnumerable<System.Span<int>> span2 = null;
+                        System.Console[][..] staticArrays = null;
+                        IEnumerable<System.Console[]> staticArrays2 = null;
+                        S<string>[..] constrained = null;
+                        IEnumerable<S<string>> constrained2 = null;
                     }
+                    void P(System.Console[..] p, IEnumerable<System.Console> p2, S<string>[..] q, IEnumerable<S<string>> q2) { }
+                    S<string>[..] H;
+                    IEnumerable<S<string>> H2;
                 }
+                struct S<T> where T : struct { }
                 """;
             // Sizes other than a lone `..` stay array sizes, and an array creation keeps its C# meaning. A sequence of
-            // an invalid element type reports what its IEnumerable<T> twin reports.
+            // an invalid element type reports what its IEnumerable<T> twin reports, at the same place: on the element
+            // type.
             CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, options: TestOptions.UnsafeDebugDll).VerifyDiagnostics(
                 // (4,8): error CS0270: Array size cannot be specified in a variable declaration (try initializing with a 'new' expression)
                 //     int[1..] A;
@@ -3662,7 +4764,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 Diagnostic(ErrorCode.ERR_InvalidArray, "..").WithLocation(17, 24),
                 // (18,9): error CS0718: 'Console': static types cannot be used as type arguments
                 //         System.Console[..] d = null;
-                Diagnostic(ErrorCode.ERR_GenericArgIsStaticClass, "System.Console[..]").WithArguments("System.Console").WithLocation(18, 9),
+                Diagnostic(ErrorCode.ERR_GenericArgIsStaticClass, "System.Console").WithArguments("System.Console").WithLocation(18, 9),
                 // (18,28): warning CS0219: The variable 'd' is assigned but its value is never used
                 //         System.Console[..] d = null;
                 Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "d").WithArguments("d").WithLocation(18, 28),
@@ -3671,7 +4773,115 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 Diagnostic(ErrorCode.ERR_GenericArgIsStaticClass, "System.Console").WithArguments("System.Console").WithLocation(19, 21),
                 // (19,37): warning CS0219: The variable 'd2' is assigned but its value is never used
                 //         IEnumerable<System.Console> d2 = null;
-                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "d2").WithArguments("d2").WithLocation(19, 37));
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "d2").WithArguments("d2").WithLocation(19, 37),
+                // (22,13): error CS0306: The type 'int*' may not be used as a type argument
+                //             int*[..] e = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(22, 13),
+                // (22,22): warning CS0219: The variable 'e' is assigned but its value is never used
+                //             int*[..] e = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "e").WithArguments("e").WithLocation(22, 22),
+                // (23,25): error CS0306: The type 'int*' may not be used as a type argument
+                //             IEnumerable<int*> e2 = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(23, 25),
+                // (23,31): warning CS0219: The variable 'e2' is assigned but its value is never used
+                //             IEnumerable<int*> e2 = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "e2").WithArguments("e2").WithLocation(23, 31),
+                // (24,13): error CS0306: The type 'int*' may not be used as a type argument
+                //             int*[..][..] nested = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(24, 13),
+                // (24,26): warning CS0219: The variable 'nested' is assigned but its value is never used
+                //             int*[..][..] nested = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "nested").WithArguments("nested").WithLocation(24, 26),
+                // (25,37): error CS0306: The type 'int*' may not be used as a type argument
+                //             IEnumerable<IEnumerable<int*>> nested2 = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(25, 37),
+                // (25,44): warning CS0219: The variable 'nested2' is assigned but its value is never used
+                //             IEnumerable<IEnumerable<int*>> nested2 = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "nested2").WithArguments("nested2").WithLocation(25, 44),
+                // (26,24): warning CS0219: The variable 'pointerArrays' is assigned but its value is never used
+                //             int*[][..] pointerArrays = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "pointerArrays").WithArguments("pointerArrays").WithLocation(26, 24),
+                // (27,33): warning CS0219: The variable 'pointerArrays2' is assigned but its value is never used
+                //             IEnumerable<int*[]> pointerArrays2 = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "pointerArrays2").WithArguments("pointerArrays2").WithLocation(27, 33),
+                // (28,13): error CS0306: The type 'int*' may not be used as a type argument
+                //             int*[..][][..] mixed = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(28, 13),
+                // (28,28): warning CS0219: The variable 'mixed' is assigned but its value is never used
+                //             int*[..][][..] mixed = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "mixed").WithArguments("mixed").WithLocation(28, 28),
+                // (29,37): error CS0306: The type 'int*' may not be used as a type argument
+                //             IEnumerable<IEnumerable<int*>[]> mixed2 = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(29, 37),
+                // (29,46): warning CS0219: The variable 'mixed2' is assigned but its value is never used
+                //             IEnumerable<IEnumerable<int*>[]> mixed2 = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "mixed2").WithArguments("mixed2").WithLocation(29, 46),
+                // (30,13): error CS0306: The type 'int*' may not be used as a type argument
+                //             int*~[..] task = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(30, 13),
+                // (30,23): warning CS0219: The variable 'task' is assigned but its value is never used
+                //             int*~[..] task = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "task").WithArguments("task").WithLocation(30, 23),
+                // (31,53): error CS0306: The type 'int*' may not be used as a type argument
+                //             IEnumerable<System.Threading.Tasks.Task<int*>> task2 = null;
+                Diagnostic(ErrorCode.ERR_BadTypeArgument, "int*").WithArguments("int*").WithLocation(31, 53),
+                // (31,60): warning CS0219: The variable 'task2' is assigned but its value is never used
+                //             IEnumerable<System.Threading.Tasks.Task<int*>> task2 = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "task2").WithArguments("task2").WithLocation(31, 60),
+                // (33,30): warning CS0219: The variable 'span' is assigned but its value is never used
+                //         System.Span<int>[..] span = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "span").WithArguments("span").WithLocation(33, 30),
+                // (34,39): warning CS0219: The variable 'span2' is assigned but its value is never used
+                //         IEnumerable<System.Span<int>> span2 = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "span2").WithArguments("span2").WithLocation(34, 39),
+                // (35,9): error CS0719: 'Console': array elements cannot be of static type
+                //         System.Console[][..] staticArrays = null;
+                Diagnostic(ErrorCode.ERR_ArrayOfStaticClass, "System.Console").WithArguments("System.Console").WithLocation(35, 9),
+                // (35,30): warning CS0219: The variable 'staticArrays' is assigned but its value is never used
+                //         System.Console[][..] staticArrays = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "staticArrays").WithArguments("staticArrays").WithLocation(35, 30),
+                // (36,21): error CS0719: 'Console': array elements cannot be of static type
+                //         IEnumerable<System.Console[]> staticArrays2 = null;
+                Diagnostic(ErrorCode.ERR_ArrayOfStaticClass, "System.Console").WithArguments("System.Console").WithLocation(36, 21),
+                // (36,39): warning CS0219: The variable 'staticArrays2' is assigned but its value is never used
+                //         IEnumerable<System.Console[]> staticArrays2 = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "staticArrays2").WithArguments("staticArrays2").WithLocation(36, 39),
+                // (37,11): error CS0453: The type 'string' must be a non-nullable value type in order to use it as parameter 'T' in the generic type or method 'S<T>'
+                //         S<string>[..] constrained = null;
+                Diagnostic(ErrorCode.ERR_ValConstraintNotSatisfied, "string").WithArguments("S<T>", "T", "string").WithLocation(37, 11),
+                // (37,23): warning CS0219: The variable 'constrained' is assigned but its value is never used
+                //         S<string>[..] constrained = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "constrained").WithArguments("constrained").WithLocation(37, 23),
+                // (38,23): error CS0453: The type 'string' must be a non-nullable value type in order to use it as parameter 'T' in the generic type or method 'S<T>'
+                //         IEnumerable<S<string>> constrained2 = null;
+                Diagnostic(ErrorCode.ERR_ValConstraintNotSatisfied, "string").WithArguments("S<T>", "T", "string").WithLocation(38, 23),
+                // (38,32): warning CS0219: The variable 'constrained2' is assigned but its value is never used
+                //         IEnumerable<S<string>> constrained2 = null;
+                Diagnostic(ErrorCode.WRN_UnreferencedVarAssg, "constrained2").WithArguments("constrained2").WithLocation(38, 32),
+                // (40,31): error CS0718: 'Console': static types cannot be used as type arguments
+                //     void P(System.Console[..] p, IEnumerable<System.Console> p2, S<string>[..] q, IEnumerable<S<string>> q2) { }
+                Diagnostic(ErrorCode.ERR_GenericArgIsStaticClass, "p").WithArguments("System.Console").WithLocation(40, 31),
+                // (40,62): error CS0718: 'Console': static types cannot be used as type arguments
+                //     void P(System.Console[..] p, IEnumerable<System.Console> p2, S<string>[..] q, IEnumerable<S<string>> q2) { }
+                Diagnostic(ErrorCode.ERR_GenericArgIsStaticClass, "p2").WithArguments("System.Console").WithLocation(40, 62),
+                // (40,80): error CS0453: The type 'string' must be a non-nullable value type in order to use it as parameter 'T' in the generic type or method 'S<T>'
+                //     void P(System.Console[..] p, IEnumerable<System.Console> p2, S<string>[..] q, IEnumerable<S<string>> q2) { }
+                Diagnostic(ErrorCode.ERR_ValConstraintNotSatisfied, "q").WithArguments("S<T>", "T", "string").WithLocation(40, 80),
+                // (40,106): error CS0453: The type 'string' must be a non-nullable value type in order to use it as parameter 'T' in the generic type or method 'S<T>'
+                //     void P(System.Console[..] p, IEnumerable<System.Console> p2, S<string>[..] q, IEnumerable<S<string>> q2) { }
+                Diagnostic(ErrorCode.ERR_ValConstraintNotSatisfied, "q2").WithArguments("S<T>", "T", "string").WithLocation(40, 106),
+                // (41,19): error CS0453: The type 'string' must be a non-nullable value type in order to use it as parameter 'T' in the generic type or method 'S<T>'
+                //     S<string>[..] H;
+                Diagnostic(ErrorCode.ERR_ValConstraintNotSatisfied, "H").WithArguments("S<T>", "T", "string").WithLocation(41, 19),
+                // (41,19): warning CS0169: The field 'C.H' is never used
+                //     S<string>[..] H;
+                Diagnostic(ErrorCode.WRN_UnreferencedField, "H").WithArguments("C.H").WithLocation(41, 19),
+                // (42,28): error CS0453: The type 'string' must be a non-nullable value type in order to use it as parameter 'T' in the generic type or method 'S<T>'
+                //     IEnumerable<S<string>> H2;
+                Diagnostic(ErrorCode.ERR_ValConstraintNotSatisfied, "H2").WithArguments("S<T>", "T", "string").WithLocation(42, 28),
+                // (42,28): warning CS0169: The field 'C.H2' is never used
+                //     IEnumerable<S<string>> H2;
+                Diagnostic(ErrorCode.WRN_UnreferencedField, "H2").WithArguments("C.H2").WithLocation(42, 28));
         }
 
         [Fact]
@@ -4094,6 +5304,34 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (10,17): error CS8917: The delegate type could not be inferred.
                 //         var g = (y) => y;
                 Diagnostic(ErrorCode.ERR_CannotInferDelegateType, "(y) => y").WithLocation(10, 17));
+        }
+
+        [Theory]
+        [CombinatorialData]
+        public void ValLambda_SimpleLambdaNeedsParentheses(bool sharper)
+        {
+            // Like C#'s parameter modifiers, val needs the parenthesized form: val x => x is the same syntax error with or without
+            // Sharper. A clearer error is https://github.com/ok3mad/roslyn/issues/98.
+            var source = """
+                using System;
+                class C
+                {
+                    void M()
+                    {
+                        Func<int, int> f = val x => x;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: sharper ? s_sharperOptions : TestOptions.Regular, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (6,28): error CS0103: The name 'val' does not exist in the current context
+                //         Func<int, int> f = val x => x;
+                Diagnostic(ErrorCode.ERR_NameNotInContext, "val").WithArguments("val").WithLocation(6, 28),
+                // (6,32): error CS1002: ; expected
+                //         Func<int, int> f = val x => x;
+                Diagnostic(ErrorCode.ERR_SemicolonExpected, "x").WithLocation(6, 32),
+                // (6,32): error CS0201: Only assignment, call, increment, decrement, await, and new object expressions can be used as a statement
+                //         Func<int, int> f = val x => x;
+                Diagnostic(ErrorCode.ERR_IllegalStatement, "x => x").WithLocation(6, 32));
         }
 
         [Fact]
@@ -5020,6 +6258,660 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
 
             var localFunction = (LocalFunctionStatementSyntax)SyntaxFactory.ParseStatement("readonly void F() { }", options: options);
             Assert.True(localFunction.Modifiers.Single().ContainsDiagnostics);
+        }
+
+        [Fact]
+        public void ReadonlyParameter_Basic()
+        {
+            // readonly works on every kind of parameter list with a body, and the parameters read as usual.
+            var source = """
+                using System;
+
+                var c = new C(1);
+                c.M(2);
+                Console.Write(c[3]);
+                Console.Write((c + 4).P);
+                Console.Write(5.Ext());
+                Func<int, int> f = (readonly int x) => x + 1;
+                Console.Write(f(5));
+                Func<int, int> g = delegate (readonly int x) { return x + 2; };
+                Console.Write(g(5));
+                Local(8);
+                Console.Write(C.Sum(1, 2, 6));
+                Console.Write(C.Default());
+                Console.Write(new P(10).Get());
+                Console.Write(new R(11).X);
+
+                static void Local(readonly int x) => Console.Write(x);
+
+                class C
+                {
+                    public int P;
+                    public C(readonly int p) { P = p; Console.Write(p); }
+                    public void M(readonly int x) => Console.Write(x);
+                    public int this[readonly int i] => i;
+                    public static C operator +(readonly C c, readonly int i) => new C(c.P + i);
+                    public static int Sum(readonly params int[] xs) => xs.Length + xs[2];
+                    public static int Default(readonly int x = 7) => x;
+                }
+
+                static class E
+                {
+                    public static int Ext(readonly this int x) => x + 1;
+                }
+
+                class P(readonly int x)
+                {
+                    public int Get() => x;
+                }
+
+                record R(readonly int X);
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "123556678971011" : null).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void ReadonlyParameter_FeatureDisabled()
+        {
+            // Without Sharper, readonly without ref keeps the C# error, and the parameter stays writable.
+            var source = """
+                class C
+                {
+                    void M(readonly int x)
+                    {
+                        x = 1;
+                        System.Func<int, int> f = (readonly int y) => y = 2;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: TestOptions.Regular, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (3,12): error CS9190: 'readonly' modifier must be specified after 'ref'.
+                //     void M(readonly int x)
+                Diagnostic(ErrorCode.ERR_RefReadOnlyWrongOrdering, "readonly").WithLocation(3, 12),
+                // (6,36): error CS9190: 'readonly' modifier must be specified after 'ref'.
+                //         System.Func<int, int> f = (readonly int y) => y = 2;
+                Diagnostic(ErrorCode.ERR_RefReadOnlyWrongOrdering, "readonly").WithLocation(6, 36));
+        }
+
+        [Fact]
+        public void ReadonlyParameter_Writes()
+        {
+            // Each write to the readonly parameter next to the same write to its plain twin, which is allowed.
+            var source = """
+                using System;
+
+                class C
+                {
+                    static void Ref(ref int i) { }
+                    static void Out(out int i) { i = 0; }
+                    static void In(in int i) { }
+
+                    void M(readonly int x, int y, readonly string s, string t)
+                    {
+                        x = 2;
+                        y = 2;
+                        x += 1;
+                        y += 1;
+                        x++;
+                        y++;
+                        --x;
+                        --y;
+                        Ref(ref x);
+                        Ref(ref y);
+                        Out(out x);
+                        Out(out y);
+                        In(in x);
+                        In(in y);
+                        ref int r = ref x;
+                        ref int q = ref y;
+                        ref readonly int rr = ref x;
+                        Action a = () => x = 3;
+                        Action b = () => y = 3;
+                        void Local() { x = 4; }
+                        void Local2() { y = 4; }
+                        s ??= "a";
+                        t ??= "a";
+                        (x, y) = (5, 5);
+                    }
+
+                    C(readonly int x, int y) { x = 1; y = 1; }
+                    int this[readonly int i, int j] { get { i = 1; j = 1; return 0; } set { i = value; j = value; } }
+                    public static C operator -(readonly C c, C d) { c = null; d = null; return null; }
+                    void LocalAndLambda()
+                    {
+                        void Local(readonly int x, int y) { x = 1; y = 1; }
+                        Action<int, int> f = (readonly int x, int y) => { x = 1; y = 1; };
+                        Action<int, int> g = delegate (readonly int x, int y) { x = 1; y = 1; };
+                        Local(0, 0);
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (11,9): error CS1656: Cannot assign to 'x' because it is a 'readonly parameter'
+                //         x = 2;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly parameter").WithLocation(11, 9),
+                // (13,9): error CS1656: Cannot assign to 'x' because it is a 'readonly parameter'
+                //         x += 1;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly parameter").WithLocation(13, 9),
+                // (15,9): error CS1656: Cannot assign to 'x' because it is a 'readonly parameter'
+                //         x++;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly parameter").WithLocation(15, 9),
+                // (17,11): error CS1656: Cannot assign to 'x' because it is a 'readonly parameter'
+                //         --x;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly parameter").WithLocation(17, 11),
+                // (19,17): error CS1657: Cannot use 'x' as a ref or out value because it is a 'readonly parameter'
+                //         Ref(ref x);
+                Diagnostic(ErrorCode.ERR_RefReadonlyLocalCause, "x").WithArguments("x", "readonly parameter").WithLocation(19, 17),
+                // (21,17): error CS1657: Cannot use 'x' as a ref or out value because it is a 'readonly parameter'
+                //         Out(out x);
+                Diagnostic(ErrorCode.ERR_RefReadonlyLocalCause, "x").WithArguments("x", "readonly parameter").WithLocation(21, 17),
+                // (25,25): error CS1657: Cannot use 'x' as a ref or out value because it is a 'readonly parameter'
+                //         ref int r = ref x;
+                Diagnostic(ErrorCode.ERR_RefReadonlyLocalCause, "x").WithArguments("x", "readonly parameter").WithLocation(25, 25),
+                // (28,26): error CS1656: Cannot assign to 'x' because it is a 'readonly parameter'
+                //         Action a = () => x = 3;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly parameter").WithLocation(28, 26),
+                // (30,14): warning CS8321: The local function 'Local' is declared but never used
+                //         void Local() { x = 4; }
+                Diagnostic(ErrorCode.WRN_UnreferencedLocalFunction, "Local").WithArguments("Local").WithLocation(30, 14),
+                // (30,24): error CS1656: Cannot assign to 'x' because it is a 'readonly parameter'
+                //         void Local() { x = 4; }
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly parameter").WithLocation(30, 24),
+                // (31,14): warning CS8321: The local function 'Local2' is declared but never used
+                //         void Local2() { y = 4; }
+                Diagnostic(ErrorCode.WRN_UnreferencedLocalFunction, "Local2").WithArguments("Local2").WithLocation(31, 14),
+                // (32,9): error CS1656: Cannot assign to 's' because it is a 'readonly parameter'
+                //         s ??= "a";
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "s").WithArguments("s", "readonly parameter").WithLocation(32, 9),
+                // (34,10): error CS1656: Cannot assign to 'x' because it is a 'readonly parameter'
+                //         (x, y) = (5, 5);
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly parameter").WithLocation(34, 10),
+                // (37,32): error CS1656: Cannot assign to 'x' because it is a 'readonly parameter'
+                //     C(readonly int x, int y) { x = 1; y = 1; }
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly parameter").WithLocation(37, 32),
+                // (39,53): error CS1656: Cannot assign to 'c' because it is a 'readonly parameter'
+                //     public static C operator -(readonly C c, C d) { c = null; d = null; return null; }
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "c").WithArguments("c", "readonly parameter").WithLocation(39, 53),
+                // (42,45): error CS1656: Cannot assign to 'x' because it is a 'readonly parameter'
+                //         void Local(readonly int x, int y) { x = 1; y = 1; }
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly parameter").WithLocation(42, 45),
+                // (43,59): error CS1656: Cannot assign to 'x' because it is a 'readonly parameter'
+                //         Action<int, int> f = (readonly int x, int y) => { x = 1; y = 1; };
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly parameter").WithLocation(43, 59),
+                // (44,65): error CS1656: Cannot assign to 'x' because it is a 'readonly parameter'
+                //         Action<int, int> g = delegate (readonly int x, int y) { x = 1; y = 1; };
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly parameter").WithLocation(44, 65));
+        }
+
+        [Fact]
+        public void ReadonlyParameter_StructFieldAssignment()
+        {
+            var source = """
+                struct S { public int F; public int P { get; set; } }
+
+                class C
+                {
+                    void M(readonly S v, S w)
+                    {
+                        v.F = 1;
+                        w.F = 1;
+                        v.P = 1;
+                        w.P = 1;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (7,9): error CS1654: Cannot modify members of 'v' because it is a 'readonly parameter'
+                //         v.F = 1;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocal2Cause, "v.F").WithArguments("v", "readonly parameter").WithLocation(7, 9),
+                // (9,9): error CS1654: Cannot modify members of 'v' because it is a 'readonly parameter'
+                //         v.P = 1;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocal2Cause, "v.P").WithArguments("v", "readonly parameter").WithLocation(9, 9));
+        }
+
+        [Fact]
+        public void ReadonlyParameter_Ref()
+        {
+            // readonly on a ref, in or out parameter forbids ref reassignment and keeps the C# rules for writes through the ref,
+            // as for readonly ref locals. ref readonly keeps its C# meaning, and readonly ref readonly is both.
+            var source = """
+                class C
+                {
+                    static int j;
+
+                    void M(readonly ref int r1, ref readonly int r2, readonly ref readonly int r3, readonly in int r4, readonly out int r5, ref int r6)
+                    {
+                        r5 = 5;
+                        r1 = 5;
+                        r2 = 5;
+                        r3 = 5;
+                        r4 = 5;
+                        r6 = 5;
+                        r1 = ref j;
+                        r2 = ref j;
+                        r3 = ref j;
+                        r4 = ref j;
+                        r5 = ref j;
+                        r6 = ref j;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (9,9): error CS8331: Cannot assign to variable 'r2' or use it as the right hand side of a ref assignment because it is a readonly variable
+                //         r2 = 5;
+                Diagnostic(ErrorCode.ERR_AssignReadonlyNotField, "r2").WithArguments("variable", "r2").WithLocation(9, 9),
+                // (10,9): error CS8331: Cannot assign to variable 'r3' or use it as the right hand side of a ref assignment because it is a readonly variable
+                //         r3 = 5;
+                Diagnostic(ErrorCode.ERR_AssignReadonlyNotField, "r3").WithArguments("variable", "r3").WithLocation(10, 9),
+                // (11,9): error CS8331: Cannot assign to variable 'r4' or use it as the right hand side of a ref assignment because it is a readonly variable
+                //         r4 = 5;
+                Diagnostic(ErrorCode.ERR_AssignReadonlyNotField, "r4").WithArguments("variable", "r4").WithLocation(11, 9),
+                // (13,9): error CS1656: Cannot assign to 'r1' because it is a 'readonly parameter'
+                //         r1 = ref j;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "r1").WithArguments("r1", "readonly parameter").WithLocation(13, 9),
+                // (15,9): error CS1656: Cannot assign to 'r3' because it is a 'readonly parameter'
+                //         r3 = ref j;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "r3").WithArguments("r3", "readonly parameter").WithLocation(15, 9),
+                // (16,9): error CS1656: Cannot assign to 'r4' because it is a 'readonly parameter'
+                //         r4 = ref j;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "r4").WithArguments("r4", "readonly parameter").WithLocation(16, 9),
+                // (17,9): error CS1656: Cannot assign to 'r5' because it is a 'readonly parameter'
+                //         r5 = ref j;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "r5").WithArguments("r5", "readonly parameter").WithLocation(17, 9));
+        }
+
+        [Fact]
+        public void ReadonlyParameter_Modifiers()
+        {
+            // readonly must come first. Elsewhere, and on extension block receivers and function pointers, it keeps the C# errors.
+            var source = """
+                using System;
+
+                unsafe class C
+                {
+                    void M1(readonly scoped Span<int> s) { s = default; }
+                    void M2(scoped readonly Span<int> s) { }
+                    void M3(readonly readonly int x) { }
+                    void M4(in readonly int x) { }
+                    void M5(readonly ref readonly readonly int x) { }
+                    void M6(params readonly int[] x) { }
+                    void M7(delegate*<readonly int, void> f) { }
+                    void M8()
+                    {
+                        Action<int> f = (readonly x) => { x = 1; };
+                        Action<int> g = (readonly int x) => { x = 1; };
+                    }
+                }
+
+                static class E
+                {
+                    public static void Ext1(this readonly int x) { }
+                    public static void Ext2(readonly this ref int x) { x = 1; x = ref x; }
+                    extension(readonly int x)
+                    {
+                        public void Ext3() { }
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, options: TestOptions.UnsafeDebugDll).VerifyDiagnostics(
+                // (5,44): error CS1656: Cannot assign to 's' because it is a 'readonly parameter'
+                //     void M1(readonly scoped Span<int> s) { s = default; }
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "s").WithArguments("s", "readonly parameter").WithLocation(5, 44),
+                // (6,20): error CS9350: The 'readonly' modifier cannot immediately follow the 'scoped' modifier.
+                //     void M2(scoped readonly Span<int> s) { }
+                Diagnostic(ErrorCode.ERR_InvalidModifierAfterScoped, "readonly").WithArguments("readonly").WithLocation(6, 20),
+                // (6,20): error CS9190: 'readonly' modifier must be specified after 'ref'.
+                //     void M2(scoped readonly Span<int> s) { }
+                Diagnostic(ErrorCode.ERR_RefReadOnlyWrongOrdering, "readonly").WithLocation(6, 20),
+                // (7,22): error CS1107: A parameter can only have one 'readonly' modifier
+                //     void M3(readonly readonly int x) { }
+                Diagnostic(ErrorCode.ERR_DupParamMod, "readonly").WithArguments("readonly").WithLocation(7, 22),
+                // (8,16): error CS9190: 'readonly' modifier must be specified after 'ref'.
+                //     void M4(in readonly int x) { }
+                Diagnostic(ErrorCode.ERR_RefReadOnlyWrongOrdering, "readonly").WithLocation(8, 16),
+                // (9,35): error CS1107: A parameter can only have one 'readonly' modifier
+                //     void M5(readonly ref readonly readonly int x) { }
+                Diagnostic(ErrorCode.ERR_DupParamMod, "readonly").WithArguments("readonly").WithLocation(9, 35),
+                // (10,20): error CS9190: 'readonly' modifier must be specified after 'ref'.
+                //     void M6(params readonly int[] x) { }
+                Diagnostic(ErrorCode.ERR_RefReadOnlyWrongOrdering, "readonly").WithLocation(10, 20),
+                // (11,23): error CS9190: 'readonly' modifier must be specified after 'ref'.
+                //     void M7(delegate*<readonly int, void> f) { }
+                Diagnostic(ErrorCode.ERR_RefReadOnlyWrongOrdering, "readonly").WithLocation(11, 23),
+                // (14,43): error CS1656: Cannot assign to 'x' because it is a 'readonly parameter'
+                //         Action<int> f = (readonly x) => { x = 1; };
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly parameter").WithLocation(14, 43),
+                // (15,47): error CS1656: Cannot assign to 'x' because it is a 'readonly parameter'
+                //         Action<int> g = (readonly int x) => { x = 1; };
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly parameter").WithLocation(15, 47),
+                // (21,34): error CS9190: 'readonly' modifier must be specified after 'ref'.
+                //     public static void Ext1(this readonly int x) { }
+                Diagnostic(ErrorCode.ERR_RefReadOnlyWrongOrdering, "readonly").WithLocation(21, 34),
+                // (22,63): error CS1656: Cannot assign to 'x' because it is a 'readonly parameter'
+                //     public static void Ext2(readonly this ref int x) { x = 1; x = ref x; }
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly parameter").WithLocation(22, 63),
+                // (23,15): error CS9190: 'readonly' modifier must be specified after 'ref'.
+                //     extension(readonly int x)
+                Diagnostic(ErrorCode.ERR_RefReadOnlyWrongOrdering, "readonly").WithLocation(23, 15));
+        }
+
+        [Fact]
+        public void ReadonlyParameter_NotPartOfSignature()
+        {
+            // readonly is a rule about the body: overriding, implementing, partial methods, delegate conversions and
+            // overload resolution ignore it, and it is not emitted.
+            var source = """
+                using System;
+
+                abstract class B
+                {
+                    public abstract int M(int x);
+                    public virtual int N(readonly int x) => x;
+                    public abstract int A(readonly int x);
+                }
+
+                interface I { int M(readonly int x); }
+
+                partial class C : B, I
+                {
+                    public override int M(readonly int x) => x;
+                    public override int N(int x) { x++; return x; }
+                    public override int A(int x) { x++; return x; }
+                    int I.M(int x) { x++; return x; }
+                    partial void P(readonly int x);
+                    partial void P(int x) { x = 1; }
+                }
+
+                delegate int D(readonly int x);
+
+                class Program
+                {
+                    static int F(int x) => x;
+                    static int G(readonly int x) => x;
+                    static void H(int x) { }
+                    static void H(readonly int x) { }
+
+                    static void Main()
+                    {
+                        D d1 = F;
+                        Func<int, int> d2 = G;
+                        D d3 = (int x) => x;
+                        Func<int, int> d4 = (readonly int x) => x;
+                        Console.Write(d1(1) + d2(2) + d3(3) + d4(4) + new C().N(5));
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (29,17): error CS0111: Type 'Program' already defines a member called 'H' with the same parameter types
+                //     static void H(readonly int x) { }
+                Diagnostic(ErrorCode.ERR_MemberAlreadyExists, "H").WithArguments("H", "Program").WithLocation(29, 17));
+        }
+
+        [Fact]
+        public void ReadonlyParameter_StructMemberCallOnCopy()
+        {
+            // As for readonly locals, a non-readonly member runs on a copy and warns, also when captured or hoisted, and for members found by pattern.
+            var source = """
+                using System;
+                using System.Collections.Generic;
+                using System.Threading.Tasks;
+
+                await M(new S(), new S());
+                Console.Write(";");
+                var p = new P(new S());
+                p.Run();
+
+                static async Task M(readonly S v, S w)
+                {
+                    v.Mutate();
+                    Console.Write(v.F);
+                    _ = v.Getter;
+                    Console.Write(v.F);
+                    foreach (var x in v) { }
+                    Console.Write(v.F);
+                    v.ReadOnlyMethod();
+                    Action f = () => { v.Mutate(); Console.Write(v.F); };
+                    f();
+                    await Task.Yield();
+                    v.Mutate();
+                    Console.Write(v.F);
+                    if (v is { Getter: 1 }) { }
+                    Console.Write(v.F);
+                    w.Mutate();
+                    Console.Write(w.F);
+                }
+
+                class P(readonly S s)
+                {
+                    public void Run() { s.Mutate(); Console.Write(s.F); }
+                }
+
+                struct S
+                {
+                    public int F;
+                    public void Mutate() { F++; }
+                    public int Getter { get { F++; return F; } }
+                    public readonly void ReadOnlyMethod() { }
+                    public IEnumerator<int> GetEnumerator() { F++; return new List<int>().GetEnumerator(); }
+                }
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "0000001;0" : null).VerifyDiagnostics(
+                // (12,5): warning CS20013: Call to non-readonly member 'S.Mutate()' on readonly parameter 'v' runs on a copy, so 'v' is not changed.
+                //     v.Mutate();
+                Diagnostic(ErrorCode.WRN_SharperReadOnlyParameterMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v").WithLocation(12, 5),
+                // (14,9): warning CS20013: Call to non-readonly member 'S.Getter.get' on readonly parameter 'v' runs on a copy, so 'v' is not changed.
+                //     _ = v.Getter;
+                Diagnostic(ErrorCode.WRN_SharperReadOnlyParameterMemberCallOnCopy, "v").WithArguments("S.Getter.get", "v").WithLocation(14, 9),
+                // (16,23): warning CS20013: Call to non-readonly member 'S.GetEnumerator()' on readonly parameter 'v' runs on a copy, so 'v' is not changed.
+                //     foreach (var x in v) { }
+                Diagnostic(ErrorCode.WRN_SharperReadOnlyParameterMemberCallOnCopy, "v").WithArguments("S.GetEnumerator()", "v").WithLocation(16, 23),
+                // (19,24): warning CS20013: Call to non-readonly member 'S.Mutate()' on readonly parameter 'v' runs on a copy, so 'v' is not changed.
+                //     Action f = () => { v.Mutate(); Console.Write(v.F); };
+                Diagnostic(ErrorCode.WRN_SharperReadOnlyParameterMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v").WithLocation(19, 24),
+                // (22,5): warning CS20013: Call to non-readonly member 'S.Mutate()' on readonly parameter 'v' runs on a copy, so 'v' is not changed.
+                //     v.Mutate();
+                Diagnostic(ErrorCode.WRN_SharperReadOnlyParameterMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v").WithLocation(22, 5),
+                // (24,9): warning CS20013: Call to non-readonly member 'S.Getter.get' on readonly parameter 'v' runs on a copy, so 'v' is not changed.
+                //     if (v is { Getter: 1 }) { }
+                Diagnostic(ErrorCode.WRN_SharperReadOnlyParameterMemberCallOnCopy, "v").WithArguments("S.Getter.get", "v").WithLocation(24, 9),
+                // (32,25): warning CS20013: Call to non-readonly member 'S.Mutate()' on readonly parameter 's' runs on a copy, so 's' is not changed.
+                //     public void Run() { s.Mutate(); Console.Write(s.F); }
+                Diagnostic(ErrorCode.WRN_SharperReadOnlyParameterMemberCallOnCopy, "s").WithArguments("S.Mutate()", "s").WithLocation(32, 25));
+        }
+
+        [Fact]
+        public void ReadonlyParameter_PrimaryConstructor()
+        {
+            // A captured readonly primary constructor parameter cannot be written in members or initializers, and its field is readonly.
+            var source = """
+                class C(readonly int x, int y)
+                {
+                    int A = x++;
+                    int B = y++;
+                    void M() { x = 1; y = 1; }
+                    int Get() => x + y;
+                }
+
+                struct S(readonly int x)
+                {
+                    void M() { x = 1; }
+                    int Get() => x;
+                }
+
+                record R(readonly int X)
+                {
+                    int Y = X++;
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics(
+                // (3,13): error CS1656: Cannot assign to 'x' because it is a 'readonly parameter'
+                //     int A = x++;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly parameter").WithLocation(3, 13),
+                // (5,16): error CS1656: Cannot assign to 'x' because it is a 'readonly parameter'
+                //     void M() { x = 1; y = 1; }
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly parameter").WithLocation(5, 16),
+                // (11,16): error CS1656: Cannot assign to 'x' because it is a 'readonly parameter'
+                //     void M() { x = 1; }
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "x").WithArguments("x", "readonly parameter").WithLocation(11, 16),
+                // (17,13): error CS1656: Cannot assign to 'X' because it is a 'readonly parameter'
+                //     int Y = X++;
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "X").WithArguments("X", "readonly parameter").WithLocation(17, 13));
+        }
+
+        [Fact]
+        public void ReadonlyParameter_PrimaryConstructor_Field()
+        {
+            var source = """
+                class C(readonly int x, int y)
+                {
+                    public int Get() => x + y;
+                }
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, options: TestOptions.DebugDll.WithMetadataImportOptions(MetadataImportOptions.All), symbolValidator: module =>
+            {
+                var c = module.GlobalNamespace.GetTypeMember("C");
+                Assert.True(c.GetField("<x>P").IsReadOnly);
+                Assert.False(c.GetField("<y>P").IsReadOnly);
+            }).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void ReadonlyParameter_Metadata()
+        {
+            // Nothing is emitted for readonly: plain C# sees ordinary parameters, and can override and call the members.
+            var library = """
+                public class B
+                {
+                    public virtual int M(readonly int x, readonly ref int r, readonly in int i, readonly out int o) { o = x; return r + i; }
+                }
+                """;
+            var libraryComp = CreateCompilation(library, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            libraryComp.VerifyDiagnostics();
+
+            var parameters = libraryComp.GetMember<MethodSymbol>("B.M").Parameters;
+            Assert.Equal([RefKind.None, RefKind.Ref, RefKind.In, RefKind.Out], parameters.Select(p => p.RefKind));
+            Assert.All(parameters, p => Assert.Equal(ScopedKind.None, p.DeclaredScope));
+
+            var source = """
+                class C : B
+                {
+                    public override int M(int x, ref int r, in int i, out int o) { x++; o = 1; return x; }
+
+                    static void Main()
+                    {
+                        int r = 2;
+                        System.Console.Write(new B().M(1, ref r, 3, out int o) + o);
+                        System.Console.Write(new C().M(1, ref r, 3, out o) + o);
+                    }
+                }
+                """;
+            foreach (var reference in new[] { libraryComp.ToMetadataReference(), libraryComp.EmitToImageReference() })
+            {
+                CompileAndVerify(source, references: [reference], parseOptions: TestOptions.Regular, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "63" : null).VerifyDiagnostics();
+            }
+
+            CompileAndVerify(libraryComp, symbolValidator: module =>
+            {
+                var method = module.GlobalNamespace.GetMember<MethodSymbol>("B.M");
+                Assert.All(method.Parameters, p => Assert.Empty(p.GetAttributes()));
+                Assert.Equal([RefKind.None, RefKind.Ref, RefKind.In, RefKind.Out], method.Parameters.Select(p => p.RefKind));
+            });
+        }
+
+        [Fact]
+        public void ReadonlyParameter_Nullable()
+        {
+            var source = """
+                #nullable enable
+                class C
+                {
+                    void M(readonly string? maybe, readonly string s)
+                    {
+                        _ = maybe.Length;
+                        if (maybe is not null) _ = maybe.Length;
+                        _ = s.Length;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (6,13): warning CS8602: Dereference of a possibly null reference.
+                //         _ = maybe.Length;
+                Diagnostic(ErrorCode.WRN_NullReferenceReceiver, "maybe").WithLocation(6, 13));
+        }
+
+        [Fact]
+        public void ReadonlyParameter_SemanticModel()
+        {
+            // The parameter is an ordinary IParameterSymbol; (readonly x) => ... is implicitly typed, like (val x) => ....
+            var source = """
+                using System;
+
+                class C
+                {
+                    void M(readonly int x, readonly ref int r)
+                    {
+                        Func<int, int> f = (readonly y) => y;
+                    }
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics();
+            var tree = comp.SyntaxTrees.Single();
+            var model = comp.GetSemanticModel(tree);
+            var parameters = tree.GetRoot().DescendantNodes().OfType<ParameterSyntax>().Select(p => model.GetDeclaredSymbol(p)).ToArray();
+            Assert.Equal(["System.Int32 x", "ref System.Int32 r", "System.Int32 y"], parameters.Select(p => p.ToTestDisplayString()));
+            Assert.Equal([RefKind.None, RefKind.Ref, RefKind.None], parameters.Select(p => p.RefKind));
+        }
+
+        [Fact]
+        public void ReadonlyParameter_IOperation()
+        {
+            var source = """
+                class C
+                {
+                    int M(readonly int x)
+                    /*<bind>*/{
+                        return x + 1;
+                    }/*</bind>*/
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            var expectedOperationTree = """
+                IBlockOperation (1 statements) (OperationKind.Block, Type: null) (Syntax: '{ ... }')
+                  IReturnOperation (OperationKind.Return, Type: null) (Syntax: 'return x + 1;')
+                    ReturnedValue:
+                      IBinaryOperation (BinaryOperatorKind.Add) (OperationKind.Binary, Type: System.Int32) (Syntax: 'x + 1')
+                        Left:
+                          IParameterReferenceOperation: x (OperationKind.ParameterReference, Type: System.Int32) (Syntax: 'x')
+                        Right:
+                          ILiteralOperation (OperationKind.Literal, Type: System.Int32, Constant: 1) (Syntax: '1')
+                """;
+            VerifyOperationTreeAndDiagnosticsForTest<BlockSyntax>(comp, expectedOperationTree, []);
+        }
+
+        [Fact]
+        public void ReadonlyParameter_DataFlow()
+        {
+            var source = """
+                class C
+                {
+                    int M(readonly int x, int y)
+                    {
+                        y = x;
+                        return y;
+                    }
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics();
+            var tree = comp.SyntaxTrees.Single();
+            var model = comp.GetSemanticModel(tree);
+            var statement = tree.GetRoot().DescendantNodes().OfType<ExpressionStatementSyntax>().Single();
+            var dataFlow = model.AnalyzeDataFlow(statement);
+            Assert.Equal("x", string.Join(", ", dataFlow.ReadInside.Select(s => s.Name)));
+            Assert.Equal("y", string.Join(", ", dataFlow.WrittenInside.Select(s => s.Name)));
+            Assert.Equal("this, x, y", string.Join(", ", dataFlow.WrittenOutside.Select(s => s.Name)));
         }
     }
 }

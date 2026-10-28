@@ -678,9 +678,11 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             in CheckConstraintsArgs args,
             SyntaxNode typeSyntax,
             SeparatedSyntaxList<TypeSyntax> typeArgumentsSyntax, // may be omitted in synthesized invocations
-            ConsList<TypeSymbol> basesBeingResolved)
+            ConsList<TypeSymbol> basesBeingResolved,
+            ImmutableArray<Location> typeArgumentLocations = default) // Sharper: for type forms whose arguments are not a type argument list
         {
             Debug.Assert(typeArgumentsSyntax.Count == 0 /*omitted*/ || typeArgumentsSyntax.Count == type.Arity);
+            Debug.Assert(typeArgumentLocations.IsDefault || (typeArgumentsSyntax.Count == 0 && typeArgumentLocations.Length == type.Arity));
 
             if (!RequiresChecking(type))
             {
@@ -700,7 +702,9 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             foreach (var pair in diagnosticsBuilder)
             {
                 int ordinal = pair.TypeParameter.Ordinal;
-                var location = ordinal < typeArgumentsSyntax.Count ? typeArgumentsSyntax[ordinal].Location : args.Location;
+                var location = ordinal < typeArgumentsSyntax.Count ? typeArgumentsSyntax[ordinal].Location
+                    : !typeArgumentLocations.IsDefault ? typeArgumentLocations[ordinal]
+                    : args.Location;
                 args.Diagnostics.Add(pair.UseSiteInfo, location);
             }
 

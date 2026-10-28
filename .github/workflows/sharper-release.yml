@@ -1,0 +1,79 @@
+# Builds the Sharper language server and compiler toolset package and publishes them as a GitHub release.
+# The Sharper devcontainer (.devcontainer/sharper) installs the latest release. See docs/sharper/vscode.md.
+#
+# Run it from the Actions tab (workflow_dispatch), or push a tag named sharper-*.
+
+name: Sharper release
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['sharper-*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sharper-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Compute version
+        id: version
+        run: |
+          # Arcade turns OfficialBuildId yyyyMMdd.N into the package version <prefix>-<label>.<short date>.N.
+          build_id="$(date -u +%Y%m%d).${GITHUB_RUN_NUMBER}"
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            tag="$GITHUB_REF_NAME"
+          else
+            tag="sharper-${build_id}"
+          fi
+          echo "build_id=$build_id" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Build language server
+        run: >
+          ./eng/common/dotnet.sh publish
+          src/LanguageServer/Microsoft.CodeAnalysis.LanguageServer/Microsoft.CodeAnalysis.LanguageServer.csproj
+          -c Release
+          -p:PublishReadyToRun=false
+          -p:OfficialBuildId=${{ steps.version.outputs.build_id }}
+          -p:PreReleaseVersionLabel=sharper
+          -o out/sharper-vscode/server
+
+      - name: Pack compiler toolset
+        run: >
+          ./eng/common/dotnet.sh pack
+          src/NuGet/Microsoft.Net.Compilers.Toolset/AnyCpu/Microsoft.Net.Compilers.Toolset.Package.csproj
+          -c Release
+          -p:OfficialBuildId=${{ steps.version.outputs.build_id }}
+          -p:PreReleaseVersionLabel=sharper
+          -p:PackageOutputPath=$GITHUB_WORKSPACE/out/sharper-vscode/packages
+
+      - name: Bundle
+        run: |
+          echo "${{ steps.version.outputs.tag }} ($GITHUB_SHA)" > out/sharper-vscode/VERSION
+          tar -czf out/sharper-vscode.tar.gz -C out/sharper-vscode .
+          ls -l out/sharper-vscode/packages out/sharper-vscode.tar.gz
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ steps.version.outputs.tag }}"
+          target=()
+          if [[ "$GITHUB_REF_TYPE" != tag ]]; then
+            target=(--target "$GITHUB_SHA")
+          fi
+          gh release create "$tag" "${target[@]}" \
+            --title "Sharper $tag" \
+            --notes "Sharper language server and compiler toolset built from $GITHUB_SHA. Install with .devcontainer/sharper/setup.sh; see docs/sharper/vscode.md." \
+            --latest \
+            out/sharper-vscode.tar.gz \
+            out/sharper-vscode/packages/*.nupkg

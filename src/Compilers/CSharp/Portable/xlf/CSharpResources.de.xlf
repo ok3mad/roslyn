@@ -2622,6 +2622,11 @@
         <target state="new">A spread 'yield return ..' cannot enumerate the asynchronous sequence '{0}', because that would need an 'await' that is not written. Use 'await foreach' with 'yield return' instead.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperSpreadRefStructEnumerator">
+        <source>A spread 'yield return ..' cannot enumerate '{0}' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead.</source>
+        <target state="new">A spread 'yield return ..' cannot enumerate '{0}' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperValDeconstructionDisallowsSpecificType">
         <source>Deconstruction 'val (...)' form disallows a specific type for 'val'. Use '@val' for the type.</source>
         <target state="new">Deconstruction 'val (...)' form disallows a specific type for 'val'. Use '@val' for the type.</target>
@@ -3375,6 +3380,11 @@
       <trans-unit id="IDS_READONLYLOCAL">
         <source>readonly local</source>
         <target state="new">readonly local</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_READONLYPARAMETER">
+        <source>readonly parameter</source>
+        <target state="new">readonly parameter</target>
         <note />
       </trans-unit>
       <trans-unit id="IDS_SK_ARRAY">
@@ -4165,6 +4175,16 @@
       <trans-unit id="WRN_SharperReadOnlyLocalMemberCallOnCopy_Title">
         <source>Call to a non-readonly member on a readonly local runs on a copy</source>
         <target state="new">Call to a non-readonly member on a readonly local runs on a copy</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WRN_SharperReadOnlyParameterMemberCallOnCopy">
+        <source>Call to non-readonly member '{0}' on readonly parameter '{1}' runs on a copy, so '{1}' is not changed.</source>
+        <target state="new">Call to non-readonly member '{0}' on readonly parameter '{1}' runs on a copy, so '{1}' is not changed.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WRN_SharperReadOnlyParameterMemberCallOnCopy_Title">
+        <source>Call to a non-readonly member on a readonly parameter runs on a copy</source>
+        <target state="new">Call to a non-readonly member on a readonly parameter runs on a copy</target>
         <note />
       </trans-unit>
       <trans-unit id="WRN_SharperValMemberCallOnCopy">

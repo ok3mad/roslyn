@@ -429,6 +429,7 @@ class X
                         case ErrorCode.WRN_SharperDynamicRangeNotSpread:
                         case ErrorCode.WRN_SharperValMemberCallOnCopy:
                         case ErrorCode.WRN_SharperReadOnlyLocalMemberCallOnCopy:
+                        case ErrorCode.WRN_SharperReadOnlyParameterMemberCallOnCopy:
                             Assert.Equal(1, ErrorFacts.GetWarningLevel(errorCode));
                             break;
                         case ErrorCode.WRN_MainIgnored:

@@ -31,6 +31,10 @@ namespace Microsoft.CodeAnalysis.CSharp.Syntax.InternalSyntax
         private int _recursionDepth;
         private TerminatorState _termState; // Resettable
 
+        // Sharper: the last token of the function type scanned most recently (see ScanTupleOrSharperFunctionType). It is
+        // scratch state that its readers clear before scanning, so it is not part of ResetPoint.
+        private SyntaxToken? _lastTokenOfScannedSharperFunctionType;
+
         // NOTE: If you add new state, you should probably add it to ResetPoint as well.
 
         internal LanguageParser(
@@ -7460,25 +7464,41 @@ done:
         /// <c>(p)->F</c> is also a pointer member access, so a function type with one parameter that may be an expression,
         /// followed by a name, returns the flags of its return type, as for the qualified name <c>p.F</c>. The callers
         /// then keep C#'s meaning wherever it is valid. Any other function type must be a type.
+        /// <para>
+        /// Parentheses around a function type, <c>((A) -> R)</c>, make a parenthesized type, so that a suffix can apply
+        /// to the whole function type. It returns the flags of the function type, so <c>((p)->F)</c> stays as
+        /// ambiguous as <c>(p)->F</c>.
+        /// </para>
         /// </remarks>
         private ScanTypeFlags ScanTupleOrSharperFunctionType(out SyntaxToken lastTokenOfType)
         {
             int count = 0;
             bool hasModifiers = false;
+            bool hasRefElements = false;
             bool hasNames = false;
             var firstElementType = ScanTypeFlags.NotType;
+            bool firstElementIsFunctionType = false;
 
             if (this.CurrentToken.Kind != SyntaxKind.CloseParenToken)
             {
                 while (true)
                 {
-                    while (IsParameterModifierExcludingScoped(this.CurrentToken))
+                    // ScanType takes a leading 'ref' or 'ref readonly' as part of the type, as ScanTupleType does for
+                    // C#, so that a 'ref' tuple element still scans as a tuple type.
+                    if (this.CurrentToken.Kind == SyntaxKind.RefKeyword)
                     {
-                        this.EatToken();
-                        hasModifiers = true;
+                        hasRefElements = true;
+                    }
+                    else
+                    {
+                        while (IsParameterModifierExcludingScoped(this.CurrentToken))
+                        {
+                            this.EatToken();
+                            hasModifiers = true;
+                        }
                     }
 
-                    var elementType = ScanType(out lastTokenOfType);
+                    var elementType = ScanSharperFunctionTypeElement(out lastTokenOfType, out bool isFunctionType);
                     if (elementType == ScanTypeFlags.NotType)
                     {
                         lastTokenOfType = null;
@@ -7488,6 +7508,7 @@ done:
                     if (count == 0)
                     {
                         firstElementType = elementType;
+                        firstElementIsFunctionType = isFunctionType;
                     }
 
                     count++;
@@ -7515,6 +7536,12 @@ done:
             lastTokenOfType = this.EatToken();
             if (this.CurrentToken.Kind != SyntaxKind.MinusGreaterThanToken)
             {
+                if (count == 1 && firstElementIsFunctionType && !hasModifiers && !hasRefElements && !hasNames)
+                {
+                    // A parenthesized function type, `((A) -> R)`.
+                    return firstElementType;
+                }
+
                 // Tuple element names are allowed; modifiers are not.
                 return count >= 2 && !hasModifiers
                     ? ScanTypeFlags.TupleType
@@ -7530,10 +7557,27 @@ done:
                 return ScanTypeFlags.NotType;
             }
 
-            return count == 1 && !hasModifiers && !hasNames && returnStartsWithName &&
+            _lastTokenOfScannedSharperFunctionType = lastTokenOfType;
+            return count == 1 && !hasModifiers && !hasRefElements && !hasNames && returnStartsWithName &&
                 firstElementType is ScanTypeFlags.NonGenericTypeOrExpression or ScanTypeFlags.AliasQualifiedName
                 ? returnType
                 : ScanTypeFlags.MustBeType;
+        }
+
+        /// <summary>
+        /// Sharper: scans a type inside parentheses, the element of a tuple type or a parameter of a function type, and
+        /// tells whether it is a function type. A suffix after a function type applies to its return type, so the
+        /// element is a function type when it starts with <c>(</c> and ends where the last function type scanned
+        /// ends. A tuple or parenthesized type ends at its own <c>)</c> or suffix instead.
+        /// </summary>
+        private ScanTypeFlags ScanSharperFunctionTypeElement(out SyntaxToken lastTokenOfType, out bool isFunctionType)
+        {
+            bool startsWithParen = this.CurrentToken.Kind == SyntaxKind.OpenParenToken;
+            _lastTokenOfScannedSharperFunctionType = null;
+            var result = ScanType(out lastTokenOfType);
+            isFunctionType = startsWithParen && result != ScanTypeFlags.NotType &&
+                lastTokenOfType != null && lastTokenOfType == _lastTokenOfScannedSharperFunctionType;
+            return result;
         }
 
 #nullable enable
@@ -7675,7 +7719,7 @@ done:
             return tokenAfterVoid.Kind == SyntaxKind.TildeToken && IsFeatureEnabled(MessageID.IDS_FeatureSharper);
         }
 
-        private TypeSyntax ParseTypeOrVoid()
+        private TypeSyntax ParseTypeOrVoid(ParseTypeMode mode = ParseTypeMode.Normal)
         {
             if (this.CurrentToken.Kind == SyntaxKind.VoidKeyword && this.PeekToken(1).Kind != SyntaxKind.AsteriskToken && !IsSharperVoidTask(this.PeekToken(1)))
             {
@@ -7683,7 +7727,7 @@ done:
                 return _syntaxFactory.PredefinedType(this.EatToken());
             }
 
-            return this.ParseType();
+            return this.ParseType(mode);
         }
 
         private enum ParseTypeMode
@@ -8094,32 +8138,44 @@ done:
         }
 
         /// <summary>
-        /// Sharper: true at <c>( [modifiers] type, ... ) -></c>, the start of a function type.
+        /// Sharper: true at <c>( [modifiers] type, ... ) -></c>, the start of a function type, and at
+        /// <c>( function-type )</c>, a parenthesized function type (<paramref name="isParenthesized"/>).
         /// </summary>
-        private bool IsSharperFunctionTypeStart()
+        private bool IsSharperFunctionTypeStart(out bool isParenthesized)
         {
             Debug.Assert(this.CurrentToken.Kind == SyntaxKind.OpenParenToken);
 
-            using var _ = this.GetDisposableResetPoint(resetOnDispose: true);
+            using var resetPoint = this.GetDisposableResetPoint(resetOnDispose: true);
             this.EatToken();
+            isParenthesized = false;
 
+            int count = 0;
+            bool isParenthesizedCandidate = false;
             if (this.CurrentToken.Kind != SyntaxKind.CloseParenToken)
             {
                 while (true)
                 {
+                    bool hasModifiers = false;
                     while (IsParameterModifierExcludingScoped(this.CurrentToken))
                     {
                         this.EatToken();
+                        hasModifiers = true;
                     }
 
-                    if (ScanType() == ScanTypeFlags.NotType)
+                    if (ScanSharperFunctionTypeElement(out _, out bool isFunctionType) == ScanTypeFlags.NotType)
                     {
                         return false;
+                    }
+
+                    if (count++ == 0)
+                    {
+                        isParenthesizedCandidate = isFunctionType && !hasModifiers;
                     }
 
                     if (IsTrueIdentifier())
                     {
                         this.EatToken();
+                        isParenthesizedCandidate = false;
                     }
 
                     if (this.CurrentToken.Kind != SyntaxKind.CommaToken)
@@ -8131,8 +8187,18 @@ done:
                 }
             }
 
-            return this.CurrentToken.Kind == SyntaxKind.CloseParenToken &&
-                this.PeekToken(1).Kind == SyntaxKind.MinusGreaterThanToken;
+            if (this.CurrentToken.Kind != SyntaxKind.CloseParenToken)
+            {
+                return false;
+            }
+
+            if (this.PeekToken(1).Kind == SyntaxKind.MinusGreaterThanToken)
+            {
+                return true;
+            }
+
+            isParenthesized = count == 1 && isParenthesizedCandidate;
+            return isParenthesized;
         }
 
         /// <summary>
@@ -8159,7 +8225,9 @@ done:
         /// Sharper: parses a function type, <c>(A, B) -> R</c>. Parameter modifiers are kept for the binder to report;
         /// parameter names are skipped with an error.
         /// </summary>
-        private FunctionTypeSyntax ParseSharperFunctionType()
+        /// <param name="mode">In a pattern, the return type is parsed as the type of a pattern, so that
+        /// <c>x is (int) -> int ? a : b</c> stays a conditional, as <c>x is int ? a : b</c> is.</param>
+        private FunctionTypeSyntax ParseSharperFunctionType(ParseTypeMode mode = ParseTypeMode.Normal)
         {
             var open = this.EatToken(SyntaxKind.OpenParenToken);
             var parameters = _pool.AllocateSeparated<FunctionPointerParameterSyntax>();
@@ -8196,14 +8264,25 @@ done:
             var close = this.EatToken(SyntaxKind.CloseParenToken);
             var arrow = this.EatToken(SyntaxKind.MinusGreaterThanToken);
 
-            // PROTOTYPE(sharper): a suffix applies to the return type; there is no parenthesized form that applies one to the
-            // function type itself (https://github.com/ok3mad/roslyn/issues/58).
+            // A suffix applies to the return type. A parenthesized function type takes a suffix of its own.
             return _syntaxFactory.FunctionType(
                 open,
                 _pool.ToListAndFree(parameters),
                 close,
                 arrow,
-                this.ParseTypeOrVoid());
+                this.ParseTypeOrVoid(mode is ParseTypeMode.AfterIs or ParseTypeMode.DefinitePattern ? mode : ParseTypeMode.Normal));
+        }
+
+        /// <summary>
+        /// Sharper: parses a parenthesized function type, <c>((A) -> R)</c>, which lets a suffix apply to the whole
+        /// function type, as in <c>((int) -> int)?</c>.
+        /// </summary>
+        private ParenthesizedTypeSyntax ParseSharperParenthesizedType()
+        {
+            return _syntaxFactory.ParenthesizedType(
+                this.EatToken(SyntaxKind.OpenParenToken),
+                this.ParseSharperFunctionType(),
+                this.EatToken(SyntaxKind.CloseParenToken));
         }
 
         private TupleElementSyntax ParseTupleElement()
@@ -8243,9 +8322,9 @@ done:
 
             if (this.CurrentToken.Kind == SyntaxKind.OpenParenToken)
             {
-                if (IsFeatureEnabled(MessageID.IDS_FeatureSharper) && IsSharperFunctionTypeStart())
+                if (IsFeatureEnabled(MessageID.IDS_FeatureSharper) && IsSharperFunctionTypeStart(out bool isParenthesized))
                 {
-                    return this.ParseSharperFunctionType();
+                    return isParenthesized ? this.ParseSharperParenthesizedType() : this.ParseSharperFunctionType(mode);
                 }
 
                 return this.ParseTupleType();
@@ -13246,8 +13325,18 @@ done:
                 return false;
             }
 
+            bool typeStartsWithParen = this.CurrentToken.Kind == SyntaxKind.OpenParenToken;
             var type = this.ScanType(out var lastTokenOfType, forPattern);
             if (type == ScanTypeFlags.NotType)
+            {
+                return false;
+            }
+
+            // Sharper: no C# type that starts with `(` is ambiguous, so this is a parenthesized function type that is also
+            // an expression, as in the invocation `(((p)->F))(x)`, and C# reads it as one.
+            if (typeStartsWithParen &&
+                type is ScanTypeFlags.NonGenericTypeOrExpression or ScanTypeFlags.GenericTypeOrExpression or ScanTypeFlags.GenericTypeOrMethod or ScanTypeFlags.AliasQualifiedName &&
+                IsFeatureEnabled(MessageID.IDS_FeatureSharper))
             {
                 return false;
             }
@@ -13774,7 +13863,12 @@ done:
             using var _1 = this.GetDisposableResetPoint(resetOnDispose: true);
 
             this.EatToken(); // open paren
-            ScanTypeFlags scanTypeFlags = ScanTupleType(out _);
+
+            // Sharper: `new ((A) -> R)[n]` creates an array of function types. A target-typed `new(...)` is never a
+            // pointer, so it is never followed by `->` in valid C#.
+            ScanTypeFlags scanTypeFlags = IsFeatureEnabled(MessageID.IDS_FeatureSharper)
+                ? ScanTupleOrSharperFunctionType(out _)
+                : ScanTupleType(out _);
             if (scanTypeFlags != ScanTypeFlags.NotType)
             {
                 switch (this.CurrentToken.Kind)

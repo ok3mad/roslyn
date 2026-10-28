@@ -11,7 +11,7 @@ by the C# compiler itself: new syntax binds to bound nodes and lowers to ordinar
 checklist distilled from the first features: `yield return ..xs` (a new bound node; the commits merged from
 `sharper/gating`), `val` locals (a contextual keyword on an existing symbol; merged from `sharper/val`, later extended to
 deconstruction, patterns and lambda parameters), `readonly`
-locals (a modifier C# rejected, reusing the `val` checks) and the sequence type `T[..]` (a type form that binds to a
+locals and parameters (a modifier C# rejected, reusing the `val` checks) and the sequence type `T[..]` (a type form that binds to a
 BCL type; `sharper/sequence-type`). See `SharperTests.cs` for all of them.
 
 ## When to Use
@@ -51,7 +51,9 @@ BCL type; `sharper/sequence-type`). See `SharperTests.cs` for all of them.
    Kind checks (`BoundKind.X`, `is BoundX`) hide in flow analysis, lowering helpers and region analysis, and
    several of them throw or assert on unknown kinds.
 4. Implement layer by layer (below), re-running the tests after each one. The next failure names the next layer.
-5. **Before merging, make the analyzer build clean** (see Testing). Test runs and plain builds skip the analyzers, so
+5. **Before merging a parser change, run the parser tests with Sharper on** (`ROSLYN_TEST_SHARPER=1`, see Testing)
+   and sort every failure that is not on the last run's list.
+6. **Before merging, make the analyzer build clean** (see Testing). Test runs and plain builds skip the analyzers, so
    public API changes (RS0016, RS0017) show up only there. An error that is already on `main` still blocks: fix it or
    link its issue in the PR.
 
@@ -83,8 +85,9 @@ implementation plan, "Feature 3"):
    scanning. Do not return `ScanTypeFlags.MustBeType` if the form is also an expression, and check `ScanCast` and
    `ScanPossibleTypeArgumentList` for valid C# that would change meaning.
 3. **Bind through `BindSharperTypeAlias`** (`Binder/Binder_SharperTypes.cs`), with the definition from
-   `GetSpecialType` or `GetWellKnownType`. It constructs the type through `ConstructNamedType`, so constraint checks
-   and their suppression in signatures behave as for the type written out.
+   `GetSpecialType` or `GetWellKnownType`, and one location per type argument (the part of the form that stands for
+   it). Constraint checks, their suppression in signatures, and the location of a constraint error then behave as for
+   the type written out.
 4. **Find the code that reads the syntax directly**: `VisitRankSpecifiers` callers that bind sizes, and
    `CSharpSemanticModel.CanGetSemanticInfo` for sub-expressions that are now part of a type.
 5. **Test against the C# twin** in every type position (compare member and local symbols), including inside a
@@ -176,7 +179,23 @@ implementation plan, "Feature 3"):
    to the token, so no binder change can lift it. Gate the error in the parser, then add it back wherever the same
    modifier list builds another construct (`readonly` locals: the local function path and `const readonly`). Check that
    every position the feature should cover has a slot for the modifier: a `for` initializer has none, and adding one
-   is a public syntax API change.
+   is a public syntax API change. Other modifiers are rejected by the binder instead: `readonly` on a parameter parses
+   (for `ref readonly`), and `ParameterHelpers.CheckParameterModifiers` reports CS9190.
+21. **A type form that wraps an ambiguous one inherits its ambiguity, and C# has more than one tuple scan.** The
+   parenthesized function type `((p)->F)` returns the flags of `(p)->F` from `ScanType`, so callers treat it like a
+   name and `((p)->F)[i]`, `((p)->F)?.X` and `((p)->F) ? a : b` keep their C# meaning. The cast heuristic is the
+   exception: `(((p)->F))(x)` would become a cast, so `ScanCast` refuses an ambiguous type that starts with `(` (no C#
+   type that starts with `(` is ambiguous). `ScanTypeFlags` cannot say what kind of type was scanned; the scan records
+   the last token of the latest function type (`_lastTokenOfScannedSharperFunctionType`), cleared before each read.
+   Grep for other scans of `(`: target-typed `new(...)` has its own (`IsImplicitObjectCreation`), so
+   `new ((int) -> int)[3]` needed it too. Check every "valid C#" case with the flag off before testing it:
+   `e is (p)->F` turned out to be a C# syntax error, which left function types free to take that place in patterns.
+   Patterns parse their type in their own mode (`AfterIs`, `DefinitePattern`), which is what keeps `x is T ? a : b` a
+   conditional; a type form that parses a nested type (the function type's return type) must pass that mode on.
+22. **Simple symbols keep no syntax.** A rule read from a parameter's syntax needs the syntax on the symbol, but
+   `SourceParameterSymbol.Create` makes a parameter with no modifiers, attributes or default a
+   `SourceSimpleParameterSymbol`, which drops it. Add the condition there so such parameters stay complex
+   (`readonly` parameters), or carry the decision in a flag, as `LambdaParameterSymbol.IsSharperVal` does.
 
 ## Testing
 
@@ -190,6 +209,9 @@ implementation plan, "Feature 3"):
   analysis (`AnalyzeControlFlow`, `AnalyzeDataFlow`).
 - Run the Sharper tests with `ROSLYN_TEST_IOPERATION=1` as well: every compilation then also validates IOperation,
   the semantic model and the control flow graph.
+- After a parser change, run the whole Syntax test project with `ROSLYN_TEST_SHARPER=1`, which turns Sharper on for
+  every parse (design rule 2: valid C# must parse the same). Compare the failures with the last run's list in the
+  implementation plan's follow-ups; each new one is a bug or, if it fits the rule, a new accepted break.
 - Before merging, build with the analyzers on, which the test runs skip: it reports public API changes (RS0016,
   RS0017) and other analyzer errors.
   `dotnet build src/Compilers/CSharp/Portable/Microsoft.CodeAnalysis.CSharp.csproj -p:RunAnalyzersDuringBuild=true`
@@ -200,4 +222,5 @@ implementation plan, "Feature 3"):
 export PATH=$PWD/.dotnet:$PATH DOTNET_ROOT=$PWD/.dotnet
 dotnet test src/Compilers/CSharp/Test/Semantic/Microsoft.CodeAnalysis.CSharp.Semantic.UnitTests.csproj -f net10.0 --filter "FullyQualifiedName~SharperTests"
 ROSLYN_TEST_IOPERATION=1 dotnet test src/Compilers/CSharp/Test/Semantic/Microsoft.CodeAnalysis.CSharp.Semantic.UnitTests.csproj -f net10.0 --filter "FullyQualifiedName~SharperTests"
+ROSLYN_TEST_SHARPER=1 dotnet test src/Compilers/CSharp/Test/Syntax/Microsoft.CodeAnalysis.CSharp.Syntax.UnitTests.csproj -f net10.0
 ```

@@ -346,9 +346,14 @@ namespace Microsoft.CodeAnalysis.CSharp
                 return new BoundYieldReturnSpreadStatement(node, collectionExpr, enumeratorInfoOpt: null, elementPlaceholder: null, elementConversion: null, hasErrors: true);
             }
 
-            // PROTOTYPE(sharper): A ref struct source (a span, an inline array) is rejected later with CS4007 about its
-            // enumerator ("cannot be preserved across 'await' or 'yield' boundary"), which the user never wrote.
-            // Consider a spread-specific error here. Tracked in #44.
+            // A spread keeps the source's enumerator alive across its yields, so the enumerator must be hoisted into
+            // the iterator's state machine. A ref struct enumerator cannot be (a span's, which also enumerates an
+            // inline array), and lowering would report CS4007 about an enumerator the user never wrote. Say why here.
+            if (builder.InlineArraySpanType != WellKnownType.Unknown || builder.GetEnumeratorInfo.Method.ReturnType.IsRestrictedType())
+            {
+                Error(diagnostics, ErrorCode.ERR_SharperSpreadRefStructEnumerator, operandSyntax, collectionExpr.Type ?? builder.CollectionType);
+                return new BoundYieldReturnSpreadStatement(node, collectionExpr, enumeratorInfoOpt: null, elementPlaceholder: null, elementConversion: null, hasErrors: true);
+            }
 
             builder.ReportDiagnosticsIfUnsafeMemberAccess(this, node.YieldKeyword, node, diagnostics);
 

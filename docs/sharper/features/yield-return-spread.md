@@ -63,8 +63,10 @@ IEnumerable<T> Walk(Node<T> node)
 - **`dynamic` operands:** `..d` converts `d` to `Index` at runtime, so it is valid C# and stays a range. The compiler
   warns (CS20002); convert `d` to a sequence type to spread it. Where a range is not valid (for example an iterator of
   `int`), `..d` spreads and enumerates `d` dynamically. Deciding at runtime instead is [#42](https://github.com/ok3mad/roslyn/issues/42).
-- **Ref struct sources** such as spans are rejected, with an error about the span's enumerator (CS4007). A clearer
-  error is [#44](https://github.com/ok3mad/roslyn/issues/44).
+- **Ref struct enumerators:** a spread keeps the source's enumerator across its yields, so sources enumerated by a
+  ref struct are rejected (CS20012): spans, `ReadOnlySpan<T>`, inline arrays (enumerated through a span) and
+  collections whose `GetEnumerator` returns a ref struct. A ref struct source whose enumerator is a class spreads
+  normally. Where `..x` is a valid C# range, it stays a range, as always.
 - **Edit and Continue** works for methods with spreads: edits before, after and inside a spread keep its states and
   its hoisted enumerator, so a suspended iterator continues where it was. As with `foreach`, changing the type of the
   source creates new hoisted fields, so an iterator suspended inside that spread cannot continue it. Replacing a

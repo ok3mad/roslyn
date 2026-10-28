@@ -80,7 +80,8 @@ namespace Microsoft.CodeAnalysis.CSharp
                     result.Add(parameter,
                                new SynthesizedPrimaryConstructorParameterBackingFieldSymbol(parameter,
                                                                                             GeneratedNames.MakePrimaryConstructorParameterFieldName(parameter.Name),
-                                                                                            isReadOnly: containingType.IsReadOnly));
+                                                                                            // A Sharper readonly parameter is never written, so its field can be readonly too.
+                                                                                            isReadOnly: containingType.IsReadOnly || parameter is SourceComplexParameterSymbolBase { IsSharperReadOnly: true }));
                 }
 
                 captured.Free();
