@@ -41,7 +41,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 // The default value reports its own errors when it is bound against the parameter type.
                 result = TypeWithAnnotations.Create(CreateErrorType("infer"));
             }
-            else if (naturalTypeDiagnostics.HasAnyErrors() || !expression.HasExpressionType() || expression.Type.IsVoidType())
+            else if (naturalTypeDiagnostics.HasAnyErrors() || expression.Type is not { } type || type.IsVoidType())
             {
                 // null, default, new() and collection expressions have no type of their own, so there is nothing to
                 // infer from.
@@ -52,7 +52,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             {
                 diagnostics.AddDependencies(valueDiagnostics);
                 diagnostics.AddDependencies(naturalTypeDiagnostics);
-                result = TypeWithAnnotations.Create(expression.Type, GetSharperInferredParameterAnnotation(parameter, expression));
+                result = TypeWithAnnotations.Create(type, GetSharperInferredParameterAnnotation(parameter, expression));
             }
 
             valueDiagnostics.Free();
