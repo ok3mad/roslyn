@@ -435,7 +435,8 @@ namespace Microsoft.CodeAnalysis.CSharp
         SafeKeyword = 8454,
 
         // Sharper contextual keywords take the top free slots below ElifKeyword, counting down, so upstream can keep adding
-        // its own from 8455 up. SharperTests checks that no other SyntaxKind takes these values.
+        // its own from 8455 up. SharperTests checks that no other SyntaxKind takes these values. Unlike upstream's, they are
+        // not in GetContextualKeywordKinds() or GetContextualKeywordKind(string): only the parser makes them, with Sharper on.
         /// <summary>Represents Sharper's <c>val</c>: an implicitly typed variable that cannot be reassigned.</summary>
         ValKeyword = 8466,
 
