@@ -44,12 +44,18 @@ The decisions are in the brainstorm's [Decided](../planning/brainstorm.md#decide
 ## Not supported yet
 
 - Calls only: method calls, extension methods and delegate invocations. Object creation (`new C(it.X)`), indexers,
-  constructor initializers and attributes report CS20019 for now.
-- `F(Make(it), out var v)`: a declaration anywhere in the arguments turns the lambda off.
+  constructor initializers and attributes report CS20019 for now ([#122](https://github.com/ok3mad/roslyn/issues/122)).
 - The semantic model finds the lambda (`GetSymbolInfo` and `GetTypeInfo` on `it`, `GetOperation`), but
   `LookupSymbols` inside an implicit lambda does not list `it`, and speculative binding inside one sees the outer
-  scope.
-- Edit and Continue does not see implicit lambdas, because the IDE's matcher finds lambdas by their syntax.
+  scope ([#123](https://github.com/ok3mad/roslyn/issues/123)).
+- Edit and Continue does not see implicit lambdas, because the IDE's matcher finds lambdas by their syntax
+  ([#124](https://github.com/ok3mad/roslyn/issues/124)).
+- `F(Make(it), out var v)`: a declaration anywhere in the arguments turns the lambda off ([#125](https://github.com/ok3mad/roslyn/issues/125)).
+- When an inner call claims `it`, the outer call reports a plain C# error such as CS0411 that does not mention `it`,
+  and a write to `it` says "'val variable'" ([#126](https://github.com/ok3mad/roslyn/issues/126)).
+- Each call with a free `it` scans its arguments' syntax, and failed trials bind again at each nesting level
+  ([#127](https://github.com/ok3mad/roslyn/issues/127)).
+- No IDE support yet: Quick Info, hints, and the "name the parameter" fixer ([#128](https://github.com/ok3mad/roslyn/issues/128)).
 
 ## How it works
 
@@ -78,8 +84,8 @@ change; three assertions that expect lambda syntax accept an argument expression
 
 ## Follow-ups
 
-See the `PROTOTYPE(sharper)` comments: declarations next to an implicit lambda, `LookupSymbols` and Edit and Continue.
-Object creation and the other argument lists are the next step, then pipe stages with #25.
+Each item under [Not supported yet](#not-supported-yet) has an issue, [#122](https://github.com/ok3mad/roslyn/issues/122) to [#128](https://github.com/ok3mad/roslyn/issues/128), and the code
+marks them with `PROTOTYPE(sharper)` comments. Pipe stages come with [#25](https://github.com/ok3mad/roslyn/issues/25).
 
 ## Code
 

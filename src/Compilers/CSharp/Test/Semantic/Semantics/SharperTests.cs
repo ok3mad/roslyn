@@ -7932,7 +7932,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             Assert.Equal(MethodKind.AnonymousFunction, ((IMethodSymbol)symbol.ContainingSymbol).MethodKind);
             Assert.Equal("System.Int32", model.GetTypeInfo(it).Type.ToTestDisplayString());
             // PROTOTYPE(sharper): the semantic model finds a lambda's scope by its syntax, so lookup inside an implicit
-            // lambda does not see 'it' yet (#24).
+            // lambda does not see 'it' yet (#123).
             Assert.DoesNotContain(model.LookupSymbols(it.SpanStart), s => s.Name == "it");
 
             var argument = (BinaryExpressionSyntax)it.Parent;

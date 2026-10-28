@@ -173,7 +173,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             {
                 // A variable declared in the arguments gets its type while the call binds, so the two trials would
                 // both set it. Bind as values, and report a declaration inside an argument that would be a lambda.
-                // PROTOTYPE(sharper): 'F(Make(it), out var v)' cannot be an implicit lambda yet (#24).
+                // PROTOTYPE(sharper): 'F(Make(it), out var v)' cannot be an implicit lambda yet (#125).
                 if (declaration.argument is not null)
                 {
                     diagnostics.Add(ErrorCode.ERR_SharperItDeclaration, declaration.designation.Location, declaration.designation.Identifier.ValueText);
@@ -543,7 +543,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 if (!locals.IsEmpty)
                 {
                     // PROTOTYPE(sharper): the binder map scopes these to the lambda, but whether an argument is a
-                    // lambda depends on types; decide whether declarations can be allowed (#24).
+                    // lambda depends on types; decide whether declarations can be allowed (#125).
                     diagnostics.Add(ErrorCode.ERR_SharperItDeclaration, locals[0].GetFirstLocation(), locals[0]);
                 }
 

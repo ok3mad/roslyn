@@ -140,7 +140,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         /// is one depends on types (the parameter it goes to), so this is only an upper bound, for assertions.
         /// </summary>
         // PROTOTYPE(sharper): Edit and Continue does not see implicit 'it' lambdas, because they have no lambda syntax.
-        // The syntax offset of the body still identifies each one; decide how the IDE's lambda matching finds them (#24).
+        // The syntax offset of the body still identifies each one; decide how the IDE's lambda matching finds them (#124).
         internal static bool IsSharperImplicitItLambdaBody(SyntaxNode node)
         {
             return node is ExpressionSyntax { Parent: ArgumentSyntax } && node.IsFeatureEnabled(MessageID.IDS_FeatureSharper);
