@@ -6,6 +6,7 @@ using System.Collections.Immutable;
 using System.Diagnostics;
 using Microsoft.CodeAnalysis.CSharp.Symbols;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Text;
 using Roslyn.Utilities;
 
 namespace Microsoft.CodeAnalysis.CSharp
@@ -70,9 +71,11 @@ namespace Microsoft.CodeAnalysis.CSharp
                 {
                     var sequenceRank = rankSpecifiers[end];
                     var definition = GetSpecialType(SpecialType.System_Collections_Generic_IEnumerable_T, diagnostics, sequenceRank);
-                    // PROTOTYPE(sharper): report an invalid element type on the element type, not the whole sequence type
-                    // (https://github.com/ok3mad/roslyn/issues/65).
-                    var sequence = BindSharperTypeAlias(definition, [type], node, basesBeingResolved, diagnostics);
+                    // The element is everything to the left of this rank. Only the first rank has a syntax node for it.
+                    var elementLocation = end == 0
+                        ? node.ElementType.Location
+                        : Location.Create(node.SyntaxTree, TextSpan.FromBounds(node.SpanStart, rankSpecifiers[end - 1].Span.End));
+                    var sequence = BindSharperTypeAlias(definition, [type], [elementLocation], node, basesBeingResolved, diagnostics);
                     type = TypeWithAnnotations.Create(AreNullableAnnotationsEnabled(sequenceRank.CloseBracketToken), sequence);
                 }
 
@@ -97,25 +100,39 @@ namespace Microsoft.CodeAnalysis.CSharp
 
             var resultType = BindTypeArgument(syntax.ElementType, diagnostics, basesBeingResolved);
             var definition = GetWellKnownType(WellKnownType.System_Threading_Tasks_Task_T, diagnostics, syntax);
-            return BindSharperTypeAlias(definition, [resultType], syntax, basesBeingResolved, diagnostics);
+            return BindSharperTypeAlias(definition, [resultType], [syntax.ElementType.Location], syntax, basesBeingResolved, diagnostics);
         }
 
         /// <summary>
         /// Constructs the BCL generic type that a Sharper type form stands for. Constraints are checked as for a
         /// type written out in C#: here, or by the declaring symbol where the binder suppresses constraint checks (in
-        /// signatures). Diagnostics are reported on <paramref name="syntax"/>, the whole type form, since the type
-        /// arguments have no syntax of their own. The caller gets <paramref name="definition"/> with
-        /// <c>GetSpecialType</c> or <c>GetWellKnownType</c>, which report a missing type.
+        /// signatures). A constraint error on a type argument is reported at its entry in
+        /// <paramref name="typeArgumentLocations"/>, the part of the form that stands for it, where the C# form would
+        /// report it on the type argument; other diagnostics are reported on <paramref name="syntax"/>, the whole type
+        /// form. The caller gets <paramref name="definition"/> with <c>GetSpecialType</c> or <c>GetWellKnownType</c>,
+        /// which report a missing type.
         /// </summary>
         private NamedTypeSymbol BindSharperTypeAlias(
             NamedTypeSymbol definition,
             ImmutableArray<TypeWithAnnotations> typeArguments,
+            ImmutableArray<Location> typeArgumentLocations,
             SyntaxNode syntax,
             ConsList<TypeSymbol> basesBeingResolved,
             BindingDiagnosticBag diagnostics)
         {
             Debug.Assert(definition.IsDefinition && definition.Arity == typeArguments.Length);
-            return ConstructNamedType(definition, syntax, typeArgumentsSyntax: default, typeArguments, basesBeingResolved, diagnostics);
+            Debug.Assert(typeArgumentLocations.Length == typeArguments.Length);
+
+            // ConstructNamedType, with locations in place of a type argument list.
+            var type = definition.Construct(typeArguments);
+            if (ShouldCheckConstraints && ConstraintsHelper.RequiresChecking(type))
+            {
+                bool includeNullability = Compilation.IsFeatureEnabled(MessageID.IDS_FeatureNullableReferenceTypes);
+                type.CheckConstraintsForNamedType(new ConstraintsHelper.CheckConstraintsArgs(this.Compilation, this.Conversions, includeNullability, syntax.Location, diagnostics),
+                                                  syntax, typeArgumentsSyntax: default, basesBeingResolved, typeArgumentLocations);
+            }
+
+            return type;
         }
     }
 }

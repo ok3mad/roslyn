@@ -29,11 +29,12 @@ variables and `using` aliases.
 - **Suffixes stack left to right, innermost first**, like `?` and `[]`: `int~[]` is `Task<int>[]`, `int[]~` is
   `Task<int[]>`, `int[..]~` is `Task<IEnumerable<int>>`, `int~[..]` is `IEnumerable<Task<int>>` and `int~~` is
   `Task<Task<int>>`. In a function type the suffix applies to the return type: `(int) -> int~` is
-  `Func<int, Task<int>>`, and `() -> void~` is `Func<Task>`.
+  `Func<int, Task<int>>`, and `() -> void~` is `Func<Task>`; a task of a function takes parentheses,
+  `((int) -> int)~` is `Task<Func<int, int>>`.
 - **Nullable annotations:** `string?~` is `Task<string?>` and `string~?` is a nullable `Task<string>`, with the same
   warnings as the `Task` spelling.
 - **Constraints are those of `Task<T>`:** a pointer, a static type or a ref struct cannot be the result type (CS0306,
-  CS0718, CS9244).
+  CS0718, CS9244). The error is reported on the result type, where the `Task<T>` spelling reports it.
 - **Not sugared:** `ValueTask<T>` and `IAsyncEnumerable<T>` stay spelled out. In six open-source applications,
   `ValueTask` is 0.4% of async declarations, mostly where an interface imposes it (`DisposeAsync`).
 

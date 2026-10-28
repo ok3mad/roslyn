@@ -574,6 +574,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 case ErrorCode.WRN_SharperDynamicRangeNotSpread:
                 case ErrorCode.WRN_SharperValMemberCallOnCopy:
                 case ErrorCode.WRN_SharperReadOnlyLocalMemberCallOnCopy:
+                case ErrorCode.WRN_SharperReadOnlyParameterMemberCallOnCopy:
                     return 1;
                 default:
                     return 0;
@@ -2607,7 +2608,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 or ErrorCode.ERR_ClosedBadDerivedTypesProperty
                 or ErrorCode.ERR_BadCompilationOptionValueAccepted
                 or ErrorCode.ERR_IllegalUnsafeModifier
-                or ErrorCode.ERR_SharperSpreadInAsyncIterator
+                or ErrorCode.ERR_SharperSpreadOfAsyncSequence
                 or ErrorCode.WRN_SharperDynamicRangeNotSpread
                 or ErrorCode.WRN_SharperValMemberCallOnCopy
                 or ErrorCode.ERR_SharperValMayNotBindToType
@@ -2619,6 +2620,12 @@ namespace Microsoft.CodeAnalysis.CSharp
                 or ErrorCode.WRN_SharperReadOnlyLocalMemberCallOnCopy
                 or ErrorCode.ERR_SharperReadOnlyLocalWithNoInitializer
                 or ErrorCode.ERR_SharperSpreadRefStructEnumerator
+                or ErrorCode.WRN_SharperReadOnlyParameterMemberCallOnCopy
+                or ErrorCode.ERR_SharperInferNoType
+                or ErrorCode.ERR_SharperInferNotSupportedYet
+                or ErrorCode.ERR_SharperInferNoBody
+                or ErrorCode.ERR_SharperInferUsesInferredMethod
+                or ErrorCode.ERR_SharperInferUsesItself
                     => false,
             };
 #pragma warning restore CS8524 // The switch expression does not handle some values of its input type (it is not exhaustive) involving an unnamed enum value.

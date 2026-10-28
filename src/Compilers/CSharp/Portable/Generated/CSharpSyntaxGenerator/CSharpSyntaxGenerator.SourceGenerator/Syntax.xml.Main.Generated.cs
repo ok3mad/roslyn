@@ -70,6 +70,9 @@ public partial class CSharpSyntaxVisitor<TResult>
     /// <summary>Called when the visitor visits a FunctionTypeSyntax node.</summary>
     public virtual TResult? VisitFunctionType(FunctionTypeSyntax node) => this.DefaultVisit(node);
 
+    /// <summary>Called when the visitor visits a ParenthesizedTypeSyntax node.</summary>
+    public virtual TResult? VisitParenthesizedType(ParenthesizedTypeSyntax node) => this.DefaultVisit(node);
+
     /// <summary>Called when the visitor visits a TupleElementSyntax node.</summary>
     public virtual TResult? VisitTupleElement(TupleElementSyntax node) => this.DefaultVisit(node);
 
@@ -830,6 +833,9 @@ public partial class CSharpSyntaxVisitor
     /// <summary>Called when the visitor visits a FunctionTypeSyntax node.</summary>
     public virtual void VisitFunctionType(FunctionTypeSyntax node) => this.DefaultVisit(node);
 
+    /// <summary>Called when the visitor visits a ParenthesizedTypeSyntax node.</summary>
+    public virtual void VisitParenthesizedType(ParenthesizedTypeSyntax node) => this.DefaultVisit(node);
+
     /// <summary>Called when the visitor visits a TupleElementSyntax node.</summary>
     public virtual void VisitTupleElement(TupleElementSyntax node) => this.DefaultVisit(node);
 
@@ -1589,6 +1595,9 @@ public partial class CSharpSyntaxRewriter : CSharpSyntaxVisitor<SyntaxNode?>
 
     public override SyntaxNode? VisitFunctionType(FunctionTypeSyntax node)
         => node.Update(VisitToken(node.OpenParenToken), VisitList(node.Parameters), VisitToken(node.CloseParenToken), VisitToken(node.ArrowToken), (TypeSyntax?)Visit(node.ReturnType) ?? throw new ArgumentNullException("returnType"));
+
+    public override SyntaxNode? VisitParenthesizedType(ParenthesizedTypeSyntax node)
+        => node.Update(VisitToken(node.OpenParenToken), (TypeSyntax?)Visit(node.Type) ?? throw new ArgumentNullException("type"), VisitToken(node.CloseParenToken));
 
     public override SyntaxNode? VisitTupleElement(TupleElementSyntax node)
         => node.Update((TypeSyntax?)Visit(node.Type) ?? throw new ArgumentNullException("type"), VisitToken(node.Identifier));
@@ -2545,6 +2554,19 @@ public static partial class SyntaxFactory
     /// <summary>Creates a new FunctionTypeSyntax instance.</summary>
     public static FunctionTypeSyntax FunctionType(TypeSyntax returnType)
         => SyntaxFactory.FunctionType(SyntaxFactory.Token(SyntaxKind.OpenParenToken), default, SyntaxFactory.Token(SyntaxKind.CloseParenToken), SyntaxFactory.Token(SyntaxKind.MinusGreaterThanToken), returnType);
+
+    /// <summary>Creates a new ParenthesizedTypeSyntax instance.</summary>
+    public static ParenthesizedTypeSyntax ParenthesizedType(SyntaxToken openParenToken, TypeSyntax type, SyntaxToken closeParenToken)
+    {
+        if (openParenToken.Kind() != SyntaxKind.OpenParenToken) throw new ArgumentException(nameof(openParenToken));
+        if (type == null) throw new ArgumentNullException(nameof(type));
+        if (closeParenToken.Kind() != SyntaxKind.CloseParenToken) throw new ArgumentException(nameof(closeParenToken));
+        return (ParenthesizedTypeSyntax)Syntax.InternalSyntax.SyntaxFactory.ParenthesizedType((Syntax.InternalSyntax.SyntaxToken)openParenToken.Node!, (Syntax.InternalSyntax.TypeSyntax)type.Green, (Syntax.InternalSyntax.SyntaxToken)closeParenToken.Node!).CreateRed();
+    }
+
+    /// <summary>Creates a new ParenthesizedTypeSyntax instance.</summary>
+    public static ParenthesizedTypeSyntax ParenthesizedType(TypeSyntax type)
+        => SyntaxFactory.ParenthesizedType(SyntaxFactory.Token(SyntaxKind.OpenParenToken), type, SyntaxFactory.Token(SyntaxKind.CloseParenToken));
 
     /// <summary>Creates a new TupleElementSyntax instance.</summary>
     public static TupleElementSyntax TupleElement(TypeSyntax type, SyntaxToken identifier)

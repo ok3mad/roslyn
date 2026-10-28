@@ -348,6 +348,36 @@
   <data name="IDS_READONLYLOCAL" xml:space="preserve">
     <value>readonly local</value>
   </data>
+  <data name="IDS_READONLYPARAMETER" xml:space="preserve">
+    <value>readonly parameter</value>
+  </data>
+  <data name="IDS_SharperInferOnBlockBody" xml:space="preserve">
+    <value>on a block body</value>
+  </data>
+  <data name="IDS_SharperInferOnNonPrivateMember" xml:space="preserve">
+    <value>on a member that is not private</value>
+  </data>
+  <data name="IDS_SharperInferOnAsync" xml:space="preserve">
+    <value>on an async method</value>
+  </data>
+  <data name="IDS_SharperInferOnRefReturn" xml:space="preserve">
+    <value>on a ref return</value>
+  </data>
+  <data name="IDS_SharperInferOnPartialMethod" xml:space="preserve">
+    <value>on a partial method</value>
+  </data>
+  <data name="IDS_SharperInferOnExplicitImplementation" xml:space="preserve">
+    <value>on an explicit interface implementation</value>
+  </data>
+  <data name="IDS_SharperInferOnExtensionMember" xml:space="preserve">
+    <value>on an extension block member</value>
+  </data>
+  <data name="IDS_SharperInferOnPropertyOrIndexer" xml:space="preserve">
+    <value>on a property or indexer</value>
+  </data>
+  <data name="IDS_SharperInferOnOperator" xml:space="preserve">
+    <value>on an operator</value>
+  </data>
   <data name="IDS_FIXEDLOCAL" xml:space="preserve">
     <value>fixed variable</value>
   </data>
@@ -8245,8 +8275,8 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
     <value>'node' is not an 'await using' statement</value>
     <comment>node and await using are not localizable</comment>
   </data>
-  <data name="ERR_SharperSpreadInAsyncIterator" xml:space="preserve">
-    <value>A spread 'yield return ..' cannot be used in an async iterator.</value>
+  <data name="ERR_SharperSpreadOfAsyncSequence" xml:space="preserve">
+    <value>A spread 'yield return ..' cannot enumerate the asynchronous sequence '{0}', because that would need an 'await' that is not written. Use 'await foreach' with 'yield return' instead.</value>
   </data>
   <data name="WRN_SharperDynamicRangeNotSpread" xml:space="preserve">
     <value>'..{0}' is a range here, not a spread, because '{0}' is dynamic. To yield each element, convert '{0}' to a sequence type first.</value>
@@ -8289,6 +8319,27 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
   </data>
   <data name="ERR_SharperSpreadRefStructEnumerator" xml:space="preserve">
     <value>A spread 'yield return ..' cannot enumerate '{0}' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead.</value>
+  </data>
+  <data name="WRN_SharperReadOnlyParameterMemberCallOnCopy" xml:space="preserve">
+    <value>Call to non-readonly member '{0}' on readonly parameter '{1}' runs on a copy, so '{1}' is not changed.</value>
+  </data>
+  <data name="WRN_SharperReadOnlyParameterMemberCallOnCopy_Title" xml:space="preserve">
+    <value>Call to a non-readonly member on a readonly parameter runs on a copy</value>
+  </data>
+  <data name="ERR_SharperInferNoType" xml:space="preserve">
+    <value>Cannot infer the return type of '{0}', because its body ({1}) has no type. Write the return type.</value>
+  </data>
+  <data name="ERR_SharperInferNotSupportedYet" xml:space="preserve">
+    <value>An inferred return type ('infer') is not supported {0} yet. Write the return type.</value>
+  </data>
+  <data name="ERR_SharperInferNoBody" xml:space="preserve">
+    <value>'{0}' has no body to infer its return type from. Write the return type.</value>
+  </data>
+  <data name="ERR_SharperInferUsesInferredMethod" xml:space="preserve">
+    <value>Cannot infer the return type of '{0}', because its body uses '{1}', whose return type is inferred too. Write the return type of one of them.</value>
+  </data>
+  <data name="ERR_SharperInferUsesItself" xml:space="preserve">
+    <value>Cannot infer the return type of '{0}', because its body uses '{0}' itself. Write the return type.</value>
   </data>
   <data name="WRN_RedundantPattern" xml:space="preserve">
     <value>The pattern is redundant.</value>

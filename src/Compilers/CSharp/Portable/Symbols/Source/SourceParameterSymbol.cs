@@ -80,7 +80,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 (syntax.Default == null) &&
                 (syntax.AttributeLists.Count == 0) &&
                 !owner.IsPartialMember() &&
-                scope == ScopedKind.None)
+                scope == ScopedKind.None &&
+                !ParameterHelpers.IsSharperReadOnly(syntax))
             {
                 return new SourceSimpleParameterSymbol(owner, parameterType, ordinal, refKind, name, location);
             }

@@ -16,7 +16,14 @@ namespace Microsoft.CodeAnalysis.CSharp.Test.Utilities
 {
     public static class TestOptions
     {
-        public static readonly CSharpParseOptions Regular = new CSharpParseOptions(kind: SourceCodeKind.Regular, documentationMode: DocumentationMode.Parse);
+        /// <summary>
+        /// True when the ROSLYN_TEST_SHARPER environment variable is set. The test parse options then turn the Sharper
+        /// feature on for every parse, to check that Sharper keeps the meaning of valid C# (docs/sharper/README.md,
+        /// design rule 2). See <see cref="WithSharperIfRequested"/>.
+        /// </summary>
+        public static readonly bool SharperForAllParses = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ROSLYN_TEST_SHARPER"));
+
+        public static readonly CSharpParseOptions Regular = new CSharpParseOptions(kind: SourceCodeKind.Regular, documentationMode: DocumentationMode.Parse).WithSharperIfRequested();
         public static readonly CSharpParseOptions Script = Regular.WithKind(SourceCodeKind.Script);
         public static readonly CSharpParseOptions Regular1 = Regular.WithLanguageVersion(LanguageVersion.CSharp1);
         public static readonly CSharpParseOptions Regular2 = Regular.WithLanguageVersion(LanguageVersion.CSharp2);
@@ -99,6 +106,20 @@ namespace Microsoft.CodeAnalysis.CSharp.Test.Utilities
         public static readonly EmitOptions NativePdbEmit = EmitOptions.Default.WithDebugInformationFormat(DebugInformationFormat.Pdb);
 
         public static readonly GeneratorDriverOptions GeneratorDriverOptions = new GeneratorDriverOptions(trackIncrementalGeneratorSteps: true, baseDirectory: TempRoot.Root);
+
+        /// <summary>
+        /// Adds the Sharper feature to <paramref name="options"/> when <see cref="SharperForAllParses"/> is set, and
+        /// returns <paramref name="options"/> unchanged otherwise.
+        /// </summary>
+        public static CSharpParseOptions WithSharperIfRequested(this CSharpParseOptions options)
+        {
+            if (!SharperForAllParses || options.Features.ContainsKey(Feature.Sharper))
+            {
+                return options;
+            }
+
+            return options.WithFeatures(options.Features.Concat(new[] { new KeyValuePair<string, string>(Feature.Sharper, "true") }));
+        }
 
         public static CSharpParseOptions WithStrictFeature(this CSharpParseOptions options)
         {

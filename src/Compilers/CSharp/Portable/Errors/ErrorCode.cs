@@ -2515,7 +2515,7 @@ namespace Microsoft.CodeAnalysis.CSharp
 
         // Sharper diagnostics are numbered from SharperErrorCodes.Base, far above the upstream numbers (CS9401 today), so
         // upstream can keep adding codes without clashing. Add new Sharper codes at the end of this block.
-        ERR_SharperSpreadInAsyncIterator = SharperErrorCodes.Base + 1,
+        ERR_SharperSpreadOfAsyncSequence = SharperErrorCodes.Base + 1,
         WRN_SharperDynamicRangeNotSpread = SharperErrorCodes.Base + 2,
         WRN_SharperValMemberCallOnCopy = SharperErrorCodes.Base + 3,
         ERR_SharperValMayNotBindToType = SharperErrorCodes.Base + 4,
@@ -2527,6 +2527,12 @@ namespace Microsoft.CodeAnalysis.CSharp
         WRN_SharperReadOnlyLocalMemberCallOnCopy = SharperErrorCodes.Base + 10,
         ERR_SharperReadOnlyLocalWithNoInitializer = SharperErrorCodes.Base + 11,
         ERR_SharperSpreadRefStructEnumerator = SharperErrorCodes.Base + 12,
+        WRN_SharperReadOnlyParameterMemberCallOnCopy = SharperErrorCodes.Base + 13,
+        ERR_SharperInferNoType = SharperErrorCodes.Base + 14,
+        ERR_SharperInferNotSupportedYet = SharperErrorCodes.Base + 15,
+        ERR_SharperInferNoBody = SharperErrorCodes.Base + 16,
+        ERR_SharperInferUsesInferredMethod = SharperErrorCodes.Base + 17,
+        ERR_SharperInferUsesItself = SharperErrorCodes.Base + 18,
 
         // Note: you will need to do the following after adding errors:
         //  1) Update ErrorFacts.IsBuildOnlyDiagnostic (src/Compilers/CSharp/Portable/Errors/ErrorFacts.cs)

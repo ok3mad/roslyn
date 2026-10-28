@@ -1567,6 +1567,45 @@ namespace Microsoft.CodeAnalysis.CSharp
                 requiresAnalysis);
         }
 
+        /// <summary>
+        /// Sharper: analyzes the body of a method whose return type is inferred (<c>infer</c>), and returns the type
+        /// and nullable state of its returned value, as for the return type of a lambda. The diagnostics are dropped:
+        /// the method body is analyzed again, against the inferred type, when the method is compiled.
+        /// </summary>
+        internal static TypeWithAnnotations? AnalyzeSharperInferredReturnType(CSharpCompilation compilation, MethodSymbol method, BoundBlock body, Binder binder)
+        {
+            if (!HasRequiredLanguageVersion(compilation))
+            {
+                return null;
+            }
+
+            var returnTypes = ArrayBuilder<(BoundReturnStatement, TypeWithAnnotations)>.GetInstance();
+            var diagnostics = DiagnosticBag.GetInstance();
+            Analyze(compilation,
+                method,
+                body,
+                binder,
+                binder.Conversions,
+                diagnostics,
+                useConstructorExitWarnings: false,
+                getterNullResilienceData: null,
+                useDelegateInvokeParameterTypes: false,
+                useDelegateInvokeReturnType: false,
+                delegateInvokeMethodOpt: null,
+                initialState: null,
+                baseOrThisInitializer: null,
+                analyzedNullabilityMapOpt: null,
+                snapshotBuilderOpt: null,
+                returnTypesOpt: returnTypes,
+                getFinalNullableState: false,
+                finalNullableState: out _);
+            diagnostics.Free();
+
+            TypeWithAnnotations? result = returnTypes.Count == 1 ? returnTypes[0].Item2 : null;
+            returnTypes.Free();
+            return result;
+        }
+
         internal static VariableState? GetAfterInitializersState(CSharpCompilation compilation, Symbol? symbol, BoundNode constructorBody)
         {
             if (symbol is MethodSymbol method

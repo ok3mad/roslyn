@@ -136,3 +136,19 @@ static Microsoft.CodeAnalysis.CSharp.SyntaxFactory.TaskType(Microsoft.CodeAnalys
 static Microsoft.CodeAnalysis.CSharp.SyntaxFactory.TaskType(Microsoft.CodeAnalysis.CSharp.Syntax.TypeSyntax! elementType, Microsoft.CodeAnalysis.SyntaxToken tildeToken) -> Microsoft.CodeAnalysis.CSharp.Syntax.TaskTypeSyntax!
 virtual Microsoft.CodeAnalysis.CSharp.CSharpSyntaxVisitor.VisitTaskType(Microsoft.CodeAnalysis.CSharp.Syntax.TaskTypeSyntax! node) -> void
 virtual Microsoft.CodeAnalysis.CSharp.CSharpSyntaxVisitor<TResult>.VisitTaskType(Microsoft.CodeAnalysis.CSharp.Syntax.TaskTypeSyntax! node) -> TResult?
+Microsoft.CodeAnalysis.CSharp.Syntax.ParenthesizedTypeSyntax
+Microsoft.CodeAnalysis.CSharp.Syntax.ParenthesizedTypeSyntax.CloseParenToken.get -> Microsoft.CodeAnalysis.SyntaxToken
+Microsoft.CodeAnalysis.CSharp.Syntax.ParenthesizedTypeSyntax.OpenParenToken.get -> Microsoft.CodeAnalysis.SyntaxToken
+Microsoft.CodeAnalysis.CSharp.Syntax.ParenthesizedTypeSyntax.Type.get -> Microsoft.CodeAnalysis.CSharp.Syntax.TypeSyntax!
+Microsoft.CodeAnalysis.CSharp.Syntax.ParenthesizedTypeSyntax.Update(Microsoft.CodeAnalysis.SyntaxToken openParenToken, Microsoft.CodeAnalysis.CSharp.Syntax.TypeSyntax! type, Microsoft.CodeAnalysis.SyntaxToken closeParenToken) -> Microsoft.CodeAnalysis.CSharp.Syntax.ParenthesizedTypeSyntax!
+Microsoft.CodeAnalysis.CSharp.Syntax.ParenthesizedTypeSyntax.WithCloseParenToken(Microsoft.CodeAnalysis.SyntaxToken closeParenToken) -> Microsoft.CodeAnalysis.CSharp.Syntax.ParenthesizedTypeSyntax!
+Microsoft.CodeAnalysis.CSharp.Syntax.ParenthesizedTypeSyntax.WithOpenParenToken(Microsoft.CodeAnalysis.SyntaxToken openParenToken) -> Microsoft.CodeAnalysis.CSharp.Syntax.ParenthesizedTypeSyntax!
+Microsoft.CodeAnalysis.CSharp.Syntax.ParenthesizedTypeSyntax.WithType(Microsoft.CodeAnalysis.CSharp.Syntax.TypeSyntax! type) -> Microsoft.CodeAnalysis.CSharp.Syntax.ParenthesizedTypeSyntax!
+Microsoft.CodeAnalysis.CSharp.SyntaxKind.ParenthesizedType = 9902 -> Microsoft.CodeAnalysis.CSharp.SyntaxKind
+override Microsoft.CodeAnalysis.CSharp.CSharpSyntaxRewriter.VisitParenthesizedType(Microsoft.CodeAnalysis.CSharp.Syntax.ParenthesizedTypeSyntax! node) -> Microsoft.CodeAnalysis.SyntaxNode?
+override Microsoft.CodeAnalysis.CSharp.Syntax.ParenthesizedTypeSyntax.Accept(Microsoft.CodeAnalysis.CSharp.CSharpSyntaxVisitor! visitor) -> void
+override Microsoft.CodeAnalysis.CSharp.Syntax.ParenthesizedTypeSyntax.Accept<TResult>(Microsoft.CodeAnalysis.CSharp.CSharpSyntaxVisitor<TResult>! visitor) -> TResult?
+static Microsoft.CodeAnalysis.CSharp.SyntaxFactory.ParenthesizedType(Microsoft.CodeAnalysis.CSharp.Syntax.TypeSyntax! type) -> Microsoft.CodeAnalysis.CSharp.Syntax.ParenthesizedTypeSyntax!
+static Microsoft.CodeAnalysis.CSharp.SyntaxFactory.ParenthesizedType(Microsoft.CodeAnalysis.SyntaxToken openParenToken, Microsoft.CodeAnalysis.CSharp.Syntax.TypeSyntax! type, Microsoft.CodeAnalysis.SyntaxToken closeParenToken) -> Microsoft.CodeAnalysis.CSharp.Syntax.ParenthesizedTypeSyntax!
+virtual Microsoft.CodeAnalysis.CSharp.CSharpSyntaxVisitor.VisitParenthesizedType(Microsoft.CodeAnalysis.CSharp.Syntax.ParenthesizedTypeSyntax! node) -> void
+virtual Microsoft.CodeAnalysis.CSharp.CSharpSyntaxVisitor<TResult>.VisitParenthesizedType(Microsoft.CodeAnalysis.CSharp.Syntax.ParenthesizedTypeSyntax! node) -> TResult?

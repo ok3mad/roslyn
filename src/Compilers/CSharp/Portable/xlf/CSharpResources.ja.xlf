@@ -2612,14 +2612,39 @@
         <target state="new">A function type cannot have more than {0} parameters, because no 'System.Func' or 'System.Action' delegate has more.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperInferNoBody">
+        <source>'{0}' has no body to infer its return type from. Write the return type.</source>
+        <target state="new">'{0}' has no body to infer its return type from. Write the return type.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperInferNoType">
+        <source>Cannot infer the return type of '{0}', because its body ({1}) has no type. Write the return type.</source>
+        <target state="new">Cannot infer the return type of '{0}', because its body ({1}) has no type. Write the return type.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperInferNotSupportedYet">
+        <source>An inferred return type ('infer') is not supported {0} yet. Write the return type.</source>
+        <target state="new">An inferred return type ('infer') is not supported {0} yet. Write the return type.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperInferUsesInferredMethod">
+        <source>Cannot infer the return type of '{0}', because its body uses '{1}', whose return type is inferred too. Write the return type of one of them.</source>
+        <target state="new">Cannot infer the return type of '{0}', because its body uses '{1}', whose return type is inferred too. Write the return type of one of them.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperInferUsesItself">
+        <source>Cannot infer the return type of '{0}', because its body uses '{0}' itself. Write the return type.</source>
+        <target state="new">Cannot infer the return type of '{0}', because its body uses '{0}' itself. Write the return type.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperReadOnlyLocalWithNoInitializer">
         <source>A readonly local must be initialized in its declaration, because it cannot be assigned later.</source>
         <target state="new">A readonly local must be initialized in its declaration, because it cannot be assigned later.</target>
         <note />
       </trans-unit>
-      <trans-unit id="ERR_SharperSpreadInAsyncIterator">
-        <source>A spread 'yield return ..' cannot be used in an async iterator.</source>
-        <target state="new">A spread 'yield return ..' cannot be used in an async iterator.</target>
+      <trans-unit id="ERR_SharperSpreadOfAsyncSequence">
+        <source>A spread 'yield return ..' cannot enumerate the asynchronous sequence '{0}', because that would need an 'await' that is not written. Use 'await foreach' with 'yield return' instead.</source>
+        <target state="new">A spread 'yield return ..' cannot enumerate the asynchronous sequence '{0}', because that would need an 'await' that is not written. Use 'await foreach' with 'yield return' instead.</target>
         <note />
       </trans-unit>
       <trans-unit id="ERR_SharperSpreadRefStructEnumerator">
@@ -3382,6 +3407,11 @@
         <target state="new">readonly local</target>
         <note />
       </trans-unit>
+      <trans-unit id="IDS_READONLYPARAMETER">
+        <source>readonly parameter</source>
+        <target state="new">readonly parameter</target>
+        <note />
+      </trans-unit>
       <trans-unit id="IDS_SK_ARRAY">
         <source>array</source>
         <target state="translated">配列</target>
@@ -3400,6 +3430,51 @@
       <trans-unit id="IDS_SK_POINTER">
         <source>pointer</source>
         <target state="translated">ポインター</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperInferOnAsync">
+        <source>on an async method</source>
+        <target state="new">on an async method</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperInferOnBlockBody">
+        <source>on a block body</source>
+        <target state="new">on a block body</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperInferOnExplicitImplementation">
+        <source>on an explicit interface implementation</source>
+        <target state="new">on an explicit interface implementation</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperInferOnExtensionMember">
+        <source>on an extension block member</source>
+        <target state="new">on an extension block member</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperInferOnNonPrivateMember">
+        <source>on a member that is not private</source>
+        <target state="new">on a member that is not private</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperInferOnOperator">
+        <source>on an operator</source>
+        <target state="new">on an operator</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperInferOnPartialMethod">
+        <source>on a partial method</source>
+        <target state="new">on a partial method</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperInferOnPropertyOrIndexer">
+        <source>on a property or indexer</source>
+        <target state="new">on a property or indexer</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperInferOnRefReturn">
+        <source>on a ref return</source>
+        <target state="new">on a ref return</target>
         <note />
       </trans-unit>
       <trans-unit id="IDS_VALLOCAL">
@@ -4170,6 +4245,16 @@
       <trans-unit id="WRN_SharperReadOnlyLocalMemberCallOnCopy_Title">
         <source>Call to a non-readonly member on a readonly local runs on a copy</source>
         <target state="new">Call to a non-readonly member on a readonly local runs on a copy</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WRN_SharperReadOnlyParameterMemberCallOnCopy">
+        <source>Call to non-readonly member '{0}' on readonly parameter '{1}' runs on a copy, so '{1}' is not changed.</source>
+        <target state="new">Call to non-readonly member '{0}' on readonly parameter '{1}' runs on a copy, so '{1}' is not changed.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WRN_SharperReadOnlyParameterMemberCallOnCopy_Title">
+        <source>Call to a non-readonly member on a readonly parameter runs on a copy</source>
+        <target state="new">Call to a non-readonly member on a readonly parameter runs on a copy</target>
         <note />
       </trans-unit>
       <trans-unit id="WRN_SharperValMemberCallOnCopy">

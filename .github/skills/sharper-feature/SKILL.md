@@ -11,7 +11,7 @@ by the C# compiler itself: new syntax binds to bound nodes and lowers to ordinar
 checklist distilled from the first features: `yield return ..xs` (a new bound node; the commits merged from
 `sharper/gating`), `val` locals (a contextual keyword on an existing symbol; merged from `sharper/val`, later extended to
 deconstruction, patterns and lambda parameters), `readonly`
-locals (a modifier C# rejected, reusing the `val` checks) and the sequence type `T[..]` (a type form that binds to a
+locals and parameters (a modifier C# rejected, reusing the `val` checks) and the sequence type `T[..]` (a type form that binds to a
 BCL type; `sharper/sequence-type`). See `SharperTests.cs` for all of them.
 
 ## When to Use
@@ -51,7 +51,9 @@ BCL type; `sharper/sequence-type`). See `SharperTests.cs` for all of them.
    Kind checks (`BoundKind.X`, `is BoundX`) hide in flow analysis, lowering helpers and region analysis, and
    several of them throw or assert on unknown kinds.
 4. Implement layer by layer (below), re-running the tests after each one. The next failure names the next layer.
-5. **Before merging, make the analyzer build clean** (see Testing). Test runs and plain builds skip the analyzers, so
+5. **Before merging a parser change, run the parser tests with Sharper on** (`ROSLYN_TEST_SHARPER=1`, see Testing)
+   and sort every failure that is not on the last run's list.
+6. **Before merging, make the analyzer build clean** (see Testing). Test runs and plain builds skip the analyzers, so
    public API changes (RS0016, RS0017) show up only there. An error that is already on `main` still blocks: fix it or
    link its issue in the PR.
 
@@ -83,8 +85,9 @@ implementation plan, "Feature 3"):
    scanning. Do not return `ScanTypeFlags.MustBeType` if the form is also an expression, and check `ScanCast` and
    `ScanPossibleTypeArgumentList` for valid C# that would change meaning.
 3. **Bind through `BindSharperTypeAlias`** (`Binder/Binder_SharperTypes.cs`), with the definition from
-   `GetSpecialType` or `GetWellKnownType`. It constructs the type through `ConstructNamedType`, so constraint checks
-   and their suppression in signatures behave as for the type written out.
+   `GetSpecialType` or `GetWellKnownType`, and one location per type argument (the part of the form that stands for
+   it). Constraint checks, their suppression in signatures, and the location of a constraint error then behave as for
+   the type written out.
 4. **Find the code that reads the syntax directly**: `VisitRankSpecifiers` callers that bind sizes, and
    `CSharpSemanticModel.CanGetSemanticInfo` for sub-expressions that are now part of a type.
 5. **Test against the C# twin** in every type position (compare member and local symbols), including inside a
@@ -107,13 +110,14 @@ implementation plan, "Feature 3"):
 5. **Do not copy the precedent blindly.** A foreach iteration variable gets an explicit cast (`forCast: true`); a
    yielded or assigned value must convert implicitly.
 6. **Synthesized `try` blocks carry syntax.** The async rewriter and Edit and Continue accept only certain syntax for
-   a `try` (`SyntaxBindingUtilities.BindsToTryStatement`). Edit and Continue maps state machine states by syntax
+   a `try` (`SyntaxBindingUtilities.BindsToTryStatement`, asserted in async methods); a new syntax for a synthesized
+   `try` must be added there, as the spread's yield syntax is. Edit and Continue maps state machine states by syntax
    offset and relative ordinal (`AwaitDebugId`), so two states on one node need distinct ordinals: the spread's `try`
    has the yield's syntax, and `IteratorMethodToStateMachineRewriter.PushFrame` gives its finalize state ordinal 1.
    Also check the IDE's matcher (`SyntaxComparer` in `src/Features/CSharp/Portable/EditAndContinue`): a construct
    with its own states or hoisted variables must not match the plain statement it reinterprets. Write emit-difference
    tests (`EditAndContinueSharperTests.cs`, Emit2) for edits before, after and inside the construct, and for adding
-   and removing it.
+   and removing it, in synchronous and async iterators (an async iterator's `try` has no finalize state).
 7. **`dynamic` defers errors to runtime**, so a "C# wins unless it errors" rule rarely fires for a dynamic operand.
    Decide what Sharper does there explicitly.
 8. **A keyword's spelling is checked far from its binder.** `var` is tested syntactically (`TypeSyntax.IsVar`,
@@ -175,7 +179,39 @@ implementation plan, "Feature 3"):
    to the token, so no binder change can lift it. Gate the error in the parser, then add it back wherever the same
    modifier list builds another construct (`readonly` locals: the local function path and `const readonly`). Check that
    every position the feature should cover has a slot for the modifier: a `for` initializer has none, and adding one
-   is a public syntax API change.
+   is a public syntax API change. Other modifiers are rejected by the binder instead: `readonly` on a parameter parses
+   (for `ref readonly`), and `ParameterHelpers.CheckParameterModifiers` reports CS9190.
+21. **A type form that wraps an ambiguous one inherits its ambiguity, and C# has more than one tuple scan.** The
+   parenthesized function type `((p)->F)` returns the flags of `(p)->F` from `ScanType`, so callers treat it like a
+   name and `((p)->F)[i]`, `((p)->F)?.X` and `((p)->F) ? a : b` keep their C# meaning. The cast heuristic is the
+   exception: `(((p)->F))(x)` would become a cast, so `ScanCast` refuses an ambiguous type that starts with `(` (no C#
+   type that starts with `(` is ambiguous). `ScanTypeFlags` cannot say what kind of type was scanned; the scan records
+   the last token of the latest function type (`_lastTokenOfScannedSharperFunctionType`), cleared before each read.
+   Grep for other scans of `(`: target-typed `new(...)` has its own (`IsImplicitObjectCreation`), so
+   `new ((int) -> int)[3]` needed it too. Check every "valid C#" case with the flag off before testing it:
+   `e is (p)->F` turned out to be a C# syntax error, which left function types free to take that place in patterns.
+   Patterns parse their type in their own mode (`AfterIs`, `DefinitePattern`), which is what keeps `x is T ? a : b` a
+   conditional; a type form that parses a nested type (the function type's return type) must pass that mode on.
+22. **Simple symbols keep no syntax.** A rule read from a parameter's syntax needs the syntax on the symbol, but
+   `SourceParameterSymbol.Create` makes a parameter with no modifiers, attributes or default a
+   `SourceSimpleParameterSymbol`, which drops it. Add the condition there so such parameters stay complex
+   (`readonly` parameters), or carry the decision in a flag, as `LambdaParameterSymbol.IsSharperVal` does.
+
+23. **A signature inferred from a body must not be computed under the method-checks lock.** `MethodChecks` runs under a
+   per-method lock (`LazyMethodChecks`) and reads the return type itself; binding a body there reads other methods'
+   signatures, so two methods that use each other deadlock on two threads, and a reentrant read sees a half-set symbol.
+   `infer` keeps a `SharperInferredReturnType` instead: computed on first use outside any lock, published once with
+   its diagnostics, and guarded by a thread-static frame that turns a read of an inferred type during inference into
+   an uncached error type, so results never depend on the order of inference (the `var` local precedent:
+   `SourceLocalSymbol.s_LocalTypeInferenceInProgress`). Test the order (force one symbol first) and concurrent reads.
+
+## Inferred Types
+
+Inference from a body (`infer` return types, rows 10 and 15) reuses `var`'s rules for the natural type
+(`BindToNaturalType`, `BindToInferredDelegateType`) and lambdas' nullable re-inference (`NullableWalker` with
+`returnTypesOpt`). The body is bound once to infer and again to compile; drop the diagnostics of the first binding
+unless they are the inference's own. The design and the plan for the later steps are in the implementation plan,
+"Feature 6".
 
 ## Testing
 
@@ -189,6 +225,9 @@ implementation plan, "Feature 3"):
   analysis (`AnalyzeControlFlow`, `AnalyzeDataFlow`).
 - Run the Sharper tests with `ROSLYN_TEST_IOPERATION=1` as well: every compilation then also validates IOperation,
   the semantic model and the control flow graph.
+- After a parser change, run the whole Syntax test project with `ROSLYN_TEST_SHARPER=1`, which turns Sharper on for
+  every parse (design rule 2: valid C# must parse the same). Compare the failures with the last run's list in the
+  implementation plan's follow-ups; each new one is a bug or, if it fits the rule, a new accepted break.
 - Before merging, build with the analyzers on, which the test runs skip: it reports public API changes (RS0016,
   RS0017) and other analyzer errors.
   `dotnet build src/Compilers/CSharp/Portable/Microsoft.CodeAnalysis.CSharp.csproj -p:RunAnalyzersDuringBuild=true`
@@ -199,4 +238,5 @@ implementation plan, "Feature 3"):
 export PATH=$PWD/.dotnet:$PATH DOTNET_ROOT=$PWD/.dotnet
 dotnet test src/Compilers/CSharp/Test/Semantic/Microsoft.CodeAnalysis.CSharp.Semantic.UnitTests.csproj -f net10.0 --filter "FullyQualifiedName~SharperTests"
 ROSLYN_TEST_IOPERATION=1 dotnet test src/Compilers/CSharp/Test/Semantic/Microsoft.CodeAnalysis.CSharp.Semantic.UnitTests.csproj -f net10.0 --filter "FullyQualifiedName~SharperTests"
+ROSLYN_TEST_SHARPER=1 dotnet test src/Compilers/CSharp/Test/Syntax/Microsoft.CodeAnalysis.CSharp.Syntax.UnitTests.csproj -f net10.0
 ```
