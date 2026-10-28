@@ -155,7 +155,10 @@ implementation plan, "Feature 3"):
    `SyntaxFacts.IsTypeSyntax`, `SyntaxFacts.IsInTypeOnlyContext` (for the semantic model) and
    `SyntaxExtensions.VisitRankSpecifiers`, which throws on unknown type kinds. In the parser, gate every lookahead
    change on Sharper and scan nested parentheses in one pass: trying a second scan after a failed one is exponential in
-   the nesting depth.
+   the nesting depth. Use the node in the source of `DiagnosticAnalyzerAllInOne_Sharper` and run
+   `DiagnosticAnalyzerAllInOne` (`src/Compilers/CSharp/Test/Emit3/Diagnostics/DiagnosticAnalyzerTests.AllInOne.cs`),
+   which checks that a syntax-node analyzer is called for every node kind; it is the only such test and lives in Emit3,
+   outside the Sharper test runs.
 
 15. **The lexer has no `..` token.** It produces two `.` tokens that the parser merges (`IsAtDotDotToken`,
    `EatDotDotToken`); `CurrentToken.Kind == SyntaxKind.DotDotToken` never matches.

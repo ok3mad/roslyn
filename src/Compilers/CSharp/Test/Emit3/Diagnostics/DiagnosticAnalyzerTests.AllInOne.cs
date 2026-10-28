@@ -7,6 +7,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Linq;
 using System.Threading;
 using Microsoft.CodeAnalysis.CSharp.Test.Utilities;
 using Microsoft.CodeAnalysis.Diagnostics;
@@ -33,8 +34,42 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             CreateCompilationWithMscorlib461(source).VerifyAnalyzerDiagnostics(new[] { analyzer }, options);
             analyzer.VerifyAllAnalyzerMembersWereCalled();
             analyzer.VerifyAnalyzeSymbolCalledForAllSymbolKinds();
-            analyzer.VerifyAnalyzeNodeCalledForAllSyntaxKinds([]);
+            // Sharper's node kinds (9900 and up, see SyntaxKind.FunctionType) need /features:sharper, which this C# source does
+            // not use. DiagnosticAnalyzerAllInOne_Sharper covers them.
+            analyzer.VerifyAnalyzeNodeCalledForAllSyntaxKinds([.. s_sharperSyntaxKinds]);
             analyzer.VerifyOnCodeBlockCalledForAllSymbolAndMethodKinds(symbolKindsWithNoCodeBlocks);
+        }
+
+        private static readonly ImmutableArray<SyntaxKind> s_sharperSyntaxKinds =
+            [.. Enum.GetValues<SyntaxKind>().Where(k => (int)k >= (int)SyntaxKind.FunctionType)];
+
+        [Fact]
+        public void DiagnosticAnalyzerAllInOne_Sharper()
+        {
+            // Uses every Sharper syntax node: a function type, a task type and a parenthesized function type.
+            var source = """
+                using System.Threading.Tasks;
+
+                class C
+                {
+                    (int, string) -> bool _predicate = (i, s) => s.Length == i;
+                    ((int) -> void)? _callback = null;
+
+                    async int~ GetAsync() { await Task.Yield(); return 1; }
+                    async void~ RunAsync() => await GetAsync();
+                }
+                """;
+
+            var analyzer = new CSharpTrackingDiagnosticAnalyzer();
+            var options = TestOptions.Regular.WithFeatures([new KeyValuePair<string, string>(Feature.Sharper, "true")]);
+            var comp = CreateCompilation(source, parseOptions: options);
+            comp.VerifyDiagnostics();
+            comp.VerifyAnalyzerDiagnostics([analyzer]);
+
+            var analyzedKinds = analyzer.CallLog.Where(e => e.AbstractMemberName == "SyntaxNode").Select(e => e.SyntaxKind).ToHashSet();
+            // A new Sharper node kind fails here until the source above uses it.
+            var missing = s_sharperSyntaxKinds.Where(k => !analyzedKinds.Contains(k));
+            Assert.True(!missing.Any(), "Missing: " + string.Join(", ", missing));
         }
 
         [WorkItem(896075, "http://vstfdevdiv:8080/DevDiv2/DevDiv/_workitems/edit/896075")]
