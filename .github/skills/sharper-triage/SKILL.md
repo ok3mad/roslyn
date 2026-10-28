@@ -21,6 +21,9 @@ below.
 - **Running** means the session's `session_status` is `SESSION_STATUS_RUNNING` (it is using tokens now). An idle
   session waiting for the user, or for its PR to be reviewed, is not running, but its open PR still counts as a work
   item in progress.
+- **A work item** is backlog work: a running work session, or an open PR that closes a backlog issue or comes from a
+  `triage:work` session. Tooling, infrastructure and docs PRs that close no issue (a devcontainer, a skill) are listed
+  in the report as waiting for review, but do not count.
 - If work items are already at 5, start no work session even when fewer than 3 are running: the bottleneck is review,
   so say which PRs are waiting.
 - If work items are below 3 and 3 sessions are already running, start nothing and say so. Never exceed the limit to
@@ -51,6 +54,8 @@ All of these must hold. Otherwise the issue is either a discussion candidate or 
   building is fine.
 - **Unblocked.** Everything it is "After" or "Builds on" is merged into `main` (check the issue body and the roadmap's
   Suggested order). Rows that wait for unions (row 19) or purity (row 24) are not ready.
+- **Not parked.** The issue body does not say the design is parked (for example "Status: parked"). Parked designs
+  wait for the user; don't reopen them in a discussion session either.
 - **Not already taken.** No open PR closes it, and no non-archived session works on it (match the issue number in
   session titles and in PR bodies).
 - **No collision.** It does not change the same code as a running session in a way that makes both PRs conflict
