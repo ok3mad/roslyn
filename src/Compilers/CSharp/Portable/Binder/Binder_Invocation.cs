@@ -245,6 +245,11 @@ namespace Microsoft.CodeAnalysis.CSharp
             {
                 boundExpression = CheckValue(boundExpression, BindValueKind.RValueOrMethodGroup, diagnostics);
                 string name = boundExpression.Kind == BoundKind.MethodGroup ? GetName(node.Expression) : null;
+                if (HasSharperImplicitItArgument(node.ArgumentList))
+                {
+                    return BindSharperImplicitItInvocation(node, boundExpression, name, analyzedArguments, diagnostics);
+                }
+
                 BindArgumentsAndNames(node.ArgumentList, diagnostics, analyzedArguments, allowArglist: true);
                 return BindInvocationExpression(node, node.Expression, name, boundExpression, analyzedArguments, diagnostics, acceptOnlyMethods: false);
             }

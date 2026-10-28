@@ -121,7 +121,7 @@ The brainstorm proposes 26 pieces of syntax (#28, discard arguments, is still to
 
 | # | Syntax | Example | Lowers to | Parser change | Size | Certainty | Main risk or open point | Issue |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 12 | Implicit `it` | `xs.Select(Process(it, a))`, `when: it is X` | lambda `x => ...` | none | L | Med–High | Decided: the innermost argument whose parameter is a one-parameter delegate becomes the lambda; one meaning of `it` per lambda or stage; an outer `it` plus value and function overloads is an error; an existing `it` keeps its C# meaning (see [Decided](brainstorm.md#decided)). Risk: the semantic model and IDE for a lambda without lambda syntax, as query clauses have | [#24](https://github.com/ok3mad/roslyn/issues/24) |
+| 12 | Implicit `it` | `xs.Select(Process(it, a))`, `when: it is X` | lambda `x => ...` | none | L | Prototype | Decided: the innermost argument whose parameter is a one-parameter delegate becomes the lambda; one meaning of `it` per lambda or stage; an outer `it` plus value and function overloads is an error; an existing `it` keeps its C# meaning (see [Decided](brainstorm.md#decided)). Calls only so far; `LookupSymbols` and Edit and Continue do not see the lambda yet. See the [feature page](../features/implicit-it.md) | [#24](https://github.com/ok3mad/roslyn/issues/24) |
 | 13 | Pipe, without lifting | `x \|> F`, `x \|> F(it, y)` | nested call | yes (new `\|>` token) | M | Med–High | A bare stage versus a stage that uses `it` | [#25](https://github.com/ok3mad/roslyn/issues/25) |
 | 16 | `try` expression | `try F(url) catch { HttpRequestException { ... } => ..., }` | try/catch with spilling | yes (`try` in expression position) | M–L | Med | The result type needs unions (#19); no `finally` | [#28](https://github.com/ok3mad/roslyn/issues/28) |
 | 17 | Lambda to single-method interface | `Render(user, id => new Profile())` | generated sealed class | none | M | Med | Only where C# reports an error today; the class needs a readable name for stack traces | [#29](https://github.com/ok3mad/roslyn/issues/29) |
@@ -471,6 +471,31 @@ Tests: 16 `Infer_*` tests in `SharperTests.cs`: runtime output, every inferred t
 nullable annotations, the semantic model, IOperation, metadata seen from a C# compilation, the order of inference
 and concurrent inference.
 
+## Feature 7: implicit `it`
+
+`xs.Select(Process(it, a))` is `xs.Select(x => Process(x, a))` (issue #24). The rules are in the brainstorm's
+[Decided](brainstorm.md#decided) list and the [feature page](../features/implicit-it.md); this section keeps what the
+implementation taught.
+
+- **The precedent is the query clause, not the lambda.** A query clause is a lambda whose syntax is a plain expression
+  (`QueryUnboundLambdaState`), and an implicit `it` lambda is the same: an `UnboundLambda` over the argument
+  expression, whose body binds in an `ExecutableCodeBinder` rooted there. Type inference, overload resolution,
+  nullable analysis, closures and expression trees then need no change. Only assertions that list lambda syntax kinds
+  did (`BoundLambda`, `ClosureConversion.GetLambdaId`, `SynthesizedClosureEnvironment`).
+- **A type-directed scope needs two trials, and a filter in front of them.** Whether an argument is the lambda depends
+  on the parameter it goes to, which is known only after overload resolution, so each call binds its arguments as
+  lambdas, then as values. A failed call binds its lambda arguments again for error recovery, so without a filter the
+  work multiplied with the nesting depth (CS9236, "binding the lambda at least 100 times", on a two-level example).
+  `SharperCandidateTakesFunction` checks the candidates' parameter types first, extension methods included; a lambda
+  trial then runs only where some candidate takes a one-parameter delegate.
+- **Variables declared in the arguments break trial binding.** An `out var` gets its type while the call binds, and a
+  second trial sets it again (an assertion in `SourceLocalSymbol.SetTypeWithAnnotations`). An argument list that
+  declares a variable binds as values only, which is decision 5 (no declarations in an implicit lambda).
+- **Trial bags need diagnostics.** The semantic model binds with a bag that collects none, and a trial copied from it
+  could not tell success from failure (`HasAnyErrors` asserts). Trials use their own bags with diagnostics.
+- **"Does it use `it`?" is a bound question.** `xs.Select(Make(ys.First(it.X)))` binds as a lambda whose `it` is
+  unused, because the inner call claims it. The lambda trial counts only when each lambda reads its parameter.
+
 ## Follow-ups
 
 Sharper diagnostics were renumbered from `SharperErrorCodes.Base` (20000): CS9402, CS9403 and CS9404 became CS20001, CS20002 and CS20003, and this document uses the new numbers throughout.
@@ -501,6 +526,10 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 - [ ] `val`: decide whether to expose val-ness in the public API (`ILocalSymbol` has no read-only flag). [#88](https://github.com/ok3mad/roslyn/issues/88)
 - [ ] `val`: analyzer and fixer "local is never reassigned, use `val`". [#89](https://github.com/ok3mad/roslyn/issues/89)
 - [ ] `val`: verify Edit and Continue with `val` locals and their struct copies. [#90](https://github.com/ok3mad/roslyn/issues/90)
+- [ ] Implicit `it` in object creation, indexers, constructor initializers and attributes; today only calls. [#24](https://github.com/ok3mad/roslyn/issues/24)
+- [ ] Implicit `it`: `LookupSymbols` and speculative binding inside an implicit lambda, which the semantic model finds by lambda syntax. [#24](https://github.com/ok3mad/roslyn/issues/24)
+- [ ] Implicit `it`: Edit and Continue, whose lambda matching also works on syntax. [#24](https://github.com/ok3mad/roslyn/issues/24)
+- [ ] Implicit `it`: allow `F(Make(it), out var v)`, a declaration next to an implicit lambda. [#24](https://github.com/ok3mad/roslyn/issues/24)
 - [ ] Test `/nowarn` and `.editorconfig` with five-digit Sharper IDs. [#91](https://github.com/ok3mad/roslyn/issues/91)
 - [ ] Decide immutability depth: binding, value or deep (a type-level immutability marker). [#92](https://github.com/ok3mad/roslyn/issues/92)
 - [ ] Sequence type: decide whether array creation should accept sequence elements (`new int[3][..]`, today CS0178, or `new int[..][3]`). [#64](https://github.com/ok3mad/roslyn/issues/64)

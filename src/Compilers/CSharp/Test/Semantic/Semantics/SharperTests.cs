@@ -7617,5 +7617,360 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             var csharp = CreateCompilation("", references: [reference], targetFramework: TargetFramework.Net90, options: TestOptions.DebugDll.WithMetadataImportOptions(MetadataImportOptions.All));
             Assert.Equal("System.String? C.M(System.String? s)", csharp.GetMember<MethodSymbol>("C.M").ToTestDisplayString(includeNonNullable: true));
         }
+
+        [Fact]
+        public void ImplicitIt_Basic()
+        {
+            // Each Sharper line next to its C# twin, which writes the lambda out.
+            var source = """
+                using System;
+                using System.Linq;
+
+                class C
+                {
+                    static string Process(int x, string a) => a + x;
+                    static T Retry<T>(Func<T> load, int times, Func<T, bool> when)
+                    {
+                        T result = load();
+                        for (int i = 1; i < times && when(result); i++) result = load();
+                        return result;
+                    }
+
+                    static void Main()
+                    {
+                        int[] xs = [1, 2, 3];
+                        string a = "n";
+                        Console.Write(string.Join(",", xs.Select(Process(it, a))));
+                        Console.Write(string.Join(",", xs.Select(x => Process(x, a))));
+                        Console.Write(";");
+                        Console.Write(string.Join(",", xs.Where(it > 1)));
+                        Console.Write(string.Join(",", xs.Where(x => x > 1)));
+                        Console.Write(";");
+                        int calls = 0;
+                        Console.Write(Retry(() => ++calls, times: 3, when: it < 3));
+                        Console.Write(Retry(() => ++calls, times: 3, when: r => r < 3));
+                        Console.Write(";");
+                        Console.Write(string.Join(",", xs.Select(it * 2).Where(it > 2)));
+                        Console.Write(string.Join(",", xs.Select(x => x * 2).Where(x => x > 2)));
+                        Console.Write(";");
+                        Console.Write(string.Join(",", xs.Select(it % 2 == 0 ? "even" : "odd")));
+                        Console.Write(string.Join(",", xs.Select(x => x % 2 == 0 ? "even" : "odd")));
+                        Console.Write(";");
+                        Console.Write(string.Join(",", xs.Select(y => xs.Count(it > y))));
+                        Console.Write(string.Join(",", xs.Select(y => xs.Count(x => x > y))));
+                    }
+                }
+                """;
+            var verifier = CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90,
+                expectedOutput: ExecutionConditionUtil.IsCoreClr ? "n1,n2,n3n1,n2,n3;2,32,3;34;4,64,6;odd,even,oddodd,even,odd;2,1,02,1,0" : null);
+            verifier.VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void ImplicitIt_Errors()
+        {
+            var source = """
+                using System.Collections.Generic;
+                using System.Linq;
+
+                class C
+                {
+                    class Order { public List<Line> Lines = new(); public int Total; }
+                    class Line { public int Qty; }
+                    static int F(int x) => x;
+
+                    void M(int[] xs, List<Order> orders)
+                    {
+                        var f = it * 2;
+                        F(it);
+                        orders.Where(it.Lines.Any(it.Qty > 5));
+                        it = 1;
+                        xs.Select(it++);
+                        xs.Select(int.TryParse(it.ToString(), out var v) ? v : 0);
+                        var q = from x in xs where F(it) > 0 select x;
+                        orders.Select(it.Lines.Select(it.Qty).Sum());
+                        xs.Select(F(xs.Count(it > 1)));
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (6,63): warning CS0649: Field 'C.Order.Total' is never assigned to, and will always have its default value 0
+                //     class Order { public List<Line> Lines = new(); public int Total; }
+                Diagnostic(ErrorCode.WRN_UnassignedInternalField, "Total").WithArguments("C.Order.Total", "0").WithLocation(6, 63),
+                // (7,29): warning CS0649: Field 'C.Line.Qty' is never assigned to, and will always have its default value 0
+                //     class Line { public int Qty; }
+                Diagnostic(ErrorCode.WRN_UnassignedInternalField, "Qty").WithArguments("C.Line.Qty", "0").WithLocation(7, 29),
+                // (12,17): error CS20019: 'it' has no lambda here. 'it' is the parameter of an argument that takes a function with one parameter, such as 'xs.Select(it.Name)'.
+                //         var f = it * 2;
+                Diagnostic(ErrorCode.ERR_SharperItNoLambda, "it").WithLocation(12, 17),
+                // (13,11): error CS20019: 'it' has no lambda here. 'it' is the parameter of an argument that takes a function with one parameter, such as 'xs.Select(it.Name)'.
+                //         F(it);
+                Diagnostic(ErrorCode.ERR_SharperItNoLambda, "it").WithLocation(13, 11),
+                // (14,35): error CS20020: 'it' has two meanings here: the parameter of an outer lambda and of this inner one. Name one of them, as in 'x => ...'.
+                //         orders.Where(it.Lines.Any(it.Qty > 5));
+                Diagnostic(ErrorCode.ERR_SharperItTwoMeanings, "it").WithLocation(14, 35),
+                // (15,9): error CS20019: 'it' has no lambda here. 'it' is the parameter of an argument that takes a function with one parameter, such as 'xs.Select(it.Name)'.
+                //         it = 1;
+                Diagnostic(ErrorCode.ERR_SharperItNoLambda, "it").WithLocation(15, 9),
+                // (16,19): error CS1656: Cannot assign to 'it' because it is a 'val variable'
+                //         xs.Select(it++);
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "it").WithArguments("it", "val variable").WithLocation(16, 19),
+                // (17,32): error CS20019: 'it' has no lambda here. 'it' is the parameter of an argument that takes a function with one parameter, such as 'xs.Select(it.Name)'.
+                //         xs.Select(int.TryParse(it.ToString(), out var v) ? v : 0);
+                Diagnostic(ErrorCode.ERR_SharperItNoLambda, "it").WithLocation(17, 32),
+                // (17,55): error CS20022: Cannot declare 'v' in an implicit 'it' lambda. Write the lambda, as in 'x => ...'.
+                //         xs.Select(int.TryParse(it.ToString(), out var v) ? v : 0);
+                Diagnostic(ErrorCode.ERR_SharperItDeclaration, "v").WithArguments("v").WithLocation(17, 55),
+                // (18,38): error CS20019: 'it' has no lambda here. 'it' is the parameter of an argument that takes a function with one parameter, such as 'xs.Select(it.Name)'.
+                //         var q = from x in xs where F(it) > 0 select x;
+                Diagnostic(ErrorCode.ERR_SharperItNoLambda, "it").WithLocation(18, 38),
+                // (19,39): error CS20020: 'it' has two meanings here: the parameter of an outer lambda and of this inner one. Name one of them, as in 'x => ...'.
+                //         orders.Select(it.Lines.Select(it.Qty).Sum());
+                Diagnostic(ErrorCode.ERR_SharperItTwoMeanings, "it").WithLocation(19, 39),
+                // (20,12): error CS0411: The type arguments for method 'Enumerable.Select<TSource, TResult>(IEnumerable<TSource>, Func<TSource, int, TResult>)' cannot be inferred from the usage. Try specifying the type arguments explicitly.
+                //         xs.Select(F(xs.Count(it > 1)));
+                Diagnostic(ErrorCode.ERR_CantInferMethTypeArgs, "Select").WithArguments("System.Linq.Enumerable.Select<TSource, TResult>(System.Collections.Generic.IEnumerable<TSource>, System.Func<TSource, int, TResult>)").WithLocation(20, 12));
+        }
+
+        [Fact]
+        public void ImplicitIt_CSharpMeaningWins()
+        {
+            // Wherever C# finds something named 'it', the C# meaning wins: the same code compiles the same with
+            // Sharper on and off.
+            var source = """
+                using System;
+                using System.Linq;
+
+                #pragma warning disable CS8981 // lowercase type name
+                class it { public static int Value = 5; }
+                #pragma warning restore CS8981
+
+                class C
+                {
+                    static int F(int x) => x * 10;
+                    int[] xs = [1, 2, 3];
+
+                    void Local() { int it = 2; Console.Write(string.Join(",", xs.Select(x => x + it))); }
+                    void Parameter(int it) => Console.Write(string.Join(",", xs.Select(x => F(it))));
+                    void Explicit() => Console.Write(string.Join(",", xs.Select(it => F(it))));
+                    void Pattern(object o) => Console.Write(F(o is int it ? it : 0));
+                    void Type() => Console.Write(F(it.Value));
+
+                    static void Main()
+                    {
+                        var c = new C();
+                        c.Local(); Console.Write(";");
+                        c.Parameter(1); Console.Write(";");
+                        c.Explicit(); Console.Write(";");
+                        c.Pattern(3); Console.Write(";");
+                        c.Type();
+                    }
+                }
+                """;
+            var expectedOutput = ExecutionConditionUtil.IsCoreClr ? "3,4,5;10,10,10;10,20,30;30;50" : null;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: expectedOutput).VerifyDiagnostics();
+            CompileAndVerify(source, parseOptions: TestOptions.Regular, targetFramework: TargetFramework.Net90, expectedOutput: expectedOutput).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void ImplicitIt_FeatureOff()
+        {
+            var source = """
+                using System.Linq;
+
+                class C
+                {
+                    object M(int[] xs) => xs.Select(it * 2);
+                    object N(int[] xs) => xs.Select(@it * 2);
+                }
+                """;
+            CreateCompilation(source, parseOptions: TestOptions.Regular, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (5,37): error CS0103: The name 'it' does not exist in the current context
+                //     object M(int[] xs) => xs.Select(it * 2);
+                Diagnostic(ErrorCode.ERR_NameNotInContext, "it").WithArguments("it").WithLocation(5, 37),
+                // (6,37): error CS0103: The name 'it' does not exist in the current context
+                //     object N(int[] xs) => xs.Select(@it * 2);
+                Diagnostic(ErrorCode.ERR_NameNotInContext, "@it").WithArguments("it").WithLocation(6, 37));
+
+            // '@it' is the escape for the C# meaning, so it is never implicit.
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (6,37): error CS0103: The name 'it' does not exist in the current context
+                //     object N(int[] xs) => xs.Select(@it * 2);
+                Diagnostic(ErrorCode.ERR_NameNotInContext, "@it").WithArguments("it").WithLocation(6, 37));
+        }
+
+        [Fact]
+        public void ImplicitIt_InnermostFunction()
+        {
+            // 'it' belongs to the innermost argument that takes a function: explicit lambdas, thunks and calls that
+            // take values are skipped.
+            var source = """
+                using System;
+                using System.Linq;
+
+                class User { public int Id; public string Name; }
+
+                class C
+                {
+                    static string Load(int id) => "p" + id;
+                    static string Render(User user, Func<string> load) => user.Name + ":" + load();
+                    static string Format(int x) => "<" + x + ">";
+
+                    static void Main()
+                    {
+                        User[] users = [new User { Id = 1, Name = "a" }, new User { Id = 2, Name = "b" }];
+                        int[] xs = [1, 2, 3];
+                        Console.Write(string.Join(",", users.Select(Render(it, () => Load(it.Id)))));
+                        Console.Write(string.Join(",", users.Select(u => Render(u, () => Load(u.Id)))));
+                        Console.Write(";");
+                        Console.Write(Format(xs.First(it > 1)));
+                        Console.Write(Format(xs.First(x => x > 1)));
+                        Console.Write(";");
+                        Console.Write(string.Join(",", users.Select(Format(it.Name.Count(char.IsLetter)))));
+                        Console.Write(string.Join(",", users.Select(u => Format(u.Name.Count(char.IsLetter)))));
+                    }
+                }
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90,
+                expectedOutput: ExecutionConditionUtil.IsCoreClr ? "a:p1,b:p2a:p1,b:p2;<2><2>;<1>,<1><1>,<1>" : null).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void ImplicitIt_ValueOrFunction()
+        {
+            // With an outer 'it', a method that takes a value or a function at the argument is ambiguous.
+            var source = """
+                using System.Linq;
+
+                class Default { public bool Preferred; }
+                class Order { public Default Preferred; }
+
+                class C
+                {
+                    object M(Order[] orders, Default[] defaults) => orders.Select(defaults.FirstOrDefault(it.Preferred));
+                    object N(Default[] defaults) => defaults.FirstOrDefault(it.Preferred);
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (3,29): warning CS0649: Field 'Default.Preferred' is never assigned to, and will always have its default value false
+                // class Default { public bool Preferred; }
+                Diagnostic(ErrorCode.WRN_UnassignedInternalField, "Preferred").WithArguments("Default.Preferred", "false").WithLocation(3, 29),
+                // (4,30): warning CS0649: Field 'Order.Preferred' is never assigned to, and will always have its default value null
+                // class Order { public Default Preferred; }
+                Diagnostic(ErrorCode.WRN_UnassignedInternalField, "Preferred").WithArguments("Order.Preferred", "null").WithLocation(4, 30),
+                // (8,91): error CS20021: 'it' is ambiguous here: 'FirstOrDefault' takes a value or a function at this argument, and the outer 'it' fits both. Write the lambda, as in 'x => ...', or name the outer value.
+                //     object M(Order[] orders, Default[] defaults) => orders.Select(defaults.FirstOrDefault(it.Preferred));
+                Diagnostic(ErrorCode.ERR_SharperItValueOrFunction, "it").WithArguments("FirstOrDefault").WithLocation(8, 91));
+        }
+
+        [Fact]
+        public void ImplicitIt_ExpressionTree()
+        {
+            var source = """
+                using System;
+                using System.Linq;
+                using System.Linq.Expressions;
+
+                class C
+                {
+                    static void Main()
+                    {
+                        var xs = new[] { 1, 2, 3 }.AsQueryable();
+                        Console.Write(string.Join(",", xs.Where(it > 1)));
+                        Console.Write(string.Join(",", xs.Where(x => x > 1)));
+                        Expression<Func<int, bool>> e = x => x > 1;
+                        Console.Write(xs.Where(it > 1).Expression.ToString().Contains("it > 1"));
+                    }
+                }
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90,
+                expectedOutput: ExecutionConditionUtil.IsCoreClr ? "2,32,3True" : null).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void ImplicitIt_Nullable()
+        {
+            var source = """
+                #nullable enable
+                using System.Linq;
+
+                class C
+                {
+                    object M(string?[] xs) => xs.Select(it.Length);
+                    object MCSharp(string?[] xs) => xs.Select(x => x.Length);
+                    object N(string?[] xs) => xs.Where(it != null).Select(it!.Length);
+                }
+                """;
+            // The same warning as the C# twin.
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (6,41): warning CS8602: Dereference of a possibly null reference.
+                //     object M(string?[] xs) => xs.Select(it.Length);
+                Diagnostic(ErrorCode.WRN_NullReferenceReceiver, "it").WithLocation(6, 41),
+                // (7,52): warning CS8602: Dereference of a possibly null reference.
+                //     object MCSharp(string?[] xs) => xs.Select(x => x.Length);
+                Diagnostic(ErrorCode.WRN_NullReferenceReceiver, "x").WithLocation(7, 52));
+        }
+
+        [Fact]
+        public void ImplicitIt_SemanticModel()
+        {
+            var source = """
+                using System.Linq;
+
+                class C
+                {
+                    object M(int[] xs) => xs.Where(it > 1);
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics();
+            var tree = comp.SyntaxTrees[0];
+            var model = comp.GetSemanticModel(tree);
+            var it = tree.GetRoot().DescendantNodes().OfType<IdentifierNameSyntax>().Single(n => n.Identifier.Text == "it");
+            var symbol = (IParameterSymbol)model.GetSymbolInfo(it).Symbol;
+            Assert.Equal("System.Int32 it", symbol.ToTestDisplayString());
+            Assert.Equal(MethodKind.AnonymousFunction, ((IMethodSymbol)symbol.ContainingSymbol).MethodKind);
+            Assert.Equal("System.Int32", model.GetTypeInfo(it).Type.ToTestDisplayString());
+            // PROTOTYPE(sharper): the semantic model finds a lambda's scope by its syntax, so lookup inside an implicit
+            // lambda does not see 'it' yet (#24).
+            Assert.DoesNotContain(model.LookupSymbols(it.SpanStart), s => s.Name == "it");
+
+            var argument = (BinaryExpressionSyntax)it.Parent;
+            // The lambda shares its syntax with its body, the argument expression, like a query clause's lambda.
+            var operation = model.GetOperation(argument);
+            Assert.Equal(OperationKind.Binary, operation.Kind);
+            while (operation is not Microsoft.CodeAnalysis.Operations.IAnonymousFunctionOperation)
+            {
+                operation = operation.Parent;
+            }
+
+            Assert.True(operation.IsImplicit);
+            Assert.Same(symbol.ContainingSymbol, ((Microsoft.CodeAnalysis.Operations.IAnonymousFunctionOperation)operation).Symbol);
+        }
+
+        [Fact]
+        public void ImplicitIt_AwaitAndPatternVariable()
+        {
+            var source = """
+                using System.Linq;
+                using System.Threading.Tasks;
+
+                class C
+                {
+                    async Task<object> M(int[] xs) => xs.Select(await Task.FromResult(it));
+                    object N(object[] xs) => xs.Select(it is int n ? n : 0);
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (6,49): error CS20023: Cannot use 'await' in an implicit 'it' lambda. Write the lambda, as in 'async x => ...'.
+                //     async Task<object> M(int[] xs) => xs.Select(await Task.FromResult(it));
+                Diagnostic(ErrorCode.ERR_SharperItAwait, "await Task.FromResult(it)").WithLocation(6, 49),
+                // (7,40): error CS20019: 'it' has no lambda here. 'it' is the parameter of an argument that takes a function with one parameter, such as 'xs.Select(it.Name)'.
+                //     object N(object[] xs) => xs.Select(it is int n ? n : 0);
+                Diagnostic(ErrorCode.ERR_SharperItNoLambda, "it").WithLocation(7, 40),
+                // (7,50): error CS20022: Cannot declare 'n' in an implicit 'it' lambda. Write the lambda, as in 'x => ...'.
+                //     object N(object[] xs) => xs.Select(it is int n ? n : 0);
+                Diagnostic(ErrorCode.ERR_SharperItDeclaration, "n").WithArguments("n").WithLocation(7, 50));
+        }
     }
 }
