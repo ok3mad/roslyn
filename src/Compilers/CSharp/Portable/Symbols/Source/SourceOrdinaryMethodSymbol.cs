@@ -141,9 +141,9 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             if (isInfer)
             {
                 // The return type is inferred from the body, after the method checks (see SharperInferredReturnType).
-                if (CheckSharperInferredReturnTypeSupported(syntax, returnTypeSyntax, diagnostics))
+                if (CheckSharperInferredReturnTypeSupported(returnTypeSyntax, diagnostics))
                 {
-                    inferredReturnType = new InferredReturnType(this, returnTypeSyntax, syntax.ExpressionBody);
+                    inferredReturnType = new InferredReturnType(this, returnTypeSyntax, (CSharpSyntaxNode)syntax.Body ?? syntax.ExpressionBody);
                     return (default, parameters, default, inferredReturnType);
                 }
 
@@ -216,10 +216,10 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
 #nullable enable
         /// <summary>
-        /// Step R1 of Sharper's inferred return type supports expression bodies of private methods only. A member with no
+        /// Steps R1 and R2 of Sharper's inferred return type support the bodies of private methods only. A member with no
         /// body can never infer its return type; the others are later steps.
         /// </summary>
-        private bool CheckSharperInferredReturnTypeSupported(MethodDeclarationSyntax syntax, TypeSyntax inferSyntax, BindingDiagnosticBag diagnostics)
+        private bool CheckSharperInferredReturnTypeSupported(TypeSyntax inferSyntax, BindingDiagnosticBag diagnostics)
         {
             MessageID? notSupportedYet;
             if (!HasAnyBody)
@@ -243,13 +243,9 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             {
                 notSupportedYet = MessageID.IDS_SharperInferOnExtensionMember;
             }
-            else if (syntax.ExpressionBody is null)
+            else if (IsAsync && IsIterator)
             {
-                notSupportedYet = MessageID.IDS_SharperInferOnBlockBody;
-            }
-            else if (IsAsync)
-            {
-                notSupportedYet = MessageID.IDS_SharperInferOnAsync;
+                notSupportedYet = MessageID.IDS_SharperInferOnAsyncIterator;
             }
             else if (RefKind != RefKind.None)
             {
@@ -268,13 +264,13 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         {
             private readonly SourceOrdinaryMethodSymbol _method;
 
-            internal InferredReturnType(SourceOrdinaryMethodSymbol method, TypeSyntax inferSyntax, ArrowExpressionClauseSyntax body)
+            internal InferredReturnType(SourceOrdinaryMethodSymbol method, TypeSyntax inferSyntax, CSharpSyntaxNode body)
                 : base(method, inferSyntax, body)
             {
                 _method = method;
             }
 
-            protected override Binder? GetBodyBinder(ArrowExpressionClauseSyntax body)
+            protected override Binder? GetBodyBinder(CSharpSyntaxNode body)
                 => _method.TryGetBodyBinder()?.GetBinder(body);
 
             protected override void CheckInferredType(TypeWithAnnotations type, TypeSyntax inferSyntax, BindingDiagnosticBag diagnostics)

@@ -11,7 +11,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 {
     /// <summary>
     /// The return type of a method or local function declared with Sharper's <c>infer</c>, inferred from its
-    /// expression body (<see cref="Binder.BindSharperInferredReturnType"/>).
+    /// expression body or block body (<see cref="Binder.BindSharperInferredReturnType"/>).
     /// </summary>
     /// <remarks>
     /// The type is computed on first use, outside of any lock, and published with a compare-exchange: binding is
@@ -45,25 +45,42 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
         private readonly MethodSymbol _method;
         private readonly TypeSyntax _inferSyntax;
-        private readonly ArrowExpressionClauseSyntax _body;
+        private readonly CSharpSyntaxNode _body;
         private readonly object _publishLock = new object();
         private TypeWithAnnotations.Boxed? _lazyType;
 
-        protected SharperInferredReturnType(MethodSymbol method, TypeSyntax inferSyntax, ArrowExpressionClauseSyntax body)
+        protected SharperInferredReturnType(MethodSymbol method, TypeSyntax inferSyntax, CSharpSyntaxNode body)
         {
             Debug.Assert(inferSyntax.IsInfer);
+            Debug.Assert(body is ArrowExpressionClauseSyntax or BlockSyntax);
             _method = method;
             _inferSyntax = inferSyntax;
             _body = body;
         }
 
-        /// <summary>The binder of the expression body, as the method body binding gets it.</summary>
-        protected abstract Binder? GetBodyBinder(ArrowExpressionClauseSyntax body);
+        /// <summary>The binder of the expression body or block body, as the method body binding gets it.</summary>
+        protected abstract Binder? GetBodyBinder(CSharpSyntaxNode body);
 
         /// <summary>Checks that apply to a written return type, such as the restricted types.</summary>
         protected abstract void CheckInferredType(TypeWithAnnotations type, TypeSyntax inferSyntax, BindingDiagnosticBag diagnostics);
 
         protected abstract void AddDeclarationDiagnostics(BindingDiagnosticBag diagnostics);
+
+        /// <summary>
+        /// True while the body of <paramref name="method"/> is bound to infer its return type on this thread. The binder
+        /// then binds <c>return</c> and <c>yield return</c> as for a lambda whose return type is inferred, without
+        /// reading the return type, which would count as a use of the method by itself.
+        /// </summary>
+        internal static bool IsBeingInferred(MethodSymbol method)
+            => s_inferenceInProgress is { } inProgress && (object)inProgress.Inference._method == method;
+
+        /// <summary>
+        /// True for a method whose return type is inferred, where the inference failed with an error. Its body is not
+        /// checked for a missing return value (CS0161), since it has no return type to miss.
+        /// </summary>
+        internal static bool HasFailedInference(MethodSymbol method)
+            => method is SourceOrdinaryMethodOrUserDefinedOperatorSymbol { IsSharperInferredReturnType: true } or LocalFunctionSymbol { IsSharperInferredReturnType: true } &&
+                method.ReturnType.IsErrorType();
 
         internal TypeWithAnnotations GetReturnType()
         {

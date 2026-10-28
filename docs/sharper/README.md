@@ -93,7 +93,7 @@ Not done yet:
 | [`readonly` parameters](features/readonly-parameters.md) | `void F(readonly int x)` declares a parameter that cannot be reassigned; it is not part of the signature. | Prototype | [#23](https://github.com/ok3mad/roslyn/issues/23), [#97](https://github.com/ok3mad/roslyn/issues/97) |
 | [Sequence type](features/sequence-type.md) | `T[..]` is `IEnumerable<T>` in every type position. | Prototype, merged into `main` | [#19](https://github.com/ok3mad/roslyn/issues/19) |
 | [Task type](features/task-type.md) | `T~` is `Task<T>`, and `void~` is `Task`. | Prototype, merged into `main` | [#20](https://github.com/ok3mad/roslyn/issues/20) |
-| [Inferred return type](features/inferred-return-type.md) | `private static infer Greeting(int id) => $"Hello, {id}!";` returns `string`. Step R1: expression bodies of private methods and local functions. | Prototype of step R1, on `sharper/infer-return-r1` | [#67](https://github.com/ok3mad/roslyn/issues/67), under [#22](https://github.com/ok3mad/roslyn/issues/22) |
+| [Inferred return type](features/inferred-return-type.md) | `private static infer Greeting(int id) => $"Hello, {id}!";` returns `string`. Steps R1 and R2: expression and block bodies of private methods and local functions, iterators and `async`. | Prototype; R1 merged into `main`, R2 on `sharper/infer-return-r2` | [#67](https://github.com/ok3mad/roslyn/issues/67), [#68](https://github.com/ok3mad/roslyn/issues/68), under [#22](https://github.com/ok3mad/roslyn/issues/22) |
 | [Implicit `it`](features/implicit-it.md) | `xs.Select(it.Name)` is `xs.Select(x => x.Name)`: an argument that uses `it` is a lambda, if the innermost parameter around it takes a one-parameter function. | Prototype, merged into `main` | [#24](https://github.com/ok3mad/roslyn/issues/24) |
 
 Every planned feature has an issue, one per row of the
@@ -115,7 +115,8 @@ git grep -n "PROTOTYPE(sharper)"
   `sharper-*.yml`.
 - `sharper/<feature>` branches hold features in progress; `sharper/gating`, `sharper/val`,
   `sharper/val-designations`, `sharper/val-patterns`, `sharper/function-types`, `sharper/task-type`, `sharper/val-lambda-parameters` and
-  `sharper/readonly-locals` and `sharper/implicit-it` are merged. `sharper/readonly-parameters` is in progress.
+  `sharper/readonly-locals`, `sharper/infer-return-r1` and `sharper/implicit-it` are merged. `sharper/readonly-parameters` and
+  `sharper/infer-return-r2` are in progress.
 
 ## Diagnostics
 
@@ -139,7 +140,7 @@ in `#pragma warning`, `/nowarn` and `.editorconfig`.
 | CS20011 | Error | A readonly local must be initialized in its declaration, because it cannot be assigned later. |
 | CS20012 | Error | A spread 'yield return ..' cannot enumerate '{0}' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead. |
 | CS20013 | Warning | Call to non-readonly member '{0}' on readonly parameter '{1}' runs on a copy, so '{1}' is not changed. |
-| CS20014 | Error | Cannot infer the return type of '{0}', because its body ({1}) has no type. Write the return type. |
+| CS20014 | Error | Cannot infer the return type of '{0}', because the value it returns ({1}) has no type. Write the return type. |
 | CS20015 | Error | An inferred return type ('infer') is not supported {0} yet. Write the return type. |
 | CS20016 | Error | '{0}' has no body to infer its return type from. Write the return type. |
 | CS20017 | Error | Cannot infer the return type of '{0}', because its body uses '{1}', whose return type is inferred too. Write the return type of one of them. |
@@ -149,6 +150,8 @@ in `#pragma warning`, `/nowarn` and `.editorconfig`.
 | CS20021 | Error | 'it' is ambiguous here: '{0}' takes a value or a function at this argument, and the outer 'it' fits both. Write the lambda, as in 'x => ...', or name the outer value. |
 | CS20022 | Error | Cannot declare '{0}' in an implicit 'it' lambda. Write the lambda, as in 'x => ...'. |
 | CS20023 | Error | Cannot use 'await' in an implicit 'it' lambda. Write the lambda, as in 'async x => ...'. |
+| CS20024 | Error | Cannot infer the return type of '{0}', because the values it returns ({1}) have no best common type. Write the return type. |
+| CS20025 | Error | Cannot infer the return type of the iterator '{0}', because it has no 'yield return' to infer the element type from. Write the return type. |
 
 ## Where the code is
 
