@@ -8356,6 +8356,15 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
   <data name="ERR_SharperItAwait" xml:space="preserve">
     <value>Cannot use 'await' in an implicit 'it' lambda. Write the lambda, as in 'async x =&gt; ...'.</value>
   </data>
+  <data name="ERR_SharperInferParameterNoType" xml:space="preserve">
+    <value>Cannot infer the type of parameter '{0}', because its default value ({1}) has no type. Write the parameter type.</value>
+  </data>
+  <data name="ERR_SharperInferParameterNoDefault" xml:space="preserve">
+    <value>Cannot infer the type of parameter '{0}', because it has no default value. Write the parameter type.</value>
+  </data>
+  <data name="ERR_SharperInferParameterCycle" xml:space="preserve">
+    <value>Cannot infer the type of parameter '{0}', because its default value depends on the type of '{0}' itself. Write the parameter type.</value>
+  </data>
   <data name="WRN_RedundantPattern" xml:space="preserve">
     <value>The pattern is redundant.</value>
   </data>

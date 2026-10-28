@@ -1569,6 +1569,24 @@ namespace Microsoft.CodeAnalysis.CSharp
             return null;
         }
 
+        private ConcurrentDictionary<ParameterSyntax, SharperInferredParameterType.Result>? _lazySharperInferredParameterTypes;
+
+        /// <summary>
+        /// Sharper: the inferred types of <c>infer</c> parameters, by parameter syntax (see <see cref="SharperInferredParameterType"/>).
+        /// </summary>
+        internal ConcurrentDictionary<ParameterSyntax, SharperInferredParameterType.Result> SharperInferredParameterTypes
+        {
+            get
+            {
+                if (_lazySharperInferredParameterTypes == null)
+                {
+                    Interlocked.CompareExchange(ref _lazySharperInferredParameterTypes, new ConcurrentDictionary<ParameterSyntax, SharperInferredParameterType.Result>(), null);
+                }
+
+                return _lazySharperInferredParameterTypes;
+            }
+        }
+
         private ConcurrentDictionary<string, NamespaceSymbol>? _externAliasTargets;
 
         internal bool GetExternAliasTarget(string aliasName, out NamespaceSymbol @namespace)
