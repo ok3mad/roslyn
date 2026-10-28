@@ -178,7 +178,9 @@ namespace Microsoft.CodeAnalysis.CSharp
                         }
                         if (method.MethodKind == MethodKind.AnonymousFunction)
                         {
-                            info = method.IsImplicitlyDeclared ?
+                            info = method is LambdaSymbol { IsSharperImplicitIt: true } ?
+                                new CSDiagnosticInfo(ErrorCode.ERR_SharperItAwait) :
+                                method.IsImplicitlyDeclared ?
                                 // The await expression occurred in a query expression:
                                 new CSDiagnosticInfo(ErrorCode.ERR_BadAwaitInQuery) :
                                 new CSDiagnosticInfo(ErrorCode.ERR_BadAwaitWithoutAsyncLambda, ((LambdaSymbol)method).MessageID.Localize());

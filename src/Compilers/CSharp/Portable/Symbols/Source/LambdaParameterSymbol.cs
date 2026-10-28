@@ -44,6 +44,11 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         /// </summary>
         internal bool IsSharperVal { get; }
 
+        /// <summary>
+        /// Whether this is the parameter <c>it</c> of a Sharper implicit <c>it</c> lambda.
+        /// </summary>
+        internal bool IsSharperImplicitIt => ContainingSymbol is LambdaSymbol { IsSharperImplicitIt: true };
+
         public override ImmutableArray<CustomModifier> RefCustomModifiers
         {
             get { return ImmutableArray<CustomModifier>.Empty; }

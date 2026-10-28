@@ -1787,6 +1787,10 @@ namespace Microsoft.CodeAnalysis.CSharp
                     {
                         Error(diagnostics, ErrorCode.ERR_QueryInnerKey, node, name);
                     }
+                    else if (IsSharperItIdentifier(node) && node.IsFeatureEnabled(MessageID.IDS_FeatureSharper))
+                    {
+                        Error(diagnostics, ErrorCode.ERR_SharperItNoLambda, node);
+                    }
                     else
                     {
                         Error(diagnostics, ErrorCode.ERR_NameNotInContext, node, name);
@@ -3113,7 +3117,7 @@ namespace Microsoft.CodeAnalysis.CSharp
 
         // Given a list of arguments, create arrays of the bound arguments and the names of those
         // arguments.
-        private void BindArgumentsAndNames(BaseArgumentListSyntax argumentListOpt, BindingDiagnosticBag diagnostics, AnalyzedArguments result, bool allowArglist = false, bool isDelegateCreation = false)
+        private void BindArgumentsAndNames(BaseArgumentListSyntax argumentListOpt, BindingDiagnosticBag diagnostics, AnalyzedArguments result, bool allowArglist = false, bool isDelegateCreation = false, ArrayBuilder<ArgumentSyntax> sharperImplicitItArguments = null)
         {
             if (argumentListOpt is null)
             {
@@ -3131,7 +3135,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             foreach (var argumentSyntax in argumentListOpt.Arguments)
             {
                 BindArgumentAndName(result, diagnostics, ref hadError, ref hadLangVersionError,
-                    argumentSyntax, allowArglist, isDelegateCreation: isDelegateCreation);
+                    argumentSyntax, allowArglist, isDelegateCreation: isDelegateCreation, sharperImplicitItArguments: sharperImplicitItArguments);
             }
         }
 
@@ -3170,14 +3174,18 @@ namespace Microsoft.CodeAnalysis.CSharp
             ref bool hadLangVersionError,
             ArgumentSyntax argumentSyntax,
             bool allowArglist,
-            bool isDelegateCreation)
+            bool isDelegateCreation,
+            ArrayBuilder<ArgumentSyntax> sharperImplicitItArguments = null)
         {
             RefKind origRefKind = argumentSyntax.RefOrOutKeyword.Kind().GetRefKind();
             // The old native compiler ignores ref/out in a delegate creation expression.
             // For compatibility we implement the same bug except in strict mode.
             // Note: Some others should still be rejected when ref/out present. See RefMustBeObeyed.
             RefKind refKind = origRefKind == RefKind.None || RefMustBeObeyed(isDelegateCreation, argumentSyntax) ? origRefKind : RefKind.None;
-            BoundExpression boundArgument = BindArgumentValue(diagnostics, argumentSyntax, allowArglist, refKind);
+            BoundExpression boundArgument =
+                sharperImplicitItArguments?.Contains(argumentSyntax) == true && TryMakeSharperImplicitItLambda(argumentSyntax, diagnostics) is { } implicitItLambda
+                    ? implicitItLambda
+                    : BindArgumentValue(diagnostics, argumentSyntax, allowArglist, refKind);
 
             BindArgumentAndName(
                 result,

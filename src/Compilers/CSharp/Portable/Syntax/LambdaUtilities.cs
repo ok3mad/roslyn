@@ -136,6 +136,17 @@ namespace Microsoft.CodeAnalysis.CSharp
         }
 
         /// <summary>
+        /// Whether the node can be the body of a Sharper implicit <c>it</c> lambda: an argument expression. Whether it
+        /// is one depends on types (the parameter it goes to), so this is only an upper bound, for assertions.
+        /// </summary>
+        // PROTOTYPE(sharper): Edit and Continue does not see implicit 'it' lambdas, because they have no lambda syntax.
+        // The syntax offset of the body still identifies each one; decide how the IDE's lambda matching finds them (#124).
+        internal static bool IsSharperImplicitItLambdaBody(SyntaxNode node)
+        {
+            return node is ExpressionSyntax { Parent: ArgumentSyntax } && node.IsFeatureEnabled(MessageID.IDS_FeatureSharper);
+        }
+
+        /// <summary>
         /// Returns true if the specified <paramref name="node"/> represents a body of a lambda.
         /// </summary>
         public static bool IsLambdaBody(SyntaxNode node, bool allowReducedLambdas = false)

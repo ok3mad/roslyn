@@ -213,6 +213,22 @@ implementation plan, "Feature 3"):
    an uncached error type, so results never depend on the order of inference (the `var` local precedent:
    `SourceLocalSymbol.s_LocalTypeInferenceInProgress`). Test the order (force one symbol first) and concurrent reads.
 
+24. **A trial bag inherits "no diagnostics" from its template.** The semantic model binds with a bag that collects
+   none, so `BindingDiagnosticBag.GetInstance(diagnostics)` makes a trial that cannot tell success from failure
+   (`HasAnyErrors` asserts). A trial that decides something takes
+   `GetInstance(withDiagnostics: true, withDependencies: diagnostics.AccumulatesDependencies)`.
+25. **Binding the same arguments twice sets their declared variables twice.** An `out var` or pattern variable in an
+   argument gets its type as the call binds; a second trial with a different outcome trips
+   `SourceLocalSymbol.SetTypeWithAnnotations`. Skip the second trial when the arguments declare variables (implicit
+   `it`). A failed call also binds its lambda arguments again for error recovery, so filter before trying a reading
+   that is likely to fail, or the work multiplies with the nesting depth.
+26. **A lambda without lambda syntax follows the query clause.** `QueryUnboundLambdaState` builds an `UnboundLambda`
+   over a plain expression, and an `ExecutableCodeBinder` rooted there scopes its body; inference, nullable analysis,
+   closures and expression trees then work. Assertions that list lambda syntax kinds (`BoundLambda`,
+   `ClosureConversion.GetLambdaId`, `SynthesizedClosureEnvironment.AssertIsClosureScopeSyntax`), `await` diagnostics
+   (`IsImplicitlyDeclared` means "query"), the semantic model's scope lookup and Edit and Continue all find lambdas
+   by syntax.
+
 ## Inferred Types
 
 Inference from a body (`infer` return types, rows 10 and 15) reuses `var`'s rules for the natural type

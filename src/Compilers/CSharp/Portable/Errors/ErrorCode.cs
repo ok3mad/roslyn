@@ -2533,6 +2533,11 @@ namespace Microsoft.CodeAnalysis.CSharp
         ERR_SharperInferNoBody = SharperErrorCodes.Base + 16,
         ERR_SharperInferUsesInferredMethod = SharperErrorCodes.Base + 17,
         ERR_SharperInferUsesItself = SharperErrorCodes.Base + 18,
+        ERR_SharperItNoLambda = SharperErrorCodes.Base + 19,
+        ERR_SharperItTwoMeanings = SharperErrorCodes.Base + 20,
+        ERR_SharperItValueOrFunction = SharperErrorCodes.Base + 21,
+        ERR_SharperItDeclaration = SharperErrorCodes.Base + 22,
+        ERR_SharperItAwait = SharperErrorCodes.Base + 23,
 
         // Note: you will need to do the following after adding errors:
         //  1) Update ErrorFacts.IsBuildOnlyDiagnostic (src/Compilers/CSharp/Portable/Errors/ErrorFacts.cs)
