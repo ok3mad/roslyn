@@ -301,7 +301,9 @@ namespace Microsoft.CodeAnalysis.CSharp.Syntax.InternalSyntax
                     // we have a "var" pattern; "var" is not permitted to be a stand-in for a type (or a constant) in a pattern.
                     // Sharper's "val" is a var pattern with a ValKeyword token: its variables cannot be reassigned. Like "var", it is
                     // a keyword here even where a type named val exists (an accepted break, escaped as @val by the sharpener).
-                    var varToken = ConvertToKeyword(typeIdentifierToken);
+                    var varToken = IsSharperValIdentifier(typeIdentifierToken)
+                        ? ConvertToSharperValKeyword(typeIdentifierToken)
+                        : ConvertToKeyword(typeIdentifierToken);
                     var varDesignation = ParseDesignation(forPattern: true);
                     return _syntaxFactory.VarPattern(varToken, varDesignation);
                 }

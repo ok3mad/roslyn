@@ -10256,8 +10256,30 @@ done:
         /// </summary>
         private bool IsIdentifierVarOrSharperVal(SyntaxToken token)
         {
-            return token.IsIdentifierVar() ||
-                (token.ContextualKind == SyntaxKind.ValKeyword && IsFeatureEnabled(MessageID.IDS_FeatureSharper));
+            return token.IsIdentifierVar() || (IsSharperValIdentifier(token) && IsFeatureEnabled(MessageID.IDS_FeatureSharper));
+        }
+
+        /// <summary>
+        /// True for an identifier spelled <c>val</c> (not <c>@val</c> or an escape sequence). The lexer leaves <c>val</c> an
+        /// ordinary identifier, as in C#: <see cref="SyntaxFacts.GetContextualKeywordKind(string)"/> does not know it, since
+        /// callers such as Razor treat a contextual keyword as one everywhere. The parser makes the
+        /// <see cref="SyntaxKind.ValKeyword"/> token itself, with <see cref="ConvertToSharperValKeyword"/>.
+        /// </summary>
+        private static bool IsSharperValIdentifier(SyntaxToken token)
+        {
+            return token.Kind == SyntaxKind.IdentifierToken && token.Text == "val";
+        }
+
+        /// <summary>
+        /// The <see cref="SyntaxKind.ValKeyword"/> token of a Sharper val pattern, keeping the trivia and diagnostics of the
+        /// identifier it replaces (like <see cref="SyntaxParser.ConvertToKeyword"/>, which uses the lexer's contextual kind).
+        /// </summary>
+        private static SyntaxToken ConvertToSharperValKeyword(SyntaxToken token)
+        {
+            Debug.Assert(IsSharperValIdentifier(token));
+            var keyword = SyntaxFactory.Token(token.LeadingTrivia.Node, SyntaxKind.ValKeyword, token.TrailingTrivia.Node);
+            var diagnostics = token.GetDiagnostics();
+            return diagnostics is { Length: > 0 } ? keyword.WithDiagnosticsGreen(diagnostics) : keyword;
         }
 
         /// <summary>
