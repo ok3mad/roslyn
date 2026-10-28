@@ -20,6 +20,13 @@ namespace Microsoft.CodeAnalysis.CSharp.Syntax
         /// </summary>
         internal bool IsVarOrVal => IsVar || IsVal;
 
+        /// <summary>
+        /// True if this is the identifier <c>infer</c> and Sharper is enabled, so that it may stand for the Sharper
+        /// <c>infer</c> keyword: a return type inferred from the body. Like <see cref="IsVar"/>, it still binds to a
+        /// type named <c>infer</c> when one is in scope.
+        /// </summary>
+        internal bool IsInfer => ((InternalSyntax.TypeSyntax)this.Green).IsInfer && this.IsFeatureEnabled(MessageID.IDS_FeatureSharper);
+
         public bool IsUnmanaged => ((InternalSyntax.TypeSyntax)this.Green).IsUnmanaged;
 
         public bool IsNotNull => ((InternalSyntax.TypeSyntax)this.Green).IsNotNull;

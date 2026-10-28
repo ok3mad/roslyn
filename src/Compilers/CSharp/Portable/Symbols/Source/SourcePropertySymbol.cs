@@ -574,7 +574,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             Debug.Assert(typeSyntax is not ScopedTypeSyntax);
 
             typeSyntax = typeSyntax.SkipScoped(out _).SkipRef();
-            var type = binder.BindType(typeSyntax, diagnostics);
+            var type = binder.BindTypeReportingSharperInferNotSupportedYet(typeSyntax, MessageID.IDS_SharperInferOnPropertyOrIndexer, diagnostics);
             CompoundUseSiteInfo<AssemblySymbol> useSiteInfo = binder.GetNewCompoundUseSiteInfo(diagnostics);
 
             if (GetExplicitInterfaceSpecifier() is null && !this.IsNoMoreVisibleThan(type, ref useSiteInfo))

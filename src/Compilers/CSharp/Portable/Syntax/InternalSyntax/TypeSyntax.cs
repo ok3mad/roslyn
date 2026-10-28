@@ -10,6 +10,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Syntax.InternalSyntax
     {
         public bool IsVar => IsIdentifierName("var");
         public bool IsVal => IsIdentifierName("val");
+        public bool IsInfer => IsIdentifierName("infer");
         public bool IsUnmanaged => IsIdentifierName("unmanaged");
         public bool IsNotNull => IsIdentifierName("notnull");
         public bool IsNint => IsIdentifierName("nint");

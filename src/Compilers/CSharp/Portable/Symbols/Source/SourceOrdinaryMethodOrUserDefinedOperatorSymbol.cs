@@ -21,6 +21,9 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         private ImmutableArray<ParameterSymbol> _lazyParameters;
         private TypeWithAnnotations _lazyReturnType;
 
+        // Sharper: set by MethodChecks instead of _lazyReturnType when the return type is inferred ('infer').
+        private SharperInferredReturnType? _lazySharperInferredReturnType;
+
         protected SourceOrdinaryMethodOrUserDefinedOperatorSymbol(NamedTypeSymbol containingType, SyntaxReference syntaxReferenceOpt, Location location, bool isIterator, (DeclarationModifiers declarationModifiers, Flags flags) modifiersAndFlags)
             : base(containingType, syntaxReferenceOpt, location, isIterator, modifiersAndFlags)
         {
@@ -33,23 +36,45 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             get
             {
                 LazyMethodChecks();
-                return base.ReturnsVoid;
+                return _lazySharperInferredReturnType is { } inferred ? inferred.GetReturnType().IsVoidType() : base.ReturnsVoid;
             }
         }
 
-        protected MethodSymbol? MethodChecks(TypeWithAnnotations returnType, ImmutableArray<ParameterSymbol> parameters, BindingDiagnosticBag diagnostics)
+        /// <summary>
+        /// True if the return type is Sharper's <c>infer</c>. The type is then inferred from the body on first use,
+        /// after <c>MethodChecks</c>, which must not read it.
+        /// </summary>
+        internal bool IsSharperInferredReturnType
         {
+            get
+            {
+                LazyMethodChecks();
+                return _lazySharperInferredReturnType is not null;
+            }
+        }
+
+        /// <param name="sharperInferredReturnType">
+        /// Set, with a default <paramref name="returnType"/>, when the return type is Sharper's <c>infer</c>. The checks
+        /// of the return type then run when it is inferred.
+        /// </param>
+        protected MethodSymbol? MethodChecks(TypeWithAnnotations returnType, ImmutableArray<ParameterSymbol> parameters, BindingDiagnosticBag diagnostics, SharperInferredReturnType? sharperInferredReturnType = null)
+        {
+            Debug.Assert(returnType.HasType != sharperInferredReturnType is not null);
             _lazyReturnType = returnType;
             _lazyParameters = parameters;
+            _lazySharperInferredReturnType = sharperInferredReturnType;
 
-            // set ReturnsVoid flag
-            this.SetReturnsVoid(_lazyReturnType.IsVoidType());
+            if (sharperInferredReturnType is null)
+            {
+                // set ReturnsVoid flag
+                this.SetReturnsVoid(_lazyReturnType.IsVoidType());
 
-            this.CheckEffectiveAccessibility(_lazyReturnType, _lazyParameters, diagnostics);
-            this.CheckFileTypeUsage(_lazyReturnType, _lazyParameters, diagnostics);
+                this.CheckEffectiveAccessibility(_lazyReturnType, _lazyParameters, diagnostics);
+                this.CheckFileTypeUsage(_lazyReturnType, _lazyParameters, diagnostics);
+            }
 
             // Checks taken from MemberDefiner::defineMethod
-            if (this.Name == WellKnownMemberNames.DestructorName && this.ParameterCount == 0 && this.Arity == 0 && this.ReturnsVoid)
+            if (sharperInferredReturnType is null && this.Name == WellKnownMemberNames.DestructorName && this.ParameterCount == 0 && this.Arity == 0 && this.ReturnsVoid)
             {
                 diagnostics.Add(ErrorCode.WRN_FinalizeMethod, _location);
             }
@@ -81,7 +106,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
             // This value may not be correct, but we need something while we compute this.OverriddenMethod.
             // May be re-assigned below.
-            Debug.Assert(_lazyReturnType.CustomModifiers.IsEmpty);
+            Debug.Assert(sharperInferredReturnType is not null || _lazyReturnType.CustomModifiers.IsEmpty);
             _lazyRefCustomModifiers = ImmutableArray<CustomModifier>.Empty;
 
             MethodSymbol? overriddenOrExplicitlyImplementedMethod = null;
@@ -191,7 +216,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             get
             {
                 LazyMethodChecks();
-                return _lazyReturnType;
+                return _lazySharperInferredReturnType is { } inferred ? inferred.GetReturnType() : _lazyReturnType;
             }
         }
 

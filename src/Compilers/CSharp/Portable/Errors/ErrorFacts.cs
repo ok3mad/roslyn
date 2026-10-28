@@ -2621,6 +2621,11 @@ namespace Microsoft.CodeAnalysis.CSharp
                 or ErrorCode.ERR_SharperReadOnlyLocalWithNoInitializer
                 or ErrorCode.ERR_SharperSpreadRefStructEnumerator
                 or ErrorCode.WRN_SharperReadOnlyParameterMemberCallOnCopy
+                or ErrorCode.ERR_SharperInferNoType
+                or ErrorCode.ERR_SharperInferNotSupportedYet
+                or ErrorCode.ERR_SharperInferNoBody
+                or ErrorCode.ERR_SharperInferUsesInferredMethod
+                or ErrorCode.ERR_SharperInferUsesItself
                     => false,
             };
 #pragma warning restore CS8524 // The switch expression does not handle some values of its input type (it is not exhaustive) involving an unnamed enum value.
