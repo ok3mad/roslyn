@@ -12,6 +12,7 @@ valid C#, and lower to ordinary C# constructs. Everything outside the Sharper fe
 stay mergeable with it, so keep changes to upstream code minimal.
 - Sharper overview, design rules and feature status: `docs/sharper/README.md`.
 - Implementing a feature: the `sharper-feature` skill (`.github/skills/sharper-feature/SKILL.md`).
+- Choosing what to work on next, and starting work or discussion sessions: the `sharper-triage` skill (`.github/skills/sharper-triage/SKILL.md`).
 - Tests: `src/Compilers/CSharp/Test/Semantic/Semantics/SharperTests.cs`.
 - Branches: `main` is the integration branch; features in progress live on `sharper/<feature>`.
 
@@ -121,7 +122,7 @@ For the documentation-assessment checklist and routing rules, see the
 
 ### Skills
 
-Skills live in `.github/skills/<skill-name>/SKILL.md` and are auto-discovered by their YAML `description`. Useful ones here include `sharper-feature`, `code-review`, `ci-analysis`, `analyzer-codefix`, `merge-into-branch`, `snap`, and `update-agent-docs`.
+Skills live in `.github/skills/<skill-name>/SKILL.md` and are auto-discovered by their YAML `description`. Useful ones here include `sharper-feature`, `sharper-triage`, `code-review`, `ci-analysis`, `analyzer-codefix`, `merge-into-branch`, `snap`, and `update-agent-docs`.
 
 ## Working Loop (plan first)
 
