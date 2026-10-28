@@ -2617,9 +2617,9 @@
         <target state="new">A readonly local must be initialized in its declaration, because it cannot be assigned later.</target>
         <note />
       </trans-unit>
-      <trans-unit id="ERR_SharperSpreadInAsyncIterator">
-        <source>A spread 'yield return ..' cannot be used in an async iterator.</source>
-        <target state="new">A spread 'yield return ..' cannot be used in an async iterator.</target>
+      <trans-unit id="ERR_SharperSpreadOfAsyncSequence">
+        <source>A spread 'yield return ..' cannot enumerate the asynchronous sequence '{0}', because that would need an 'await' that is not written. Use 'await foreach' with 'yield return' instead.</source>
+        <target state="new">A spread 'yield return ..' cannot enumerate the asynchronous sequence '{0}', because that would need an 'await' that is not written. Use 'await foreach' with 'yield return' instead.</target>
         <note />
       </trans-unit>
       <trans-unit id="ERR_SharperSpreadRefStructEnumerator">

@@ -321,19 +321,25 @@ namespace Microsoft.CodeAnalysis.CSharp
             // Bound like the collection of a foreach statement.
             BoundExpression collectionExpr = BindRValueWithoutTargetType(operandSyntax, diagnostics);
 
-            if (((MethodSymbol)this.ContainingMemberOrLambda).IsAsync)
+            // The spread is a synchronous foreach, also in an async iterator, so a source that is both synchronous and
+            // asynchronous is enumerated synchronously, as by a foreach without 'await'.
+            BoundExpression originalCollectionExpr = collectionExpr;
+            var enumeratorDiagnostics = BindingDiagnosticBag.GetInstance(withDiagnostics: true, withDependencies: diagnostics.AccumulatesDependencies);
+            bool hasErrors = !GetEnumeratorInfoAndInferCollectionElementType(node, operandSyntax, ref collectionExpr, isAsync: false, isSpread: true, enumeratorDiagnostics, out TypeWithAnnotations inferredType, out ForEachEnumeratorInfo.Builder builder) ||
+                builder.IsIncomplete;
+
+            BoundExpression asyncCollectionExpr = originalCollectionExpr;
+            if (hasErrors &&
+                ((MethodSymbol)this.ContainingMemberOrLambda).IsAsync &&
+                GetEnumeratorInfoAndInferCollectionElementType(node, operandSyntax, ref asyncCollectionExpr, isAsync: true, isSpread: false, BindingDiagnosticBag.Discarded, out _, builder: out _))
             {
-                // PROTOTYPE(sharper): Spreads are not supported in async iterators, and may never be. Supporting a
-                // synchronous source needs the lowered try/finally to be accepted by the async rewriter, which
-                // checks its syntax for Edit and Continue (SyntaxBindingUtilities.BindsToTryStatement). Supporting
-                // an async source would also mean an implicit `await foreach`, a hidden suspension point.
-                // Tracked in #43.
-                Error(diagnostics, ErrorCode.ERR_SharperSpreadInAsyncIterator, node.Expression);
-                return new BoundYieldReturnSpreadStatement(node, collectionExpr, enumeratorInfoOpt: null, elementPlaceholder: null, elementConversion: null, hasErrors: true);
+                // An asynchronous source would need an implicit `await foreach`, an 'await' the user never wrote (#43).
+                enumeratorDiagnostics.Free();
+                Error(diagnostics, ErrorCode.ERR_SharperSpreadOfAsyncSequence, operandSyntax, originalCollectionExpr.Type);
+                return new BoundYieldReturnSpreadStatement(node, originalCollectionExpr, enumeratorInfoOpt: null, elementPlaceholder: null, elementConversion: null, hasErrors: true);
             }
 
-            bool hasErrors = !GetEnumeratorInfoAndInferCollectionElementType(node, operandSyntax, ref collectionExpr, isAsync: false, isSpread: true, diagnostics, out TypeWithAnnotations inferredType, out ForEachEnumeratorInfo.Builder builder) ||
-                builder.IsIncomplete;
+            diagnostics.AddRangeAndFree(enumeratorDiagnostics);
 
             if (hasErrors)
             {

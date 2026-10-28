@@ -2608,7 +2608,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 or ErrorCode.ERR_ClosedBadDerivedTypesProperty
                 or ErrorCode.ERR_BadCompilationOptionValueAccepted
                 or ErrorCode.ERR_IllegalUnsafeModifier
-                or ErrorCode.ERR_SharperSpreadInAsyncIterator
+                or ErrorCode.ERR_SharperSpreadOfAsyncSequence
                 or ErrorCode.WRN_SharperDynamicRangeNotSpread
                 or ErrorCode.WRN_SharperValMemberCallOnCopy
                 or ErrorCode.ERR_SharperValMayNotBindToType

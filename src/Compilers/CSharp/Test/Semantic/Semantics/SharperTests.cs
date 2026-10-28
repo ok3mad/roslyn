@@ -493,32 +493,467 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         }
 
         [Fact]
-        public void YieldReturnSpread_AsyncIterator_NotSupported()
+        public void YieldReturnSpread_AsyncIterator_SyncSource()
         {
-            // Spreads are not supported in async iterators, whether the source is synchronous or asynchronous.
+            // A synchronous source is spread in an async iterator as by the C# twin, `foreach (var x in xs) yield return x;`.
+            var source = """
+                using System;
+                using System.Collections.Generic;
+                using System.Threading.Tasks;
+
+                await foreach (var x in Spread([1, 2], new List<int> { 3, 4 }, Seq()))
+                    Console.Write(x);
+                Console.Write(";");
+                await foreach (var x in CSharp([1, 2], new List<int> { 3, 4 }, Seq()))
+                    Console.Write(x);
+
+                static async IAsyncEnumerable<int> Spread(int[] array, List<int> list, int[..] seq)
+                {
+                    await Task.Yield();
+                    yield return ..array;
+                    await Task.Yield();
+                    yield return ..list;
+                    yield return ..seq;
+                    yield return ..new[,] { { 7, 8 } };
+                    yield return ..new Pattern();
+                }
+
+                static async IAsyncEnumerable<int> CSharp(int[] array, List<int> list, IEnumerable<int> seq)
+                {
+                    await Task.Yield();
+                    foreach (var x in array) yield return x;
+                    await Task.Yield();
+                    foreach (var x in list) yield return x;
+                    foreach (var x in seq) yield return x;
+                    foreach (var x in new[,] { { 7, 8 } }) yield return x;
+                    foreach (var x in new Pattern()) yield return x;
+                }
+
+                static IEnumerable<int> Seq()
+                {
+                    yield return 5;
+                    yield return 6;
+                }
+
+                // A pattern-based enumerator that is not disposable, so the spread has no try/finally.
+                class Pattern
+                {
+                    public Enumerator GetEnumerator() => new Enumerator();
+
+                    public class Enumerator
+                    {
+                        private bool _done;
+                        public int Current => 9;
+                        public bool MoveNext() => !_done && (_done = true);
+                    }
+                }
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "123456789;123456789" : null, verify: Verification.Skipped).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void YieldReturnSpread_AsyncIterator_LocalFunctionAndString()
+        {
+            var source = """
+                using System;
+                using System.Collections.Generic;
+                using System.Threading.Tasks;
+
+                await foreach (var c in Chars("ab"))
+                    Console.Write(c);
+
+                static async IAsyncEnumerable<char> Chars(string s)
+                {
+                    await foreach (var c in Inner())
+                        yield return c;
+
+                    async IAsyncEnumerable<char> Inner()
+                    {
+                        await Task.Yield();
+                        yield return ..s;
+                        yield return '!';
+                    }
+                }
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "ab!" : null, verify: Verification.Skipped).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void YieldReturnSpread_AsyncIterator_EnumeratorIsDisposed()
+        {
+            // The source's enumerator is disposed when it is exhausted, when the consumer breaks out of `await foreach`,
+            // and when the consumer calls DisposeAsync directly while the iterator is suspended inside the spread.
+            var source = """
+                using System;
+                using System.Collections.Generic;
+                using System.Threading.Tasks;
+
+                await foreach (var x in Spread(Source()))
+                    Console.Write(x);
+                Console.Write(" | ");
+                await foreach (var x in Spread(Source()))
+                {
+                    Console.Write(x);
+                    if (x == 2)
+                        break;
+                }
+                Console.Write(" | ");
+                var e = Spread(Source()).GetAsyncEnumerator();
+                await e.MoveNextAsync();
+                await e.MoveNextAsync();
+                Console.Write(e.Current);
+                await e.DisposeAsync();
+                Console.Write(" | ");
+                await foreach (var x in Spread(Source()))
+                {
+                    Console.Write(x);
+                    if (x == 4)
+                        break;
+                }
+
+                static async IAsyncEnumerable<int> Spread(IEnumerable<int> xs)
+                {
+                    yield return 0;
+                    await Task.Yield();
+                    yield return ..xs;
+                    await Task.Yield();
+                    yield return 4;
+                }
+
+                static IEnumerable<int> Source()
+                {
+                    try
+                    {
+                        yield return 1;
+                        yield return 2;
+                        yield return 3;
+                    }
+                    finally
+                    {
+                        Console.Write(" disposed ");
+                    }
+                }
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90,
+                expectedOutput: ExecutionConditionUtil.IsCoreClr ? "0123 disposed 4 | 012 disposed  | 1 disposed  | 0123 disposed 4" : null, verify: Verification.Skipped).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void YieldReturnSpread_AsyncIterator_InTryFinallyWithAwait()
+        {
+            // A spread inside the iterator's own try/finally and `await using`, whose cleanup awaits: on an early stop
+            // and at the end, the source is disposed first, then the resource, then the outer finally runs.
+            var source = """
+                using System;
+                using System.Collections.Generic;
+                using System.Threading.Tasks;
+
+                await foreach (var x in Spread(Source()))
+                {
+                    Console.Write(x);
+                    if (x == 1)
+                        break;
+                }
+                Console.Write(" | ");
+                await foreach (var x in Spread(Source()))
+                    Console.Write(x);
+
+                static async IAsyncEnumerable<int> Spread(IEnumerable<int> xs)
+                {
+                    try
+                    {
+                        await using (var r = new Resource())
+                        {
+                            yield return ..xs;
+                        }
+                    }
+                    finally
+                    {
+                        await Task.Yield();
+                        Console.Write(" finally");
+                    }
+                }
+
+                static IEnumerable<int> Source()
+                {
+                    try
+                    {
+                        yield return 1;
+                        yield return 2;
+                    }
+                    finally
+                    {
+                        Console.Write(" disposed");
+                    }
+                }
+
+                class Resource : IAsyncDisposable
+                {
+                    public async ValueTask DisposeAsync()
+                    {
+                        await Task.Yield();
+                        Console.Write(" resource");
+                    }
+                }
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90,
+                expectedOutput: ExecutionConditionUtil.IsCoreClr ? "1 disposed resource finally | 12 disposed resource finally" : null, verify: Verification.Skipped).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void YieldReturnSpread_AsyncIterator_Cancellation()
+        {
+            // The spread has no await, so it never observes the token itself; a source that checks it stops the spread
+            // with an exception, and the source's enumerator is still disposed.
+            var source = """
+                using System;
+                using System.Collections.Generic;
+                using System.Runtime.CompilerServices;
+                using System.Threading;
+                using System.Threading.Tasks;
+
+                var cts = new CancellationTokenSource();
+                try
+                {
+                    await foreach (var x in Spread().WithCancellation(cts.Token))
+                    {
+                        Console.Write(x);
+                        if (x == 2)
+                            cts.Cancel();
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    Console.Write(" canceled");
+                }
+
+                static async IAsyncEnumerable<int> Spread([EnumeratorCancellation] CancellationToken token = default)
+                {
+                    await Task.Yield();
+                    yield return ..Source(token);
+                    await Task.Delay(1, token);
+                    yield return 9;
+                }
+
+                static IEnumerable<int> Source(CancellationToken token)
+                {
+                    try
+                    {
+                        for (int i = 1; i <= 4; i++)
+                        {
+                            token.ThrowIfCancellationRequested();
+                            yield return i;
+                        }
+                    }
+                    finally
+                    {
+                        Console.Write(" disposed");
+                    }
+                }
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "12 disposed canceled" : null, verify: Verification.Skipped).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void YieldReturnSpread_AsyncIterator_Exception()
+        {
+            // An exception from the source's MoveNext surfaces from MoveNextAsync, after the source is disposed.
+            var source = """
+                using System;
+                using System.Collections.Generic;
+                using System.Threading.Tasks;
+
+                try
+                {
+                    await foreach (var x in Spread(Source()))
+                        Console.Write(x);
+                }
+                catch (InvalidOperationException e)
+                {
+                    Console.Write(" " + e.Message);
+                }
+
+                static async IAsyncEnumerable<int> Spread(IEnumerable<int> xs)
+                {
+                    await Task.Yield();
+                    yield return ..xs;
+                    yield return 9;
+                }
+
+                static IEnumerable<int> Source()
+                {
+                    try
+                    {
+                        yield return 1;
+                        throw new InvalidOperationException("boom");
+                    }
+                    finally
+                    {
+                        Console.Write(" disposed");
+                    }
+                }
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "1 disposed boom" : null, verify: Verification.Skipped).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void YieldReturnSpread_AsyncIterator_SyncAndAsyncSource()
+        {
+            // A source that is both synchronous and asynchronous is enumerated synchronously, as by a foreach
+            // without 'await'.
+            var source = """
+                using System;
+                using System.Collections;
+                using System.Collections.Generic;
+                using System.Threading;
+                using System.Threading.Tasks;
+
+                await foreach (var x in Spread(new Both()))
+                    Console.Write(x);
+                Console.Write(";");
+                await foreach (var x in CSharp(new Both()))
+                    Console.Write(x);
+
+                static async IAsyncEnumerable<string> Spread(Both both)
+                {
+                    await Task.Yield();
+                    yield return ..both;
+                }
+
+                static async IAsyncEnumerable<string> CSharp(Both both)
+                {
+                    await Task.Yield();
+                    foreach (var x in both) yield return x;
+                }
+
+                class Both : IEnumerable<string>, IAsyncEnumerable<string>
+                {
+                    public IEnumerator<string> GetEnumerator() => new List<string> { "sync" }.GetEnumerator();
+                    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+                    public IAsyncEnumerator<string> GetAsyncEnumerator(CancellationToken token = default) => throw null;
+                }
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "sync;sync" : null, verify: Verification.Skipped).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void YieldReturnSpread_AsyncIterator_AsyncSource()
+        {
+            // An asynchronous source is never spread: it would need an `await foreach`, an 'await' the user never wrote.
+            // A source that is not enumerable at all reports the usual spread error, and outside an async iterator an
+            // asynchronous source reports the usual foreach error.
             var source = """
                 using System.Collections.Generic;
 
                 class C
                 {
-                    static async IAsyncEnumerable<int> SyncSource(IEnumerable<int> xs)
+                    static async IAsyncEnumerable<int> AsyncIterator(IAsyncEnumerable<int> xs)
                     {
                         yield return ..xs;
                     }
 
-                    static async IAsyncEnumerable<int> AsyncSource(IAsyncEnumerable<int> xs)
+                    static async IAsyncEnumerable<int> AsyncIteratorCSharp(IAsyncEnumerable<int> xs)
+                    {
+                        await foreach (var x in xs) yield return x;
+                    }
+
+                    static async IAsyncEnumerable<int> AsyncIteratorPattern(Pattern xs)
+                    {
+                        yield return ..xs;
+                    }
+
+                    static async IAsyncEnumerable<int> AsyncIteratorNotEnumerable()
+                    {
+                        yield return ..5;
+                    }
+
+                    static IEnumerable<int> SyncIterator(IAsyncEnumerable<int> xs)
+                    {
+                        yield return ..xs;
+                    }
+
+                    static async IAsyncEnumerable<int> AsyncIteratorDerived(Derived xs)
                     {
                         yield return ..xs;
                     }
                 }
+
+                class Pattern
+                {
+                    public IAsyncEnumerator<int> GetAsyncEnumerator() => null;
+                }
+
+                abstract class Derived : IAsyncEnumerable<int>
+                {
+                    public abstract IAsyncEnumerator<int> GetAsyncEnumerator(System.Threading.CancellationToken token);
+                }
                 """;
             CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyEmitDiagnostics(
-                // (7,22): error CS20001: A spread 'yield return ..' cannot be used in an async iterator.
+                // (7,24): error CS20001: A spread 'yield return ..' cannot enumerate the asynchronous sequence 'IAsyncEnumerable<int>', because that would need an 'await' that is not written. Use 'await foreach' with 'yield return' instead.
                 //         yield return ..xs;
-                Diagnostic(ErrorCode.ERR_SharperSpreadInAsyncIterator, "..xs").WithLocation(7, 22),
-                // (12,22): error CS20001: A spread 'yield return ..' cannot be used in an async iterator.
+                Diagnostic(ErrorCode.ERR_SharperSpreadOfAsyncSequence, "xs").WithArguments("System.Collections.Generic.IAsyncEnumerable<int>").WithLocation(7, 24),
+                // (17,24): error CS20001: A spread 'yield return ..' cannot enumerate the asynchronous sequence 'Pattern', because that would need an 'await' that is not written. Use 'await foreach' with 'yield return' instead.
                 //         yield return ..xs;
-                Diagnostic(ErrorCode.ERR_SharperSpreadInAsyncIterator, "..xs").WithLocation(12, 22));
+                Diagnostic(ErrorCode.ERR_SharperSpreadOfAsyncSequence, "xs").WithArguments("Pattern").WithLocation(17, 24),
+                // (22,24): error CS9212: Spread operator '..' cannot operate on variables of type 'int' because 'int' does not contain a public instance or extension definition for 'GetEnumerator'
+                //         yield return ..5;
+                Diagnostic(ErrorCode.ERR_SpreadMissingMember, "5").WithArguments("int", "GetEnumerator").WithLocation(22, 24),
+                // (27,24): error CS8414: foreach statement cannot operate on variables of type 'IAsyncEnumerable<int>' because 'IAsyncEnumerable<int>' does not contain a public instance or extension definition for 'GetEnumerator'. Did you mean 'await foreach' rather than 'foreach'?
+                //         yield return ..xs;
+                Diagnostic(ErrorCode.ERR_ForEachMissingMemberWrongAsync, "xs").WithArguments("System.Collections.Generic.IAsyncEnumerable<int>", "GetEnumerator").WithLocation(27, 24),
+                // (32,24): error CS20001: A spread 'yield return ..' cannot enumerate the asynchronous sequence 'Derived', because that would need an 'await' that is not written. Use 'await foreach' with 'yield return' instead.
+                //         yield return ..xs;
+                Diagnostic(ErrorCode.ERR_SharperSpreadOfAsyncSequence, "xs").WithArguments("Derived").WithLocation(32, 24));
+        }
+
+        [Fact]
+        public void YieldReturnSpread_AsyncIterator_RefStructSource()
+        {
+            // As in a synchronous iterator, a span's enumerator cannot live across the yields.
+            var source = """
+                using System;
+                using System.Collections.Generic;
+                using System.Threading.Tasks;
+
+                class C
+                {
+                    static async IAsyncEnumerable<int> Spread(int[] xs)
+                    {
+                        await Task.Yield();
+                        yield return ..xs.AsSpan();
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyEmitDiagnostics(
+                // (10,24): error CS20012: A spread 'yield return ..' cannot enumerate 'Span<int>' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead.
+                //         yield return ..xs.AsSpan();
+                Diagnostic(ErrorCode.ERR_SharperSpreadRefStructEnumerator, "xs.AsSpan()").WithArguments("System.Span<int>").WithLocation(10, 24));
+        }
+
+        [Fact]
+        public void YieldReturnSpread_AsyncIterator_Nullable()
+        {
+            // The same warnings as in a synchronous iterator.
+            var source = """
+                #nullable enable
+                using System.Collections.Generic;
+
+                class C
+                {
+                    static async IAsyncEnumerable<string> Spread(IEnumerable<string?> xs, IEnumerable<string>? ys)
+                    {
+                        yield return ..xs;
+                        yield return ..ys;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyEmitDiagnostics(
+                // (8,24): warning CS8603: Possible null reference return.
+                //         yield return ..xs;
+                Diagnostic(ErrorCode.WRN_NullReferenceReturn, "xs").WithLocation(8, 24),
+                // (9,24): warning CS8602: Dereference of a possibly null reference.
+                //         yield return ..ys;
+                Diagnostic(ErrorCode.WRN_NullReferenceReceiver, "ys").WithLocation(9, 24));
         }
 
         [Fact]
@@ -2163,7 +2598,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         [Fact]
         public void SharperDiagnostics_NumberedFromBase()
         {
-            Assert.Equal(20001, (int)ErrorCode.ERR_SharperSpreadInAsyncIterator);
+            Assert.Equal(20001, (int)ErrorCode.ERR_SharperSpreadOfAsyncSequence);
             Assert.Equal("CS20003", MessageProvider.Instance.GetIdForErrorCode((int)ErrorCode.WRN_SharperValMemberCallOnCopy));
 
             // Five-digit IDs work with #pragma and the command-line warning options.
