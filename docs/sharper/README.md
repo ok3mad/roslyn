@@ -135,11 +135,11 @@ in `#pragma warning`, `/nowarn` and `.editorconfig`.
 | CS20010 | Warning | Call to non-readonly member '{0}' on readonly local '{1}' runs on a copy, so '{1}' is not changed. |
 | CS20011 | Error | A readonly local must be initialized in its declaration, because it cannot be assigned later. |
 | CS20012 | Error | A spread 'yield return ..' cannot enumerate '{0}' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead. |
-| CS20013 | Error | Cannot infer the return type of '{0}', because its body ({1}) has no type. Write the return type. |
-| CS20014 | Error | An inferred return type ('infer') is not supported {0} yet. Write the return type. |
-| CS20015 | Error | '{0}' has no body to infer its return type from. Write the return type. |
-| CS20016 | Error | Cannot infer the return type of '{0}', because its body uses '{1}', whose return type is inferred too. Write the return type of one of them. |
-| CS20017 | Error | Cannot infer the return type of '{0}', because its body uses '{0}' itself. Write the return type. |
+| CS20014 | Error | Cannot infer the return type of '{0}', because its body ({1}) has no type. Write the return type. |
+| CS20015 | Error | An inferred return type ('infer') is not supported {0} yet. Write the return type. |
+| CS20016 | Error | '{0}' has no body to infer its return type from. Write the return type. |
+| CS20017 | Error | Cannot infer the return type of '{0}', because its body uses '{1}', whose return type is inferred too. Write the return type of one of them. |
+| CS20018 | Error | Cannot infer the return type of '{0}', because its body uses '{0}' itself. Write the return type. |
 
 ## Where the code is
 

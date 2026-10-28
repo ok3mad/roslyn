@@ -172,7 +172,7 @@ Return type (#10):
 
 | Step | Scope | Size | Open point |
 | --- | --- | --- | --- |
-| R1 | `infer` as a return type: gating, a type named `infer` wins, CS0246 with the flag off. Expression bodies of private methods and local functions that call only methods with written return types | S–M | Prototype ([#67](https://github.com/ok3mad/roslyn/issues/67)). Decided: nothing to infer from is CS20013, where `var` reports CS0815, CS8917 or CS8716 |
+| R1 | `infer` as a return type: gating, a type named `infer` wins, CS0246 with the flag off. Expression bodies of private methods and local functions that call only methods with written return types | S–M | Prototype ([#67](https://github.com/ok3mad/roslyn/issues/67)). Decided: nothing to infer from is CS20014, where `var` reports CS0815, CS8917 or CS8716 |
 | R2 | Block bodies: several `return` statements with the best common type, no return value as `void`, iterators, `async` | M | Nullable annotation of the result when one `return` is maybe-null |
 | R3 | Methods with inferred return types calling each other: binding order across members, cycle and recursion errors | L | Whether a recursive method with a non-recursive `return` is allowed later |
 | R4 | Every member kind and accessibility: public and protected members, `virtual`, `partial`, operators, metadata emission, Edit and Continue (a body edit that changes the type is a signature change) | M | None for public members: they infer like any other (decided) |
@@ -387,24 +387,24 @@ with a thread-static set) and lambda return types (`UnboundLambda.InferReturnTyp
 | --- | --- | --- |
 | `Binder.BindTypeOrSharperInferKeyword` | Binds the return type syntax; `infer` is a keyword only when no type named `infer` is in scope (`BindTypeOrAliasOrKeyword`, as for `var`) | P1 (parameters) |
 | `SharperInferredReturnType` | Holds the inferred type of one method, computed on first use outside of any lock and published once (diagnostics before the type). `MethodChecks` stores it instead of a return type and skips the checks that need the type; they run after inference | R2 (more body shapes), R3 |
-| Thread-static inference frame | While a body is bound for inference, a read of any inferred return type is recorded and gets an uncached error type: the method itself is CS20017, another inferred method CS20016 | R3 replaces the frame with a stack |
+| Thread-static inference frame | While a body is bound for inference, a read of any inferred return type is recorded and gets an uncached error type: the method itself is CS20018, another inferred method CS20017 | R3 replaces the frame with a stack |
 | `Binder.BindSharperInferredReturnType` | Binds the expression body with the body's own binder, takes the natural type as `var` does (`BindToNaturalType`, `BindToInferredDelegateType`) | R2 collects `return` statements and uses the best common type, as lambdas do |
 | `NullableWalker.AnalyzeSharperInferredReturnType` | Analyzes the body with `returnTypesOpt`, as for a lambda, and takes the top-level annotation from the returned state | R2 joins several returns (`BestTypeForLambdaReturns`) |
 | `CSharpSemanticModel.GetSharperInferredReturnTypeMethod` | `GetTypeInfo` and `GetSymbolInfo` on `infer` return the inferred type | R5 |
-| `CheckSharperInferredReturnTypeSupported` | The R1 limits: CS20014 for what a later step adds, CS20015 for members with no body | R2 and R4 remove rows |
+| `CheckSharperInferredReturnTypeSupported` | The R1 limits: CS20015 for what a later step adds, CS20016 for members with no body | R2 and R4 remove rows |
 
 ### Decisions
 
 | Question | Decision | Why |
 | --- | --- | --- |
 | What is inferred | The type `var r = e;` gives `r`, or `void` for a call that returns nothing | `var` already decides natural types (lambdas, method groups, tuples); one rule for locals and return types |
-| Nothing to infer from | CS20013, on the expression, where `var` reports CS0815, CS8917 or CS8716 | One message for every expression without a type, naming the method |
+| Nothing to infer from | CS20014, on the expression, where `var` reports CS0815, CS8917 or CS8716 | One message for every expression without a type, naming the method |
 | Body with errors | Error type, no extra diagnostic | The body binding reports the errors when the method is compiled |
 | Nullable annotation | From the flow state of the body; oblivious where annotations are disabled at `infer` | Matches lambda return types; a maybe-null body is the R2 open point for several returns |
-| Using itself | CS20017, permanent | The brainstorm's F# rule. A recursive method with a non-recursive `return` stays the R3 open point |
-| Using another inferred method | CS20016 in R1, reported on the user | Ordering is R3; reporting on the user keeps the other method valid, and the error type is never cached, so the result does not depend on the order |
-| Unsupported positions | CS20014 with the position, CS20015 for no body; properties, indexers and operators included | A clear "not yet" instead of CS0246 for a type named `infer` |
-| Where the diagnostics are | On `infer` for CS20014 to CS20017, on the body for CS20013 | The use of an inferred method is found through the symbol, which has no syntax |
+| Using itself | CS20018, permanent | The brainstorm's F# rule. A recursive method with a non-recursive `return` stays the R3 open point |
+| Using another inferred method | CS20017 in R1, reported on the user | Ordering is R3; reporting on the user keeps the other method valid, and the error type is never cached, so the result does not depend on the order |
+| Unsupported positions | CS20015 with the position, CS20016 for no body; properties, indexers and operators included | A clear "not yet" instead of CS0246 for a type named `infer` |
+| Where the diagnostics are | On `infer` for CS20015 to CS20018, on the body for CS20014 | The use of an inferred method is found through the symbol, which has no syntax |
 
 ### Plan for the later steps
 

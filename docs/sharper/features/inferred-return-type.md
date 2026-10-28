@@ -26,7 +26,7 @@ inferred methods that use each other (R3) and other members (R4) are the next st
 - **What is inferred.** The return type is the type `var r = e;` would give `r`, where `e` is the expression body,
   or `void` when `e` is a call that returns nothing. A lambda or method group gets its natural function type
   (`infer F() => () => 1` returns `Func<int>`). A private method can return an anonymous type.
-- **Nothing to infer from.** A body with no type of its own reports CS20013, where `var` reports CS0815, CS8917 or
+- **Nothing to infer from.** A body with no type of its own reports CS20014, where `var` reports CS0815, CS8917 or
   CS8716: `null`, `default`, a lambda or method group without a natural type, `throw`, `new()`, a collection
   expression, `(1, null)`. A body with its own errors reports only those, and the return type is an error type.
 - **Nullable.** In a `#nullable enable` context, the top-level annotation comes from the flow state of the body, as
@@ -35,27 +35,27 @@ inferred methods that use each other (R3) and other members (R4) are the next st
 - **A type named `infer`.** Like `var`, `infer` is a keyword only when no type named `infer` is in scope. With the
   flag off it is an ordinary type name: CS0246 when there is none.
 - **Using itself.** A method whose body uses its own inferred return type, directly (`Fib` calling `Fib`) or as a
-  method group, reports CS20017 and must write its return type, as in F#. This stays an error in later steps.
+  method group, reports CS20018 and must write its return type, as in F#. This stays an error in later steps.
 - **Using another inferred method.** A body that calls or converts another method whose return type is inferred
-  reports CS20016 in R1. Step R3 orders the inference instead. Methods with written return types can call inferred
+  reports CS20017 in R1. Step R3 orders the inference instead. Methods with written return types can call inferred
   ones freely.
 - **The checks of a written return type** apply to the inferred one: file-local types in signatures (CS9051),
   restricted types (CS1599), and nullable and native integer attributes.
 
 ## Not supported yet
 
-Each of these reports CS20014 ("not supported ... yet") or CS20015, instead of CS0246:
+Each of these reports CS20015 ("not supported ... yet") or CS20016, instead of CS0246:
 
 | Where | Error | Step |
 | --- | --- | --- |
-| Block bodies | CS20014 | R2 |
-| `async` methods and local functions | CS20014 | R2 |
-| Members that are not private (public, internal, protected, `override`) | CS20014 | R4 |
-| Explicit interface implementations, partial methods, extension block members | CS20014 | R4 / P2 |
-| `ref` returns | CS20014 | R4 |
-| Properties and indexers | CS20014 | R4 (open point) |
-| Operators and conversion operators | CS20014 | R4 |
-| Members with no body (`abstract`, `extern`, interface members, partial definitions) | CS20015, permanent | |
+| Block bodies | CS20015 | R2 |
+| `async` methods and local functions | CS20015 | R2 |
+| Members that are not private (public, internal, protected, `override`) | CS20015 | R4 |
+| Explicit interface implementations, partial methods, extension block members | CS20015 | R4 / P2 |
+| `ref` returns | CS20015 | R4 |
+| Properties and indexers | CS20015 | R4 (open point) |
+| Operators and conversion operators | CS20015 | R4 |
+| Members with no body (`abstract`, `extern`, interface members, partial definitions) | CS20016, permanent | |
 
 Elsewhere (fields, locals, parameters, delegates, type arguments) `infer` is an ordinary type name. Parameters are
 step P1.
@@ -89,7 +89,7 @@ The design for the later steps, and why, is in the
 
 - A local function's body is analyzed for nullability on its own, so a captured `var` local counts as maybe null
   (`PROTOTYPE(sharper)` in `Binder_SharperInferredReturnType.cs`).
-- CS20016 and CS20017 are reported on `infer`, not on the use in the body, because the use is found through the
+- CS20017 and CS20018 are reported on `infer`, not on the use in the body, because the use is found through the
   symbol, which has no syntax.
 - The IDE does not know `infer` yet (R5, [#71](https://github.com/ok3mad/roslyn/issues/71)).
 

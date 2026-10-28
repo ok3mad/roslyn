@@ -5935,40 +5935,40 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
-                // (3,34): error CS20013: Cannot infer the return type of 'C.M1()', because its body (<null>) has no type. Write the return type.
+                // (3,34): error CS20014: Cannot infer the return type of 'C.M1()', because its body (<null>) has no type. Write the return type.
                 //     private static infer M1() => null;
                 Diagnostic(ErrorCode.ERR_SharperInferNoType, "null").WithArguments("C.M1()", "<null>").WithLocation(3, 34),
-                // (4,34): error CS20013: Cannot infer the return type of 'C.M2()', because its body (default) has no type. Write the return type.
+                // (4,34): error CS20014: Cannot infer the return type of 'C.M2()', because its body (default) has no type. Write the return type.
                 //     private static infer M2() => default;
                 Diagnostic(ErrorCode.ERR_SharperInferNoType, "default").WithArguments("C.M2()", "default").WithLocation(4, 34),
-                // (5,34): error CS20013: Cannot infer the return type of 'C.M3()', because its body (lambda expression) has no type. Write the return type.
+                // (5,34): error CS20014: Cannot infer the return type of 'C.M3()', because its body (lambda expression) has no type. Write the return type.
                 //     private static infer M3() => x => x;
                 Diagnostic(ErrorCode.ERR_SharperInferNoType, "x => x").WithArguments("C.M3()", "lambda expression").WithLocation(5, 34),
-                // (6,34): error CS20013: Cannot infer the return type of 'C.M4()', because its body (method group) has no type. Write the return type.
+                // (6,34): error CS20014: Cannot infer the return type of 'C.M4()', because its body (method group) has no type. Write the return type.
                 //     private static infer M4() => System.Console.Write;
                 Diagnostic(ErrorCode.ERR_SharperInferNoType, "System.Console.Write").WithArguments("C.M4()", "method group").WithLocation(6, 34),
-                // (7,34): error CS20013: Cannot infer the return type of 'C.M5()', because its body (<throw expression>) has no type. Write the return type.
+                // (7,34): error CS20014: Cannot infer the return type of 'C.M5()', because its body (<throw expression>) has no type. Write the return type.
                 //     private static infer M5() => throw null;
                 Diagnostic(ErrorCode.ERR_SharperInferNoType, "throw null").WithArguments("C.M5()", "<throw expression>").WithLocation(7, 34),
-                // (8,34): error CS20013: Cannot infer the return type of 'C.M6()', because its body (new()) has no type. Write the return type.
+                // (8,34): error CS20014: Cannot infer the return type of 'C.M6()', because its body (new()) has no type. Write the return type.
                 //     private static infer M6() => new();
                 Diagnostic(ErrorCode.ERR_SharperInferNoType, "new()").WithArguments("C.M6()", "new()").WithLocation(8, 34),
-                // (9,34): error CS20013: Cannot infer the return type of 'C.M7()', because its body (collection expression) has no type. Write the return type.
+                // (9,34): error CS20014: Cannot infer the return type of 'C.M7()', because its body (collection expression) has no type. Write the return type.
                 //     private static infer M7() => [1, 2];
                 Diagnostic(ErrorCode.ERR_SharperInferNoType, "[1, 2]").WithArguments("C.M7()", "collection expression").WithLocation(9, 34),
-                // (10,34): error CS20013: Cannot infer the return type of 'C.M8()', because its body ((int, <null>)) has no type. Write the return type.
+                // (10,34): error CS20014: Cannot infer the return type of 'C.M8()', because its body ((int, <null>)) has no type. Write the return type.
                 //     private static infer M8() => (1, null);
                 Diagnostic(ErrorCode.ERR_SharperInferNoType, "(1, null)").WithArguments("C.M8()", "(int, <null>)").WithLocation(10, 34),
                 // (14,15): warning CS8321: The local function 'L1' is declared but never used
                 //         infer L1() => null;
                 Diagnostic(ErrorCode.WRN_UnreferencedLocalFunction, "L1").WithArguments("L1").WithLocation(14, 15),
-                // (14,23): error CS20013: Cannot infer the return type of 'L1()', because its body (<null>) has no type. Write the return type.
+                // (14,23): error CS20014: Cannot infer the return type of 'L1()', because its body (<null>) has no type. Write the return type.
                 //         infer L1() => null;
                 Diagnostic(ErrorCode.ERR_SharperInferNoType, "null").WithArguments("L1()", "<null>").WithLocation(14, 23),
                 // (15,15): warning CS8321: The local function 'L2' is declared but never used
                 //         infer L2() => x => x;
                 Diagnostic(ErrorCode.WRN_UnreferencedLocalFunction, "L2").WithArguments("L2").WithLocation(15, 15),
-                // (15,23): error CS20013: Cannot infer the return type of 'L2()', because its body (lambda expression) has no type. Write the return type.
+                // (15,23): error CS20014: Cannot infer the return type of 'L2()', because its body (lambda expression) has no type. Write the return type.
                 //         infer L2() => x => x;
                 Diagnostic(ErrorCode.ERR_SharperInferNoType, "x => x").WithArguments("L2()", "lambda expression").WithLocation(15, 23),
                 // (16,13): error CS0815: Cannot assign <null> to an implicitly-typed variable
@@ -6099,97 +6099,97 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
-                // (5,5): error CS20015: 'I.M()' has no body to infer its return type from. Write the return type.
+                // (5,5): error CS20016: 'I.M()' has no body to infer its return type from. Write the return type.
                 //     infer M();
                 Diagnostic(ErrorCode.ERR_SharperInferNoBody, "infer").WithArguments("I.M()").WithLocation(5, 5),
-                // (11,21): error CS20015: 'B.Abstract()' has no body to infer its return type from. Write the return type.
+                // (11,21): error CS20016: 'B.Abstract()' has no body to infer its return type from. Write the return type.
                 //     public abstract infer Abstract();
                 Diagnostic(ErrorCode.ERR_SharperInferNoBody, "infer").WithArguments("B.Abstract()").WithLocation(11, 21),
                 // (15,22): error CS0535: 'C' does not implement interface member 'I.N()'
                 // partial class C : B, I
                 Diagnostic(ErrorCode.ERR_UnimplementedInterfaceMember, "I").WithArguments("C", "I.N()").WithLocation(15, 22),
-                // (17,13): error CS20014: An inferred return type ('infer') is not supported on a block body yet. Write the return type.
+                // (17,13): error CS20015: An inferred return type ('infer') is not supported on a block body yet. Write the return type.
                 //     private infer BlockBody() { return 1; }
                 Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on a block body").WithLocation(17, 13),
-                // (18,12): error CS20014: An inferred return type ('infer') is not supported on a member that is not private yet. Write the return type.
+                // (18,12): error CS20015: An inferred return type ('infer') is not supported on a member that is not private yet. Write the return type.
                 //     public infer Public() => 1;
                 Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on a member that is not private").WithLocation(18, 12),
-                // (19,14): error CS20014: An inferred return type ('infer') is not supported on a member that is not private yet. Write the return type.
+                // (19,14): error CS20015: An inferred return type ('infer') is not supported on a member that is not private yet. Write the return type.
                 //     internal infer Internal() => 1;
                 Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on a member that is not private").WithLocation(19, 14),
-                // (20,15): error CS20014: An inferred return type ('infer') is not supported on a member that is not private yet. Write the return type.
+                // (20,15): error CS20015: An inferred return type ('infer') is not supported on a member that is not private yet. Write the return type.
                 //     protected infer Protected() => 1;
                 Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on a member that is not private").WithLocation(20, 15),
-                // (21,23): error CS20014: An inferred return type ('infer') is not supported on a member that is not private yet. Write the return type.
+                // (21,23): error CS20015: An inferred return type ('infer') is not supported on a member that is not private yet. Write the return type.
                 //     private protected infer PrivateProtected() => 1;
                 Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on a member that is not private").WithLocation(21, 23),
-                // (22,21): error CS20014: An inferred return type ('infer') is not supported on a member that is not private yet. Write the return type.
+                // (22,21): error CS20015: An inferred return type ('infer') is not supported on a member that is not private yet. Write the return type.
                 //     public override infer Virtual() => 2;
                 Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on a member that is not private").WithLocation(22, 21),
-                // (23,5): error CS20014: An inferred return type ('infer') is not supported on an explicit interface implementation yet. Write the return type.
+                // (23,5): error CS20015: An inferred return type ('infer') is not supported on an explicit interface implementation yet. Write the return type.
                 //     infer I.N() => 1;
                 Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on an explicit interface implementation").WithLocation(23, 5),
                 // (23,13): error CS9334: 'C.N()': return type must be 'int' to match implemented member 'I.N()'
                 //     infer I.N() => 1;
                 Diagnostic(ErrorCode.ERR_ExplicitInterfaceMemberReturnTypeMismatch, "N").WithArguments("C.N()", "int", "I.N()").WithLocation(23, 13),
-                // (24,12): error CS20014: An inferred return type ('infer') is not supported on a member that is not private yet. Write the return type.
+                // (24,12): error CS20015: An inferred return type ('infer') is not supported on a member that is not private yet. Write the return type.
                 //     public infer M() => 1;
                 Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on a member that is not private").WithLocation(24, 12),
-                // (25,21): error CS20015: 'C.Partial()' has no body to infer its return type from. Write the return type.
+                // (25,21): error CS20016: 'C.Partial()' has no body to infer its return type from. Write the return type.
                 //     private partial infer Partial();
                 Diagnostic(ErrorCode.ERR_SharperInferNoBody, "infer").WithArguments("C.Partial()").WithLocation(25, 21),
-                // (26,21): error CS20014: An inferred return type ('infer') is not supported on a partial method yet. Write the return type.
+                // (26,21): error CS20015: An inferred return type ('infer') is not supported on a partial method yet. Write the return type.
                 //     private partial infer Partial() => 1;
                 Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on a partial method").WithLocation(26, 21),
-                // (27,19): error CS20014: An inferred return type ('infer') is not supported on an async method yet. Write the return type.
+                // (27,19): error CS20015: An inferred return type ('infer') is not supported on an async method yet. Write the return type.
                 //     private async infer Async() => await Task.FromResult(1);
                 Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on an async method").WithLocation(27, 19),
-                // (29,17): error CS20014: An inferred return type ('infer') is not supported on a ref return yet. Write the return type.
+                // (29,17): error CS20015: An inferred return type ('infer') is not supported on a ref return yet. Write the return type.
                 //     private ref infer Ref() => ref _field;
                 Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on a ref return").WithLocation(29, 17),
-                // (30,27): error CS20015: 'C.Extern()' has no body to infer its return type from. Write the return type.
+                // (30,27): error CS20016: 'C.Extern()' has no body to infer its return type from. Write the return type.
                 //     private static extern infer Extern();
                 Diagnostic(ErrorCode.ERR_SharperInferNoBody, "infer").WithArguments("C.Extern()").WithLocation(30, 27),
                 // (30,33): warning CS0626: Method, operator, or accessor 'C.Extern()' is marked external and has no attributes on it. Consider adding a DllImport attribute to specify the external implementation.
                 //     private static extern infer Extern();
                 Diagnostic(ErrorCode.WRN_ExternMethodNoImplementation, "Extern").WithArguments("C.Extern()").WithLocation(30, 33),
-                // (31,13): error CS20014: An inferred return type ('infer') is not supported on a property or indexer yet. Write the return type.
+                // (31,13): error CS20015: An inferred return type ('infer') is not supported on a property or indexer yet. Write the return type.
                 //     private infer Property => 1;
                 Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on a property or indexer").WithLocation(31, 13),
-                // (32,13): error CS20014: An inferred return type ('infer') is not supported on a property or indexer yet. Write the return type.
+                // (32,13): error CS20015: An inferred return type ('infer') is not supported on a property or indexer yet. Write the return type.
                 //     private infer this[int i] => i;
                 Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on a property or indexer").WithLocation(32, 13),
-                // (33,19): error CS20014: An inferred return type ('infer') is not supported on an operator yet. Write the return type.
+                // (33,19): error CS20015: An inferred return type ('infer') is not supported on an operator yet. Write the return type.
                 //     public static infer operator +(C c) => c;
                 Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on an operator").WithLocation(33, 19),
-                // (34,37): error CS20014: An inferred return type ('infer') is not supported on an operator yet. Write the return type.
+                // (34,37): error CS20015: An inferred return type ('infer') is not supported on an operator yet. Write the return type.
                 //     public static implicit operator infer(C c) => 1;
                 Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on an operator").WithLocation(34, 37),
-                // (35,30): error CS20015: 'C.Abstract()' has no body to infer its return type from. Write the return type.
+                // (35,30): error CS20016: 'C.Abstract()' has no body to infer its return type from. Write the return type.
                 //     public override abstract infer Abstract();
                 Diagnostic(ErrorCode.ERR_SharperInferNoBody, "infer").WithArguments("C.Abstract()").WithLocation(35, 30),
                 // (35,36): error CS0513: 'C.Abstract()' is abstract but it is contained in non-abstract type 'C'
                 //     public override abstract infer Abstract();
                 Diagnostic(ErrorCode.ERR_AbstractInConcreteClass, "Abstract").WithArguments("C.Abstract()", "C").WithLocation(35, 36),
-                // (39,9): error CS20014: An inferred return type ('infer') is not supported on a block body yet. Write the return type.
+                // (39,9): error CS20015: An inferred return type ('infer') is not supported on a block body yet. Write the return type.
                 //         infer LBlock() { return 1; }
                 Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on a block body").WithLocation(39, 9),
                 // (39,15): warning CS8321: The local function 'LBlock' is declared but never used
                 //         infer LBlock() { return 1; }
                 Diagnostic(ErrorCode.WRN_UnreferencedLocalFunction, "LBlock").WithArguments("LBlock").WithLocation(39, 15),
-                // (40,15): error CS20014: An inferred return type ('infer') is not supported on an async method yet. Write the return type.
+                // (40,15): error CS20015: An inferred return type ('infer') is not supported on an async method yet. Write the return type.
                 //         async infer LAsync() => await Task.FromResult(1);
                 Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on an async method").WithLocation(40, 15),
                 // (40,21): warning CS8321: The local function 'LAsync' is declared but never used
                 //         async infer LAsync() => await Task.FromResult(1);
                 Diagnostic(ErrorCode.WRN_UnreferencedLocalFunction, "LAsync").WithArguments("LAsync").WithLocation(40, 21),
-                // (41,9): error CS20014: An inferred return type ('infer') is not supported on a ref return yet. Write the return type.
+                // (41,9): error CS20015: An inferred return type ('infer') is not supported on a ref return yet. Write the return type.
                 //         ref infer LRef() => ref _field;
                 Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "ref infer").WithArguments("on a ref return").WithLocation(41, 9),
                 // (41,19): warning CS8321: The local function 'LRef' is declared but never used
                 //         ref infer LRef() => ref _field;
                 Diagnostic(ErrorCode.WRN_UnreferencedLocalFunction, "LRef").WithArguments("LRef").WithLocation(41, 19),
-                // (42,23): error CS20015: 'LExtern()' has no body to infer its return type from. Write the return type.
+                // (42,23): error CS20016: 'LExtern()' has no body to infer its return type from. Write the return type.
                 //         static extern infer LExtern();
                 Diagnostic(ErrorCode.ERR_SharperInferNoBody, "infer").WithArguments("LExtern()").WithLocation(42, 23),
                 // (42,29): warning CS0626: Method, operator, or accessor 'LExtern()' is marked external and has no attributes on it. Consider adding a DllImport attribute to specify the external implementation.
@@ -6198,7 +6198,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (42,29): warning CS8321: The local function 'LExtern' is declared but never used
                 //         static extern infer LExtern();
                 Diagnostic(ErrorCode.WRN_UnreferencedLocalFunction, "LExtern").WithArguments("LExtern").WithLocation(42, 29),
-                // (50,17): error CS20014: An inferred return type ('infer') is not supported on an extension block member yet. Write the return type.
+                // (50,17): error CS20015: An inferred return type ('infer') is not supported on an extension block member yet. Write the return type.
                 //         private infer Twice() => i * 2;
                 Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on an extension block member").WithLocation(50, 17));
         }
@@ -6224,13 +6224,13 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
-                // (3,20): error CS20016: Cannot infer the return type of 'C.A()', because its body uses 'C.B()', whose return type is inferred too. Write the return type of one of them.
+                // (3,20): error CS20017: Cannot infer the return type of 'C.A()', because its body uses 'C.B()', whose return type is inferred too. Write the return type of one of them.
                 //     private static infer A() => B() + 1;
                 Diagnostic(ErrorCode.ERR_SharperInferUsesInferredMethod, "infer").WithArguments("C.A()", "C.B()").WithLocation(3, 20),
-                // (5,20): error CS20016: Cannot infer the return type of 'C.D()', because its body uses 'C.B()', whose return type is inferred too. Write the return type of one of them.
+                // (5,20): error CS20017: Cannot infer the return type of 'C.D()', because its body uses 'C.B()', whose return type is inferred too. Write the return type of one of them.
                 //     private static infer D() => B;
                 Diagnostic(ErrorCode.ERR_SharperInferUsesInferredMethod, "infer").WithArguments("C.D()", "C.B()").WithLocation(5, 20),
-                // (11,9): error CS20016: Cannot infer the return type of 'L2()', because its body uses 'L1()', whose return type is inferred too. Write the return type of one of them.
+                // (11,9): error CS20017: Cannot infer the return type of 'L2()', because its body uses 'L1()', whose return type is inferred too. Write the return type of one of them.
                 //         infer L2() => L1() + B();
                 Diagnostic(ErrorCode.ERR_SharperInferUsesInferredMethod, "infer").WithArguments("L2()", "L1()").WithLocation(11, 9),
                 // (12,13): warning CS8321: The local function 'L3' is declared but never used
@@ -6254,7 +6254,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
                 _ = comp.GetMember<MethodSymbol>(first).ReturnType;
                 comp.VerifyDiagnostics(
-                    // (3,20): error CS20016: Cannot infer the return type of 'C.A()', because its body uses 'C.B()', whose return type is inferred too. Write the return type of one of them.
+                    // (3,20): error CS20017: Cannot infer the return type of 'C.A()', because its body uses 'C.B()', whose return type is inferred too. Write the return type of one of them.
                     //     private static infer A() => B() + 1;
                     Diagnostic(ErrorCode.ERR_SharperInferUsesInferredMethod, "infer").WithArguments("C.A()", "C.B()").WithLocation(3, 20));
                 Assert.Equal("infer", comp.GetMember<MethodSymbol>("C.A").ReturnType.ToTestDisplayString());
@@ -6304,13 +6304,13 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
-                // (3,20): error CS20017: Cannot infer the return type of 'C.Fib(int)', because its body uses 'C.Fib(int)' itself. Write the return type.
+                // (3,20): error CS20018: Cannot infer the return type of 'C.Fib(int)', because its body uses 'C.Fib(int)' itself. Write the return type.
                 //     private static infer Fib(int i) => i < 2 ? 1 : Fib(i - 1) + Fib(i - 2);
                 Diagnostic(ErrorCode.ERR_SharperInferUsesItself, "infer").WithArguments("C.Fib(int)").WithLocation(3, 20),
-                // (4,20): error CS20017: Cannot infer the return type of 'C.Self()', because its body uses 'C.Self()' itself. Write the return type.
+                // (4,20): error CS20018: Cannot infer the return type of 'C.Self()', because its body uses 'C.Self()' itself. Write the return type.
                 //     private static infer Self() => Self;
                 Diagnostic(ErrorCode.ERR_SharperInferUsesItself, "infer").WithArguments("C.Self()").WithLocation(4, 20),
-                // (9,9): error CS20017: Cannot infer the return type of 'Fact(int)', because its body uses 'Fact(int)' itself. Write the return type.
+                // (9,9): error CS20018: Cannot infer the return type of 'Fact(int)', because its body uses 'Fact(int)' itself. Write the return type.
                 //         infer Fact(int n) => n <= 1 ? 1 : n * Fact(n - 1);
                 Diagnostic(ErrorCode.ERR_SharperInferUsesItself, "infer").WithArguments("Fact(int)").WithLocation(9, 9));
         }

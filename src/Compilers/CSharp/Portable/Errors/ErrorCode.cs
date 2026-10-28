@@ -2527,11 +2527,11 @@ namespace Microsoft.CodeAnalysis.CSharp
         WRN_SharperReadOnlyLocalMemberCallOnCopy = SharperErrorCodes.Base + 10,
         ERR_SharperReadOnlyLocalWithNoInitializer = SharperErrorCodes.Base + 11,
         ERR_SharperSpreadRefStructEnumerator = SharperErrorCodes.Base + 12,
-        ERR_SharperInferNoType = SharperErrorCodes.Base + 13,
-        ERR_SharperInferNotSupportedYet = SharperErrorCodes.Base + 14,
-        ERR_SharperInferNoBody = SharperErrorCodes.Base + 15,
-        ERR_SharperInferUsesInferredMethod = SharperErrorCodes.Base + 16,
-        ERR_SharperInferUsesItself = SharperErrorCodes.Base + 17,
+        ERR_SharperInferNoType = SharperErrorCodes.Base + 14,
+        ERR_SharperInferNotSupportedYet = SharperErrorCodes.Base + 15,
+        ERR_SharperInferNoBody = SharperErrorCodes.Base + 16,
+        ERR_SharperInferUsesInferredMethod = SharperErrorCodes.Base + 17,
+        ERR_SharperInferUsesItself = SharperErrorCodes.Base + 18,
 
         // Note: you will need to do the following after adding errors:
         //  1) Update ErrorFacts.IsBuildOnlyDiagnostic (src/Compilers/CSharp/Portable/Errors/ErrorFacts.cs)
