@@ -48,12 +48,13 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         {
             // Uses every Sharper syntax node: a function type, a task type and a parenthesized function type.
             var source = """
+                #nullable enable
                 using System.Threading.Tasks;
 
                 class C
                 {
                     (int, string) -> bool _predicate = (i, s) => s.Length == i;
-                    ((int) -> void)? _callback = null;
+                    void Notify(((int) -> void)? callback) => callback?.Invoke(_predicate(1, "a") ? 1 : 0);
 
                     async int~ GetAsync() { await Task.Yield(); return 1; }
                     async void~ RunAsync() => await GetAsync();
