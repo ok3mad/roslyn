@@ -186,7 +186,7 @@ Parameter types (#15):
 
 | Step | Scope | Size | Open point |
 | --- | --- | --- | --- |
-| P1 | `infer` as a parameter type, with source 2: the default value's type. `null`, `default` and target-typed values give an error | S | |
+| P1 | `infer` as a parameter type, with source 2: the default value's type. `null`, `default` and target-typed values give an error | S | Prototype ([#72](https://github.com/ok3mad/roslyn/issues/72)). Decided: every member kind and lambdas; a value that is not a constant gives its type, then CS1736 as in C#; cycles through signatures are CS20026 |
 | P2 | Source 1: the overridden or implemented member gives the parameter and return types. Members are matched by name and parameter count before their types are known; more than one candidate is an error | M | Explicit interface implementations; a partial `infer` signature where some types are written |
 | P3 | `readonly infer x` | S | Whether `val x` is its shorthand on method parameters |
 | P4 | Source 4, first cut: the parameter passed directly as an argument to a call with exactly one candidate (method, constructor, delegate). Needs binding the body with a placeholder type | L | How the placeholder interacts with lambdas and local functions in the body |
@@ -499,6 +499,50 @@ implementation taught.
 - **"Does it use `it`?" is a bound question.** `xs.Select(Make(ys.First(it.X)))` binds as a lambda whose `it` is
   unused, because the inner call claims it. The lambda trial counts only when each lambda reads its parameter.
 
+## Feature 8: inferred parameter type, step P1
+
+`void Fetch(string url, infer retries = 3)` gives `retries` the type `int`, on branch `sharper/infer-parameter-p1`
+([#72](https://github.com/ok3mad/roslyn/issues/72), feature page
+[inferred-parameter-type.md](../features/inferred-parameter-type.md)). Like R1, it adds no syntax, bound node or public
+API, and needs no lowering.
+
+**Probe.** Every member kind builds its parameters in `ParameterHelpers.MakeParameter`, and lambdas in
+`Binder.AnalyzeAnonymousFunction`; the type is bound there and stored in the parameter symbol, which every signature
+comparison then reads (overrides, implementations, duplicate members, partial methods). The default value is bound
+later and lazily, against that type (`SourceComplexParameterSymbol.MakeDefaultExpression`). So the type must be known
+when the symbol is created, unlike R1's return type, which could stay lazy because `MethodChecks` skips the checks that
+need it. Methods and constructors create their parameters inside `MethodChecks`, under the per-member lock, and
+indexers inside `EnsureSignature`, under another.
+
+### The mechanism
+
+| Piece | What it does | Extended by |
+| --- | --- | --- |
+| `infer` branch of `ParameterHelpers.MakeParameter`, `Binder.BindLambdaParameterType` | Recognize `infer` with R1's `BindTypeOrSharperInferKeyword` and create the parameter with the inferred type | P2 (the overridden member when there is no default value), P4 to P7 |
+| `Binder.BindSharperInferredParameterType` | Binds the default value with the binder it is bound with anyway, takes the natural type as `var` does, and the annotation from whether the value is a null constant | |
+| `SharperInferredParameterType` | Keeps the results per parameter syntax in the compilation, published once. A thread-static stack of the parameters being inferred finds cycles, and every parameter of a cycle gets CS20026 as soon as the cycle is found | P2 and P4 add sources; a body used as a source (P4) can cycle through the signature the same way |
+| `InferBeforeSignature` in `LazyMethodChecks` and `EnsureSignature` | Infers before the signature lock is taken, so binding a default value never holds a member's lock while it waits for another's | |
+| `CSharpSemanticModel.GetSharperInferredParameter` | `GetTypeInfo` and `GetSymbolInfo` on `infer` return the parameter type | R5 |
+
+### Decisions
+
+| Question | Decision | Why |
+| --- | --- | --- |
+| What is inferred | The type `var x = e;` gives `x`; a lambda or method group gets its natural function type | One rule with locals and R1 |
+| A default value that is not a constant | Its type, then CS1736 from the default value check, as for the written type | The issue's `TimeSpan.FromSeconds(5)` names a type, and C# reports the same error for its twin; non-constant defaults would be a feature of their own |
+| Nothing to infer from | CS20024 on the value; no CS1736 or conversion error after it | One error per parameter, which asks for the type |
+| No default value | CS20025 on `infer` | P2 adds the overridden member as a source before this error |
+| Nullable annotation | Annotated for a null constant (`default(string)`), not annotated otherwise, oblivious where annotations are disabled | A default value is a constant, so it needs no flow analysis; `infer s = "a"` is a `string` that callers cannot pass null to |
+| Where it runs | Before the signature lock, cached per parameter syntax | The lock-order trap R1 found (trap 23 of the skill); a cache by syntax serves members without a lock and lambdas, which are bound several times |
+| Cycles | CS20026 on every parameter of the cycle, published when the cycle is found | Publishing at the end was not enough: a member whose signature completes inside the cycle let another thread infer the rest of the cycle without the error (found by `InferParameter_Cycle_Concurrent`) |
+| `ref`, `out`, `params`, `this` | No special rule: without a default value CS20025, with one the C# error for the default value | The C# twin reports the same, and the type is still known |
+
+Tests: 17 `InferParameter_*` tests in `SharperTests.cs`: runtime output for every member kind and lambdas next to C#
+twins, the inferred types against written ones (also the default values), the errors, cycles in every order and on
+two threads, caller information attributes, signature matching, nullable annotations, the semantic model, IOperation,
+metadata seen from a C# compilation, and concurrent inference. `readonly infer x = 1u` already works (P3 needs only
+its tests and the `val` decision).
+
 ## Follow-ups
 
 Sharper diagnostics were renumbered from `SharperErrorCodes.Base` (20000): CS9402, CS9403 and CS9404 became CS20001, CS20002 and CS20003, and this document uses the new numbers throughout.
@@ -547,6 +591,7 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 - [ ] `readonly` locals: decide `readonly` in `for` initializers, `foreach`, deconstruction and `out` (no modifier slot; a public syntax change). [#95](https://github.com/ok3mad/roslyn/issues/95)
 - [ ] `readonly` locals: IDE support (completion, refactorings that drop or break `readonly`). [#96](https://github.com/ok3mad/roslyn/issues/96)
 - [x] `readonly` parameters, the grid's remaining explicitly typed corner. [#97](https://github.com/ok3mad/roslyn/issues/97)
+- [ ] Inferred parameter type: steps P2 to P8 ([#73](https://github.com/ok3mad/roslyn/issues/73), [#74](https://github.com/ok3mad/roslyn/issues/74) and the rest of [#27](https://github.com/ok3mad/roslyn/issues/27)); the default value is bound twice, once to infer and once against the type.
 - [ ] Inferred return type: steps R2 to R5 ([#68](https://github.com/ok3mad/roslyn/issues/68) to [#71](https://github.com/ok3mad/roslyn/issues/71)); a local function's nullable inference sees captured variables at their declared state.
 - [ ] `readonly` locals share the `val` follow-ups: silence CS20010 with CS20003 (#84), the "never reassigned" fixer can offer `readonly int` (#89), and the public API (#88) and Edit and Continue (#90) items cover them too.
 - [x] Run the upstream parser tests with Sharper on ([#63](https://github.com/ok3mad/roslyn/issues/63)): `ROSLYN_TEST_SHARPER=1` adds the feature to the test parse options (`TestOptions`, `CSharpTestSource.Parse`, the `ParsingTests` helpers). Tests that call `SyntaxFactory` without options are not covered. Last run (net10.0, Debug, `main` with `val`, `readonly` locals and parameters, `T[..]`, function types, also parenthesized and in patterns, and `T~`), with no valid C# parsing differently:

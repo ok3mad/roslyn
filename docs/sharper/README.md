@@ -94,6 +94,7 @@ Not done yet:
 | [Sequence type](features/sequence-type.md) | `T[..]` is `IEnumerable<T>` in every type position. | Prototype, merged into `main` | [#19](https://github.com/ok3mad/roslyn/issues/19) |
 | [Task type](features/task-type.md) | `T~` is `Task<T>`, and `void~` is `Task`. | Prototype, merged into `main` | [#20](https://github.com/ok3mad/roslyn/issues/20) |
 | [Inferred return type](features/inferred-return-type.md) | `private static infer Greeting(int id) => $"Hello, {id}!";` returns `string`. Step R1: expression bodies of private methods and local functions. | Prototype of step R1, on `sharper/infer-return-r1` | [#67](https://github.com/ok3mad/roslyn/issues/67), under [#22](https://github.com/ok3mad/roslyn/issues/22) |
+| [Inferred parameter type](features/inferred-parameter-type.md) | `void Fetch(string url, infer retries = 3)` gives `retries` the type of its default value, `int`. Step P1: default values, on every member kind and lambdas. | Prototype of step P1, on `sharper/infer-parameter-p1` | [#72](https://github.com/ok3mad/roslyn/issues/72), under [#27](https://github.com/ok3mad/roslyn/issues/27) |
 | [Implicit `it`](features/implicit-it.md) | `xs.Select(it.Name)` is `xs.Select(x => x.Name)`: an argument that uses `it` is a lambda, if the innermost parameter around it takes a one-parameter function. | Prototype, merged into `main` | [#24](https://github.com/ok3mad/roslyn/issues/24) |
 
 Every planned feature has an issue, one per row of the
@@ -115,7 +116,7 @@ git grep -n "PROTOTYPE(sharper)"
   `sharper-*.yml`.
 - `sharper/<feature>` branches hold features in progress; `sharper/gating`, `sharper/val`,
   `sharper/val-designations`, `sharper/val-patterns`, `sharper/function-types`, `sharper/task-type`, `sharper/val-lambda-parameters` and
-  `sharper/readonly-locals` and `sharper/implicit-it` are merged. `sharper/readonly-parameters` is in progress.
+  `sharper/readonly-locals` and `sharper/implicit-it` are merged. `sharper/readonly-parameters` and `sharper/infer-parameter-p1` are in progress.
 
 ## Diagnostics
 
@@ -149,6 +150,9 @@ in `#pragma warning`, `/nowarn` and `.editorconfig`.
 | CS20021 | Error | 'it' is ambiguous here: '{0}' takes a value or a function at this argument, and the outer 'it' fits both. Write the lambda, as in 'x => ...', or name the outer value. |
 | CS20022 | Error | Cannot declare '{0}' in an implicit 'it' lambda. Write the lambda, as in 'x => ...'. |
 | CS20023 | Error | Cannot use 'await' in an implicit 'it' lambda. Write the lambda, as in 'async x => ...'. |
+| CS20024 | Error | Cannot infer the type of parameter '{0}', because its default value ({1}) has no type. Write the parameter type. |
+| CS20025 | Error | Cannot infer the type of parameter '{0}', because it has no default value. Write the parameter type. |
+| CS20026 | Error | Cannot infer the type of parameter '{0}', because its default value depends on the type of '{0}' itself. Write the parameter type. |
 
 ## Where the code is
 
@@ -156,7 +160,7 @@ in `#pragma warning`, `/nowarn` and `.editorconfig`.
 | --- | --- |
 | Feature flag | `src/Compilers/CSharp/Portable/Errors/MessageID.cs` (`IDS_FeatureSharper`), `src/Compilers/Core/Portable/CommandLine/Feature.cs` (`Feature.Sharper`) |
 | Parser | `src/Compilers/CSharp/Portable/Parser/LanguageParser.cs` (search for `IDS_FeatureSharper`) |
-| Binding | `src/Compilers/CSharp/Portable/Binder/` (search for `IDS_FeatureSharper`); short type forms such as `T[..]` in `Binder_SharperTypes.cs`; inferred return types in `Binder_SharperInferredReturnType.cs` and `Symbols/Source/SharperInferredReturnType.cs`; implicit `it` in `Binder_SharperImplicitIt.cs` |
+| Binding | `src/Compilers/CSharp/Portable/Binder/` (search for `IDS_FeatureSharper`); short type forms such as `T[..]` in `Binder_SharperTypes.cs`; inferred return types in `Binder_SharperInferredReturnType.cs` and `Symbols/Source/SharperInferredReturnType.cs`; inferred parameter types in `Binder_SharperInferredParameterType.cs` and `Symbols/Source/SharperInferredParameterType.cs`; implicit `it` in `Binder_SharperImplicitIt.cs` |
 | Syntax nodes | `src/Compilers/CSharp/Portable/Syntax/Syntax.xml` (`FunctionTypeSyntax`, `TaskTypeSyntax`, `ParenthesizedTypeSyntax`); Sharper kinds in `SyntaxKind.cs` count up from 9900 |
 | Bound nodes | `src/Compilers/CSharp/Portable/BoundTree/BoundNodes.xml` |
 | Lowering | `src/Compilers/CSharp/Portable/Lowering/LocalRewriter/` |
