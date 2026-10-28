@@ -50,7 +50,7 @@ The working name is **Sharper** (the language) or **SharperLang** (for public na
 
 ## Syntax so far
 
-Sharper should read like C# with less ceremony; the sketches below are guesses to react to, not a spec, and the syntax is far from consistent: for example the examples spell inferred union types as A | B, which was never discussed (patterns use or, and C# 15 declares union Name(A, B)). Everything else is plain C#, so existing code stays valid.
+Sharper should read like C# with less ceremony; the sketches below are guesses to react to, not a spec, and the syntax is far from consistent: for example union types were spelled A | B in the examples before the spelling was discussed (patterns use or, and C# 15 declares union Name(A, B)); the parked proposal spells them `(A | B)`, see [Unions (proposal, parked)](#unions-proposal-parked). Everything else is plain C#, so existing code stays valid.
 
 - **Functions are ordinary methods.** What the earlier `fun` declaration bundled is split into separate features that each work on any method, local function or lambda (see [Functions as separate elements](#functions-as-separate-elements)): `infer` in place of a return or parameter type and `readonly` parameters. `fun` itself is parked for a later "functional all in" mode.
 - **`val`** is an immutable binding, used in declarations and patterns: `val (small, large) = ...`.
@@ -127,7 +127,8 @@ statements of a block body.
 
 - **Several `return` statements** use C#'s best common type, as for an implicitly typed array or a lambda. No
   return value gives `void`. An iterator gives `IEnumerable<T>` and an `async` method `Task<T>`, as for lambdas.
-  An inferred union of the returned types waits for unions (#19).
+  An inferred union of the returned types waits for unions (#19); under the parked proposal it is an anonymous union,
+  allowed only on members not visible outside the assembly (see [Unions (proposal, parked)](#unions-proposal-parked)).
 - **Overrides and interface implementations** take the return type of the member they override or implement, not
   their body (parameter source 1 below).
 - **Ordering and cycles.** Return types are part of signatures, so binding one body can require binding another
@@ -196,6 +197,58 @@ Inference keeps most types out of sight, but the wrapper types show up in public
 - **Stacking** reads left to right, innermost first: `int[..]~` is `Task<IEnumerable<int>>`, `int~[..]` is `IEnumerable<Task<int>>`, `User?~` is `Task<User?>`, `User~?` is a nullable `Task<User>`, and `(int) -> int~` is `Func<int, Task<int>>`.
 - **Parsing:** a postfix `~` after a type, next to `?`, `*` and `[]`. Unlike `T* x`, which C# already reads as a declaration because the multiplication can never be a statement, `~` has no binary meaning at all, so there is nothing to disambiguate.
 - **Not sugared:** `ValueTask<T>` stays spelled out. It is 0.4% of the async declarations in the six applications above, mostly where an interface imposes it (`DisposeAsync`, EF Core interceptors); it is common only in performance-sensitive libraries such as Roslyn (22%). `IAsyncEnumerable<T>` is avoided in practice. A stream is inferred in a pipeline when needed, and async streams are not a focus.
+- **`(A | B)`** is an anonymous union. It is a proposal, parked: see [Unions (proposal, parked)](#unions-proposal-parked).
+
+## Unions (proposal, parked)
+
+The proposal for row 19 ([#31](https://github.com/ok3mad/roslyn/issues/31)), worked out against the compiler in October 2026 and parked on purpose: the representation is a crucial decision and is not committed yet. Nothing here is implemented. The points below are the current direction; the open items are listed at the end.
+
+**What C# 15 already gives.** `union Name(A, B)` declares a struct that implements `IUnion`, with one constructor per case and an `object? Value` property that holds the case, boxed (`SynthesizedUnionCtor`, `SynthesizedUnionValuePropertySymbol`). The compiler treats any class or struct with `[Union]` as a union, from source or metadata (`NamedTypeSymbol.IsUnionType`, `PENamedTypeSymbol.IsUnionTypeCore`), generic ones included: case types are substituted, and duplicates are dropped, so `U<NotFound, NotFound>` has one case. Type patterns match against `Value` (`UnionMatchingRewriter`), and exhaustiveness comes from `TypeUnionValueSet` (CS8509 names one missing case). The only implicit conversion is from a case type into the union (`AnalyzeImplicitUnionConversions`); there is no conversion from one union to another.
+
+**Spelling.** `(A | B)`, always in parentheses: `(Profile | Unavailable)~`, `List<(A | B)>`, `void M((A | B) x)`.
+
+- A bare `A | B` cannot work as a local, because `A | B x = ...` already parses as an expression, and `F<A | B>(x)` is valid C# with another meaning.
+- The scanner change goes into `ScanTupleOrSharperFunctionType`, where a `|` after an element now gives `NotType`.
+- Patterns keep their meaning: `x is (Flags.A | Flags.B)` and `case (A | B):` stay bitwise ors of constants, because in a pattern `(` starts a type only for a tuple array or a function type (`LooksLikeTypeOfPattern`). So `x is (A | B) u` cannot be written; `is A or B` covers the test.
+- `(a | b) x`, `out (a | b) x` and `((a | b) x, y) = ...` are errors in C# today, so declarations take nothing away. `new (a | b)` before `;` or `,` stays a target-typed `new`, and `(a | b).M()` stays a call.
+- `using U = (A | B);` names a union without declaring a type.
+- **Accepted break:** `M(lo < (x | m), hi > (y))`, two comparisons in C#, becomes a generic call, because a `(`, `)` or `,` after the `>` makes the scan definite (`ScanTypeArgumentList`). C# has the same break for tuples, `M(a < (b, c), d > (e))`, and Sharper accepted it for `F<a[..]>(x)`. It needs a sharpener rewrite and tests.
+- **Casts:** the scan needs a result of its own. With the "type or expression" results, `ScanCast`'s Sharper guard keeps `((a | b))(c)` a call, but then `((A | B))x` is no cast either. Read it as a cast only before an identifier or a literal, as `CanFollowSharperSequenceCast` does for `T[..]`. A union with a keyword type, `(int | string)`, is never an expression, so it can be definitely a type.
+- **Tuples:** `|` binds tighter than `,`, so `(A | B, C)` is a tuple whose first element is a union.
+- **Function types:** `(A | B) -> R` takes `A | B` under either reading. A union as a return type or a function type as a case needs parentheses: `() -> (A | B)`, `((() -> A) | B)`; `() -> A | B` is an error.
+
+**Representation: a synthesized C# 15 union.** Each assembly gets one internal generic `[Union]` struct per number of cases, such as `<>u__Union2<T1, T2>`, and `(A | B)` is that struct constructed with the case types. It reuses all of the C# 15 machinery: construction from a case value, patterns, exhaustiveness, and C# callers in the same assembly see a real union. The model is the anonymous delegate, which is keyed by shape and shared across the compilation (`AnonymousTypeManager.SynthesizeDelegate`), with names assigned at emit and kept across Edit and Continue generations.
+
+- **The alternatives.** A tagged struct (fields per case) avoids boxing value-type cases but has to be hand-built to look like a union to C#. Erasing to `object` makes conversions free but gives C# callers no checks and collides overloads (`F((A | B))` and `F((C | D))`). A shared runtime library, `Sharper.Union<T1..Tn>` like `ValueTuple`, would let assemblies share one type, at the price of a runtime dependency; it stays possible later.
+
+**Identity and normal form.**
+
+- `(A | B)` written anywhere in one assembly is one type. `F((A | B) x)` next to `F((B | A) x)` is a duplicate member (CS0111).
+- Cases are sorted by fully qualified metadata name, then assembly name; type parameters keep their written position.
+- Nested unions flatten, `(A | (B | C))` is `(A | B | C)`; a one-case union is the type itself, `(A | A)` is `A`; a subtype stays a separate case with a warning, `(Animal | Dog)`, because absorbing it would make the identity depend on inheritance.
+- **Generic code does not collapse.** `F<T>` returning `(T | NotFound)`, called with `Profile`, keeps the case order of its definition, which can differ from the sorted `(Profile | NotFound)`. No ordering of a type parameter is stable under every substitution. With `T` = `NotFound` the case set has one entry, but the value is still the two-case struct, not `NotFound`.
+
+**Conversions.**
+
+- From a case value into the union, as in C# 15.
+- From one union into another with the same or a wider case set, and into a named union with a superset of the cases: implicit, copying the `Value` reference with no allocation. This also mends the order mismatches of generic code above.
+- `List<Profile>` to `List<(Profile | X)>`, and two orders of the same union as a type argument, are not CLR conversions and stay errors; write the `Select`.
+
+**Visibility.**
+
+- Anonymous unions are allowed in private and internal members, including the public members of internal types.
+- They are an error in members visible outside the assembly (`public`, `protected`, `protected internal`), whether written or inferred: an `infer` member is allowed on public members, but an inferred anonymous union there is the same error. The fix is a named `union Name(A, B)`, and a code fix can generate it. Reasons: another assembly cannot name the internal template, C# callers would see `<>u__Union2<...>`, and adding a case changes the arity and so the signature, where a named union keeps its name.
+- **Friend assemblies** (`InternalsVisibleTo`) are out of scope ([#131](https://github.com/ok3mad/roslyn/issues/131)). They can call the members and match on the result from the start, but their own `(A | B)` is a different type, so assigning it, implementing or overriding a member of ours with it, and passing it as a generic argument are ordinary type errors until then.
+
+**Generics.** Following the untagged-unions open question: only declared error cases pass through pipes, an unconstrained `T` is never an error case, and instantiating it with one is rejected. This matters for lifting (#32), not for the first slice.
+
+**Slices.**
+
+1. **None needed for `try` (#28).** A `try` expression target-typed to a declared union (`ProfileResult r = try ... catch { ... }`) works with the C# 15 conversion from a case value. Size S on top of #28.
+2. **Anonymous unions.** `UnionTypeSyntax` (new public API) and the scan, the binding onto the synthesized template, union-to-union conversions, the visibility error, and a union result for the best common type of `try`, `?:`, switch arms and `infer` (R2, #68). Tests compare each form with its named C# 15 twin. Size L.
+3. **Later.** Lifting (#32), friend assemblies (#131), and copying conversions for collections if they turn out to be needed.
+
+**Still open.** Whether to commit to the synthesized representation at all, or to start with a shared runtime library or erasure; the case order rule; and whether simplifying `(A | A)` to `A` and warning about subtypes are the right normal form.
 
 ## Sequences and yield
 
@@ -281,7 +334,7 @@ The base case is a pure function, and every effect (async, sequences, deferred e
 - **Errors are values.** Expected failures are union cases that pass through pipe stages untouched, so there is no `Result<T>` wrapper. Bugs (overflow, null, bad index, stack overflow) are not tracked in types. Calls into existing .NET code take their may-throw bit from the bindings (see below), so a call the bindings show cannot throw needs no handler, and only members the analysis cannot resolve default to may-throw. `try ... catch` at the boundary is the handler.
 - **Purity is inferred, and so are the bindings.** A function that reads no ambient state and calls only pure functions is pure. Local bindings do not matter, whether `val` or var, as long as they do not escape the function. Calls into .NET take their purity from the bindings, which come from IL analysis plus a small hand-written overlay, so much of the BCL counts as pure (`Math.Max`, `string.Length`, `Select` with a pure lambda). Only unresolved members, such as native code, reflection and unknown virtual calls, default to impure. Lifting needs a pure function to preserve semantics, and a lazy lift over a sequence needs a total one: a lazy version moves a throw to enumeration time, repeats it on every enumeration, or drops it when the sequence is never enumerated, and the same goes for non-termination. A lift of a function that is only pure is lowered eagerly.
 - **Why tracking purity pays, in one example.** `decimal.TryParse(s)` reads the current culture, so it is impure, and `"1,5"` parses as 1.5 or as 15 depending on the machine. The checker flags it, and a fixer passes `CultureInfo.InvariantCulture`. The invariant culture is an immutable singleton, so that overload counts as pure, but only conditionally (`pure(provider)`), because a custom `IFormatProvider` could do anything. `Try*` methods map to a union such as `T | NoValue` in the bindings.
-- **Unions need a representation.** Inferred structural unions are the leading idea, with a named union required at public boundaries (like anonymous types and tuples). The alternative, erasing to `object` and keeping the types only in Sharper, works but is not ideal.
+- **Unions need a representation.** Inferred structural unions are the leading idea, with a named union required at public boundaries (like anonymous types and tuples). The alternative, erasing to `object` and keeping the types only in Sharper, works but is not ideal. The parked proposal lowers `(A | B)` to a synthesized C# 15 union and allows it in private and internal members only: see [Unions (proposal, parked)](#unions-proposal-parked).
 - **Later idea: virtual-thread feel.** Infer "may suspend" as an effect and lower to async state machines, so `async` and `await` are never written.
 
 ## Purity levels
@@ -438,7 +491,7 @@ An honest comparison:
 
 - **Shape.** One to one. Both are the same C# switch expression, and the Sharper version only drops the return type. The arm bodies are the same, long or short.
 - **Declarations.** Sharper's `union` deliberately matches C# 15's, so those lines convert directly.
-- **The outcome union.** C# needs `Outcome` declared with all eight cases and kept in sync by hand, while Sharper infers the result type from the arm bodies. That inference is the structural-union question parked earlier.
+- **The outcome union.** C# needs `Outcome` declared with all eight cases and kept in sync by hand, while Sharper infers the result type from the arm bodies. That inference is the anonymous-union proposal (see [Unions (proposal, parked)](#unions-proposal-parked)); in a public member it would still need `Outcome` declared.
 - **Exhaustiveness.** Both are exhaustive over unions without a `_` arm. When a pair is missing, C# gives a warning (CS8509) that names one example pattern unless warnings are promoted to errors, while Sharper reports an error that lists all the missing pairs. I have not verified how RC1 treats tuples of two unions.
 - **Order is semantics in both.** The terminal arm must precede the general cancel arm, and neither language flags a partial overlap, only an arm that can never match. An optional overlap hint is a possible Sharper extra.
 - **Where C# is fine.** For this example C# is close, and the real gains are the inferred outcome union and the stricter, more precise exhaustiveness error. Sharper's larger wins show up in lifting over `Task` and error cases.
@@ -599,7 +652,8 @@ What it shows:
 - **Tests.** In the functional Sharper version a plain value embeds into any effect, so the test passes `new Profile { Plan = "Pro" }` where a restartable async recipe is expected, and `new Unavailable()` becomes a recipe that always fails. The interface versions still need a fake class (in Sharper its `Load` can return a plain value, which is lifted), and the functional C# version needs `Task.FromResult` plumbing. That a test boundary fails on an error case is a runner convention that is not settled.
 - **Interfaces as parameters.** Passing an interface hands over every method, while a recipe hands over one capability, and the checker cannot see the implementation behind an interface call. Interface methods would default to impure, and a Sharper-declared interface could mark a method `pure` as a contract for its implementers. A lambda converting to a single-method interface, as in Java, is an open idea.
 - **Purity.** A function that takes a recipe is only as pure as the recipe, which is the same conditional purity as `pure(f)` in the bindings.
-- **A shortcut in the C# sketches:** one `HelloResult` serves both functions, because I have not verified how C# 15 converts between different unions.
+- **A shortcut in the C# sketches:** one `HelloResult` serves both functions. Real C# 15 code cannot do better: it has no conversion from one union to another, only from a case value into a union (checked in the compiler, `AnalyzeImplicitUnionConversions`), so `Hello` has to unpack `Render`'s result case by case.
+- **Visibility of the anonymous unions.** `IProfiles`, `FakeProfiles` and the methods are internal or private (the C# defaults), so `(Profile | Unavailable)` may appear in their signatures. A public `IProfiles` would need a named union, as in the C# versions (see [Unions (proposal, parked)](#unions-proposal-parked)).
 
 ### Batch bank
 
@@ -722,6 +776,7 @@ What it shows, and what it still needs:
 - Errors accumulate across independent pure checks (`ParseOrder`, `Validate`) through the plain function `collect`, and fail fast between stages, because each later stage needs the result of the one before. `collect` flattens nested `Invalid` results.
 - Only `Resolve` and `Quote` touch a `Task`. Parsing and validation are pure, so they can be tested without mocks, and retrying is safe because nothing has moved money yet.
 - `Task.WhenAll` is an explicit choice. The pipe cannot pick concurrent or sequential for you, and a real app would use bounded parallelism.
+- The inferred result types are anonymous unions: `ParseAmount` gives `(decimal | BadInput)`, `ProcessBatch` gives `Task<(Transfer | Invalid)[]>`, and the FX adapter's `try` gives `(RateTable | NoRate | FxUnavailable)~`. All the functions are private (the C# default), so this fits the parked proposal; a public `ProcessBatch` would need a named union for `(Transfer | Invalid)` (see [Unions (proposal, parked)](#unions-proposal-parked)). `TransferError` stays a named union because `Invalid` holds an array of it.
 - `Convert` has to keep `Money.Amount is >0`. Positive times positive is not always positive for `decimal`: rounding to the currency's minor unit can give 0.00, so `Convert` should return `Money` or an `AmountTooSmall` error. That case is not in the sample yet.
 
 ## Lessons from TypeScript
@@ -744,7 +799,7 @@ What is settled so far, what was tried and dropped, and what waits for a later s
 - A multi-case function is an ordinary C# switch expression over its parameters (`(a, b) switch { ... }`), so evaluation order is the same as in C#. Arms are not a source of parameter types. Plain C# parameter declarations stay valid and mean the same thing when there is nothing to refine.
 - Functions are ordinary methods, and the parts of the earlier `fun` are separate features (see [Functions as separate elements](#functions-as-separate-elements)). `fun` is parked for a later "functional all in" mode.
 - `infer` stands in place of an inferred return or parameter type. Parameter types are copied from a type that a signature or a value names (an overridden member, a default value, a function type, a call that pins one type), never from the shape of their uses.
-- Inferred types are allowed on public members, with no warning: whoever cares about a published API writes its types out.
+- Inferred types are allowed on public members, with no warning: whoever cares about a published API writes its types out. The one exception proposed so far: an inferred anonymous union on a public member is an error (see [Unions (proposal, parked)](#unions-proposal-parked)).
 - A general default arm after the specific ones expresses a domain rule that also covers cases added later, such as "anything can be cancelled".
 - Lifting through pipes happens one argument at a time.
 - `it` (#24), where C# reports that no `it` is in scope (CS0103); a variable, field, parameter or type named `it` keeps its C# meaning:
@@ -785,8 +840,8 @@ What is settled so far, what was tried and dropped, and what waits for a later s
 - A virtual-thread feel for concurrency by inferring "may suspend".
 - The lowering rule for `..rest` on types that are not sliceable.
 - Local mutation that does not escape (in-place quicksort), including escape analysis and a "mutates its argument" effect.
-- Structural unions versus erasure to `object`, and parallel versus sequential batches.
-- A few more passes through all the concepts before any syntax is finalized: how union types are spelled, the deep-dive questions in the open questions, and the unsettled spellings (a lift marker).
+- Unions: a proposal is written and parked until the representation is committed (see [Unions (proposal, parked)](#unions-proposal-parked)). Parallel versus sequential batches.
+- A few more passes through all the concepts before any syntax is finalized: the proposed union spelling `(A | B)`, the deep-dive questions in the open questions, and the unsettled spellings (a lift marker).
 
 ## Open Questions
 
@@ -797,10 +852,10 @@ What is settled so far, what was tried and dropped, and what waits for a later s
 - What escape hatches are needed to keep the language pragmatic, for example an `assume` that lowers to a runtime check?
 - How are diagnostics mapped back to original source after lowering?
 - Which effect conversions are safe enough to infer automatically, and which need a manual converter?
-- **Untagged unions and generics (deep dive).** If an error case passes through pipes, generic code over `T | NotFound` cannot tell whether `T` is itself `NotFound`, so behavior changes with the instantiation and nested options collapse. C# 15 unions have the same trap. One candidate is to let only declared error cases pass through, treat an unconstrained `T` as never an error, and reject instantiating it with one.
+- **Untagged unions and generics (deep dive).** If an error case passes through pipes, generic code over `T | NotFound` cannot tell whether `T` is itself `NotFound`, so behavior changes with the instantiation and nested options collapse. C# 15 unions have the same trap. One candidate is to let only declared error cases pass through, treat an unconstrained `T` as never an error, and reject instantiating it with one; the parked union proposal adopts it.
 - **Implicit lifting versus an explicit marker (deep dive).** Should the parameter type alone decide whether a pipe stage lifts, or should lifting be spelled out? Implicit lifting is a type-directed coercion, errors from a lift that did not fire will be confusing, and inlay hints in the IDE only partly help.
 - **`T~` is a hot task (deep dive).** Creating it starts the effect, so the type does not describe a computation. `~` means "may suspend", not "impure", and purity is a separate flag. How this relates to cold recipes (`() -> T~`) and to a single coherent effect story is open. It does not block the spelling: `T~` is a plain alias for `Task<T>`, which is already hot in C#. Shipping it does fix one thing, though: `~` can never later become a different type (a cold computation, `ValueTask` or "any awaitable") without breaking every signature written with it.
-- **Structural unions versus reified generics (deep dive).** TypeScript can be structural because erasure is free in JavaScript, but on the CLR generics, overloads, reflection and C# callers all see real types. `A | B` needs a canonical CLR type, yet in generic code the normal form of `T | NotFound` depends on `T` (it should collapse when `T` is `NotFound`), and `Profile~` to `(Profile | Unavailable)~` or `List<Profile>` to `List<Profile | X>` are not CLR conversions. This is a choice, not a fix: nominal or tagged unions in generic positions, erasure to `object` (boxing, opaque to C#), or copying conversions. It subsumes the untagged-unions question above.
+- **Structural unions versus reified generics (deep dive).** TypeScript can be structural because erasure is free in JavaScript, but on the CLR generics, overloads, reflection and C# callers all see real types. `A | B` needs a canonical CLR type, yet in generic code the normal form of `T | NotFound` depends on `T` (it should collapse when `T` is `NotFound`), and `Profile~` to `(Profile | Unavailable)~` or `List<Profile>` to `List<Profile | X>` are not CLR conversions. This is a choice, not a fix: nominal or tagged unions in generic positions, erasure to `object` (boxing, opaque to C#), or copying conversions. It subsumes the untagged-unions question above. The parked proposal picks a nominal synthesized C# 15 union per assembly, with union-to-union conversions that copy the `Value` reference, and leaves collection conversions as errors (see [Unions (proposal, parked)](#unions-proposal-parked)).
 - **Purity needs deep immutability (deep dive).** "Depends only on its arguments" is undefined when an argument is a reference to mutable data, so memoization, hoisting, lazy collection expressions and the rule that `T[..]` promises neither laziness nor eagerness all break on a mutable `List`, and any `List` converts to `T[..]` because it aliases `IEnumerable<T>`. Nullable reference types get away with an unsound erased layer because it never changes codegen, while Sharper's facts would drive optimizations. The choice: make immutability the foundation and treat purity as meaningful only over representationally immutable data (readonly all the way down, verified in IL), or keep the facts advisory and give up the optimizations.
 - **Implicit lifting stops at generics and `object` (deep dive).** Lifting fires on a type mismatch, but a generic `Log<T>(T x)` or an `object` parameter accepts a `Task` with no mismatch, and with the object root every value fits there. A library adding an overload can silently flip a call site between lifting and not lifting. At minimum generic and `object` positions need an explicit lift marker, which largely answers the implicit-versus-explicit question above.
 - **Inferred domains swallow exhaustiveness.** If a refined domain were ever inferred from arm patterns, a forgotten arm would narrow the domain instead of raising a non-exhaustive error, and the errors would surface at call sites instead. That is why arms are not a source of parameter types; domains are written out.
