@@ -192,6 +192,11 @@ count the parse options' features, and the accepted breaks. The
 [implementation plan](planning/implementation-plan.md#follow-ups) has the last run's list; any other failure is a bug
 unless it is one of those.
 
+To check that Sharper leaves existing C# alone, build the whole repository with its own compiler and
+`/features:sharper`, then run the unit tests on the result. The
+[`sharper-self-build`](../../.github/skills/sharper-self-build/SKILL.md) skill has the commands and shows how to tell
+failures Sharper causes from the rest.
+
 ## Not covered yet
 
 Sharper currently changes only the C# compiler. The IDE (completion, classification, refactorings), the language
