@@ -1252,8 +1252,8 @@ namespace Microsoft.CodeAnalysis.CSharp
                 }
             }
 
-            // Sharper's contextual keywords sit apart from the upstream range (see SyntaxKind.ValKeyword).
-            yield return SyntaxKind.ValKeyword;
+            // Sharper's ValKeyword is not listed: callers turn these kinds into text, and "val" must stay an identifier in
+            // C# (design rule 2). Only the parser, with Sharper enabled, makes a ValKeyword token.
         }
 
         public static bool IsContextualKeyword(SyntaxKind kind)
@@ -1311,6 +1311,8 @@ namespace Microsoft.CodeAnalysis.CSharp
                 case SyntaxKind.UnionKeyword:
                 case SyntaxKind.ClosedKeyword:
                 case SyntaxKind.SafeKeyword:
+                // Sharper: only tokens the parser made with Sharper enabled have this kind. The incremental parser
+                // (Blender.Reader.IsFabricatedToken) must not reuse them, since "val" is an identifier elsewhere.
                 case SyntaxKind.ValKeyword:
                     return true;
                 default:
@@ -1447,8 +1449,6 @@ namespace Microsoft.CodeAnalysis.CSharp
                     return SyntaxKind.ClosedKeyword;
                 case "safe":
                     return SyntaxKind.SafeKeyword;
-                case "val":
-                    return SyntaxKind.ValKeyword;
                 default:
                     return SyntaxKind.None;
             }

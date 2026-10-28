@@ -296,7 +296,8 @@ void goo()
         }
 
         [Theory, WorkItem("https://github.com/dotnet/roslyn/issues/72300")]
-        [InlineData(nameof(SyntaxFacts.GetContextualKeywordKinds), SyntaxKind.YieldKeyword, SyntaxKind.ElifKeyword)]
+        // Sharper: ValKeyword takes the top slot below ElifKeyword but is not listed (https://github.com/ok3mad/roslyn/issues/109).
+        [InlineData(nameof(SyntaxFacts.GetContextualKeywordKinds), SyntaxKind.YieldKeyword, SyntaxKind.ValKeyword)]
         [InlineData(nameof(SyntaxFacts.GetPunctuationKinds), SyntaxKind.TildeToken, SyntaxKind.BoolKeyword)]
         [InlineData(nameof(SyntaxFacts.GetReservedKeywordKinds), SyntaxKind.BoolKeyword, SyntaxKind.YieldKeyword)]
         public void TestRangeBasedGetKindsMethodsReturnExpectedResults(string methodName, SyntaxKind lowerBoundInclusive, SyntaxKind upperBoundExclusive)

@@ -4259,14 +4259,81 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             Assert.Single(Enum.GetValues(typeof(SyntaxKind)).Cast<SyntaxKind>(), k => (int)k == (int)SyntaxKind.ValKeyword);
             Assert.True(SyntaxKind.ValKeyword < SyntaxKind.ElifKeyword);
 
+            // A ValKeyword token, which only the parser makes, has the text val and is a keyword.
             Assert.Equal("val", SyntaxFacts.GetText(SyntaxKind.ValKeyword));
             Assert.True(SyntaxFacts.IsContextualKeyword(SyntaxKind.ValKeyword));
-            Assert.Contains(SyntaxKind.ValKeyword, SyntaxFacts.GetContextualKeywordKinds());
-            Assert.Equal(SyntaxKind.ValKeyword, SyntaxFacts.GetContextualKeywordKind("val"));
+            Assert.True(SyntaxFacts.IsKeywordKind(SyntaxKind.ValKeyword));
+        }
 
-            // Like var, an identifier spelled val reports the keyword as its contextual kind, with or without Sharper.
-            Assert.Equal(SyntaxKind.ValKeyword, SyntaxFactory.ParseToken("val").ContextualKind());
-            Assert.Equal(SyntaxKind.IdentifierToken, SyntaxFactory.ParseToken("@val").ContextualKind());
+        [Fact]
+        public void ValKeyword_SyntaxFactsLikeUpstream()
+        {
+            // Unlike var, val is not a contextual keyword of C#: callers such as Razor treat every contextual keyword as one
+            // everywhere, which broke valid code that names something val (https://github.com/ok3mad/roslyn/issues/109).
+            Assert.Equal(SyntaxKind.None, SyntaxFacts.GetContextualKeywordKind("val"));
+            Assert.DoesNotContain(SyntaxKind.ValKeyword, SyntaxFacts.GetContextualKeywordKinds());
+            Assert.DoesNotContain("val", SyntaxFacts.GetContextualKeywordKinds().Select(SyntaxFacts.GetText));
+            Assert.Equal(SyntaxKind.None, SyntaxFacts.GetKeywordKind("val"));
+            Assert.False(SyntaxFacts.IsReservedKeyword(SyntaxFacts.GetKeywordKind("val")));
+            Assert.Equal(SyntaxKind.VarKeyword, SyntaxFacts.GetContextualKeywordKind("var"));
+
+            // The lexer leaves val an identifier, with or without Sharper; only the parser makes the keyword.
+            foreach (var options in new[] { TestOptions.Regular, s_sharperOptions })
+            {
+                foreach (var text in new[] { "val", "@val", "v\\u0061l" })
+                {
+                    var token = SyntaxFactory.ParseTokens(text, options: options).First();
+                    Assert.Equal(SyntaxKind.IdentifierToken, token.Kind());
+                    Assert.Equal(SyntaxKind.IdentifierToken, token.ContextualKind());
+                    Assert.False(SyntaxFacts.IsContextualKeyword(token.ContextualKind()));
+                }
+
+                var tokens = SyntaxFactory.ParseTokens("val x = val.y; val (a, b) = e;", options: options);
+                Assert.DoesNotContain(tokens, t => t.IsKind(SyntaxKind.ValKeyword) || t.ContextualKind() == SyntaxKind.ValKeyword);
+            }
+        }
+
+        [Theory]
+        [InlineData("o is val x", 5)]
+        [InlineData("o is (val a, var b)", 6)]
+        [InlineData("o is { P: val p }", 10)]
+        [InlineData("o is val (a, b)", 5)]
+        [InlineData("o switch { val x => x }", 11)]
+        public void ValKeyword_PatternToken(string source, int position)
+        {
+            // With Sharper on, the parser makes the keyword of a val pattern a ValKeyword token; with it off, val stays an
+            // identifier, as in C#.
+            var sharper = SyntaxFactory.ParseExpression(source, options: s_sharperOptions);
+            var keyword = sharper.FindToken(position);
+            Assert.Equal(SyntaxKind.ValKeyword, keyword.Kind());
+            Assert.Equal(SyntaxKind.ValKeyword, keyword.ContextualKind());
+            Assert.Equal("val", keyword.Text);
+            Assert.True(keyword.IsKeyword());
+            Assert.IsType<VarPatternSyntax>(keyword.Parent);
+            Assert.Equal(source, sharper.ToFullString());
+
+            var csharp = SyntaxFactory.ParseExpression(source, options: TestOptions.Regular);
+            var identifier = csharp.FindToken(position);
+            Assert.Equal(SyntaxKind.IdentifierToken, identifier.Kind());
+            Assert.Equal(SyntaxKind.IdentifierToken, identifier.ContextualKind());
+            Assert.Equal("val", identifier.Text);
+            Assert.DoesNotContain(csharp.DescendantTokens(), t => t.IsKind(SyntaxKind.ValKeyword));
+        }
+
+        [Fact]
+        public void ValKeyword_PatternTokenKeepsTriviaAndOthersStayIdentifiers()
+        {
+            // The keyword keeps the identifier's trivia; @val and val used as a name stay identifiers.
+            var parsed = (IsPatternExpressionSyntax)SyntaxFactory.ParseExpression("o is\n/*a*/ val /*b*/ x", options: s_sharperOptions);
+            var keyword = ((VarPatternSyntax)parsed.Pattern).VarKeyword;
+            Assert.Equal(SyntaxKind.ValKeyword, keyword.Kind());
+            Assert.Equal("/*a*/ val /*b*/ ", keyword.ToFullString());
+
+            var escaped = (IsPatternExpressionSyntax)SyntaxFactory.ParseExpression("o is @val x", options: s_sharperOptions);
+            Assert.Equal(SyntaxKind.DeclarationPattern, escaped.Pattern.Kind());
+
+            var tree = SyntaxFactory.ParseSyntaxTree("val.M(val); var val = 1; int x = val!.Length + val?.Length;", s_sharperOptions);
+            Assert.DoesNotContain(tree.GetRoot().DescendantTokens(), t => t.IsKind(SyntaxKind.ValKeyword) || t.ContextualKind() == SyntaxKind.ValKeyword);
         }
 
         [Fact]
