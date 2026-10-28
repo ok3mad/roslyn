@@ -94,7 +94,7 @@ Not done yet:
 | [Sequence type](features/sequence-type.md) | `T[..]` is `IEnumerable<T>` in every type position. | Prototype, merged into `main` | [#19](https://github.com/ok3mad/roslyn/issues/19) |
 | [Task type](features/task-type.md) | `T~` is `Task<T>`, and `void~` is `Task`. | Prototype, merged into `main` | [#20](https://github.com/ok3mad/roslyn/issues/20) |
 | [Inferred return type](features/inferred-return-type.md) | `private static infer Greeting(int id) => $"Hello, {id}!";` returns `string`. Step R1: expression bodies of private methods and local functions. | Prototype of step R1, on `sharper/infer-return-r1` | [#67](https://github.com/ok3mad/roslyn/issues/67), under [#22](https://github.com/ok3mad/roslyn/issues/22) |
-| [Implicit `it`](features/implicit-it.md) | `xs.Select(it.Name)` is `xs.Select(x => x.Name)`: an argument that uses `it` is a lambda, if the innermost parameter around it takes a one-parameter function. | Prototype, on `sharper/implicit-it` | [#24](https://github.com/ok3mad/roslyn/issues/24) |
+| [Implicit `it`](features/implicit-it.md) | `xs.Select(it.Name)` is `xs.Select(x => x.Name)`: an argument that uses `it` is a lambda, if the innermost parameter around it takes a one-parameter function. | Prototype, merged into `main` | [#24](https://github.com/ok3mad/roslyn/issues/24) |
 
 Every planned feature has an issue, one per row of the
 [syntax roadmap](planning/implementation-plan.md#syntax-roadmap), collected under the tracking issue
@@ -115,7 +115,7 @@ git grep -n "PROTOTYPE(sharper)"
   `sharper-*.yml`.
 - `sharper/<feature>` branches hold features in progress; `sharper/gating`, `sharper/val`,
   `sharper/val-designations`, `sharper/val-patterns`, `sharper/function-types`, `sharper/task-type`, `sharper/val-lambda-parameters` and
-  `sharper/readonly-locals` are merged. `sharper/readonly-parameters` and `sharper/implicit-it` are in progress.
+  `sharper/readonly-locals` and `sharper/implicit-it` are merged. `sharper/readonly-parameters` is in progress.
 
 ## Diagnostics
 
