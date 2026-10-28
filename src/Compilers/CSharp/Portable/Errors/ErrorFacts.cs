@@ -574,6 +574,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 case ErrorCode.WRN_SharperDynamicRangeNotSpread:
                 case ErrorCode.WRN_SharperValMemberCallOnCopy:
                 case ErrorCode.WRN_SharperReadOnlyLocalMemberCallOnCopy:
+                case ErrorCode.WRN_SharperReadOnlyParameterMemberCallOnCopy:
                     return 1;
                 default:
                     return 0;
@@ -2619,6 +2620,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 or ErrorCode.WRN_SharperReadOnlyLocalMemberCallOnCopy
                 or ErrorCode.ERR_SharperReadOnlyLocalWithNoInitializer
                 or ErrorCode.ERR_SharperSpreadRefStructEnumerator
+                or ErrorCode.WRN_SharperReadOnlyParameterMemberCallOnCopy
                 or ErrorCode.ERR_SharperInferNoType
                 or ErrorCode.ERR_SharperInferNotSupportedYet
                 or ErrorCode.ERR_SharperInferNoBody

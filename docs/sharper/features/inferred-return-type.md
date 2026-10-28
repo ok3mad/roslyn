@@ -83,7 +83,7 @@ No syntax, bound node or lowering is added: `infer` parses as a type name, and t
    annotation, like `var`.
 
 The design for the later steps, and why, is in the
-[implementation plan](../planning/implementation-plan.md#feature-5-inferred-return-type-step-r1).
+[implementation plan](../planning/implementation-plan.md#feature-6-inferred-return-type-step-r1).
 
 ## Follow-ups
 

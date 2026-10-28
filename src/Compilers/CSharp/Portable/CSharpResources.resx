@@ -348,6 +348,9 @@
   <data name="IDS_READONLYLOCAL" xml:space="preserve">
     <value>readonly local</value>
   </data>
+  <data name="IDS_READONLYPARAMETER" xml:space="preserve">
+    <value>readonly parameter</value>
+  </data>
   <data name="IDS_SharperInferOnBlockBody" xml:space="preserve">
     <value>on a block body</value>
   </data>
@@ -8316,6 +8319,12 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
   </data>
   <data name="ERR_SharperSpreadRefStructEnumerator" xml:space="preserve">
     <value>A spread 'yield return ..' cannot enumerate '{0}' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead.</value>
+  </data>
+  <data name="WRN_SharperReadOnlyParameterMemberCallOnCopy" xml:space="preserve">
+    <value>Call to non-readonly member '{0}' on readonly parameter '{1}' runs on a copy, so '{1}' is not changed.</value>
+  </data>
+  <data name="WRN_SharperReadOnlyParameterMemberCallOnCopy_Title" xml:space="preserve">
+    <value>Call to a non-readonly member on a readonly parameter runs on a copy</value>
   </data>
   <data name="ERR_SharperInferNoType" xml:space="preserve">
     <value>Cannot infer the return type of '{0}', because its body ({1}) has no type. Write the return type.</value>

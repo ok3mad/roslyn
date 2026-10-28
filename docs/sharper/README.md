@@ -36,7 +36,8 @@ has the full implementation checklist.
    `val (a, b) = e`, which code that uses `val` as an identifier there must spell `@val`. Each accepted break is listed
    in the [implementation plan](planning/implementation-plan.md#follow-ups); the sharpener and the `.cx` extension will
    make it safe to adopt. The sequence type adds a second, smaller one: `F<a[..]>(x)` is a generic call, where C#
-   reads two comparisons that only compile with user-defined operators.
+   reads two comparisons that only compile with user-defined operators. Function types add the same one for
+   `F<(p)->b>(x)`. Both also cover the argument-list form, such as `M(F < a[..], b > (c))`.
 3. **Reuse the C# syntax.** Features reinterpret existing syntax in the binder where possible, instead of adding
    syntax nodes and public API.
 4. **Lower to C#.** Each feature lowers to constructs the compiler already emits, so debugging, PDBs and the runtime
@@ -89,6 +90,7 @@ Not done yet:
 | [Function types](features/function-types.md) | `(A, B) -> R` is `Func<A, B, R>`, and `(A) -> void` is `Action<A>`. | Prototype, merged into `main` | [#21](https://github.com/ok3mad/roslyn/issues/21) |
 | [`val` locals](features/val-locals.md) | `val x = e;` declares an implicitly typed local that cannot be reassigned, also in deconstructions, `foreach`, `out`, patterns and lambda parameters (`(val x) => ...`). | Prototype, merged into `main` | [#14](https://github.com/ok3mad/roslyn/issues/14), [#15](https://github.com/ok3mad/roslyn/issues/15), [#18](https://github.com/ok3mad/roslyn/issues/18), [#17](https://github.com/ok3mad/roslyn/issues/17) |
 | [`readonly` locals](features/readonly-locals.md) | `readonly int x = e;` and `readonly var x = e;` declare locals that cannot be reassigned; `readonly var` is `val`. | Prototype, merged into `main` | [#16](https://github.com/ok3mad/roslyn/issues/16) |
+| [`readonly` parameters](features/readonly-parameters.md) | `void F(readonly int x)` declares a parameter that cannot be reassigned; it is not part of the signature. | Prototype | [#23](https://github.com/ok3mad/roslyn/issues/23), [#97](https://github.com/ok3mad/roslyn/issues/97) |
 | [Sequence type](features/sequence-type.md) | `T[..]` is `IEnumerable<T>` in every type position. | Prototype, merged into `main` | [#19](https://github.com/ok3mad/roslyn/issues/19) |
 | [Task type](features/task-type.md) | `T~` is `Task<T>`, and `void~` is `Task`. | Prototype, merged into `main` | [#20](https://github.com/ok3mad/roslyn/issues/20) |
 | [Inferred return type](features/inferred-return-type.md) | `private static infer Greeting(int id) => $"Hello, {id}!";` returns `string`. Step R1: expression bodies of private methods and local functions. | Prototype of step R1, on `sharper/infer-return-r1` | [#67](https://github.com/ok3mad/roslyn/issues/67), under [#22](https://github.com/ok3mad/roslyn/issues/22) |
@@ -112,7 +114,7 @@ git grep -n "PROTOTYPE(sharper)"
   `sharper-*.yml`.
 - `sharper/<feature>` branches hold features in progress; `sharper/gating`, `sharper/val`,
   `sharper/val-designations`, `sharper/val-patterns`, `sharper/function-types`, `sharper/task-type`, `sharper/val-lambda-parameters` and
-  `sharper/readonly-locals` are merged.
+  `sharper/readonly-locals` are merged. `sharper/readonly-parameters` is in progress.
 
 ## Diagnostics
 
@@ -135,6 +137,7 @@ in `#pragma warning`, `/nowarn` and `.editorconfig`.
 | CS20010 | Warning | Call to non-readonly member '{0}' on readonly local '{1}' runs on a copy, so '{1}' is not changed. |
 | CS20011 | Error | A readonly local must be initialized in its declaration, because it cannot be assigned later. |
 | CS20012 | Error | A spread 'yield return ..' cannot enumerate '{0}' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead. |
+| CS20013 | Warning | Call to non-readonly member '{0}' on readonly parameter '{1}' runs on a copy, so '{1}' is not changed. |
 | CS20014 | Error | Cannot infer the return type of '{0}', because its body ({1}) has no type. Write the return type. |
 | CS20015 | Error | An inferred return type ('infer') is not supported {0} yet. Write the return type. |
 | CS20016 | Error | '{0}' has no body to infer its return type from. Write the return type. |
@@ -166,6 +169,22 @@ dotnet test src/Compilers/CSharp/Test/Semantic/Microsoft.CodeAnalysis.CSharp.Sem
 
 Also run them with `ROSLYN_TEST_IOPERATION=1`, which checks IOperation, the semantic model and the control flow graph
 for every compilation.
+
+After a parser change, run the upstream parser tests with `ROSLYN_TEST_SHARPER=1`, which turns Sharper on for every
+parse in the tests (`TestOptions.SharperForAllParses`), to check design rule 2:
+
+```bash
+ROSLYN_TEST_SHARPER=1 dotnet test src/Compilers/CSharp/Test/Syntax/Microsoft.CodeAnalysis.CSharp.Syntax.UnitTests.csproj -f net10.0
+```
+
+The switch reaches the parse options of `ParsingTests`, `TestOptions` and `CSharpTestSource.Parse`, but not tests that
+call `SyntaxFactory` without options. It also turns Sharper on for the compilations of the other C# test projects; for
+a change that also affects binding, run the Semantic project the same way with
+`--filter "FullyQualifiedName!~SharperTests"`, since the Sharper tests check the flag-off behavior too. Some
+failures are expected: tests of invalid C# that Sharper gives a meaning (such as `readonly` on a local), tests that
+count the parse options' features, and the accepted breaks. The
+[implementation plan](planning/implementation-plan.md#follow-ups) has the last run's list; any other failure is a bug
+unless it is one of those.
 
 ## Not covered yet
 

@@ -1407,6 +1407,15 @@ namespace Microsoft.CodeAnalysis.CSharp
                 }
             }
 
+            // A Sharper readonly parameter cannot be reassigned, like a readonly local: on a ref, in or out parameter it forbids
+            // ref reassignment, and writes through the ref keep their C# rules.
+            if (parameterSymbol is SourceComplexParameterSymbolBase { IsSharperReadOnly: true } &&
+                (parameterSymbol.RefKind == RefKind.None ? RequiresAssignableVariable(valueKind) : RequiresRefAssignableVariable(valueKind)))
+            {
+                ReportReadonlyVariableError(node, parameterSymbol.Name, MessageID.IDS_READONLYPARAMETER, valueKind, checkingReceiver, diagnostics);
+                return false;
+            }
+
             // all parameters can be passed by ref/out or assigned to
             // except "in" and "ref readonly" parameters, which are readonly
             if (parameterSymbol.RefKind is RefKind.In or RefKind.RefReadOnlyParameter && RequiresAssignableVariable(valueKind))

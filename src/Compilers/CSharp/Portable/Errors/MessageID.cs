@@ -318,6 +318,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         IDS_FeatureSharper = MessageBase + 12865,
         IDS_VALLOCAL = MessageBase + 12866,
         IDS_READONLYLOCAL = MessageBase + 12867,
+        IDS_READONLYPARAMETER = MessageBase + 12868,
         IDS_SharperInferOnBlockBody = MessageBase + 12869,
         IDS_SharperInferOnNonPrivateMember = MessageBase + 12870,
         IDS_SharperInferOnAsync = MessageBase + 12871,

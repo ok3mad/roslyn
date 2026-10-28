@@ -7474,6 +7474,7 @@ done:
         {
             int count = 0;
             bool hasModifiers = false;
+            bool hasRefElements = false;
             bool hasNames = false;
             var firstElementType = ScanTypeFlags.NotType;
             bool firstElementIsFunctionType = false;
@@ -7482,10 +7483,19 @@ done:
             {
                 while (true)
                 {
-                    while (IsParameterModifierExcludingScoped(this.CurrentToken))
+                    // ScanType takes a leading 'ref' or 'ref readonly' as part of the type, as ScanTupleType does for
+                    // C#, so that a 'ref' tuple element still scans as a tuple type.
+                    if (this.CurrentToken.Kind == SyntaxKind.RefKeyword)
                     {
-                        this.EatToken();
-                        hasModifiers = true;
+                        hasRefElements = true;
+                    }
+                    else
+                    {
+                        while (IsParameterModifierExcludingScoped(this.CurrentToken))
+                        {
+                            this.EatToken();
+                            hasModifiers = true;
+                        }
                     }
 
                     var elementType = ScanSharperFunctionTypeElement(out lastTokenOfType, out bool isFunctionType);
@@ -7526,7 +7536,7 @@ done:
             lastTokenOfType = this.EatToken();
             if (this.CurrentToken.Kind != SyntaxKind.MinusGreaterThanToken)
             {
-                if (count == 1 && firstElementIsFunctionType && !hasModifiers && !hasNames)
+                if (count == 1 && firstElementIsFunctionType && !hasModifiers && !hasRefElements && !hasNames)
                 {
                     // A parenthesized function type, `((A) -> R)`.
                     return firstElementType;
@@ -7548,7 +7558,7 @@ done:
             }
 
             _lastTokenOfScannedSharperFunctionType = lastTokenOfType;
-            return count == 1 && !hasModifiers && !hasNames && returnStartsWithName &&
+            return count == 1 && !hasModifiers && !hasRefElements && !hasNames && returnStartsWithName &&
                 firstElementType is ScanTypeFlags.NonGenericTypeOrExpression or ScanTypeFlags.AliasQualifiedName
                 ? returnType
                 : ScanTypeFlags.MustBeType;
