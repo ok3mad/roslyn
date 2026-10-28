@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Roslyn.Utilities;
 
 namespace Microsoft.CodeAnalysis.CSharp.Symbols
 {
@@ -114,10 +115,11 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             {
                 for (int i = cycleStart; i < inProgress.Count; i++)
                 {
-                    results.TryAdd(inProgress[i], CreateCycleResult(inProgress[i], binder));
+                    ParameterSyntax inCycle = inProgress[i];
+                    results.GetValue(inCycle, _ => CreateCycleResult(inCycle, binder));
                 }
 
-                return results[parameter];
+                return results.GetValue(parameter, _ => throw ExceptionUtilities.Unreachable());
             }
 
             inProgress.Add(parameter);
@@ -135,7 +137,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             }
 
             // A parameter found to be in a cycle while its default value was bound already has its result.
-            return results.GetOrAdd(parameter, result);
+            return results.GetValue(parameter, _ => result);
         }
 
         private static Result CreateCycleResult(ParameterSyntax parameter, Binder binder)

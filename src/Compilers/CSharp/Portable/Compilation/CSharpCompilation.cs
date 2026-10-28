@@ -1569,18 +1569,19 @@ namespace Microsoft.CodeAnalysis.CSharp
             return null;
         }
 
-        private ConcurrentDictionary<ParameterSyntax, SharperInferredParameterType.Result>? _lazySharperInferredParameterTypes;
+        private System.Runtime.CompilerServices.ConditionalWeakTable<ParameterSyntax, SharperInferredParameterType.Result>? _lazySharperInferredParameterTypes;
 
         /// <summary>
         /// Sharper: the inferred types of <c>infer</c> parameters, by parameter syntax (see <see cref="SharperInferredParameterType"/>).
+        /// Weak, so that speculative syntax does not stay alive with the compilation.
         /// </summary>
-        internal ConcurrentDictionary<ParameterSyntax, SharperInferredParameterType.Result> SharperInferredParameterTypes
+        internal System.Runtime.CompilerServices.ConditionalWeakTable<ParameterSyntax, SharperInferredParameterType.Result> SharperInferredParameterTypes
         {
             get
             {
                 if (_lazySharperInferredParameterTypes == null)
                 {
-                    Interlocked.CompareExchange(ref _lazySharperInferredParameterTypes, new ConcurrentDictionary<ParameterSyntax, SharperInferredParameterType.Result>(), null);
+                    Interlocked.CompareExchange(ref _lazySharperInferredParameterTypes, new System.Runtime.CompilerServices.ConditionalWeakTable<ParameterSyntax, SharperInferredParameterType.Result>(), null);
                 }
 
                 return _lazySharperInferredParameterTypes;
