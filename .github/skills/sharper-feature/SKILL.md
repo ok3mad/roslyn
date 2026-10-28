@@ -148,6 +148,11 @@ implementation plan, "Feature 3"):
    Giving a token field a second kind in `Syntax.xml` silently drops the generated convenience overload that fills in
    the token (`SyntaxFactory.VarPattern(designation)`), a shipped public API and a binary break (#61). Only the
    analyzer build reports it (RS0017); restore such overloads by hand at the end of `Syntax/SyntaxFactory.cs`.
+   Do not make the new keyword a contextual keyword of the lexer or of the text-based `SyntaxFacts` members
+   (`GetContextualKeywordKind(string)`, `GetContextualKeywordKinds()`): those apply to all code, with or without the flag,
+   and callers act on them. Razor ended `@val?.Name` at `val` in ordinary pages (#109). Let the parser check the spelling
+   behind the flag (`IsSharperValIdentifier`) and make the token itself (`ConvertToSharperValKeyword`); keep only the
+   kind-based `IsContextualKeyword(ValKeyword)`, which the incremental parser needs and only Sharper-made tokens reach.
 14. **A new syntax node is public API and hides in type switches.** When no existing node fits (function types), add it
    to `Syntax.xml` with a `SyntaxKind` from 9900 up (Sharper node kinds count up from there, apart from upstream),
    regenerate, and copy the RS0016 list of the analyzer build (`-p:RunAnalyzersDuringBuild=true`; a plain build reports
