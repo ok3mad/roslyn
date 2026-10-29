@@ -117,6 +117,7 @@ The brainstorm proposes 26 pieces of syntax (#28, discard arguments, is still to
 | 10 | Inferred return type | `static infer Hello(int id) => ...` | method with the inferred return type | none (`infer` parses as a type name) | L, in steps R1 to R5 | Med; R1 prototype | Ordering and cycles. Allowed on public members too, with no warning. Replaces the expression-bodied `fun`. R1 (expression bodies of private methods and local functions) is a prototype; see [Feature 5](#feature-6-inferred-return-type-step-r1) and the [feature page](../features/inferred-return-type.md) | [#22](https://github.com/ok3mad/roslyn/issues/22) |
 | 11 | `readonly` parameters | `void F(readonly int x)` | plain parameter plus the `val` no-reassignment check | none (`readonly` already parses as a parameter modifier; C#'s error without `ref`, CS9190, comes from the binder) | S | Prototype | Completes the mutability grid with #4 and #5. Not part of the signature; `readonly ref` forbids ref reassignment, as for locals. Replaces the `mutable` parameter in `fun`: immutable-by-default parameters and a `mutable` marker are a strictness ladder setting now, not syntax. See [Feature 5](#feature-5-readonly-parameters) | [#23](https://github.com/ok3mad/roslyn/issues/23), [#97](https://github.com/ok3mad/roslyn/issues/97) |
 | 15 | Inferred parameter types | `public infer Load(infer userId) => ...`, `infer timeout = TimeSpan.FromSeconds(5)` | method with the inferred types | none (`infer x` parses as a typed parameter) | S to XL, in steps P1 to P8 | Med | Copied from an overridden member, a default value, a function type or a call that pins one type, never from shape. Generic by default is open. Replaces untyped `fun` parameters inferred from arms | [#27](https://github.com/ok3mad/roslyn/issues/27) |
+| 29 | Immutable types | `[Immutable] sealed record Money(decimal Amount, string Currency);` | the type plus embedded attributes | none (attributes first, a keyword later) | M | Med; slice 1 designed | Deep and observational; inferred only from representational immutability plus pure observers. `[Immutable]` describes exact instances, `[ImmutableHierarchy]` opts in for subclasses, and type arguments are judged statically. Not a brainstorm syntax row: it answers the open question on immutability depth ([#92](https://github.com/ok3mad/roslyn/issues/92)). See [Feature 10](#feature-10-immutable-types-slice-1-design) | [#139](https://github.com/ok3mad/roslyn/issues/139) |
 
 ### Phase 2: functional core
 
@@ -157,7 +158,8 @@ Not listed: `union Name(A, B)` comes from C# 15, and `collect`, `Retry` and `Une
 4. `readonly` parameters (#11), done.
 5. Type inference (#10 and #15), the first real inference work, in the steps of the
    [work breakdown](#type-inference-work-breakdown).
-6. Rows 19 onward wait for the union representation and the purity design.
+6. Immutable types (#29), slice 1, which purity (#24) and the patterns that need it (#22, #23) build on.
+7. Rows 19 onward wait for the union representation and the purity design.
 
 Decided before the type-syntax rows: `->` is not a lambda arrow, only the arrow of function types (see Decisions).
 
@@ -632,6 +634,78 @@ two threads, caller information attributes, signature matching, nullable annotat
 metadata seen from a C# compilation, and concurrent inference. `readonly infer x = 1u` already works (P3 needs only
 its tests and the `val` decision).
 
+## Feature 10: immutable types, slice 1 (design)
+
+`[Immutable] sealed record Money(decimal Amount, string Currency);` (issue [#139](https://github.com/ok3mad/roslyn/issues/139),
+designed in [#92](https://github.com/ok3mad/roslyn/issues/92)). `val` and `readonly` make a binding immutable; this
+makes a value deeply immutable, so that "depends only on its arguments" means something for purity
+([#36](https://github.com/ok3mad/roslyn/issues/36)), opaque and extractor patterns ([#34](https://github.com/ok3mad/roslyn/issues/34),
+[#35](https://github.com/ok3mad/roslyn/issues/35)) and lazy `T[..]`. This section is the design; nothing is implemented
+yet.
+
+**Probe.** What C#, the BCL and the compiler give today:
+
+| Area | What the code shows |
+| --- | --- |
+| C# | `readonly` fields, `readonly struct`, `readonly` members, `init` and records are all shallow: a `readonly List<int>` field or `record R(List<int> Xs)` can still change through the list |
+| BCL | `System.Collections.Immutable` is shallow in `T`, and `ImmutableArray<T>` wraps a `T[]` that `ImmutableCollectionsMarshal.AsArray` hands out. `[ImmutableObject]` is an unchecked designer hint. `ReadOnlyCollection<T>` and `IReadOnlyList<T>` are views over a list that can still change |
+| Symbols | Every fact the field check needs is there for source and metadata alike: `FieldSymbol.IsReadOnly`, `TypeSymbol.IsReadOnly` (`readonly struct`), `MethodSymbol.IsInitOnly` and `IsEffectivelyReadOnly`, `IsRecord`. No IL bodies are needed for fields |
+| Reference assemblies | They strip private class fields and method bodies, so BCL types compiled against a reference pack cannot be analyzed; `string` and `ImmutableArray<T>` would fail a field check anyway. They need attestations |
+| Cycles | Struct layout cycles are already found per strongly connected component (`InfiniteFlatteningGraph`, `SourceMemberContainerSymbol.cs`) |
+
+### Decisions
+
+| Question | Decision | Why |
+| --- | --- | --- |
+| Depth | Deep, as a property of a type. `val` stays binding-only | Purity needs it; C# already has binding and shallow immutability |
+| Definition | Observationally immutable. Hold everything outside the object fixed (statics, clock, randomness, I/O). Then every repeated access returns the same result, including the identity of returned objects. Reflection, `Unsafe`, debuggers and timing do not count | A lazy cache does not change what anyone can observe, and representational immutability alone would reject it |
+| Observers | Instance getters, indexers, `Equals`, `GetHashCode` and `IEquatable<T>.Equals` must be pure. Ordinary methods may be impure, and statics are not observers | `Now => DateTime.Now` has no fields yet changes on every read. A `Roll()` method reads the outside world, and declaring it as an extension method instead could not change the type's immutability; the purity checker sees the effect at the call. Property patterns, extractors and memoization keys rely on stable observers |
+| Not implied | Neither pure methods (`ToString()` may read the culture) nor interchangeable instances: the compiler never merges or splits instances | `ReferenceEquals`, `lock` and `ConditionalWeakTable` see identity |
+| What the compiler proves | Proven: every field is of an immutable type and, in a class, `readonly`; the base is immutable; observers are pure (slice 1: they only read fields, constants and other pure observers). Disproven: state writable from outside after construction (a non-`readonly` class field, a non-`init` setter). Otherwise not proven | Inference is only ever from representational immutability; the observational definition is what claims may assert beyond it |
+| Purity spiral | Immutability and purity depend on each other. Each step only widens what is accepted, and cycles assume immutable or pure until disproven (`sealed record Node(int V, Node? Next)` passes). Totality is the exception and assumes the worst | A monotone, optimistic fixpoint converges, and later steps break nothing |
+| Inferred, declared, attested | Inferred is certain for the binary analyzed but says nothing about the next one. Declared (the owner) and attested (a third party) are promises over versions. Inside one assembly, inference is as good as a declaration and is never emitted as a public contract; across assemblies only claims count | A patch of .NET can change any inferred fact, while the code inside one assembly is the code that runs |
+| Conditional and hard claims | `[Immutable]` is conditional: the build fails unless inference proves it, also when the type cannot be analyzed. A hard claim is accepted unless disproven, and names what it vouches for: `[UnobservableWrite]` on a cache field (its reads and writes do not count against an observer's purity), `[AssumePure]` on an observer. A whole-type hard claim exists only in attestations about types that cannot be analyzed | A named obstacle catches the honest mistake of a hard claim going stale (a new mutable field fails the build) without hashing everything the type reaches |
+| Trust | Only the project that writes a claim checks it; consumers trust claims and never re-check them, as with nullable annotations. Metadata carries one plain `[Immutable]` | The checks catch honest mistakes; Reflection can break any guarantee anyway |
+| Inheritance | `[Immutable]` describes exact instances (`Inherited = false`) and puts no requirement on subclasses: a mutable subclass simply is not immutable. An immutable class needs an immutable base. `[Immutable]` on an abstract class means "my own state is immutable" | Authored in Sharper, `System.Object` would be immutable, and every .NET type cannot be required to be. Records are unsealed by default and .NET has almost no closed hierarchies, so sealing cannot be required either |
+| `[ImmutableHierarchy]` | A separate opt-in that every subclass, at any depth, or every implementation of an interface, is immutable. On a class it requires `[Immutable]`. A violating Sharper subclass is an error, a C# one in the same compilation a warning; one elsewhere, or a mock or proxy, is trusted to honour the contract. Adding or removing it breaks compatibility | Library authors who cannot seal (open public hierarchies, interfaces) still need "every value of this type is immutable" |
+| Static immutability | Every value of static type `T` is immutable when `T` is a value type with immutable state, sealed and `[Immutable]`, `[Immutable]` with `[ImmutableHierarchy]`, an `[ImmutableHierarchy]` interface, or `[Immutable]` with every subclass visible and immutable (internal types); or when flow analysis knows the exact type | This is what generic conditions and `where T : immutable` use |
+| Generics | A generic type is immutable for an instantiation when the type arguments it depends on are statically immutable. A marked type depends on all its type parameters unless one opts out with `[Phantom]`, which the compiler checks. Conditions are computed per definition, so polymorphic recursion terminates. An instantiation such as `Box<List<int>>` is not a requirement, just not immutable | The condition is a public contract. A run-time check cannot afford to walk a collection's elements, so `ImmutableList<Person>` with an unsealed `Person` is not immutable |
+| Structs | A struct is immutable when no mutable object is reachable from it; its own fields need not be `readonly`. `(int, string)`, `KeyValuePair<K, V>` and `Nullable<T>` are immutable when their components are | A struct value has no aliases: in a `readonly` location every write goes to a copy, and the rest is binding mutability |
+| Construction | Ends after the object initializer, so `init` setters and `with` are part of it | The clone is changed before it is published |
+| Run-time guard | Later, with optimizations ([#140](https://github.com/ok3mad/roslyn/issues/140)): where memoization, hoisting or laziness relies on immutability that is not static, check that `x.GetType()` carries `[Immutable]`, cached per `Type` in an emitted helper, else take the unoptimized path | A mutable subclass then costs a missed optimization, never a wrong result |
+| Views | Read-only views protect the producer ("you cannot change this"), immutability protects the consumer ("nobody can change this"). Views are never immutable and belong with effects | An `IReadOnlyList<T>` that is a `List<T>` can be cast back |
+| Lazy `T[..]` | A collection expression may be made lazy only if every spread source is total and immutable, or created inside the expression | `List<T>` converts to `T[..]` silently |
+| Weak and strong purity | A function touching only its arguments is weakly pure; with every parameter immutable it is strongly pure, and only strongly pure calls may be memoized, hoisted or made lazy | #36 can start with weak purity, which needs no immutability |
+| Spelling | Attributes first, embedded like `IsReadOnlyAttribute`; a keyword later. All names are placeholders | No parser change, no break. `readonly class` would clash with the shallow `readonly struct` |
+
+### Plan
+
+1. **The check.** `IsImmutable` for exact and static types over source and metadata symbols: the field and struct
+   rules, observers that only read fields, cycles per strongly connected component, generic conditions with
+   `[Phantom]`, cached per type.
+2. **Attestations.** Hard-coded hard claims for primitives, `string`, the immutable and frozen collections (when `T` is
+   statically immutable) and common BCL value types, until the attestation format exists
+   ([#142](https://github.com/ok3mad/roslyn/issues/142)).
+3. **Attributes and diagnostics.** `[Immutable]`, `[ImmutableHierarchy]`, `[UnobservableWrite]`, `[AssumePure]` and
+   `[Phantom]`, embedded. About six diagnostics:
+   - not immutable, with the reason;
+   - disproven;
+   - base not immutable;
+   - a subclass or implementation breaks `[ImmutableHierarchy]`;
+   - a misplaced `[UnobservableWrite]`;
+   - a `[Phantom]` parameter used in state.
+4. **Tests** in `SharperTests.cs`, next to the C# they stand for: records, structs and tuples, lazy caches, open and
+   hierarchy-marked bases, generics including recursion, metadata types, and the flag off.
+
+Not in slice 1: a keyword, `where T : immutable` and the run-time guard ([#140](https://github.com/ok3mad/roslyn/issues/140)),
+the checked lazy-field construct ([#141](https://github.com/ok3mad/roslyn/issues/141)), the attestation format
+([#142](https://github.com/ok3mad/roslyn/issues/142)), the Edit and Continue rude edit for an edit that makes a type
+mutable, and a fixer that offers `sealed`. As a side effect, a struct proven immutable needs no CS20003 copy warning
+([#84](https://github.com/ok3mad/roslyn/issues/84)).
+
+**Size:** M, about 1.5k lines with tests. No parser change; the work is the symbol query, its cycles and generic
+conditions, and the diagnostics.
+
 ## Follow-ups
 
 Sharper diagnostics were renumbered from `SharperErrorCodes.Base` (20000): CS9402, CS9403 and CS9404 became CS20001, CS20002 and CS20003, and this document uses the new numbers throughout.
@@ -673,7 +747,7 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 - [ ] `try` expression: a warning on a catch-all arm. [#135](https://github.com/ok3mad/roslyn/issues/135)
 - [ ] `try` expression: lift a task body instead of warning, after lifting (#32). [#136](https://github.com/ok3mad/roslyn/issues/136)
 - [ ] Test `/nowarn` and `.editorconfig` with five-digit Sharper IDs. [#91](https://github.com/ok3mad/roslyn/issues/91)
-- [ ] Decide immutability depth: binding, value or deep (a type-level immutability marker). [#92](https://github.com/ok3mad/roslyn/issues/92)
+- [x] Decide immutability depth: binding, value or deep (a type-level immutability marker). [#92](https://github.com/ok3mad/roslyn/issues/92): deep, see [Feature 10](#feature-10-immutable-types-slice-1-design). Slice 1 is [#139](https://github.com/ok3mad/roslyn/issues/139); follow-ups [#140](https://github.com/ok3mad/roslyn/issues/140), [#141](https://github.com/ok3mad/roslyn/issues/141), [#142](https://github.com/ok3mad/roslyn/issues/142).
 - [ ] Sequence type: decide whether array creation should accept sequence elements (`new int[3][..]`, today CS0178, or `new int[..][3]`). [#64](https://github.com/ok3mad/roslyn/issues/64)
 - [x] Function types: parentheses apply a suffix to the whole function type, `((int) -> int)?`, `((int) -> int)[]` and `((int) -> int)~`, with the new node `ParenthesizedTypeSyntax`. `((p)->F)[i]`, `((p)->F)?.X`, `((p)->F) ? a : b` and `(((p)->F))(x)` keep their C# meaning. [#58](https://github.com/ok3mad/roslyn/issues/58)
 - [x] Function types in patterns: declaration, type, recursive, list and property patterns, `switch` statements and expressions (`x is (int) -> int f`, `case () -> void a:`). In C#, `e is (p)->F` is a syntax error (the pattern parser stops at `->`), so there was no C# meaning to keep; `e is p->F` keeps its meaning. [#59](https://github.com/ok3mad/roslyn/issues/59)
