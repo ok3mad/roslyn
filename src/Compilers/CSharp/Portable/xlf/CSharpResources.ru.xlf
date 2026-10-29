@@ -2612,14 +2612,24 @@
         <target state="new">A function type cannot have more than {0} parameters, because no 'System.Func' or 'System.Action' delegate has more.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperInferIteratorYieldsNothing">
+        <source>Cannot infer the return type of the iterator '{0}', because it has no 'yield return' to infer the element type from. Write the return type.</source>
+        <target state="new">Cannot infer the return type of the iterator '{0}', because it has no 'yield return' to infer the element type from. Write the return type.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperInferNoBestType">
+        <source>Cannot infer the return type of '{0}', because the values it returns ({1}) have no best common type. Write the return type.</source>
+        <target state="new">Cannot infer the return type of '{0}', because the values it returns ({1}) have no best common type. Write the return type.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperInferNoBody">
         <source>'{0}' has no body to infer its return type from. Write the return type.</source>
         <target state="new">'{0}' has no body to infer its return type from. Write the return type.</target>
         <note />
       </trans-unit>
       <trans-unit id="ERR_SharperInferNoType">
-        <source>Cannot infer the return type of '{0}', because its body ({1}) has no type. Write the return type.</source>
-        <target state="new">Cannot infer the return type of '{0}', because its body ({1}) has no type. Write the return type.</target>
+        <source>Cannot infer the return type of '{0}', because the value it returns ({1}) has no type. Write the return type.</source>
+        <target state="new">Cannot infer the return type of '{0}', because the value it returns ({1}) has no type. Write the return type.</target>
         <note />
       </trans-unit>
       <trans-unit id="ERR_SharperInferNotSupportedYet">
@@ -3457,14 +3467,9 @@
         <target state="translated">указатель</target>
         <note />
       </trans-unit>
-      <trans-unit id="IDS_SharperInferOnAsync">
-        <source>on an async method</source>
-        <target state="new">on an async method</target>
-        <note />
-      </trans-unit>
-      <trans-unit id="IDS_SharperInferOnBlockBody">
-        <source>on a block body</source>
-        <target state="new">on a block body</target>
+      <trans-unit id="IDS_SharperInferOnAsyncIterator">
+        <source>on an async iterator</source>
+        <target state="new">on an async iterator</target>
         <note />
       </trans-unit>
       <trans-unit id="IDS_SharperInferOnExplicitImplementation">

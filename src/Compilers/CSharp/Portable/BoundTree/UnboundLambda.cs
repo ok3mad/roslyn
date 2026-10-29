@@ -210,6 +210,16 @@ namespace Microsoft.CodeAnalysis.CSharp
         }
 
         /// <summary>
+        /// Sharper: the return type of a method body whose return type is inferred ('infer'), as for a lambda with no
+        /// delegate type. <paramref name="node"/> is the body.
+        /// </summary>
+        internal static InferredLambdaReturnType InferSharperReturnType(ArrayBuilder<(BoundReturnStatement, TypeWithAnnotations)> returnTypes,
+            BoundNode node, Binder binder, bool isAsync, ConversionsBase conversions, bool withDependencies)
+        {
+            return InferReturnTypeImpl(returnTypes, node, binder, delegateType: null, isAsync, conversions, withDependencies);
+        }
+
+        /// <summary>
         /// Behavior of this function should be kept aligned with <see cref="UnboundLambdaState.ReturnInferenceCacheKey"/>.
         /// </summary>
         private static InferredLambdaReturnType InferReturnTypeImpl(ArrayBuilder<(BoundReturnStatement, TypeWithAnnotations)> returnTypes,

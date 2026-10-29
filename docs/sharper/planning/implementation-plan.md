@@ -177,7 +177,7 @@ Return type (#10):
 | Step | Scope | Size | Open point |
 | --- | --- | --- | --- |
 | R1 | `infer` as a return type: gating, a type named `infer` wins, CS0246 with the flag off. Expression bodies of private methods and local functions that call only methods with written return types | S–M | Prototype ([#67](https://github.com/ok3mad/roslyn/issues/67)). Decided: nothing to infer from is CS20014, where `var` reports CS0815, CS8917 or CS8716 |
-| R2 | Block bodies: several `return` statements with the best common type, no return value as `void`, iterators, `async` | M | Nullable annotation of the result when one `return` is maybe-null |
+| R2 | Block bodies: several `return` statements with the best common type, no return value as `void`, iterators, `async` | M | Prototype ([#68](https://github.com/ok3mad/roslyn/issues/68)). Decided: one maybe-null `return` makes the type annotated, as for a lambda. Async iterators wait |
 | R3 | Methods with inferred return types calling each other: binding order across members, cycle and recursion errors | L | Whether a recursive method with a non-recursive `return` is allowed later |
 | R4 | Every member kind and accessibility: public and protected members, `virtual`, `partial`, operators, metadata emission, Edit and Continue (a body edit that changes the type is a signature change) | M | None for public members: they infer like any other (decided) |
 | R5 | IDE: Quick Info and inlay hints show the inferred type, a fixer writes it out | M | |
@@ -454,11 +454,8 @@ with a thread-static set) and lambda return types (`UnboundLambda.InferReturnTyp
 
 ### Plan for the later steps
 
-- **R2, block bodies.** Bind the block with the body's binder into a throwaway `BoundBlock` and collect the
-  `return` statements (the binder's return-statement visitor, as `UnboundLambda` does). Best common type with
-  `BestTypeInferrer`; no return value gives `void`; iterators and `async` wrap the result as for lambdas
-  (`CalculateReturnType`). Nullable: pass the collected returns to `BestTypeForLambdaReturns`. `MethodChecks` already
-  skips everything that needs the type, so only `CheckSharperInferredReturnTypeSupported` changes.
+- **R2, block bodies.** Done; see [step R2](#feature-6-inferred-return-type-step-r2). The plan held, except that the
+  binder reads the method's own return type in more places than the return statement.
 - **R3, inferred methods using each other.** Turn the thread-static frame into a stack. A read of another inferred
   method whose type is not published infers it in a nested frame on the same thread (no lock is held, so nothing can
   deadlock); a method already on the stack is a cycle, reported on every method of the cycle. Two threads may infer
@@ -473,6 +470,48 @@ with a thread-static set) and lambda return types (`UnboundLambda.InferReturnTyp
 Tests: 16 `Infer_*` tests in `SharperTests.cs`: runtime output, every inferred type next to a C# twin, the errors,
 nullable annotations, the semantic model, IOperation, metadata seen from a C# compilation, the order of inference
 and concurrent inference.
+
+## Feature 6: inferred return type, step R2
+
+Block bodies, iterators and `async` ([#68](https://github.com/ok3mad/roslyn/issues/68), on branch
+`sharper/infer-return-r2`): `private static infer Classify(int n) { if (n < 0) return "negative"; return "other"; }`
+returns `string`. The step builds on R1's mechanism (`SharperInferredReturnType`, the thread-static frame, the second
+binding against the inferred type) and adds no syntax, bound node or public API.
+
+**Probe.** Binding a block body while its type is inferred read the method's own return type, which the frame
+counts as a use of the method by itself (CS20018) on every `return`. The reads are the binder's, not the user's:
+`GetCurrentReturnType` for `return`, `InMethodBinder.GetIteratorElementType` for `yield return` (which also caches the
+element type on the symbol, so an error type read there would stick), and `IsEffectivelyTaskReturningAsyncMethod` and
+its siblings for `async`. The nullable walker reads it for `yield return` and spreads.
+
+| Piece | What it does |
+| --- | --- |
+| `Binder.IsSharperReturnTypeBeingInferred` (`SharperInferredReturnType.IsBeingInferred`) | True while the frame on this thread infers this method. The binder's reads of the containing method's return type check it first and then behave as for a lambda whose return type is being inferred: no target type for `return`, no element type for `yield return`, no task type for `async` |
+| `Binder.BindSharperInferredReturnType` | Binds a block body with the body's binder into a throwaway `BoundBlock`, collects the `return` values (or the `yield return` values and spread elements of an iterator) with `SharperReturnsCollector`, and infers with `BoundLambda.InferSharperReturnType`: the lambda's `InferReturnTypeImpl` with no delegate type, which picks the best common type and wraps `async` results in `Task` or `Task<T>`. An iterator wraps the element type in `IEnumerable<T>` |
+| `BindSharperInferredYieldReturnSpread` | `yield return ..xs` while the element type is inferred: a spread with the element type of `xs` when `xs` is a sequence, otherwise the C# range |
+| `NullableWalker` in inference mode | `yield return` and spread elements are collected like returned values (`returnTypesOpt`), and the collected states go through the lambda's inference again with nullability (`BestTypeForLambdaReturns`) |
+| `SharperInferredReturnType.HasFailedInference` | No CS0161 ("not all code paths return a value") for a method whose inference failed, which has no type to miss |
+
+### Decisions
+
+| Question | Decision | Why |
+| --- | --- | --- |
+| Nullable annotation when one `return` is maybe-null (the R2 open point) | Annotated: `return null;` next to `return s;` gives `string?`; the element of an iterator and the result of a task follow the same rule, and the sequence or task itself is not annotated | The lambda rule (`BestTypeForLambdaReturns`), so a body means the same as a method and as a lambda. The other choice, not annotated plus a warning on the `null`, would infer a type the body contradicts |
+| Several values, no best common type | CS20024, on `infer`, listing the types. It asks for the type and does not mention unions | Unions are parked ([#31](https://github.com/ok3mad/roslyn/issues/31)); the message stays true whatever they become |
+| One value with no type (`return null;`) | CS20014, on the value, as for an expression body | Same case as R1; the message now says "the value it returns" so it fits both |
+| No `return` value | `void`; `async` gives `Task` | As lambdas |
+| An iterator with only `yield break` | CS20025 | No element type to infer, and an `IEnumerable<object>` guess would hide the mistake |
+| `async` expression bodies | `Task<T>` of the body's type, `Task` for `void` | R1 rejected `async`; with lambdas' rule for blocks, the expression body follows the same rule |
+| Async iterators | CS20015, not supported yet | Lambdas cannot be iterators, so there is no lambda rule to copy. `IAsyncEnumerable<T>` is the natural answer for a later step |
+| Errors in a block body | An error in a returned value (or a `ref` return) gives an error type silently; other errors do not stop the inference | The second binding reports both. Unrelated errors should not cascade into every caller |
+| Spread in an inferred iterator | A spread when the operand is a sequence, otherwise the C# range | There is no written element type to try the C# meaning against. The second binding, against the inferred type, applies the usual rule and agrees |
+| Inferred local functions declared in an inferred body | CS20017 even when unused, until R3 | Binding the declaration reads the local function's return type; R3's nested frames remove the error |
+
+Tests: 8 `Infer_Block_*` tests in `SharperTests.cs` next to the C# twins (types, runtime output, errors, nullable
+annotations, the semantic model and IOperation), and the R1 tests updated for `async` and async iterators. All 261
+Sharper test cases pass, also with `ROSLYN_TEST_IOPERATION=1`. Regression run (net10.0, Debug): Semantic 20,083
+passed, Emit 7,312, Emit2 2,191 and Emit3 27,951, none failed; the Syntax project with `ROSLYN_TEST_SHARPER=1` has the
+37 expected failures listed under Follow-ups and no other.
 
 ## Feature 7: implicit `it`
 
@@ -547,7 +586,8 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 - [ ] `readonly` locals: decide `readonly` in `for` initializers, `foreach`, deconstruction and `out` (no modifier slot; a public syntax change). [#95](https://github.com/ok3mad/roslyn/issues/95)
 - [ ] `readonly` locals: IDE support (completion, refactorings that drop or break `readonly`). [#96](https://github.com/ok3mad/roslyn/issues/96)
 - [x] `readonly` parameters, the grid's remaining explicitly typed corner. [#97](https://github.com/ok3mad/roslyn/issues/97)
-- [ ] Inferred return type: steps R2 to R5 ([#68](https://github.com/ok3mad/roslyn/issues/68) to [#71](https://github.com/ok3mad/roslyn/issues/71)); a local function's nullable inference sees captured variables at their declared state.
+- [ ] Inferred return type: steps R3 to R5 ([#69](https://github.com/ok3mad/roslyn/issues/69) to [#71](https://github.com/ok3mad/roslyn/issues/71)); a local function's nullable inference sees captured variables at their declared state.
+- [ ] Inferred return type: async iterators (`IAsyncEnumerable<T>`), and an inferred union when the returned values have no best common type, which waits for [#31](https://github.com/ok3mad/roslyn/issues/31).
 - [ ] `readonly` locals share the `val` follow-ups: silence CS20010 with CS20003 (#84), the "never reassigned" fixer can offer `readonly int` (#89), and the public API (#88) and Edit and Continue (#90) items cover them too.
 - [x] Run the upstream parser tests with Sharper on ([#63](https://github.com/ok3mad/roslyn/issues/63)): `ROSLYN_TEST_SHARPER=1` adds the feature to the test parse options (`TestOptions`, `CSharpTestSource.Parse`, the `ParsingTests` helpers). Tests that call `SyntaxFactory` without options are not covered. Last run (net10.0, Debug, `main` with `val`, `readonly` locals and parameters, `T[..]`, function types, also parenthesized and in patterns, and `T~`), with no valid C# parsing differently:
   - Syntax project: 37 of 10,834 fail, all expected. 32 parse invalid C# with `readonly` on a local or a parameter, which Sharper accepts, so CS0106, CS9229 or CS8328 is gone (`DeclarationScopeParsingTests` 22, `RefReadonlyTests` 6, including `InverseReadOnlyRefShouldBeIllegal` and `RefReadonlyWithScoped_03` for `readonly ref int p`, `StatementParsingTests.TestUsingVar*` 2, `TopLevelStatementsParsingTests.UsingLocalDeclaration_06`, `DeclarationParsingTests.DefiniteStatementAfterGenericType_ReadOnlyKeyword`). 3 parse a contextual modifier before a destructor at C# 15, `partial ~C()` and `safe ~C()`, where `partial~` is now a task type (`SafeModifierParsingTests.Destructor_Before`, `Destructor_ExternSafe_Before`, `ModifierParserRecoveryTests.PartialBeforeDestructor`); both are errors either way. 2 assert that the options have no features (`LocalFunctionParsingTests.DiagnosticsWithoutExperimental`, `NodesWithExperimental`).

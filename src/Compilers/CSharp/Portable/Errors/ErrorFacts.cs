@@ -2631,6 +2631,8 @@ namespace Microsoft.CodeAnalysis.CSharp
                 or ErrorCode.ERR_SharperItValueOrFunction
                 or ErrorCode.ERR_SharperItDeclaration
                 or ErrorCode.ERR_SharperItAwait
+                or ErrorCode.ERR_SharperInferNoBestType
+                or ErrorCode.ERR_SharperInferIteratorYieldsNothing
                     => false,
             };
 #pragma warning restore CS8524 // The switch expression does not handle some values of its input type (it is not exhaustive) involving an unnamed enum value.

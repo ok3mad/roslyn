@@ -293,7 +293,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 // The return type is inferred from the body on first use (see SharperInferredReturnType).
                 if (CheckSharperInferredReturnTypeSupported(returnTypeSyntax, diagnostics))
                 {
-                    inferredReturnType = new InferredReturnType(this, returnTypeSyntax, Syntax.ExpressionBody!);
+                    inferredReturnType = new InferredReturnType(this, returnTypeSyntax, (CSharpSyntaxNode?)Syntax.Body ?? Syntax.ExpressionBody!);
                 }
 
                 returnType = TypeWithAnnotations.Create(WithTypeParametersBinder.CreateErrorType("infer"));
@@ -369,8 +369,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         }
 
         /// <summary>
-        /// Step R1 of Sharper's inferred return type supports expression bodies only. A local function with no body can
-        /// never infer its return type.
+        /// A local function with no body can never infer its return type. Async iterators are not supported yet.
         /// </summary>
         private bool CheckSharperInferredReturnTypeSupported(TypeSyntax inferSyntax, BindingDiagnosticBag diagnostics)
         {
@@ -380,13 +379,9 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 diagnostics.Add(ErrorCode.ERR_SharperInferNoBody, inferSyntax.Location, this);
                 return false;
             }
-            else if (Syntax.ExpressionBody is null)
+            else if (IsAsync && IsIterator)
             {
-                notSupportedYet = MessageID.IDS_SharperInferOnBlockBody;
-            }
-            else if (IsAsync)
-            {
-                notSupportedYet = MessageID.IDS_SharperInferOnAsync;
+                notSupportedYet = MessageID.IDS_SharperInferOnAsyncIterator;
             }
             else if (_refKind != RefKind.None)
             {
@@ -405,13 +400,13 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         {
             private readonly LocalFunctionSymbol _localFunction;
 
-            internal InferredReturnType(LocalFunctionSymbol localFunction, TypeSyntax inferSyntax, ArrowExpressionClauseSyntax body)
+            internal InferredReturnType(LocalFunctionSymbol localFunction, TypeSyntax inferSyntax, CSharpSyntaxNode body)
                 : base(localFunction, inferSyntax, body)
             {
                 _localFunction = localFunction;
             }
 
-            protected override Binder? GetBodyBinder(ArrowExpressionClauseSyntax body)
+            protected override Binder? GetBodyBinder(CSharpSyntaxNode body)
                 => _localFunction.ScopeBinder.GetBinder(body);
 
             protected override void CheckInferredType(TypeWithAnnotations type, TypeSyntax inferSyntax, BindingDiagnosticBag diagnostics)

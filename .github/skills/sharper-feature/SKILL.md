@@ -228,14 +228,22 @@ implementation plan, "Feature 3"):
    `ClosureConversion.GetLambdaId`, `SynthesizedClosureEnvironment.AssertIsClosureScopeSyntax`), `await` diagnostics
    (`IsImplicitlyDeclared` means "query"), the semantic model's scope lookup and Edit and Continue all find lambdas
    by syntax.
+27. **A body bound to infer its own type must not read that type.** The binder reads the containing method's return
+   type for every `return` (`GetCurrentReturnType`), `yield return` (`InMethodBinder.GetIteratorElementType`, which
+   also caches the element type on the symbol) and `async` check (`IsEffectivelyTaskReturningAsyncMethod` and its
+   siblings), and the nullable walker reads it for `yield return`. Under the inference frame each read counts as a use
+   of the method by itself. Guard each one with `IsSharperReturnTypeBeingInferred` and do what a lambda whose return
+   type is being inferred does (no target type), rather than special-casing the symbol.
 
 ## Inferred Types
 
-Inference from a body (`infer` return types, rows 10 and 15) reuses `var`'s rules for the natural type
-(`BindToNaturalType`, `BindToInferredDelegateType`) and lambdas' nullable re-inference (`NullableWalker` with
-`returnTypesOpt`). The body is bound once to infer and again to compile; drop the diagnostics of the first binding
-unless they are the inference's own. The design and the plan for the later steps are in the implementation plan,
-"Feature 6".
+Inference from a body (`infer` return types, rows 10 and 15) reuses `var`'s rules for the natural type of an
+expression body (`BindToNaturalType`, `BindToInferredDelegateType`) and the lambda's inference for a block body
+(`BoundLambda.InferSharperReturnType`: best common type, `void`, `Task` and `Task<T>`), with lambdas' nullable
+re-inference (`NullableWalker` with `returnTypesOpt`). The body is bound once to infer and again to compile; drop the
+diagnostics of the first binding unless they are the inference's own, and make sure the second binding reports
+whatever made the inference fail (an error type return must not end up with no diagnostic). The design and the plan
+for the later steps are in the implementation plan, "Feature 6".
 
 ## Testing
 
