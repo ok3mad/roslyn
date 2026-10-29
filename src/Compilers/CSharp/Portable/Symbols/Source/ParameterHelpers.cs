@@ -305,7 +305,20 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             }
 
             Debug.Assert(parameterSyntax.Type != null);
-            var parameterType = withTypeParametersBinder.BindType(parameterSyntax.Type, diagnostics, suppressUseSiteDiagnostics: suppressUseSiteDiagnostics);
+            TypeWithAnnotations parameterType;
+            if (parameterSyntax is ParameterSyntax { Type.IsInfer: true } inferParameter)
+            {
+                // Sharper: 'infer' takes the type of the default value.
+                parameterType = withTypeParametersBinder.BindTypeOrSharperInferKeyword(inferParameter.Type, diagnostics, out bool isInfer);
+                if (isInfer)
+                {
+                    parameterType = SharperInferredParameterType.GetType(owner, inferParameter, diagnostics);
+                }
+            }
+            else
+            {
+                parameterType = withTypeParametersBinder.BindType(parameterSyntax.Type, diagnostics, suppressUseSiteDiagnostics: suppressUseSiteDiagnostics);
+            }
 
             if (!allowRefOrOut && (refKind == RefKind.Ref || refKind == RefKind.Out))
             {

@@ -235,6 +235,14 @@ implementation plan, "Feature 3"):
    of the method by itself. Guard each one with `IsSharperReturnTypeBeingInferred` and do what a lambda whose return
    type is being inferred does (no target type), rather than special-casing the symbol.
 
+28. **A cycle found inside a signature must be published before that signature completes.** An inferred parameter type
+   is needed when the parameter symbol is created, inside the signature lock, so it is inferred just before the lock
+   (`SharperInferredParameterType.InferBeforeSignature`) and cached per parameter syntax. A default value that reads
+   its own member's signature re-enters that member, which then completes its signature with an error type while the
+   outer inference is still running. Another thread can now find that signature complete and infer the rest of the
+   cycle without an error, so marking the cycle when the outer inference ends is too late: publish the error for every
+   parameter of the cycle at the moment it is found. Test cycles from each end, and on two threads at once.
+
 ## Inferred Types
 
 Inference from a body (`infer` return types, rows 10 and 15) reuses `var`'s rules for the natural type of an
@@ -244,6 +252,12 @@ re-inference (`NullableWalker` with `returnTypesOpt`). The body is bound once to
 diagnostics of the first binding unless they are the inference's own, and make sure the second binding reports
 whatever made the inference fail (an error type return must not end up with no diagnostic). The design and the plan
 for the later steps are in the implementation plan, "Feature 6".
+
+Inference of a parameter type (`infer x = 3`, row 15) has one entry point, `ParameterHelpers.MakeParameter`, which
+every member kind uses (lambdas: `Binder.BindLambdaParameterType`). A new source for a parameter type (the overridden
+member, uses in the body) goes into `SharperInferredParameterType.GetType`, keeping its cache and its cycle stack;
+a source that binds something must run before the signature lock, as the default value does (trap 28). The design is
+in the implementation plan, "Feature 9".
 
 ## Testing
 

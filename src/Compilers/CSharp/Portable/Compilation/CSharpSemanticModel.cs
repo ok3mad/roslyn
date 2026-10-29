@@ -570,6 +570,10 @@ namespace Microsoft.CodeAnalysis.CSharp
             {
                 return GetSymbolInfoFromSymbolOrNone(inferredMethod.ReturnType);
             }
+            else if (GetSharperInferredParameter(expression, cancellationToken) is { } inferredParameter)
+            {
+                return GetSymbolInfoFromSymbolOrNone(inferredParameter.Type);
+            }
             else if (expression is DeclarationExpressionSyntax declaration)
             {
                 if (declaration.Designation.Kind() != SyntaxKind.SingleVariableDesignation)
@@ -1024,6 +1028,12 @@ namespace Microsoft.CodeAnalysis.CSharp
                 var nullabilityInfo = inferredMethod.ReturnNullableAnnotation.ToNullabilityInfo(returnType);
                 return new CSharpTypeInfo(returnType, returnType, nullabilityInfo, nullabilityInfo, Conversion.Identity);
             }
+            else if (GetSharperInferredParameter(expression, cancellationToken) is { } inferredParameter)
+            {
+                var parameterType = inferredParameter.Type.GetSymbol();
+                var nullabilityInfo = inferredParameter.NullableAnnotation.ToNullabilityInfo(parameterType);
+                return new CSharpTypeInfo(parameterType, parameterType, nullabilityInfo, nullabilityInfo, Conversion.Identity);
+            }
 
             return GetTypeInfoWorker(expression, cancellationToken);
         }
@@ -1064,6 +1074,28 @@ namespace Microsoft.CodeAnalysis.CSharp
                 SourceOrdinaryMethodSymbol { IsSharperInferredReturnType: true } or LocalFunctionSymbol { IsSharperInferredReturnType: true } => method,
                 _ => null,
             };
+        }
+
+        /// <summary>
+        /// If <paramref name="expression"/> is the Sharper <c>infer</c> type of a parameter, whose type is inferred from
+        /// its default value, returns that parameter. Like <c>var</c>, the <c>infer</c> stands for the inferred type.
+        /// </summary>
+        private IParameterSymbol GetSharperInferredParameter(ExpressionSyntax expression, CancellationToken cancellationToken)
+        {
+            if (expression is not TypeSyntax { IsInfer: true, Parent: ParameterSyntax parameter } inferSyntax || parameter.Type != inferSyntax)
+            {
+                return null;
+            }
+
+            // Like 'var', 'infer' is the keyword only where no type named 'infer' is in scope.
+            Binder binder = GetEnclosingBinder(GetAdjustedNodePosition(inferSyntax));
+            if (binder is null)
+            {
+                return null;
+            }
+
+            binder.BindTypeOrSharperInferKeyword(inferSyntax, BindingDiagnosticBag.Discarded, out bool isInfer);
+            return isInfer ? GetDeclaredSymbol(parameter, cancellationToken) : null;
         }
 
         /// <summary>

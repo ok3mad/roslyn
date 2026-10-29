@@ -521,9 +521,16 @@ namespace Microsoft.CodeAnalysis.CSharp
             ParameterSymbol parameter,
             EqualsValueClauseSyntax defaultValueSyntax)
         {
-            var binder = new LocalScopeBinder(this.WithContainingMemberOrLambda(parameter.ContainingSymbol).WithAdditionalFlags(BinderFlags.ParameterDefaultValue));
+            return CreateBinderForParameterDefaultValue(parameter.ContainingSymbol, defaultValueSyntax);
+        }
+
+        internal Binder CreateBinderForParameterDefaultValue(
+            Symbol containingSymbol,
+            EqualsValueClauseSyntax defaultValueSyntax)
+        {
+            var binder = new LocalScopeBinder(this.WithContainingMemberOrLambda(containingSymbol).WithAdditionalFlags(BinderFlags.ParameterDefaultValue));
             return new ExecutableCodeBinder(defaultValueSyntax,
-                                            parameter.ContainingSymbol,
+                                            containingSymbol,
                                             binder);
         }
 

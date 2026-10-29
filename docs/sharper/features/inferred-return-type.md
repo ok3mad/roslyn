@@ -83,8 +83,8 @@ Each of these reports CS20015 ("not supported ... yet") or CS20016, instead of C
 | Operators and conversion operators | CS20015 | R4 |
 | Members with no body (`abstract`, `extern`, interface members, partial definitions) | CS20016, permanent | |
 
-Elsewhere (fields, locals, parameters, delegates, type arguments) `infer` is an ordinary type name. Parameters are
-step P1.
+Elsewhere (fields, locals, delegate return types, type arguments) `infer` is an ordinary type name. A parameter type
+`infer` takes the type of the default value ([inferred parameter type](inferred-parameter-type.md), step P1).
 
 ## How it works
 
