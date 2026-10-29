@@ -28,8 +28,12 @@ has:
 
 1. Clone this repository and open it in VS Code with the
    [Dev Containers](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) extension
-   (Docker required), or create a GitHub Codespace from it.
-2. Run **Dev Containers: Reopen in Container** and pick **Sharper playground**.
+   (Docker required) and run **Dev Containers: Reopen in Container**, picking **Sharper playground**.
+2. Or create a GitHub Codespace with
+   [this link](https://codespaces.new/ok3mad/roslyn?devcontainer_path=.devcontainer/sharper/devcontainer.json), or with
+   **Code → Codespaces → … → New with options** and the **Sharper playground** configuration. The default
+   configuration is upstream Roslyn's, which asks for an 8-core machine, so a plain "Create codespace" can fail with
+   "no machine types available".
 3. The container (the .NET 10 SDK image) installs the latest release into `/opt/sharper` with
    [`setup.sh`](../../.devcontainer/sharper/setup.sh), and opens the [playground](playground/) project with the C#
    extension pointed at `/opt/sharper/server`.
