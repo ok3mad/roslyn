@@ -124,7 +124,7 @@ The brainstorm proposes 26 pieces of syntax (#28, discard arguments, is still to
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 12 | Implicit `it` | `xs.Select(Process(it, a))`, `when: it is X` | lambda `x => ...` | none | L | Prototype | Decided: the innermost argument whose parameter is a one-parameter delegate becomes the lambda; one meaning of `it` per lambda or stage; an outer `it` plus value and function overloads is an error; an existing `it` keeps its C# meaning (see [Decided](brainstorm.md#decided)). Calls only so far; `LookupSymbols` and Edit and Continue do not see the lambda yet. See the [feature page](../features/implicit-it.md) | [#24](https://github.com/ok3mad/roslyn/issues/24) |
 | 13 | Pipe, without lifting | `x \|> F`, `x \|> F(it, y)` | nested call | yes (new `\|>` token) | M | Med–High | A bare stage versus a stage that uses `it` | [#25](https://github.com/ok3mad/roslyn/issues/25) |
-| 16 | `try` expression | `try F(url) catch { HttpRequestException { ... } => ..., }` | try/catch with spilling | yes (`try` in expression position) | M–L | Med | The result type needs unions (#19); no `finally` | [#28](https://github.com/ok3mad/roslyn/issues/28) |
+| 16 | `try` expression | `try await F(url) catch { HttpRequestException { ... } => ..., }` | try/catch with the arms in a catch filter, with spilling | yes (`try` in expression position) | L (low end) | Med; slice 1 designed | Slice 1: target-typed to a declared C# 15 union, or the best common type of the body and arms; anonymous union results wait for #19. Unmatched exceptions propagate untouched through the filter; no `finally`; an awaitable body must be awaited. See [Feature 8](#feature-8-try-expression-slice-1-design) | [#28](https://github.com/ok3mad/roslyn/issues/28) |
 | 17 | Lambda to single-method interface | `Render(user, id => new Profile())` | generated sealed class | none | M | Med | Only where C# reports an error today; the class needs a readable name for stack traces | [#29](https://github.com/ok3mad/roslyn/issues/29) |
 | 18 | Interface initializer | `new IProfiles { Load = id => ... }`, `_ = Unexpected` | generated class | none (binder only) | M | Med | Builds on #17 | [#30](https://github.com/ok3mad/roslyn/issues/30) |
 
@@ -538,7 +538,57 @@ implementation taught.
 - **"Does it use `it`?" is a bound question.** `xs.Select(Make(ys.First(it.X)))` binds as a lambda whose `it` is
   unused, because the inner call claims it. The lambda trial counts only when each lambda reads its parameter.
 
-## Feature 8: inferred parameter type, step P1
+## Feature 8: `try` expression, slice 1 (design)
+
+`RateResult r = try await http.GetFromJsonAsync<RateTable>(url) catch { HttpRequestException { StatusCode: 404 } =>
+new NoRate(from, to), TimeoutException => new FxUnavailable(0) };` (issue [#28](https://github.com/ok3mad/roslyn/issues/28)).
+Exceptions become values through switch-style arms; unmatched exceptions propagate, and there is no `finally`. Slice 1
+needs no anonymous unions: the result is target-typed to a declared C# 15 union, or has a natural type when the body
+and the arms agree. Union results without a target wait for slice 2 of [#31](https://github.com/ok3mad/roslyn/issues/31).
+This section is the design; nothing is implemented yet.
+
+**Probe.** What the compiler does today, and what the design reuses:
+
+| Area | What the code shows |
+| --- | --- |
+| Flag off | In any expression position (initializer, argument, `return`, `=>` body) `try` is rejected by `IsInvalidSubExpression` (`LanguageParser.cs`) with CS1525 "Invalid expression term 'try'", so no valid C# changes meaning. At the start of a statement `try` is always the try statement (`ParseStatementCore`, `IsDefiniteStatement`) |
+| Arms | `ParseSwitchExpression`'s arm loop (`LanguageParser_Patterns.cs`) produces `SwitchExpressionArmSyntax`, and `SwitchExpressionArmBinder.BindSwitchExpressionArm(node, switchGoverningType, ...)` takes the governing type as a parameter, so `System.Exception` gives patterns, designations and `when` clauses unchanged |
+| Result type | `SwitchExpressionBinder.InferResultType` picks the best common type of the arms (`BestTypeInferrer.GetBestType`); `BoundUnconvertedSwitchExpression` and `ConversionKind.SwitchExpression` give target typing (about 9 sites use the kind, about 37 handle the unconverted node) |
+| Union conversion | C# 15 converts a case value into a union through its factory methods (`AnalyzeImplicitUnionConversions`), tried after user-defined conversions (`GetImplicitUserDefinedOrUnionConversion`). It is not a standard conversion, so it does not chain (`UnionsTests.UnionConversion_09` and `_11`): the body's own type must be a case. No test converts a target-typed switch or `?:` into a union yet ([#137](https://github.com/ok3mad/roslyn/issues/137)) |
+| Spilling | A switch expression lowers to a `BoundSpillSequence` and sets `_needsSpilling` (`LocalRewriter_SwitchExpression.cs`), as `stackalloc` does to empty the evaluation stack (`LocalRewriter_StackAlloc.cs`). A try/catch inside a spill sequence gets the same treatment: earlier operands, as `a` in `F(a, try ...)`, move to temps, ref temps for refs (`SpillSequenceSpiller.Spill`) |
+| Filters | `BoundCatchBlock.ExceptionFilterPrologueOpt` holds statements that run before the filter condition. The spiller, `AsyncExceptionHandlerRewriter` and `EmitStatement` support it, so a decision DAG can run inside a filter, as in the valid C# `catch (Exception e) when (e switch { ... })` |
+| Restrictions | `stackalloc` in a catch block is CS0255 through `BinderFlags.InCatchBlock` (`Binder_Expressions.cs`); `await` in a filter is CS7094 through `InCatchFilter` (`Binder_Await.cs`). `yield` cannot appear inside an expression, so iterators are not affected |
+| State machines | `AsyncExceptionHandlerRewriter` and `MethodToStateMachineRewriter` assert that a try's syntax is one `SyntaxBindingUtilities.BindsToTryStatement` accepts, which keys Edit and Continue's locals and states. The spread's `yield return ..xs` was added there for the same reason |
+
+### Decisions
+
+| Question | Decision | Why |
+| --- | --- | --- |
+| Syntax | `try <expr> catch { <arms> }`: a new `TryExpressionSyntax` (try keyword, body, catch keyword, braces, `SwitchExpressionArmSyntax` list). The body runs up to `catch`. The whole expression has the lowest precedence, like a lambda, so `(try ... catch { ... }).X` needs parentheses | A new node is unavoidable (the task and function types are the precedent), and sharing the arm syntax keeps one parser and one binder for arms. Lowest precedence avoids puzzles such as `try a catch { ... } + b` |
+| Statement position | A `try` at the start of a statement stays the C# statement | C# wins; an expression statement made of a `try` expression would be CS0201 anyway |
+| Result type | Target-typed first: the body and each arm convert to the target, as for a switch expression, which reaches the C# 15 union conversion. Without a target, the best common type of the body and arms. Neither: a Sharper error that names the types and asks for a declared union or a target type | The issue's `RateResult r = try ...` needs target typing; the natural type comes free from the switch code. The error stays true whatever anonymous unions become |
+| Arms | Governing type `System.Exception`; patterns, designations and `when` as in a switch. No exhaustiveness check, because unmatched exceptions propagate; the subsumption error (an arm that can never match) stays. A catch-all arm (`_`, `Exception`) is allowed; a warning for it is [#135](https://github.com/ok3mad/roslyn/issues/135) | Same arms as a switch expression, minus the rule that has no meaning here |
+| Lowering | Through a catch filter, not catch plus `throw;`: the body's value goes to a result temp in the try block; `catch (Exception e) when (...)` runs the decision DAG in the filter prologue, setting an arm index and the pattern variables, and is false when no arm matches; the catch block assigns the chosen arm's value to the result temp | Unmatched exceptions are never caught, so their stack trace and first-pass semantics (inner `finally` blocks run after the filter decides) are untouched, and no rethrow is needed. Pattern variables set in a filter and read in the catch body are what C# already does for `catch (E e) when (e is X x)` |
+| Rethrow | Not expressible: an arm is an expression and a throw expression needs an operand. `=> throw new Wrapped(e)` is an ordinary throw expression | Unmatched exceptions already propagate untouched, so a rethrow arm adds nothing |
+| `finally` | None | Decided in the brainstorm; low-level code lives in C# |
+| An awaitable body | Slice 1 requires `try await F()`; a Sharper warning reports a body whose type is awaitable when it is not awaited. Lifting it is [#136](https://github.com/ok3mad/roslyn/issues/136), after [#32](https://github.com/ok3mad/roslyn/issues/32) | `try http.GetFromJsonAsync(url) catch { ... }` catches only synchronous throws: the 404 surfaces on `await`, outside the `try` |
+| `await` | Allowed in the body and in arm values (catch blocks allow it since C# 6), an error in `when` clauses (CS7094) | The arm binder gets `InCatchBlock` for values and `InCatchFilter` for patterns and `when` |
+| `stackalloc` | Allowed in the body, CS0255 in an arm value | IL forbids `localloc` in a handler; the flags give the C# error |
+| `ref` and ref structs | The result is an rvalue; `ref` results are not supported. Spilled operands follow the spiller's rules: temps and ref temps in synchronous methods, and in `async` methods the usual rules for values kept across an `await` | Nothing new to check beyond what a switch expression with an `await` meets |
+| Expression trees | An error, as for a switch expression (CS8514) | Expression trees have no try/catch with filters |
+
+### Plan
+
+1. **Syntax.** `TryExpressionSyntax` in `Syntax.xml` with its public API; a gated parse in place of the CS1525 path, sharing the arm loop with `ParseSwitchExpression`; parser tests with the flag on and off.
+2. **Binding.** `BoundUnconvertedTryExpression` (natural type, like the switch) and `BoundTryExpression` (converted), a new conversion kind for target typing, the arm binder with the catch and filter flags, and the decision DAG over `Exception` without the exhaustiveness check. The awaitable-body warning.
+3. **Analysis.** Definite assignment and nullable, modelled on the try statement (state at the start of a catch is the join of the states in the body) and on switch arms; IOperation.
+4. **Lowering.** The filter lowering above as a spill sequence; `TryExpressionSyntax` in `BindsToTryStatement`; Edit and Continue syntax maps.
+5. **Tests** in `SharperTests.cs`, next to the C# they stand for: union and best-common-type results, `when`, propagation of unmatched exceptions with their stack trace, `await` in the body and arms, spilled arguments (`F(a, try ...)`), `stackalloc`, iterators, expression trees, and the flag off.
+
+**Size:** L at the low end, about the size of implicit `it`. The parser and the lowering are M; most of the work is the
+target-typed conversion and flow and nullable analysis.
+
+## Feature 9: inferred parameter type, step P1
 
 `void Fetch(string url, infer retries = 3)` gives `retries` the type `int`, on branch `sharper/infer-parameter-p1`
 ([#72](https://github.com/ok3mad/roslyn/issues/72), feature page
@@ -619,6 +669,9 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 - [ ] Implicit `it`: an error that names the inner call when it claims `it` (today CS0411 at the outer call), and a cause string for writes to `it`. [#126](https://github.com/ok3mad/roslyn/issues/126)
 - [ ] Implicit `it`: the cost of the two trials and of the per-call syntax scan. [#127](https://github.com/ok3mad/roslyn/issues/127)
 - [ ] Implicit `it`: IDE support (Quick Info, hints) and the "name the parameter" fixer. [#128](https://github.com/ok3mad/roslyn/issues/128)
+- [ ] `try` expression: test a target-typed switch and `?:` into a C# 15 union before slice 1's binding. [#137](https://github.com/ok3mad/roslyn/issues/137)
+- [ ] `try` expression: a warning on a catch-all arm. [#135](https://github.com/ok3mad/roslyn/issues/135)
+- [ ] `try` expression: lift a task body instead of warning, after lifting (#32). [#136](https://github.com/ok3mad/roslyn/issues/136)
 - [ ] Test `/nowarn` and `.editorconfig` with five-digit Sharper IDs. [#91](https://github.com/ok3mad/roslyn/issues/91)
 - [ ] Decide immutability depth: binding, value or deep (a type-level immutability marker). [#92](https://github.com/ok3mad/roslyn/issues/92)
 - [ ] Sequence type: decide whether array creation should accept sequence elements (`new int[3][..]`, today CS0178, or `new int[..][3]`). [#64](https://github.com/ok3mad/roslyn/issues/64)

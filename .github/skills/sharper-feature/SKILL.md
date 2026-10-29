@@ -257,7 +257,7 @@ Inference of a parameter type (`infer x = 3`, row 15) has one entry point, `Para
 every member kind uses (lambdas: `Binder.BindLambdaParameterType`). A new source for a parameter type (the overridden
 member, uses in the body) goes into `SharperInferredParameterType.GetType`, keeping its cache and its cycle stack;
 a source that binds something must run before the signature lock, as the default value does (trap 28). The design is
-in the implementation plan, "Feature 8".
+in the implementation plan, "Feature 9".
 
 ## Testing
 
