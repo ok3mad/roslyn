@@ -8241,16 +8241,16 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
 
             void verify(ParameterSyntax parameter, ParameterSyntax twin)
             {
-                var symbol = model.GetDeclaredSymbol(parameter);
-                var twinSymbol = model.GetDeclaredSymbol(twin);
+                var symbol = model.GetDeclaredSymbol(parameter)!;
+                var twinSymbol = model.GetDeclaredSymbol(twin)!;
                 Assert.Equal(twinSymbol.Type.ToTestDisplayString(includeNonNullable: true), symbol.Type.ToTestDisplayString(includeNonNullable: true));
                 Assert.Equal(twinSymbol.NullableAnnotation, symbol.NullableAnnotation);
                 Assert.Equal(twinSymbol.ExplicitDefaultValue, symbol.ExplicitDefaultValue);
 
-                var typeInfo = model.GetTypeInfo(parameter.Type);
-                Assert.True(model.GetTypeInfo(twin.Type).Type.Equals(typeInfo.Type, SymbolEqualityComparer.Default));
+                var typeInfo = model.GetTypeInfo(parameter.Type!);
+                Assert.True(model.GetTypeInfo(twin.Type!).Type!.Equals(typeInfo.Type, SymbolEqualityComparer.Default));
                 Assert.Equal(symbol.NullableAnnotation, typeInfo.Nullability.Annotation);
-                Assert.True(symbol.Type.Equals(model.GetSymbolInfo(parameter.Type).Symbol, SymbolEqualityComparer.Default));
+                Assert.True(symbol.Type.Equals(model.GetSymbolInfo(parameter.Type!).Symbol, SymbolEqualityComparer.Default));
             }
         }
 
