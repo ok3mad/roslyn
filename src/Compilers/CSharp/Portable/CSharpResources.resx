@@ -351,14 +351,11 @@
   <data name="IDS_READONLYPARAMETER" xml:space="preserve">
     <value>readonly parameter</value>
   </data>
-  <data name="IDS_SharperInferOnBlockBody" xml:space="preserve">
-    <value>on a block body</value>
-  </data>
   <data name="IDS_SharperInferOnNonPrivateMember" xml:space="preserve">
     <value>on a member that is not private</value>
   </data>
-  <data name="IDS_SharperInferOnAsync" xml:space="preserve">
-    <value>on an async method</value>
+  <data name="IDS_SharperInferOnAsyncIterator" xml:space="preserve">
+    <value>on an async iterator</value>
   </data>
   <data name="IDS_SharperInferOnRefReturn" xml:space="preserve">
     <value>on a ref return</value>
@@ -8327,7 +8324,7 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
     <value>Call to a non-readonly member on a readonly parameter runs on a copy</value>
   </data>
   <data name="ERR_SharperInferNoType" xml:space="preserve">
-    <value>Cannot infer the return type of '{0}', because its body ({1}) has no type. Write the return type.</value>
+    <value>Cannot infer the return type of '{0}', because the value it returns ({1}) has no type. Write the return type.</value>
   </data>
   <data name="ERR_SharperInferNotSupportedYet" xml:space="preserve">
     <value>An inferred return type ('infer') is not supported {0} yet. Write the return type.</value>
@@ -8355,6 +8352,12 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
   </data>
   <data name="ERR_SharperItAwait" xml:space="preserve">
     <value>Cannot use 'await' in an implicit 'it' lambda. Write the lambda, as in 'async x =&gt; ...'.</value>
+  </data>
+  <data name="ERR_SharperInferNoBestType" xml:space="preserve">
+    <value>Cannot infer the return type of '{0}', because the values it returns ({1}) have no best common type. Write the return type.</value>
+  </data>
+  <data name="ERR_SharperInferIteratorYieldsNothing" xml:space="preserve">
+    <value>Cannot infer the return type of the iterator '{0}', because it has no 'yield return' to infer the element type from. Write the return type.</value>
   </data>
   <data name="ERR_SharperInferParameterNoType" xml:space="preserve">
     <value>Cannot infer the type of parameter '{0}', because its default value ({1}) has no type. Write the parameter type.</value>

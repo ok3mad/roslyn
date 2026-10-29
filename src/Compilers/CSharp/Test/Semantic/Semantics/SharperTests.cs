@@ -7107,40 +7107,40 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
-                // (3,34): error CS20014: Cannot infer the return type of 'C.M1()', because its body (<null>) has no type. Write the return type.
+                // (3,34): error CS20014: Cannot infer the return type of 'C.M1()', because the value it returns (<null>) has no type. Write the return type.
                 //     private static infer M1() => null;
                 Diagnostic(ErrorCode.ERR_SharperInferNoType, "null").WithArguments("C.M1()", "<null>").WithLocation(3, 34),
-                // (4,34): error CS20014: Cannot infer the return type of 'C.M2()', because its body (default) has no type. Write the return type.
+                // (4,34): error CS20014: Cannot infer the return type of 'C.M2()', because the value it returns (default) has no type. Write the return type.
                 //     private static infer M2() => default;
                 Diagnostic(ErrorCode.ERR_SharperInferNoType, "default").WithArguments("C.M2()", "default").WithLocation(4, 34),
-                // (5,34): error CS20014: Cannot infer the return type of 'C.M3()', because its body (lambda expression) has no type. Write the return type.
+                // (5,34): error CS20014: Cannot infer the return type of 'C.M3()', because the value it returns (lambda expression) has no type. Write the return type.
                 //     private static infer M3() => x => x;
                 Diagnostic(ErrorCode.ERR_SharperInferNoType, "x => x").WithArguments("C.M3()", "lambda expression").WithLocation(5, 34),
-                // (6,34): error CS20014: Cannot infer the return type of 'C.M4()', because its body (method group) has no type. Write the return type.
+                // (6,34): error CS20014: Cannot infer the return type of 'C.M4()', because the value it returns (method group) has no type. Write the return type.
                 //     private static infer M4() => System.Console.Write;
                 Diagnostic(ErrorCode.ERR_SharperInferNoType, "System.Console.Write").WithArguments("C.M4()", "method group").WithLocation(6, 34),
-                // (7,34): error CS20014: Cannot infer the return type of 'C.M5()', because its body (<throw expression>) has no type. Write the return type.
+                // (7,34): error CS20014: Cannot infer the return type of 'C.M5()', because the value it returns (<throw expression>) has no type. Write the return type.
                 //     private static infer M5() => throw null;
                 Diagnostic(ErrorCode.ERR_SharperInferNoType, "throw null").WithArguments("C.M5()", "<throw expression>").WithLocation(7, 34),
-                // (8,34): error CS20014: Cannot infer the return type of 'C.M6()', because its body (new()) has no type. Write the return type.
+                // (8,34): error CS20014: Cannot infer the return type of 'C.M6()', because the value it returns (new()) has no type. Write the return type.
                 //     private static infer M6() => new();
                 Diagnostic(ErrorCode.ERR_SharperInferNoType, "new()").WithArguments("C.M6()", "new()").WithLocation(8, 34),
-                // (9,34): error CS20014: Cannot infer the return type of 'C.M7()', because its body (collection expression) has no type. Write the return type.
+                // (9,34): error CS20014: Cannot infer the return type of 'C.M7()', because the value it returns (collection expression) has no type. Write the return type.
                 //     private static infer M7() => [1, 2];
                 Diagnostic(ErrorCode.ERR_SharperInferNoType, "[1, 2]").WithArguments("C.M7()", "collection expression").WithLocation(9, 34),
-                // (10,34): error CS20014: Cannot infer the return type of 'C.M8()', because its body ((int, <null>)) has no type. Write the return type.
+                // (10,34): error CS20014: Cannot infer the return type of 'C.M8()', because the value it returns ((int, <null>)) has no type. Write the return type.
                 //     private static infer M8() => (1, null);
                 Diagnostic(ErrorCode.ERR_SharperInferNoType, "(1, null)").WithArguments("C.M8()", "(int, <null>)").WithLocation(10, 34),
                 // (14,15): warning CS8321: The local function 'L1' is declared but never used
                 //         infer L1() => null;
                 Diagnostic(ErrorCode.WRN_UnreferencedLocalFunction, "L1").WithArguments("L1").WithLocation(14, 15),
-                // (14,23): error CS20014: Cannot infer the return type of 'L1()', because its body (<null>) has no type. Write the return type.
+                // (14,23): error CS20014: Cannot infer the return type of 'L1()', because the value it returns (<null>) has no type. Write the return type.
                 //         infer L1() => null;
                 Diagnostic(ErrorCode.ERR_SharperInferNoType, "null").WithArguments("L1()", "<null>").WithLocation(14, 23),
                 // (15,15): warning CS8321: The local function 'L2' is declared but never used
                 //         infer L2() => x => x;
                 Diagnostic(ErrorCode.WRN_UnreferencedLocalFunction, "L2").WithArguments("L2").WithLocation(15, 15),
-                // (15,23): error CS20014: Cannot infer the return type of 'L2()', because its body (lambda expression) has no type. Write the return type.
+                // (15,23): error CS20014: Cannot infer the return type of 'L2()', because the value it returns (lambda expression) has no type. Write the return type.
                 //         infer L2() => x => x;
                 Diagnostic(ErrorCode.ERR_SharperInferNoType, "x => x").WithArguments("L2()", "lambda expression").WithLocation(15, 23),
                 // (16,13): error CS0815: Cannot assign <null> to an implicitly-typed variable
@@ -7233,7 +7233,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
 
                 partial class C : B, I
                 {
-                    private infer BlockBody() { return 1; }
+                    private async infer AsyncIterator() { await Task.Yield(); yield return 1; }
                     public infer Public() => 1;
                     internal infer Internal() => 1;
                     protected infer Protected() => 1;
@@ -7255,7 +7255,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
 
                     void Locals()
                     {
-                        infer LBlock() { return 1; }
+                        async infer LAsyncIterator() { await Task.Yield(); yield return 1; }
                         async infer LAsync() => await Task.FromResult(1);
                         ref infer LRef() => ref _field;
                         static extern infer LExtern();
@@ -7280,9 +7280,9 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (15,22): error CS0535: 'C' does not implement interface member 'I.N()'
                 // partial class C : B, I
                 Diagnostic(ErrorCode.ERR_UnimplementedInterfaceMember, "I").WithArguments("C", "I.N()").WithLocation(15, 22),
-                // (17,13): error CS20015: An inferred return type ('infer') is not supported on a block body yet. Write the return type.
-                //     private infer BlockBody() { return 1; }
-                Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on a block body").WithLocation(17, 13),
+                // (17,19): error CS20015: An inferred return type ('infer') is not supported on an async iterator yet. Write the return type.
+                //     private async infer AsyncIterator() { await Task.Yield(); yield return 1; }
+                Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on an async iterator").WithLocation(17, 19),
                 // (18,12): error CS20015: An inferred return type ('infer') is not supported on a member that is not private yet. Write the return type.
                 //     public infer Public() => 1;
                 Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on a member that is not private").WithLocation(18, 12),
@@ -7313,9 +7313,6 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (26,21): error CS20015: An inferred return type ('infer') is not supported on a partial method yet. Write the return type.
                 //     private partial infer Partial() => 1;
                 Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on a partial method").WithLocation(26, 21),
-                // (27,19): error CS20015: An inferred return type ('infer') is not supported on an async method yet. Write the return type.
-                //     private async infer Async() => await Task.FromResult(1);
-                Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on an async method").WithLocation(27, 19),
                 // (29,17): error CS20015: An inferred return type ('infer') is not supported on a ref return yet. Write the return type.
                 //     private ref infer Ref() => ref _field;
                 Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on a ref return").WithLocation(29, 17),
@@ -7343,15 +7340,12 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (35,36): error CS0513: 'C.Abstract()' is abstract but it is contained in non-abstract type 'C'
                 //     public override abstract infer Abstract();
                 Diagnostic(ErrorCode.ERR_AbstractInConcreteClass, "Abstract").WithArguments("C.Abstract()", "C").WithLocation(35, 36),
-                // (39,9): error CS20015: An inferred return type ('infer') is not supported on a block body yet. Write the return type.
-                //         infer LBlock() { return 1; }
-                Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on a block body").WithLocation(39, 9),
-                // (39,15): warning CS8321: The local function 'LBlock' is declared but never used
-                //         infer LBlock() { return 1; }
-                Diagnostic(ErrorCode.WRN_UnreferencedLocalFunction, "LBlock").WithArguments("LBlock").WithLocation(39, 15),
-                // (40,15): error CS20015: An inferred return type ('infer') is not supported on an async method yet. Write the return type.
-                //         async infer LAsync() => await Task.FromResult(1);
-                Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on an async method").WithLocation(40, 15),
+                // (39,15): error CS20015: An inferred return type ('infer') is not supported on an async iterator yet. Write the return type.
+                //         async infer LAsyncIterator() { await Task.Yield(); yield return 1; }
+                Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on an async iterator").WithLocation(39, 15),
+                // (39,21): warning CS8321: The local function 'LAsyncIterator' is declared but never used
+                //         async infer LAsyncIterator() { await Task.Yield(); yield return 1; }
+                Diagnostic(ErrorCode.WRN_UnreferencedLocalFunction, "LAsyncIterator").WithArguments("LAsyncIterator").WithLocation(39, 21),
                 // (40,21): warning CS8321: The local function 'LAsync' is declared but never used
                 //         async infer LAsync() => await Task.FromResult(1);
                 Diagnostic(ErrorCode.WRN_UnreferencedLocalFunction, "LAsync").WithArguments("LAsync").WithLocation(40, 21),
@@ -7686,6 +7680,416 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         }
 
         [Fact]
+        public void Infer_Block_Basic()
+        {
+            // Block bodies, iterators and async methods, each next to its C# twin.
+            var source = """
+                using System;
+                using System.Collections.Generic;
+                using System.Threading.Tasks;
+
+                class C
+                {
+                    private static infer Classify(int n)
+                    {
+                        if (n < 0) return "negative";
+                        return n == 0 ? "zero" : "positive";
+                    }
+                    private static string ClassifyCSharp(int n)
+                    {
+                        if (n < 0) return "negative";
+                        return n == 0 ? "zero" : "positive";
+                    }
+
+                    private static infer Evens(int max) { for (var i = 0; i < max; i += 2) yield return i; }
+                    private static IEnumerable<int> EvensCSharp(int max) { for (var i = 0; i < max; i += 2) yield return i; }
+
+                    private static async infer LoadAsync(int id) { await Task.Yield(); return id; }
+                    private static async Task<int> LoadAsyncCSharp(int id) { await Task.Yield(); return id; }
+
+                    private static async infer WaitAsync() { await Task.Yield(); Console.Write("w"); }
+                    private static async Task WaitAsyncCSharp() { await Task.Yield(); Console.Write("w"); }
+
+                    private static infer Log(string s) { Console.Write(s); }
+                    private static void LogCSharp(string s) { Console.Write(s); }
+
+                    static async Task Main()
+                    {
+                        infer Twice(int x) { return x * 2; }
+                        int TwiceCSharp(int x) { return x * 2; }
+                        infer Digits(int x) { foreach (var c in x.ToString()) yield return c - '0'; }
+                        IEnumerable<int> DigitsCSharp(int x) { foreach (var c in x.ToString()) yield return c - '0'; }
+                        async infer Later(string s) { await Task.Yield(); return s + "!"; }
+                        async Task<string> LaterCSharp(string s) { await Task.Yield(); return s + "!"; }
+
+                        Console.Write(Classify(-1) + ClassifyCSharp(0) + Classify(1));
+                        Console.Write(string.Join(",", Evens(5)) + ";" + string.Join(",", EvensCSharp(5)));
+                        Console.Write(await LoadAsync(7) + await LoadAsyncCSharp(8));
+                        await WaitAsync();
+                        await WaitAsyncCSharp();
+                        Log("l");
+                        LogCSharp("l");
+                        Console.Write(Twice(21) + TwiceCSharp(21));
+                        Console.Write(string.Join("", Digits(123)) + string.Join("", DigitsCSharp(45)));
+                        Console.Write(await Later("a") + await LaterCSharp("b"));
+                    }
+                }
+                """;
+            var verifier = CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90,
+                expectedOutput: ExecutionConditionUtil.IsCoreClr ? "negativezeropositive0,2,4;0,2,415wwll8412345a!b!" : null);
+            verifier.VerifyDiagnostics();
+            var comp = (CSharpCompilation)verifier.Compilation;
+            foreach (var name in new[] { "Classify", "Evens", "LoadAsync", "WaitAsync", "Log" })
+            {
+                Assert.Equal(
+                    comp.GetMember<MethodSymbol>("C." + name + "CSharp").ReturnTypeWithAnnotations.ToTestDisplayString(includeNonNullable: true),
+                    comp.GetMember<MethodSymbol>("C." + name).ReturnTypeWithAnnotations.ToTestDisplayString(includeNonNullable: true));
+            }
+        }
+
+        [Fact]
+        public void Infer_Block_Types()
+        {
+            // The inferred type is the one a lambda with the same body would infer: the best common type of the returned values.
+            var source = """
+                using System;
+                using System.Collections.Generic;
+                using System.Threading.Tasks;
+
+                class B { }
+                class D : B { }
+
+                class C
+                {
+                    private static infer M01(int i) { if (i > 0) return 1; return 2L; }
+                    private static long M01CSharp(int i) { if (i > 0) return 1; return 2L; }
+                    private static infer M02(int i) { if (i > 0) return "a"; return null; }
+                    private static string M02CSharp(int i) { if (i > 0) return "a"; return null; }
+                    private static infer M03(int i) { if (i > 0) return new D(); return new B(); }
+                    private static B M03CSharp(int i) { if (i > 0) return new D(); return new B(); }
+                    private static infer M04() { return () => 1; }
+                    private static Func<int> M04CSharp() { return () => 1; }
+                    private static infer M05() { }
+                    private static void M05CSharp() { }
+                    private static infer M06(int i) { if (i > 0) return; Console.Write(i); }
+                    private static void M06CSharp(int i) { if (i > 0) return; Console.Write(i); }
+                    private static infer M07() { throw null; }
+                    private static void M07CSharp() { throw null; }
+                    private static infer M08<T>(T t, bool b) { if (b) return default(T); return t; }
+                    private static T M08CSharp<T>(T t, bool b) { if (b) return default(T); return t; }
+                    private static infer M09() { Func<string> f = () => { return "a"; }; int L() { return 1; } return L(); }
+                    private static int M09CSharp() { Func<string> f = () => { return "a"; }; int L() { return 1; } return L(); }
+                    private static infer M10(int i) { var t = (A: i, B: "b"); return t; }
+                    private static (int A, string B) M10CSharp(int i) { var t = (A: i, B: "b"); return t; }
+                    private static infer M11(bool b) { if (b) yield return null; yield return "a"; }
+                    private static IEnumerable<string> M11CSharp(bool b) { if (b) yield return null; yield return "a"; }
+                    private static infer M12(int[] xs) { yield return ..xs; yield return 1; }
+                    private static IEnumerable<int> M12CSharp(int[] xs) { foreach (var x in xs) yield return x; yield return 1; }
+                    private static infer M13(int[] xs) { yield return ..xs; }
+                    private static IEnumerable<int> M13CSharp(int[] xs) { foreach (var x in xs) yield return x; }
+                    private static infer M14(Index i) { yield return ..i; }
+                    private static IEnumerable<Range> M14CSharp(Index i) { yield return ..i; }
+                    private static async infer M15(bool b) { await Task.Yield(); if (b) return; }
+                    private static async Task M15CSharp(bool b) { await Task.Yield(); if (b) return; }
+                    private static async infer M16(int i) { await Task.Yield(); if (i > 0) return 1; return 2L; }
+                    private static async Task<long> M16CSharp(int i) { await Task.Yield(); if (i > 0) return 1; return 2L; }
+                    private static async infer M17() { await Task.Yield(); return new[] { 1 }; }
+                    private static async Task<int[]> M17CSharp() { await Task.Yield(); return new[] { 1 }; }
+                    private static infer M18(int i) { switch (i) { case 0: return (byte)0; case 1: return (short)1; default: return 2; } }
+                    private static int M18CSharp(int i) { switch (i) { case 0: return (byte)0; case 1: return (short)1; default: return 2; } }
+                    private static infer M19() { yield return M05CSharp; }
+                    private static IEnumerable<Action> M19CSharp() { yield return M05CSharp; }
+                    private static infer M20(object o) { if (o is string s) return s; else return ""; }
+                    private static string M20CSharp(object o) { if (o is string s) return s; else return ""; }
+                    private static async infer M21() => await Task.FromResult(1);
+                    private static async Task<int> M21CSharp() => await Task.FromResult(1);
+                    private static async infer M22() => await Task.Yield();
+                    private static async Task M22CSharp() => await Task.Yield();
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics();
+            foreach (var method in comp.GetMember<NamedTypeSymbol>("C").GetMembers().OfType<MethodSymbol>().Where(m => m.Name.StartsWith("M") && !m.Name.EndsWith("CSharp")))
+            {
+                var twin = comp.GetMember<MethodSymbol>("C." + method.Name + "CSharp");
+                Assert.Equal(twin.ReturnTypeWithAnnotations.ToTestDisplayString(includeNonNullable: true), method.ReturnTypeWithAnnotations.ToTestDisplayString(includeNonNullable: true));
+                Assert.Equal(twin.ReturnsVoid, method.ReturnsVoid);
+            }
+        }
+
+        [Fact]
+        public void Infer_Block_NoType()
+        {
+            // Returned values with no best common type, or no type at all, ask for the type.
+            var source = """
+                using System.Threading.Tasks;
+
+                class C
+                {
+                    private static infer M1() { return null; }
+                    private static infer M2(int i) { if (i > 0) return 1; return "a"; }
+                    private static infer M3(int i) { if (i > 0) return null; return default; }
+                    private static infer M4() { yield break; }
+                    private static infer M5(bool b) { if (b) yield return 1; yield return "a"; }
+                    private static async infer M6() { await Task.Yield(); return null; }
+                    private static infer M7() { return x => x; }
+                    private static infer M8() { yield return null; }
+
+                    static void Main()
+                    {
+                        infer L1(int i) { if (i > 0) return 'a'; return true; }
+                        _ = L1(1);
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (5,40): error CS20014: Cannot infer the return type of 'C.M1()', because the value it returns (<null>) has no type. Write the return type.
+                //     private static infer M1() { return null; }
+                Diagnostic(ErrorCode.ERR_SharperInferNoType, "null").WithArguments("C.M1()", "<null>").WithLocation(5, 40),
+                // (6,20): error CS20024: Cannot infer the return type of 'C.M2(int)', because the values it returns (int, string) have no best common type. Write the return type.
+                //     private static infer M2(int i) { if (i > 0) return 1; return "a"; }
+                Diagnostic(ErrorCode.ERR_SharperInferNoBestType, "infer").WithArguments("C.M2(int)", "int, string").WithLocation(6, 20),
+                // (7,20): error CS20024: Cannot infer the return type of 'C.M3(int)', because the values it returns (<null>, default) have no best common type. Write the return type.
+                //     private static infer M3(int i) { if (i > 0) return null; return default; }
+                Diagnostic(ErrorCode.ERR_SharperInferNoBestType, "infer").WithArguments("C.M3(int)", "<null>, default").WithLocation(7, 20),
+                // (8,20): error CS20025: Cannot infer the return type of the iterator 'C.M4()', because it has no 'yield return' to infer the element type from. Write the return type.
+                //     private static infer M4() { yield break; }
+                Diagnostic(ErrorCode.ERR_SharperInferIteratorYieldsNothing, "infer").WithArguments("C.M4()").WithLocation(8, 20),
+                // (9,20): error CS20024: Cannot infer the return type of 'C.M5(bool)', because the values it returns (int, string) have no best common type. Write the return type.
+                //     private static infer M5(bool b) { if (b) yield return 1; yield return "a"; }
+                Diagnostic(ErrorCode.ERR_SharperInferNoBestType, "infer").WithArguments("C.M5(bool)", "int, string").WithLocation(9, 20),
+                // (10,66): error CS20014: Cannot infer the return type of 'C.M6()', because the value it returns (<null>) has no type. Write the return type.
+                //     private static async infer M6() { await Task.Yield(); return null; }
+                Diagnostic(ErrorCode.ERR_SharperInferNoType, "null").WithArguments("C.M6()", "<null>").WithLocation(10, 66),
+                // (11,40): error CS20014: Cannot infer the return type of 'C.M7()', because the value it returns (lambda expression) has no type. Write the return type.
+                //     private static infer M7() { return x => x; }
+                Diagnostic(ErrorCode.ERR_SharperInferNoType, "x => x").WithArguments("C.M7()", "lambda expression").WithLocation(11, 40),
+                // (12,46): error CS20014: Cannot infer the return type of 'C.M8()', because the value it returns (<null>) has no type. Write the return type.
+                //     private static infer M8() { yield return null; }
+                Diagnostic(ErrorCode.ERR_SharperInferNoType, "null").WithArguments("C.M8()", "<null>").WithLocation(12, 46),
+                // (16,9): error CS20024: Cannot infer the return type of 'L1(int)', because the values it returns (char, bool) have no best common type. Write the return type.
+                //         infer L1(int i) { if (i > 0) return 'a'; return true; }
+                Diagnostic(ErrorCode.ERR_SharperInferNoBestType, "infer").WithArguments("L1(int)", "char, bool").WithLocation(16, 9));
+        }
+
+        [Fact]
+        public void Infer_Block_Errors()
+        {
+            // A returned value with errors gives an error type and no extra error; other errors in the body do not stop the inference.
+            var source = """
+                class C
+                {
+                    private static int _field;
+                    private static infer M1() { return Undefined; }
+                    private static infer M2(int i) { if (i > 0) return; return 1; }
+                    private static infer M3() { return ref _field; }
+                    private static infer M4() { int x = "a"; return 1; }
+                    private static infer M5() { yield return 1; return 2; }
+                    private static infer M6() { return System.Console.WriteLine(); }
+                    private static int Caller() => M4() + M2(1);
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (3,24): warning CS0649: Field 'C._field' is never assigned to, and will always have its default value 0
+                //     private static int _field;
+                Diagnostic(ErrorCode.WRN_UnassignedInternalField, "_field").WithArguments("C._field", "0").WithLocation(3, 24),
+                // (4,40): error CS0103: The name 'Undefined' does not exist in the current context
+                //     private static infer M1() { return Undefined; }
+                Diagnostic(ErrorCode.ERR_NameNotInContext, "Undefined").WithArguments("Undefined").WithLocation(4, 40),
+                // (5,49): error CS0126: An object of a type convertible to 'int' is required
+                //     private static infer M2(int i) { if (i > 0) return; return 1; }
+                Diagnostic(ErrorCode.ERR_RetObjectRequired, "return").WithArguments("int").WithLocation(5, 49),
+                // (6,33): error CS8149: By-reference returns may only be used in methods that return by reference
+                //     private static infer M3() { return ref _field; }
+                Diagnostic(ErrorCode.ERR_MustNotHaveRefReturn, "return").WithLocation(6, 33),
+                // (7,41): error CS0029: Cannot implicitly convert type 'string' to 'int'
+                //     private static infer M4() { int x = "a"; return 1; }
+                Diagnostic(ErrorCode.ERR_NoImplicitConv, @"""a""").WithArguments("string", "int").WithLocation(7, 41),
+                // (8,49): error CS1622: Cannot return a value from an iterator. Use the yield return statement to return a value, or yield break to end the iteration.
+                //     private static infer M5() { yield return 1; return 2; }
+                Diagnostic(ErrorCode.ERR_ReturnInIterator, "return").WithLocation(8, 49),
+                // (9,33): error CS0127: Since 'C.M6()' returns void, a return keyword must not be followed by an object expression
+                //     private static infer M6() { return System.Console.WriteLine(); }
+                Diagnostic(ErrorCode.ERR_RetNoObjectRequired, "return").WithArguments("C.M6()").WithLocation(9, 33));
+        }
+
+        [Fact]
+        public void Infer_Block_UsesItselfOrInferred()
+        {
+            // The R1 rules on uses of inferred methods apply to block bodies, iterators and async methods.
+            var source = """
+                class C
+                {
+                    private static infer Fib(int i) { if (i < 2) return 1; return Fib(i - 1) + Fib(i - 2); }
+                    private static infer Count(int i) { if (i > 0) foreach (var x in Count(i - 1)) yield return x; yield return i; }
+                    private static async infer Wait(int i) { if (i > 0) await Wait(i - 1); }
+                    private static infer One() => 1;
+                    private static infer Two() { return One() + One(); }
+
+                    static void Main()
+                    {
+                        infer Outer()
+                        {
+                            infer Inner() { return 1; }
+                            return 2;
+                        }
+                        _ = Outer();
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (3,20): error CS20018: Cannot infer the return type of 'C.Fib(int)', because its body uses 'C.Fib(int)' itself. Write the return type.
+                //     private static infer Fib(int i) { if (i < 2) return 1; return Fib(i - 1) + Fib(i - 2); }
+                Diagnostic(ErrorCode.ERR_SharperInferUsesItself, "infer").WithArguments("C.Fib(int)").WithLocation(3, 20),
+                // (4,20): error CS20018: Cannot infer the return type of 'C.Count(int)', because its body uses 'C.Count(int)' itself. Write the return type.
+                //     private static infer Count(int i) { if (i > 0) foreach (var x in Count(i - 1)) yield return x; yield return i; }
+                Diagnostic(ErrorCode.ERR_SharperInferUsesItself, "infer").WithArguments("C.Count(int)").WithLocation(4, 20),
+                // (5,26): error CS20018: Cannot infer the return type of 'C.Wait(int)', because its body uses 'C.Wait(int)' itself. Write the return type.
+                //     private static async infer Wait(int i) { if (i > 0) await Wait(i - 1); }
+                Diagnostic(ErrorCode.ERR_SharperInferUsesItself, "infer").WithArguments("C.Wait(int)").WithLocation(5, 26),
+                // (7,20): error CS20017: Cannot infer the return type of 'C.Two()', because its body uses 'C.One()', whose return type is inferred too. Write the return type of one of them.
+                //     private static infer Two() { return One() + One(); }
+                Diagnostic(ErrorCode.ERR_SharperInferUsesInferredMethod, "infer").WithArguments("C.Two()", "C.One()").WithLocation(7, 20),
+                // (11,9): error CS20017: Cannot infer the return type of 'Outer()', because its body uses 'Inner()', whose return type is inferred too. Write the return type of one of them.
+                //         infer Outer()
+                Diagnostic(ErrorCode.ERR_SharperInferUsesInferredMethod, "infer").WithArguments("Outer()", "Inner()").WithLocation(11, 9),
+                // (13,19): warning CS8321: The local function 'Inner' is declared but never used
+                //             infer Inner() { return 1; }
+                Diagnostic(ErrorCode.WRN_UnreferencedLocalFunction, "Inner").WithArguments("Inner").WithLocation(13, 19));
+        }
+
+        [Fact]
+        public void Infer_Block_Nullable()
+        {
+            // One maybe-null returned value makes the inferred type annotated, as for the return type of a lambda.
+            var source = """
+                #nullable enable
+                using System.Collections.Generic;
+                using System.Threading.Tasks;
+
+                class C
+                {
+                    private static infer M1(string? s) { if (s is null) return null; return s; }
+                    private static string? M1CSharp(string? s) { if (s is null) return null; return s; }
+                    private static infer M2(string? s) { if (s is null) return ""; return s; }
+                    private static string M2CSharp(string? s) { if (s is null) return ""; return s; }
+                    private static infer M3(string? s) { yield return "a"; yield return s; }
+                    private static IEnumerable<string?> M3CSharp(string? s) { yield return "a"; yield return s; }
+                    private static infer M4(string? s) { yield return "a"; if (s != null) yield return s; }
+                    private static IEnumerable<string> M4CSharp(string? s) { yield return "a"; if (s != null) yield return s; }
+                    private static async infer M5(string? s) { await Task.Yield(); return s; }
+                    private static async Task<string?> M5CSharp(string? s) { await Task.Yield(); return s; }
+                    private static infer M6(string?[] xs) { yield return ..xs; }
+                    private static IEnumerable<string?> M6CSharp(string?[] xs) { foreach (var x in xs) yield return x; }
+                    private static infer M7(string? s) { if (s == null) return new[] { "a" }; return new[] { s }; }
+                    private static string[] M7CSharp(string? s) { if (s == null) return new[] { "a" }; return new[] { s }; }
+                #nullable disable
+                    private static infer M8(string s) { if (s == null) return null; return s; }
+                    private static string M8CSharp(string s) { if (s == null) return null; return s; }
+                #nullable enable
+
+                    static void Main()
+                    {
+                        _ = M1("a").Length;
+                        _ = M2(null).Length;
+                        foreach (var s in M3(null)) _ = s.Length;
+                        foreach (var s in M4(null)) _ = s.Length;
+                        _ = M8(null).Length;
+                    }
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics(
+                // (28,13): warning CS8602: Dereference of a possibly null reference.
+                //         _ = M1("a").Length;
+                Diagnostic(ErrorCode.WRN_NullReferenceReceiver, @"M1(""a"")").WithLocation(28, 13),
+                // (30,41): warning CS8602: Dereference of a possibly null reference.
+                //         foreach (var s in M3(null)) _ = s.Length;
+                Diagnostic(ErrorCode.WRN_NullReferenceReceiver, "s").WithLocation(30, 41));
+            foreach (var method in comp.GetMember<NamedTypeSymbol>("C").GetMembers().OfType<MethodSymbol>().Where(m => m.Name.StartsWith("M") && m.Name != "Main" && !m.Name.EndsWith("CSharp")))
+            {
+                var twin = comp.GetMember<MethodSymbol>("C." + method.Name + "CSharp");
+                Assert.Equal(twin.ReturnTypeWithAnnotations.ToTestDisplayString(includeNonNullable: true), method.ReturnTypeWithAnnotations.ToTestDisplayString(includeNonNullable: true));
+            }
+        }
+
+        [Fact]
+        public void Infer_Block_SemanticModel()
+        {
+            var source = """
+                using System.Collections.Generic;
+                using System.Threading.Tasks;
+
+                class C
+                {
+                    private static infer M(int i) { if (i > 0) return 1; return 2L; }
+                    private static long MCSharp(int i) { if (i > 0) return 1; return 2L; }
+                    private static infer N() { yield return "a"; }
+                    private static IEnumerable<string> NCSharp() { yield return "a"; }
+                    private static async infer A() { await Task.Yield(); return 1; }
+                    private static async Task<int> ACSharp() { await Task.Yield(); return 1; }
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics();
+            var tree = comp.SyntaxTrees[0];
+            var model = comp.GetSemanticModel(tree);
+            var methods = tree.GetRoot().DescendantNodes().OfType<MethodDeclarationSyntax>().ToArray();
+            for (int i = 0; i < methods.Length; i += 2)
+            {
+                var method = model.GetDeclaredSymbol(methods[i]);
+                var twin = model.GetDeclaredSymbol(methods[i + 1]);
+                Assert.Equal(twin.ReturnType.ToTestDisplayString(), method.ReturnType.ToTestDisplayString());
+                Assert.True(twin.ReturnType.Equals(model.GetTypeInfo(methods[i].ReturnType).Type, SymbolEqualityComparer.Default));
+
+                // The return statements convert to the inferred type, as to the written one.
+                var returns = methods[i].DescendantNodes().OfType<ReturnStatementSyntax>().Select(r => model.GetTypeInfo(r.Expression).ConvertedType.ToTestDisplayString());
+                var twinReturns = methods[i + 1].DescendantNodes().OfType<ReturnStatementSyntax>().Select(r => model.GetTypeInfo(r.Expression).ConvertedType.ToTestDisplayString());
+                Assert.Equal(twinReturns, returns);
+            }
+        }
+
+        [Fact]
+        public void Infer_Block_IOperation()
+        {
+            // The body binds against the inferred type, as it would against the written type.
+            var source = """
+                class C
+                {
+                    private static infer M(int i)
+                    /*<bind>*/{
+                        if (i > 0) return 1;
+                        return 2L;
+                    }/*</bind>*/
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            var expectedOperationTree = """
+                IBlockOperation (2 statements) (OperationKind.Block, Type: null) (Syntax: '{ ... }')
+                  IConditionalOperation (OperationKind.Conditional, Type: null) (Syntax: 'if (i > 0) return 1;')
+                    Condition:
+                      IBinaryOperation (BinaryOperatorKind.GreaterThan) (OperationKind.Binary, Type: System.Boolean) (Syntax: 'i > 0')
+                        Left:
+                          IParameterReferenceOperation: i (OperationKind.ParameterReference, Type: System.Int32) (Syntax: 'i')
+                        Right:
+                          ILiteralOperation (OperationKind.Literal, Type: System.Int32, Constant: 0) (Syntax: '0')
+                    WhenTrue:
+                      IReturnOperation (OperationKind.Return, Type: null) (Syntax: 'return 1;')
+                        ReturnedValue:
+                          IConversionOperation (TryCast: False, Unchecked) (OperationKind.Conversion, Type: System.Int64, Constant: 1, IsImplicit) (Syntax: '1')
+                            Conversion: CommonConversion (Exists: True, IsIdentity: False, IsNumeric: True, IsReference: False, IsUserDefined: False) (MethodSymbol: null)
+                            Operand:
+                              ILiteralOperation (OperationKind.Literal, Type: System.Int32, Constant: 1) (Syntax: '1')
+                    WhenFalse:
+                      null
+                  IReturnOperation (OperationKind.Return, Type: null) (Syntax: 'return 2L;')
+                    ReturnedValue:
+                      ILiteralOperation (OperationKind.Literal, Type: System.Int64, Constant: 2) (Syntax: '2L')
+                """;
+            VerifyOperationTreeAndDiagnosticsForTest<BlockSyntax>(comp, expectedOperationTree, []);
+        }
+
+        [Fact]
         public void InferParameter_Basic()
         {
             // Each member with an inferred parameter type next to its C# twin, which writes the type out.
@@ -7872,28 +8276,28 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
-                // (3,23): error CS20024: Cannot infer the type of parameter 'x', because its default value (<null>) has no type. Write the parameter type.
+                // (3,23): error CS20026: Cannot infer the type of parameter 'x', because its default value (<null>) has no type. Write the parameter type.
                 //     void M1(infer x = null) { }
                 Diagnostic(ErrorCode.ERR_SharperInferParameterNoType, "null").WithArguments("x", "<null>").WithLocation(3, 23),
-                // (4,23): error CS20024: Cannot infer the type of parameter 'x', because its default value (default) has no type. Write the parameter type.
+                // (4,23): error CS20026: Cannot infer the type of parameter 'x', because its default value (default) has no type. Write the parameter type.
                 //     void M2(infer x = default) { }
                 Diagnostic(ErrorCode.ERR_SharperInferParameterNoType, "default").WithArguments("x", "default").WithLocation(4, 23),
-                // (5,23): error CS20024: Cannot infer the type of parameter 'x', because its default value (new()) has no type. Write the parameter type.
+                // (5,23): error CS20026: Cannot infer the type of parameter 'x', because its default value (new()) has no type. Write the parameter type.
                 //     void M3(infer x = new()) { }
                 Diagnostic(ErrorCode.ERR_SharperInferParameterNoType, "new()").WithArguments("x", "new()").WithLocation(5, 23),
-                // (6,23): error CS20024: Cannot infer the type of parameter 'x', because its default value (collection expression) has no type. Write the parameter type.
+                // (6,23): error CS20026: Cannot infer the type of parameter 'x', because its default value (collection expression) has no type. Write the parameter type.
                 //     void M4(infer x = [1, 2]) { }
                 Diagnostic(ErrorCode.ERR_SharperInferParameterNoType, "[1, 2]").WithArguments("x", "collection expression").WithLocation(6, 23),
-                // (7,23): error CS20024: Cannot infer the type of parameter 'x', because its default value (lambda expression) has no type. Write the parameter type.
+                // (7,23): error CS20026: Cannot infer the type of parameter 'x', because its default value (lambda expression) has no type. Write the parameter type.
                 //     void M5(infer x = y => y) { }
                 Diagnostic(ErrorCode.ERR_SharperInferParameterNoType, "y => y").WithArguments("x", "lambda expression").WithLocation(7, 23),
-                // (8,23): error CS20024: Cannot infer the type of parameter 'x', because its default value (method group) has no type. Write the parameter type.
+                // (8,23): error CS20026: Cannot infer the type of parameter 'x', because its default value (method group) has no type. Write the parameter type.
                 //     void M6(infer x = System.Console.Write) { }
                 Diagnostic(ErrorCode.ERR_SharperInferParameterNoType, "System.Console.Write").WithArguments("x", "method group").WithLocation(8, 23),
-                // (9,23): error CS20024: Cannot infer the type of parameter 'x', because its default value (void) has no type. Write the parameter type.
+                // (9,23): error CS20026: Cannot infer the type of parameter 'x', because its default value (void) has no type. Write the parameter type.
                 //     void M7(infer x = System.Console.WriteLine()) { }
                 Diagnostic(ErrorCode.ERR_SharperInferParameterNoType, "System.Console.WriteLine()").WithArguments("x", "void").WithLocation(9, 23),
-                // (10,23): error CS20024: Cannot infer the type of parameter 'x', because its default value ((int, <null>)) has no type. Write the parameter type.
+                // (10,23): error CS20026: Cannot infer the type of parameter 'x', because its default value ((int, <null>)) has no type. Write the parameter type.
                 //     void M8(infer x = (1, null)) { }
                 Diagnostic(ErrorCode.ERR_SharperInferParameterNoType, "(1, null)").WithArguments("x", "(int, <null>)").WithLocation(10, 23),
                 // (11,23): error CS0103: The name 'Missing' does not exist in the current context
@@ -7961,19 +8365,19 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (1,7): error CS1106: Extension method must be defined in a non-generic static class
                 // class C
                 Diagnostic(ErrorCode.ERR_BadExtensionAgg, "C").WithLocation(1, 7),
-                // (3,13): error CS20025: Cannot infer the type of parameter 'x', because it has no default value. Write the parameter type.
+                // (3,13): error CS20027: Cannot infer the type of parameter 'x', because it has no default value. Write the parameter type.
                 //     void M1(infer x) { }
                 Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x").WithLocation(3, 13),
-                // (4,17): error CS20025: Cannot infer the type of parameter 'x', because it has no default value. Write the parameter type.
+                // (4,17): error CS20027: Cannot infer the type of parameter 'x', because it has no default value. Write the parameter type.
                 //     void M2(ref infer x) { }
                 Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x").WithLocation(4, 17),
-                // (5,17): error CS20025: Cannot infer the type of parameter 'x', because it has no default value. Write the parameter type.
+                // (5,17): error CS20027: Cannot infer the type of parameter 'x', because it has no default value. Write the parameter type.
                 //     void M3(out infer x) { x = default; }
                 Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x").WithLocation(5, 17),
                 // (6,13): error CS0225: The params parameter must have a valid collection type
                 //     void M4(params infer x) { }
                 Diagnostic(ErrorCode.ERR_ParamsMustBeCollection, "params").WithLocation(6, 13),
-                // (6,20): error CS20025: Cannot infer the type of parameter 'x', because it has no default value. Write the parameter type.
+                // (6,20): error CS20027: Cannot infer the type of parameter 'x', because it has no default value. Write the parameter type.
                 //     void M4(params infer x) { }
                 Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x").WithLocation(6, 20),
                 // (7,13): error CS1741: A ref or out parameter cannot have a default value
@@ -8072,19 +8476,19 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
                 _ = comp.GetMember<MethodSymbol>(first).Parameters;
                 comp.VerifyDiagnostics(
-                    // (3,21): error CS20026: Cannot infer the type of parameter 'x', because its default value depends on the type of 'x' itself. Write the parameter type.
+                    // (3,21): error CS20028: Cannot infer the type of parameter 'x', because its default value depends on the type of 'x' itself. Write the parameter type.
                     //     static int Self(infer x = Self()) => 0;
                     Diagnostic(ErrorCode.ERR_SharperInferParameterCycle, "infer").WithArguments("x").WithLocation(3, 21),
-                    // (4,18): error CS20026: Cannot infer the type of parameter 'x', because its default value depends on the type of 'x' itself. Write the parameter type.
+                    // (4,18): error CS20028: Cannot infer the type of parameter 'x', because its default value depends on the type of 'x' itself. Write the parameter type.
                     //     static int A(infer x = B()) => 0;
                     Diagnostic(ErrorCode.ERR_SharperInferParameterCycle, "infer").WithArguments("x").WithLocation(4, 18),
-                    // (5,18): error CS20026: Cannot infer the type of parameter 'x', because its default value depends on the type of 'x' itself. Write the parameter type.
+                    // (5,18): error CS20028: Cannot infer the type of parameter 'x', because its default value depends on the type of 'x' itself. Write the parameter type.
                     //     static int B(infer x = A()) => 0;
                     Diagnostic(ErrorCode.ERR_SharperInferParameterCycle, "infer").WithArguments("x").WithLocation(5, 18),
                     // (6,31): error CS1736: Default parameter value for 'x' must be a compile-time constant
                     //     static int Uses(infer x = A()) => 0;
                     Diagnostic(ErrorCode.ERR_DefaultValueMustBeConstant, "A()").WithArguments("x").WithLocation(6, 31),
-                    // (13,19): error CS20026: Cannot infer the type of parameter 'x', because its default value depends on the type of 'x' itself. Write the parameter type.
+                    // (13,19): error CS20028: Cannot infer the type of parameter 'x', because its default value depends on the type of 'x' itself. Write the parameter type.
                     //         int Local(infer x = Local()) => 0;
                     Diagnostic(ErrorCode.ERR_SharperInferParameterCycle, "infer").WithArguments("x").WithLocation(13, 19));
                 Assert.Equal("System.Int32", comp.GetMember<MethodSymbol>("C.Uses").Parameters[0].Type.ToTestDisplayString());

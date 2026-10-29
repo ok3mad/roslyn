@@ -28,11 +28,11 @@ metadata all see `int retries = 3`. Step P1 takes the type from the default valu
   `infer timeout = TimeSpan.FromSeconds(5)` is a `TimeSpan` with CS1736. `ref` and `out` parameters cannot have a
   default value (CS1741), `params` and `this` parameters neither (CS1751, CS1743), and caller information attributes
   check the inferred type (`[CallerMemberName] infer m = 0` reports CS4019).
-- **Nothing to infer from.** A default value with no type of its own reports CS20024: `null`, `default`, `new()`, a
+- **Nothing to infer from.** A default value with no type of its own reports CS20026: `null`, `default`, `new()`, a
   collection expression, a lambda or method group without a natural type, a call that returns `void`, `(1, null)`. A
   default value with errors of its own reports only those. In both cases the parameter type is an error type, and the
   default value reports nothing more.
-- **No default value.** `infer x` without a default value reports CS20025. Step P2 takes such types from the
+- **No default value.** `infer x` without a default value reports CS20027. Step P2 takes such types from the
   overridden or implemented member.
 - **Nullable.** In a `#nullable enable` context, a default value that is a null constant gives an annotated type
   (`infer s = default(string)` is `string?`), and any other default value a type that is not annotated (`infer s = "a"`
@@ -45,7 +45,7 @@ metadata all see `int retries = 3`. Step P1 takes the type from the default valu
 - **A type named `infer`.** Like `var`, `infer` is a keyword only when no type named `infer` is in scope. With the
   flag off it is an ordinary type name: CS0246 when there is none.
 - **Cycles.** A default value that depends on the signature of its own member, directly (`M(infer x = M())`) or
-  through other members (`A(infer x = B())` and `B(infer x = A())`), reports CS20026 on every parameter of the
+  through other members (`A(infer x = B())` and `B(infer x = A())`), reports CS20028 on every parameter of the
   cycle, whichever member is used first. Such a default value is a call, so it is never a valid constant anyway.
   `nameof(M)` and constants such as `const string K = nameof(M)` do not read the signature and are no cycle.
 - Function pointer types (`delegate*<infer, void>`) have no default values, and `infer` there is an ordinary type
@@ -70,7 +70,7 @@ No syntax, bound node or lowering is added: `infer` parses as a type name, and t
    the compilation per parameter syntax, published once, and the signature reads them. Local functions, delegates
    and lambdas hold no such lock and infer on demand.
 4. **Cycles.** The parameters being inferred on a thread are kept on a stack. A parameter asked for while it is on the
-   stack closes a cycle: every parameter from it to the top of the stack gets the CS20026 result at once, before the
+   stack closes a cycle: every parameter from it to the top of the stack gets the CS20028 result at once, before the
    signature that asked for it completes. That keeps a thread that later finds that signature complete from inferring
    the rest of the cycle without the error.
 5. **Semantic model.** `GetTypeInfo` and `GetSymbolInfo` on a parameter's `infer` return the inferred type, with its
@@ -81,7 +81,7 @@ No syntax, bound node or lowering is added: `infer` parses as a type name, and t
 - The default value is bound twice: once for the type and once against it. The inference keeps only the type.
 - A lambda's default value is bound for inference with the enclosing member as its containing member, since the
   lambda symbol does not exist yet when its parameter types are bound.
-- In a group of members that depend on each other in more than one cycle, which members report CS20026 can depend on
+- In a group of members that depend on each other in more than one cycle, which members report CS20028 can depend on
   the order of binding. Every such member has a call as its default value, which reports CS1736 once the type is
   written.
 - The IDE does not know `infer` yet (R5, [#71](https://github.com/ok3mad/roslyn/issues/71)).

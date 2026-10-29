@@ -2631,6 +2631,8 @@ namespace Microsoft.CodeAnalysis.CSharp
                 or ErrorCode.ERR_SharperItValueOrFunction
                 or ErrorCode.ERR_SharperItDeclaration
                 or ErrorCode.ERR_SharperItAwait
+                or ErrorCode.ERR_SharperInferNoBestType
+                or ErrorCode.ERR_SharperInferIteratorYieldsNothing
                 or ErrorCode.ERR_SharperInferParameterNoType
                 or ErrorCode.ERR_SharperInferParameterNoDefault
                 or ErrorCode.ERR_SharperInferParameterCycle
