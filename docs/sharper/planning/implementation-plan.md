@@ -117,7 +117,7 @@ The brainstorm proposes 26 pieces of syntax (#28, discard arguments, is still to
 | 10 | Inferred return type | `static infer Hello(int id) => ...` | method with the inferred return type | none (`infer` parses as a type name) | L, in steps R1 to R5 | Med; R1 prototype | Ordering and cycles. Allowed on public members too, with no warning. Replaces the expression-bodied `fun`. R1 (expression bodies of private methods and local functions) is a prototype; see [Feature 5](#feature-6-inferred-return-type-step-r1) and the [feature page](../features/inferred-return-type.md) | [#22](https://github.com/ok3mad/roslyn/issues/22) |
 | 11 | `readonly` parameters | `void F(readonly int x)` | plain parameter plus the `val` no-reassignment check | none (`readonly` already parses as a parameter modifier; C#'s error without `ref`, CS9190, comes from the binder) | S | Prototype | Completes the mutability grid with #4 and #5. Not part of the signature; `readonly ref` forbids ref reassignment, as for locals. Replaces the `mutable` parameter in `fun`: immutable-by-default parameters and a `mutable` marker are a strictness ladder setting now, not syntax. See [Feature 5](#feature-5-readonly-parameters) | [#23](https://github.com/ok3mad/roslyn/issues/23), [#97](https://github.com/ok3mad/roslyn/issues/97) |
 | 15 | Inferred parameter types | `public infer Load(infer userId) => ...`, `infer timeout = TimeSpan.FromSeconds(5)` | method with the inferred types | none (`infer x` parses as a typed parameter) | S to XL, in steps P1 to P8 | Med | Copied from an overridden member, a default value, a function type or a call that pins one type, never from shape. Generic by default is open. Replaces untyped `fun` parameters inferred from arms | [#27](https://github.com/ok3mad/roslyn/issues/27) |
-| 29 | Immutable types | `[Immutable] sealed record Money(decimal Amount, string Currency);` | the type plus embedded attributes | none (attributes first, a keyword later) | M | Med; slice 1 designed | Deep and observational; inferred only from representational immutability plus pure observers. `[Immutable]` describes exact instances, `[ImmutableHierarchy]` opts in for subclasses, and type arguments are judged statically. Not a brainstorm syntax row: it answers the open question on immutability depth ([#92](https://github.com/ok3mad/roslyn/issues/92)). See [Feature 9](#feature-9-immutable-types-slice-1-design) | [#139](https://github.com/ok3mad/roslyn/issues/139) |
+| 29 | Immutable types | `[Immutable] sealed record Money(decimal Amount, string Currency);` | the type plus embedded attributes | none (attributes first, a keyword later) | M | Med; slice 1 designed | Deep and observational; inferred only from representational immutability plus pure observers. `[Immutable]` describes exact instances, `[ImmutableHierarchy]` opts in for subclasses, and type arguments are judged statically. Not a brainstorm syntax row: it answers the open question on immutability depth ([#92](https://github.com/ok3mad/roslyn/issues/92)). See [Feature 10](#feature-10-immutable-types-slice-1-design) | [#139](https://github.com/ok3mad/roslyn/issues/139) |
 
 ### Phase 2: functional core
 
@@ -188,7 +188,7 @@ Parameter types (#15):
 
 | Step | Scope | Size | Open point |
 | --- | --- | --- | --- |
-| P1 | `infer` as a parameter type, with source 2: the default value's type. `null`, `default` and target-typed values give an error | S | |
+| P1 | `infer` as a parameter type, with source 2: the default value's type. `null`, `default` and target-typed values give an error | S | Prototype ([#72](https://github.com/ok3mad/roslyn/issues/72)). Decided: every member kind and lambdas; a value that is not a constant gives its type, then CS1736 as in C#; cycles through signatures are CS20028 |
 | P2 | Source 1: the overridden or implemented member gives the parameter and return types. Members are matched by name and parameter count before their types are known; more than one candidate is an error | M | Explicit interface implementations; a partial `infer` signature where some types are written |
 | P3 | `readonly infer x` | S | Whether `val x` is its shorthand on method parameters |
 | P4 | Source 4, first cut: the parameter passed directly as an argument to a call with exactly one candidate (method, constructor, delegate). Needs binding the body with a placeholder type | L | How the placeholder interacts with lambdas and local functions in the body |
@@ -590,7 +590,51 @@ This section is the design; nothing is implemented yet.
 **Size:** L at the low end, about the size of implicit `it`. The parser and the lowering are M; most of the work is the
 target-typed conversion and flow and nullable analysis.
 
-## Feature 9: immutable types, slice 1 (design)
+## Feature 9: inferred parameter type, step P1
+
+`void Fetch(string url, infer retries = 3)` gives `retries` the type `int`, on branch `sharper/infer-parameter-p1`
+([#72](https://github.com/ok3mad/roslyn/issues/72), feature page
+[inferred-parameter-type.md](../features/inferred-parameter-type.md)). Like R1, it adds no syntax, bound node or public
+API, and needs no lowering.
+
+**Probe.** Every member kind builds its parameters in `ParameterHelpers.MakeParameter`, and lambdas in
+`Binder.AnalyzeAnonymousFunction`; the type is bound there and stored in the parameter symbol, which every signature
+comparison then reads (overrides, implementations, duplicate members, partial methods). The default value is bound
+later and lazily, against that type (`SourceComplexParameterSymbol.MakeDefaultExpression`). So the type must be known
+when the symbol is created, unlike R1's return type, which could stay lazy because `MethodChecks` skips the checks that
+need it. Methods and constructors create their parameters inside `MethodChecks`, under the per-member lock, and
+indexers inside `EnsureSignature`, under another.
+
+### The mechanism
+
+| Piece | What it does | Extended by |
+| --- | --- | --- |
+| `infer` branch of `ParameterHelpers.MakeParameter`, `Binder.BindLambdaParameterType` | Recognize `infer` with R1's `BindTypeOrSharperInferKeyword` and create the parameter with the inferred type | P2 (the overridden member when there is no default value), P4 to P7 |
+| `Binder.BindSharperInferredParameterType` | Binds the default value with the binder it is bound with anyway, takes the natural type as `var` does, and the annotation from whether the value is a null constant | |
+| `SharperInferredParameterType` | Keeps the results per parameter syntax in the compilation, published once. A thread-static stack of the parameters being inferred finds cycles, and every parameter of a cycle gets CS20028 as soon as the cycle is found | P2 and P4 add sources; a body used as a source (P4) can cycle through the signature the same way |
+| `InferBeforeSignature` in `LazyMethodChecks` and `EnsureSignature` | Infers before the signature lock is taken, so binding a default value never holds a member's lock while it waits for another's | |
+| `CSharpSemanticModel.GetSharperInferredParameter` | `GetTypeInfo` and `GetSymbolInfo` on `infer` return the parameter type | R5 |
+
+### Decisions
+
+| Question | Decision | Why |
+| --- | --- | --- |
+| What is inferred | The type `var x = e;` gives `x`; a lambda or method group gets its natural function type | One rule with locals and R1 |
+| A default value that is not a constant | Its type, then CS1736 from the default value check, as for the written type | The issue's `TimeSpan.FromSeconds(5)` names a type, and C# reports the same error for its twin; non-constant defaults would be a feature of their own |
+| Nothing to infer from | CS20026 on the value; no CS1736 or conversion error after it | One error per parameter, which asks for the type |
+| No default value | CS20027 on `infer` | P2 adds the overridden member as a source before this error |
+| Nullable annotation | Annotated for a null constant (`default(string)`), not annotated otherwise, oblivious where annotations are disabled | A default value is a constant, so it needs no flow analysis; `infer s = "a"` is a `string` that callers cannot pass null to |
+| Where it runs | Before the signature lock, cached per parameter syntax | The lock-order trap R1 found (trap 23 of the skill); a cache by syntax serves members without a lock and lambdas, which are bound several times |
+| Cycles | CS20028 on every parameter of the cycle, published when the cycle is found | Publishing at the end was not enough: a member whose signature completes inside the cycle let another thread infer the rest of the cycle without the error (found by `InferParameter_Cycle_Concurrent`) |
+| `ref`, `out`, `params`, `this` | No special rule: without a default value CS20027, with one the C# error for the default value | The C# twin reports the same, and the type is still known |
+
+Tests: 17 `InferParameter_*` tests in `SharperTests.cs`: runtime output for every member kind and lambdas next to C#
+twins, the inferred types against written ones (also the default values), the errors, cycles in every order and on
+two threads, caller information attributes, signature matching, nullable annotations, the semantic model, IOperation,
+metadata seen from a C# compilation, and concurrent inference. `readonly infer x = 1u` already works (P3 needs only
+its tests and the `val` decision).
+
+## Feature 10: immutable types, slice 1 (design)
 
 `[Immutable] sealed record Money(decimal Amount, string Currency);` (issue [#139](https://github.com/ok3mad/roslyn/issues/139),
 designed in [#92](https://github.com/ok3mad/roslyn/issues/92)). `val` and `readonly` make a binding immutable; this
@@ -703,7 +747,7 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 - [ ] `try` expression: a warning on a catch-all arm. [#135](https://github.com/ok3mad/roslyn/issues/135)
 - [ ] `try` expression: lift a task body instead of warning, after lifting (#32). [#136](https://github.com/ok3mad/roslyn/issues/136)
 - [ ] Test `/nowarn` and `.editorconfig` with five-digit Sharper IDs. [#91](https://github.com/ok3mad/roslyn/issues/91)
-- [x] Decide immutability depth: binding, value or deep (a type-level immutability marker). [#92](https://github.com/ok3mad/roslyn/issues/92): deep, see [Feature 9](#feature-9-immutable-types-slice-1-design). Slice 1 is [#139](https://github.com/ok3mad/roslyn/issues/139); follow-ups [#140](https://github.com/ok3mad/roslyn/issues/140), [#141](https://github.com/ok3mad/roslyn/issues/141), [#142](https://github.com/ok3mad/roslyn/issues/142).
+- [x] Decide immutability depth: binding, value or deep (a type-level immutability marker). [#92](https://github.com/ok3mad/roslyn/issues/92): deep, see [Feature 10](#feature-10-immutable-types-slice-1-design). Slice 1 is [#139](https://github.com/ok3mad/roslyn/issues/139); follow-ups [#140](https://github.com/ok3mad/roslyn/issues/140), [#141](https://github.com/ok3mad/roslyn/issues/141), [#142](https://github.com/ok3mad/roslyn/issues/142).
 - [ ] Sequence type: decide whether array creation should accept sequence elements (`new int[3][..]`, today CS0178, or `new int[..][3]`). [#64](https://github.com/ok3mad/roslyn/issues/64)
 - [x] Function types: parentheses apply a suffix to the whole function type, `((int) -> int)?`, `((int) -> int)[]` and `((int) -> int)~`, with the new node `ParenthesizedTypeSyntax`. `((p)->F)[i]`, `((p)->F)?.X`, `((p)->F) ? a : b` and `(((p)->F))(x)` keep their C# meaning. [#58](https://github.com/ok3mad/roslyn/issues/58)
 - [x] Function types in patterns: declaration, type, recursive, list and property patterns, `switch` statements and expressions (`x is (int) -> int f`, `case () -> void a:`). In C#, `e is (p)->F` is a syntax error (the pattern parser stops at `->`), so there was no C# meaning to keep; `e is p->F` keeps its meaning. [#59](https://github.com/ok3mad/roslyn/issues/59)
@@ -713,6 +757,7 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 - [ ] `readonly` locals: decide `readonly` in `for` initializers, `foreach`, deconstruction and `out` (no modifier slot; a public syntax change). [#95](https://github.com/ok3mad/roslyn/issues/95)
 - [ ] `readonly` locals: IDE support (completion, refactorings that drop or break `readonly`). [#96](https://github.com/ok3mad/roslyn/issues/96)
 - [x] `readonly` parameters, the grid's remaining explicitly typed corner. [#97](https://github.com/ok3mad/roslyn/issues/97)
+- [ ] Inferred parameter type: steps P2 to P8 ([#73](https://github.com/ok3mad/roslyn/issues/73), [#74](https://github.com/ok3mad/roslyn/issues/74) and the rest of [#27](https://github.com/ok3mad/roslyn/issues/27)); the default value is bound twice, once to infer and once against the type.
 - [ ] Inferred return type: steps R3 to R5 ([#69](https://github.com/ok3mad/roslyn/issues/69) to [#71](https://github.com/ok3mad/roslyn/issues/71)); a local function's nullable inference sees captured variables at their declared state.
 - [ ] Inferred return type: async iterators (`IAsyncEnumerable<T>`), and an inferred union when the returned values have no best common type, which waits for [#31](https://github.com/ok3mad/roslyn/issues/31).
 - [ ] `readonly` locals share the `val` follow-ups: silence CS20010 with CS20003 (#84), the "never reassigned" fixer can offer `readonly int` (#89), and the public API (#88) and Edit and Continue (#90) items cover them too.

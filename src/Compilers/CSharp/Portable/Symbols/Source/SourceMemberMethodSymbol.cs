@@ -462,6 +462,14 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         {
             if (!state.HasComplete(CompletionPart.FinishMethodChecks))
             {
+                // Sharper: parameter types inferred from default values are bound before the lock is taken.
+                SharperInferredParameterType.InferBeforeSignature(this, SyntaxNode switch
+                {
+                    BaseMethodDeclarationSyntax method => method.ParameterList,
+                    TypeDeclarationSyntax type when MethodKind == MethodKind.Constructor => type.ParameterList,
+                    _ => null,
+                });
+
                 // TODO: if this lock ever encloses a potential call to Debugger.NotifyOfCrossThreadDependency,
                 // then we should call DebuggerUtilities.CallBeforeAcquiringLock() (see method comment for more
                 // details).

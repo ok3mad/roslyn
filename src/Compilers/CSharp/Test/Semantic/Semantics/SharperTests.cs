@@ -8090,6 +8090,647 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         }
 
         [Fact]
+        public void InferParameter_Basic()
+        {
+            // Each member with an inferred parameter type next to its C# twin, which writes the type out.
+            var source = """
+                using System;
+
+                class C
+                {
+                    static string Fetch(string url, infer retries = 3, infer name = "n", infer ratio = 0.5, infer day = DayOfWeek.Monday) => $"{url}:{retries}:{name}:{ratio}:{day};";
+                    static string FetchCSharp(string url, int retries = 3, string name = "n", double ratio = 0.5, DayOfWeek day = DayOfWeek.Monday) => $"{url}:{retries}:{name}:{ratio}:{day};";
+
+                    static void Main()
+                    {
+                        Console.Write(Fetch("a"));
+                        Console.Write(FetchCSharp("a"));
+                        Console.Write(Fetch("b", 5, ratio: 1.5));
+                        Console.Write(FetchCSharp("b", 5, ratio: 1.5));
+                        string Local(infer x = 'c') => x.ToString() + x.GetType().Name;
+                        string LocalCSharp(char x = 'c') => x.ToString() + x.GetType().Name;
+                        Console.Write(Local() + LocalCSharp() + ";");
+                        var lambda = (infer x = 10L) => x.GetType().Name;
+                        var lambdaCSharp = (long x = 10L) => x.GetType().Name;
+                        Console.Write(lambda() + lambdaCSharp() + ";");
+                        Console.Write(ReadOnly() + ReadOnlyCSharp() + ";");
+                    }
+
+                    static string ReadOnly(readonly infer x = 1u) => x.GetType().Name;
+                    static string ReadOnlyCSharp(readonly uint x = 1u) => x.GetType().Name;
+                }
+                """;
+            var verifier = CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "a:3:n:0.5:Monday;a:3:n:0.5:Monday;b:5:n:1.5:Monday;b:5:n:1.5:Monday;cCharcChar;Int64Int64;UInt32UInt32;" : null);
+            verifier.VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void InferParameter_Members()
+        {
+            // Every kind of member with a parameter list infers the same way.
+            var source = """
+                using System;
+
+                delegate string D(infer x = 1);
+                delegate string DCSharp(int x = 1);
+
+                class P(infer x = 2)
+                {
+                    public string X => x.GetType().Name;
+                }
+
+                class PCSharp(int x = 2)
+                {
+                    public string X => x.GetType().Name;
+                }
+
+                record R(infer Name = "r");
+                record RCSharp(string Name = "r");
+
+                class C
+                {
+                    public C(infer x = 1.5f) => Value = x.GetType().Name;
+                    public C(bool b, float x = 1.5f) => Value = x.GetType().Name;
+                    public string Value;
+                    public string this[int a, infer i = (short)1] => i.GetType().Name;
+                    public string this[bool a, short i = (short)1] => i.GetType().Name;
+                    public virtual string V(infer x = 1u) => x.GetType().Name;
+                    public static string E() => "";
+
+                    static void Main()
+                    {
+                        D d = x => x.GetType().Name;
+                        DCSharp dCSharp = x => x.GetType().Name;
+                        Console.Write(d() + dCSharp() + ";");
+                        Console.Write(new P().X + new PCSharp().X + ";");
+                        Console.Write(new R().Name.GetType().Name + new RCSharp().Name.GetType().Name + ";");
+                        Console.Write(new C().Value + new C(true).Value + ";");
+                        Console.Write(new C()[0] + new C()[true] + ";");
+                        Console.Write(new Derived().V() + new Derived().V(2u) + ";");
+                        Console.Write(5.Ext() + 5.ExtCSharp() + ";");
+                    }
+                }
+
+                class Derived : C
+                {
+                    public override string V(infer x = 1u) => "D" + x;
+                }
+
+                static class Extensions
+                {
+                    public static string Ext(this int i, infer s = "e") => i + s;
+                    public static string ExtCSharp(this int i, string s = "e") => i + s;
+                }
+                """;
+            var verifier = CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "Int32Int32;Int32Int32;StringString;SingleSingle;Int16Int16;D1D2;5e5e;" : null);
+            verifier.VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void InferParameter_Types()
+        {
+            // The inferred type is the type 'var' would give a local initialized with the default value.
+            var source = """
+                #nullable enable
+                struct S { }
+                enum E { A }
+
+                class C
+                {
+                    const long K = 1;
+                    void M01(infer x = 1) { }
+                    void M01CSharp(int x = 1) { }
+                    void M02(infer x = -1L) { }
+                    void M02CSharp(long x = -1L) { }
+                    void M03(infer x = 1 + 2.0) { }
+                    void M03CSharp(double x = 1 + 2.0) { }
+                    void M04(infer x = K) { }
+                    void M04CSharp(long x = K) { }
+                    void M05(infer x = E.A) { }
+                    void M05CSharp(E x = E.A) { }
+                    void M06(infer x = (byte)1) { }
+                    void M06CSharp(byte x = (byte)1) { }
+                    void M07(infer x = 1m) { }
+                    void M07CSharp(decimal x = 1m) { }
+                    void M08(infer x = nameof(M08)) { }
+                    void M08CSharp(string x = nameof(M08)) { }
+                    void M09(infer x = default(int?)) { }
+                    void M09CSharp(int? x = default(int?)) { }
+                    void M10(infer x = default(string)) { }
+                    void M10CSharp(string? x = default(string)) { }
+                    void M11(infer x = (string?)null) { }
+                    void M11CSharp(string? x = (string?)null) { }
+                    void M12(infer x = new S()) { }
+                    void M12CSharp(S x = new S()) { }
+                    void M13(infer x = default(S)) { }
+                    void M13CSharp(S x = default(S)) { }
+                    void M14(infer x = "a" + "b") { }
+                    void M14CSharp(string x = "a" + "b") { }
+                    void M15<T>(infer x = default(T)) { }
+                    void M15CSharp<T>(T? x = default(T)) { }
+                    void M16(infer x = (object)null) { }
+                    void M16CSharp(object? x = (object)null) { }
+                    void M17(infer x = 'a') { }
+                    void M17CSharp(char x = 'a') { }
+                    void M18(infer x = true) { }
+                    void M18CSharp(bool x = true) { }
+                    void M19(in infer x = 1) { }
+                    void M19CSharp(in int x = 1) { }
+                    void M20(infer x = sizeof(int)) { }
+                    void M20CSharp(int x = sizeof(int)) { }
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics(
+                // (38,24): warning CS8600: Converting null literal or possible null value to non-nullable type.
+                //     void M16(infer x = (object)null) { }
+                Diagnostic(ErrorCode.WRN_ConvertingNullableToNonNullable, "(object)null").WithLocation(38, 24),
+                // (39,32): warning CS8600: Converting null literal or possible null value to non-nullable type.
+                //     void M16CSharp(object? x = (object)null) { }
+                Diagnostic(ErrorCode.WRN_ConvertingNullableToNonNullable, "(object)null").WithLocation(39, 32));
+            foreach (var method in comp.GetMember<NamedTypeSymbol>("C").GetMembers().OfType<MethodSymbol>().Where(m => m.Name.StartsWith("M") && !m.Name.EndsWith("CSharp")))
+            {
+                var twin = comp.GetMember<MethodSymbol>("C." + method.Name + "CSharp");
+                Assert.Equal(twin.Parameters[0].TypeWithAnnotations.ToTestDisplayString(includeNonNullable: true), method.Parameters[0].TypeWithAnnotations.ToTestDisplayString(includeNonNullable: true));
+                Assert.Equal(twin.Parameters[0].RefKind, method.Parameters[0].RefKind);
+                Assert.Equal(twin.Parameters[0].ExplicitDefaultConstantValue, method.Parameters[0].ExplicitDefaultConstantValue);
+            }
+        }
+
+        [Fact]
+        public void InferParameter_NoType()
+        {
+            // A default value with no type of its own gives nothing to infer from.
+            var source = """
+                class C
+                {
+                    void M1(infer x = null) { }
+                    void M2(infer x = default) { }
+                    void M3(infer x = new()) { }
+                    void M4(infer x = [1, 2]) { }
+                    void M5(infer x = y => y) { }
+                    void M6(infer x = System.Console.Write) { }
+                    void M7(infer x = System.Console.WriteLine()) { }
+                    void M8(infer x = (1, null)) { }
+                    void M9(infer x = Missing) { }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (3,23): error CS20026: Cannot infer the type of parameter 'x', because its default value (<null>) has no type. Write the parameter type.
+                //     void M1(infer x = null) { }
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoType, "null").WithArguments("x", "<null>").WithLocation(3, 23),
+                // (4,23): error CS20026: Cannot infer the type of parameter 'x', because its default value (default) has no type. Write the parameter type.
+                //     void M2(infer x = default) { }
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoType, "default").WithArguments("x", "default").WithLocation(4, 23),
+                // (5,23): error CS20026: Cannot infer the type of parameter 'x', because its default value (new()) has no type. Write the parameter type.
+                //     void M3(infer x = new()) { }
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoType, "new()").WithArguments("x", "new()").WithLocation(5, 23),
+                // (6,23): error CS20026: Cannot infer the type of parameter 'x', because its default value (collection expression) has no type. Write the parameter type.
+                //     void M4(infer x = [1, 2]) { }
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoType, "[1, 2]").WithArguments("x", "collection expression").WithLocation(6, 23),
+                // (7,23): error CS20026: Cannot infer the type of parameter 'x', because its default value (lambda expression) has no type. Write the parameter type.
+                //     void M5(infer x = y => y) { }
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoType, "y => y").WithArguments("x", "lambda expression").WithLocation(7, 23),
+                // (8,23): error CS20026: Cannot infer the type of parameter 'x', because its default value (method group) has no type. Write the parameter type.
+                //     void M6(infer x = System.Console.Write) { }
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoType, "System.Console.Write").WithArguments("x", "method group").WithLocation(8, 23),
+                // (9,23): error CS20026: Cannot infer the type of parameter 'x', because its default value (void) has no type. Write the parameter type.
+                //     void M7(infer x = System.Console.WriteLine()) { }
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoType, "System.Console.WriteLine()").WithArguments("x", "void").WithLocation(9, 23),
+                // (10,23): error CS20026: Cannot infer the type of parameter 'x', because its default value ((int, <null>)) has no type. Write the parameter type.
+                //     void M8(infer x = (1, null)) { }
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoType, "(1, null)").WithArguments("x", "(int, <null>)").WithLocation(10, 23),
+                // (11,23): error CS0103: The name 'Missing' does not exist in the current context
+                //     void M9(infer x = Missing) { }
+                Diagnostic(ErrorCode.ERR_NameNotInContext, "Missing").WithArguments("Missing").WithLocation(11, 23));
+        }
+
+        [Fact]
+        public void InferParameter_NotConstant()
+        {
+            // A value that is not a constant still gives its type, then reports the error of the C# twin.
+            var source = """
+                using System;
+
+                class C
+                {
+                    void Fetch(string url, infer timeout = TimeSpan.FromSeconds(5), infer retries = 3) { }
+                    void FetchCSharp(string url, TimeSpan timeout = TimeSpan.FromSeconds(5), int retries = 3) { }
+                    void Lambda(infer f = () => 1) { }
+                    void LambdaCSharp(Func<int> f = () => 1) { }
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics(
+                // (5,44): error CS1736: Default parameter value for 'timeout' must be a compile-time constant
+                //     void Fetch(string url, infer timeout = TimeSpan.FromSeconds(5), infer retries = 3) { }
+                Diagnostic(ErrorCode.ERR_DefaultValueMustBeConstant, "TimeSpan.FromSeconds(5)").WithArguments("timeout").WithLocation(5, 44),
+                // (6,53): error CS1736: Default parameter value for 'timeout' must be a compile-time constant
+                //     void FetchCSharp(string url, TimeSpan timeout = TimeSpan.FromSeconds(5), int retries = 3) { }
+                Diagnostic(ErrorCode.ERR_DefaultValueMustBeConstant, "TimeSpan.FromSeconds(5)").WithArguments("timeout").WithLocation(6, 53),
+                // (7,27): error CS1736: Default parameter value for 'f' must be a compile-time constant
+                //     void Lambda(infer f = () => 1) { }
+                Diagnostic(ErrorCode.ERR_DefaultValueMustBeConstant, "() => 1").WithArguments("f").WithLocation(7, 27),
+                // (8,37): error CS1736: Default parameter value for 'f' must be a compile-time constant
+                //     void LambdaCSharp(Func<int> f = () => 1) { }
+                Diagnostic(ErrorCode.ERR_DefaultValueMustBeConstant, "() => 1").WithArguments("f").WithLocation(8, 37));
+            Assert.Equal(comp.GetMember<MethodSymbol>("C.FetchCSharp").ToTestDisplayString().Replace("FetchCSharp", "Fetch"), comp.GetMember<MethodSymbol>("C.Fetch").ToTestDisplayString());
+            Assert.Equal("System.Func<System.Int32>", comp.GetMember<MethodSymbol>("C.Lambda").Parameters[0].Type.ToTestDisplayString());
+        }
+
+        [Fact]
+        public void InferParameter_NoDefault()
+        {
+            // Without a default value there is nothing to infer from; ref and out parameters cannot have one.
+            var source = """
+                class C
+                {
+                    void M1(infer x) { }
+                    void M2(ref infer x) { }
+                    void M3(out infer x) { x = default; }
+                    void M4(params infer x) { }
+                    void M5(ref infer x = 1) { }
+                    void M5CSharp(ref int x = 1) { }
+                    void M6(params infer x = 1) { }
+                    void M6CSharp(params int x = 1) { }
+                    void M7(this infer x = 1) { }
+                    void M7CSharp(this int x = 1) { }
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics(
+                // (1,7): error CS1106: Extension method must be defined in a non-generic static class
+                // class C
+                Diagnostic(ErrorCode.ERR_BadExtensionAgg, "C").WithLocation(1, 7),
+                // (1,7): error CS1106: Extension method must be defined in a non-generic static class
+                // class C
+                Diagnostic(ErrorCode.ERR_BadExtensionAgg, "C").WithLocation(1, 7),
+                // (3,13): error CS20027: Cannot infer the type of parameter 'x', because it has no default value. Write the parameter type.
+                //     void M1(infer x) { }
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x").WithLocation(3, 13),
+                // (4,17): error CS20027: Cannot infer the type of parameter 'x', because it has no default value. Write the parameter type.
+                //     void M2(ref infer x) { }
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x").WithLocation(4, 17),
+                // (5,17): error CS20027: Cannot infer the type of parameter 'x', because it has no default value. Write the parameter type.
+                //     void M3(out infer x) { x = default; }
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x").WithLocation(5, 17),
+                // (6,13): error CS0225: The params parameter must have a valid collection type
+                //     void M4(params infer x) { }
+                Diagnostic(ErrorCode.ERR_ParamsMustBeCollection, "params").WithLocation(6, 13),
+                // (6,20): error CS20027: Cannot infer the type of parameter 'x', because it has no default value. Write the parameter type.
+                //     void M4(params infer x) { }
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x").WithLocation(6, 20),
+                // (7,13): error CS1741: A ref or out parameter cannot have a default value
+                //     void M5(ref infer x = 1) { }
+                Diagnostic(ErrorCode.ERR_RefOutDefaultValue, "ref").WithLocation(7, 13),
+                // (8,19): error CS1741: A ref or out parameter cannot have a default value
+                //     void M5CSharp(ref int x = 1) { }
+                Diagnostic(ErrorCode.ERR_RefOutDefaultValue, "ref").WithLocation(8, 19),
+                // (9,13): error CS1751: Cannot specify a default value for a parameter collection
+                //     void M6(params infer x = 1) { }
+                Diagnostic(ErrorCode.ERR_DefaultValueForParamsParameter, "params").WithLocation(9, 13),
+                // (9,13): error CS0225: The params parameter must have a valid collection type
+                //     void M6(params infer x = 1) { }
+                Diagnostic(ErrorCode.ERR_ParamsMustBeCollection, "params").WithLocation(9, 13),
+                // (10,19): error CS1751: Cannot specify a default value for a parameter collection
+                //     void M6CSharp(params int x = 1) { }
+                Diagnostic(ErrorCode.ERR_DefaultValueForParamsParameter, "params").WithLocation(10, 19),
+                // (10,19): error CS0225: The params parameter must have a valid collection type
+                //     void M6CSharp(params int x = 1) { }
+                Diagnostic(ErrorCode.ERR_ParamsMustBeCollection, "params").WithLocation(10, 19),
+                // (11,13): error CS1743: Cannot specify a default value for the 'this' parameter
+                //     void M7(this infer x = 1) { }
+                Diagnostic(ErrorCode.ERR_DefaultValueForExtensionParameter, "this").WithLocation(11, 13),
+                // (12,19): error CS1743: Cannot specify a default value for the 'this' parameter
+                //     void M7CSharp(this int x = 1) { }
+                Diagnostic(ErrorCode.ERR_DefaultValueForExtensionParameter, "this").WithLocation(12, 19));
+            Assert.Equal("System.Int32", comp.GetMember<MethodSymbol>("C.M5").Parameters[0].Type.ToTestDisplayString());
+        }
+
+        [Fact]
+        public void InferParameter_FeatureDisabled()
+        {
+            var source = """
+                class C
+                {
+                    void M(infer x = 1) { }
+                }
+                """;
+            CreateCompilation(source, parseOptions: TestOptions.Regular, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (3,12): error CS0246: The type or namespace name 'infer' could not be found (are you missing a using directive or an assembly reference?)
+                //     void M(infer x = 1) { }
+                Diagnostic(ErrorCode.ERR_SingleTypeNameNotFound, "infer").WithArguments("infer").WithLocation(3, 12),
+                // (3,18): error CS1750: A value of type 'int' cannot be used as a default parameter because there are no standard conversions to type 'infer'
+                //     void M(infer x = 1) { }
+                Diagnostic(ErrorCode.ERR_NoConversionForDefaultParam, "x").WithArguments("int", "infer").WithLocation(3, 18));
+        }
+
+        [Fact]
+        public void InferParameter_TypeNamedInfer()
+        {
+            // A type named 'infer' in scope wins, as it does for 'var'.
+            var source = """
+                class infer { }
+
+                class C
+                {
+                    void M(infer x = null) { }
+                    void N(infer x = 1) { }
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics(
+                // (1,7): warning CS8981: The type name 'infer' only contains lower-cased ascii characters. Such names may become reserved for the language.
+                // class infer { }
+                Diagnostic(ErrorCode.WRN_LowerCaseTypeName, "infer").WithArguments("infer").WithLocation(1, 7),
+                // (6,18): error CS1750: A value of type 'int' cannot be used as a default parameter because there are no standard conversions to type 'infer'
+                //     void N(infer x = 1) { }
+                Diagnostic(ErrorCode.ERR_NoConversionForDefaultParam, "x").WithArguments("int", "infer").WithLocation(6, 18));
+            Assert.Equal("infer", comp.GetMember<MethodSymbol>("C.M").Parameters[0].Type.ToTestDisplayString());
+        }
+
+        [Fact]
+        public void InferParameter_Cycle()
+        {
+            // A default value that depends on the signature of its own member cannot give that signature a type.
+            var source = """
+                class C
+                {
+                    static int Self(infer x = Self()) => 0;
+                    static int A(infer x = B()) => 0;
+                    static int B(infer x = A()) => 0;
+                    static int Uses(infer x = A()) => 0;
+                    static string Name(infer x = nameof(Name)) => x;
+                    const string K = nameof(Constant);
+                    static string Constant(infer x = K) => x;
+
+                    static void Main()
+                    {
+                        int Local(infer x = Local()) => 0;
+                        Local();
+                    }
+                }
+                """;
+            foreach (var first in new[] { "C.Self", "C.A", "C.B", "C.Uses", "C.Constant" })
+            {
+                var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+                _ = comp.GetMember<MethodSymbol>(first).Parameters;
+                comp.VerifyDiagnostics(
+                    // (3,21): error CS20028: Cannot infer the type of parameter 'x', because its default value depends on the type of 'x' itself. Write the parameter type.
+                    //     static int Self(infer x = Self()) => 0;
+                    Diagnostic(ErrorCode.ERR_SharperInferParameterCycle, "infer").WithArguments("x").WithLocation(3, 21),
+                    // (4,18): error CS20028: Cannot infer the type of parameter 'x', because its default value depends on the type of 'x' itself. Write the parameter type.
+                    //     static int A(infer x = B()) => 0;
+                    Diagnostic(ErrorCode.ERR_SharperInferParameterCycle, "infer").WithArguments("x").WithLocation(4, 18),
+                    // (5,18): error CS20028: Cannot infer the type of parameter 'x', because its default value depends on the type of 'x' itself. Write the parameter type.
+                    //     static int B(infer x = A()) => 0;
+                    Diagnostic(ErrorCode.ERR_SharperInferParameterCycle, "infer").WithArguments("x").WithLocation(5, 18),
+                    // (6,31): error CS1736: Default parameter value for 'x' must be a compile-time constant
+                    //     static int Uses(infer x = A()) => 0;
+                    Diagnostic(ErrorCode.ERR_DefaultValueMustBeConstant, "A()").WithArguments("x").WithLocation(6, 31),
+                    // (13,19): error CS20028: Cannot infer the type of parameter 'x', because its default value depends on the type of 'x' itself. Write the parameter type.
+                    //         int Local(infer x = Local()) => 0;
+                    Diagnostic(ErrorCode.ERR_SharperInferParameterCycle, "infer").WithArguments("x").WithLocation(13, 19));
+                Assert.Equal("System.Int32", comp.GetMember<MethodSymbol>("C.Uses").Parameters[0].Type.ToTestDisplayString());
+                Assert.Equal("System.String", comp.GetMember<MethodSymbol>("C.Name").Parameters[0].Type.ToTestDisplayString());
+                Assert.Equal("System.String", comp.GetMember<MethodSymbol>("C.Constant").Parameters[0].Type.ToTestDisplayString());
+            }
+        }
+
+        [Fact]
+        public void InferParameter_Cycle_Concurrent()
+        {
+            // Members in a cycle are inferred outside of their locks, so two threads that start from either end neither
+            // deadlock nor disagree.
+            var source = """
+                class C
+                {
+                    static int A(infer x = B()) => 0;
+                    static int B(infer x = A()) => 0;
+                }
+                """;
+            for (int i = 0; i < 20; i++)
+            {
+                var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+                var methods = new[] { comp.GetMember<MethodSymbol>("C.A"), comp.GetMember<MethodSymbol>("C.B") };
+                System.Threading.Tasks.Parallel.For(0, 4, t => Assert.Equal("infer", methods[t % 2].Parameters[0].Type.ToTestDisplayString()));
+                Assert.Equal(2, comp.GetDiagnostics().Count(d => d.Code == (int)ErrorCode.ERR_SharperInferParameterCycle));
+            }
+        }
+
+        [Fact]
+        public void InferParameter_CallerInfo()
+        {
+            // Caller information attributes apply to the inferred type, as to a written one.
+            var source = """
+                using System;
+                using System.Runtime.CompilerServices;
+
+                class C
+                {
+                    static string M([CallerMemberName] infer member = "", [CallerLineNumber] infer line = 0, [CallerArgumentExpression(nameof(member))] infer expression = "") => $"{member}:{line}:{expression};";
+                    static void Bad([CallerMemberName] infer member = 0) { }
+                    static void BadCSharp([CallerMemberName] int member = 0) { }
+
+                    static void Main()
+                    {
+                        Console.Write(M());
+                        Console.Write(M("x" + "y"));
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (7,22): error CS4019: CallerMemberNameAttribute cannot be applied because there are no standard conversions from type 'string' to type 'int'
+                //     static void Bad([CallerMemberName] infer member = 0) { }
+                Diagnostic(ErrorCode.ERR_NoConversionForCallerMemberNameParam, "CallerMemberName").WithArguments("string", "int").WithLocation(7, 22),
+                // (8,28): error CS4019: CallerMemberNameAttribute cannot be applied because there are no standard conversions from type 'string' to type 'int'
+                //     static void BadCSharp([CallerMemberName] int member = 0) { }
+                Diagnostic(ErrorCode.ERR_NoConversionForCallerMemberNameParam, "CallerMemberName").WithArguments("string", "int").WithLocation(8, 28));
+
+            var verifier = CompileAndVerify(source.Replace("static void Bad", "// "), parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "Main:12:;xy:13:\"x\" + \"y\";" : null);
+            verifier.VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void InferParameter_Signatures()
+        {
+            // Overrides, implementations, partial methods and overloads compare the inferred types as written ones.
+            var source = """
+                interface I { void M(int x = 1); }
+
+                class B
+                {
+                    public virtual void V(int x = 1) { }
+                }
+
+                partial class C : B, I
+                {
+                    public void M(infer x = 1) { }
+                    public override void V(infer x = 1) { }
+                    partial void P(infer x = 1);
+                    partial void P(infer x = 1) { }
+                    void O(int x) { }
+                    void O(infer x = 2) { }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (13,26): warning CS1066: The default value specified for parameter 'x' will have no effect because it applies to a member that is used in contexts that do not allow optional arguments
+                //     partial void P(infer x = 1) { }
+                Diagnostic(ErrorCode.WRN_DefaultValueForUnconsumedLocation, "x").WithArguments("x").WithLocation(13, 26),
+                // (15,10): error CS0111: Type 'C' already defines a member called 'O' with the same parameter types
+                //     void O(infer x = 2) { }
+                Diagnostic(ErrorCode.ERR_MemberAlreadyExists, "O").WithArguments("O", "C").WithLocation(15, 10));
+        }
+
+        [Fact]
+        public void InferParameter_Nullable()
+        {
+            // The annotation is that of the default value: a null constant gives an annotated type.
+            var source = """
+                class C
+                {
+                #nullable enable
+                    static void M1(infer s = "a") { }
+                    static void M2(infer s = default(string)) { }
+                    static void M3(infer s = "a")
+                    {
+                        s = null;
+                    }
+                #nullable disable
+                    static void M4(infer s = "a") { }
+
+                #nullable enable
+                    static void Main()
+                    {
+                        M1(null);
+                        M2(null);
+                        M4(null);
+                    }
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics(
+                // (8,13): warning CS8600: Converting null literal or possible null value to non-nullable type.
+                //         s = null;
+                Diagnostic(ErrorCode.WRN_ConvertingNullableToNonNullable, "null").WithLocation(8, 13),
+                // (16,12): warning CS8625: Cannot convert null literal to non-nullable reference type.
+                //         M1(null);
+                Diagnostic(ErrorCode.WRN_NullAsNonNullable, "null").WithLocation(16, 12));
+            Assert.Equal("System.String!", comp.GetMember<MethodSymbol>("C.M1").Parameters[0].TypeWithAnnotations.ToTestDisplayString(includeNonNullable: true));
+            Assert.Equal("System.String?", comp.GetMember<MethodSymbol>("C.M2").Parameters[0].TypeWithAnnotations.ToTestDisplayString(includeNonNullable: true));
+            Assert.Equal("System.String", comp.GetMember<MethodSymbol>("C.M4").Parameters[0].TypeWithAnnotations.ToTestDisplayString(includeNonNullable: true));
+        }
+
+        [Fact]
+        public void InferParameter_SemanticModel()
+        {
+            var source = """
+                #nullable enable
+                class C
+                {
+                    void M(infer x = 1, infer s = default(string), int xCSharp = 1, string? sCSharp = default(string))
+                    {
+                        var f = (infer y = 2L, long yCSharp = 2L) => y;
+                    }
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics();
+            var tree = comp.SyntaxTrees[0];
+            var model = comp.GetSemanticModel(tree);
+            var parameters = tree.GetRoot().DescendantNodes().OfType<ParameterSyntax>().ToArray();
+            verify(parameters[0], parameters[2]);
+            verify(parameters[1], parameters[3]);
+            verify(parameters[4], parameters[5]);
+
+            void verify(ParameterSyntax parameter, ParameterSyntax twin)
+            {
+                var symbol = model.GetDeclaredSymbol(parameter)!;
+                var twinSymbol = model.GetDeclaredSymbol(twin)!;
+                Assert.Equal(twinSymbol.Type.ToTestDisplayString(includeNonNullable: true), symbol.Type.ToTestDisplayString(includeNonNullable: true));
+                Assert.Equal(twinSymbol.NullableAnnotation, symbol.NullableAnnotation);
+                Assert.Equal(twinSymbol.ExplicitDefaultValue, symbol.ExplicitDefaultValue);
+
+                var typeInfo = model.GetTypeInfo(parameter.Type!);
+                Assert.True(model.GetTypeInfo(twin.Type!).Type!.Equals(typeInfo.Type, SymbolEqualityComparer.Default));
+                Assert.Equal(symbol.NullableAnnotation, typeInfo.Nullability.Annotation);
+                Assert.True(symbol.Type.Equals(model.GetSymbolInfo(parameter.Type!).Symbol, SymbolEqualityComparer.Default));
+            }
+        }
+
+        [Fact]
+        public void InferParameter_IOperation()
+        {
+            // The default value binds against the inferred type, as it would against the written type.
+            var source = """
+                class C
+                {
+                    void M(infer x /*<bind>*/= 1 + 2/*</bind>*/) { }
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            var expectedOperationTree = """
+                IParameterInitializerOperation (Parameter: [System.Int32 x = 3]) (OperationKind.ParameterInitializer, Type: null) (Syntax: '= 1 + 2')
+                  IBinaryOperation (BinaryOperatorKind.Add) (OperationKind.Binary, Type: System.Int32, Constant: 3) (Syntax: '1 + 2')
+                    Left:
+                      ILiteralOperation (OperationKind.Literal, Type: System.Int32, Constant: 1) (Syntax: '1')
+                    Right:
+                      ILiteralOperation (OperationKind.Literal, Type: System.Int32, Constant: 2) (Syntax: '2')
+                """;
+            VerifyOperationTreeAndDiagnosticsForTest<EqualsValueClauseSyntax>(comp, expectedOperationTree, []);
+        }
+
+        [Fact]
+        public void InferParameter_Metadata()
+        {
+            // The emitted parameters have the inferred types and the default values, as a C# compilation sees them.
+            var source = """
+                #nullable enable
+                public class C
+                {
+                    public static string M(infer count = 3, infer name = "n", infer other = default(string)) => name + count + other;
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            CompileAndVerify(comp, symbolValidator: module =>
+            {
+                Assert.Equal("System.String! C.M([System.Int32 count = 3], [System.String! name = \"n\"], [System.String? other = null])", module.GlobalNamespace.GetMember<MethodSymbol>("C.M").ToTestDisplayString(includeNonNullable: true));
+            }).VerifyDiagnostics();
+
+            var csharp = """
+                class D
+                {
+                    static void Main() => System.Console.Write(C.M() + C.M(4, "x"));
+                }
+                """;
+            CompileAndVerify(csharp, references: [comp.EmitToImageReference()], targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "n3x4" : null).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void InferParameter_Concurrent()
+        {
+            // The types are inferred outside of the method locks; threads that race get the same types, and the errors are reported once.
+            var builder = new System.Text.StringBuilder("class C\n{\n");
+            for (int i = 0; i < 50; i++)
+            {
+                builder.AppendLine($"    static int M{i}(infer x = {i}, infer y = N{(i + 1) % 50}()) => 0;");
+                builder.AppendLine($"    static int N{i}(infer x = null) => 0;");
+            }
+
+            builder.AppendLine("}");
+            var comp = CreateCompilation(builder.ToString(), parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            var methods = comp.GetMember<NamedTypeSymbol>("C").GetMembers().OfType<MethodSymbol>().Where(m => m.MethodKind == MethodKind.Ordinary).ToArray();
+            System.Threading.Tasks.Parallel.For(0, 8, _ =>
+            {
+                foreach (var method in methods)
+                {
+                    Assert.Equal(method.Name.StartsWith("M") ? "System.Int32" : "infer", method.Parameters[0].Type.ToTestDisplayString());
+                }
+            });
+            Assert.Equal(50, comp.GetDiagnostics().Count(d => d.Code == (int)ErrorCode.ERR_SharperInferParameterNoType));
+        }
+
+        [Fact]
         public void ImplicitIt_Basic()
         {
             // Each Sharper line next to its C# twin, which writes the lambda out.

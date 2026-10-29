@@ -2637,6 +2637,21 @@
         <target state="new">An inferred return type ('infer') is not supported {0} yet. Write the return type.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperInferParameterCycle">
+        <source>Cannot infer the type of parameter '{0}', because its default value depends on the type of '{0}' itself. Write the parameter type.</source>
+        <target state="new">Cannot infer the type of parameter '{0}', because its default value depends on the type of '{0}' itself. Write the parameter type.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperInferParameterNoDefault">
+        <source>Cannot infer the type of parameter '{0}', because it has no default value. Write the parameter type.</source>
+        <target state="new">Cannot infer the type of parameter '{0}', because it has no default value. Write the parameter type.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperInferParameterNoType">
+        <source>Cannot infer the type of parameter '{0}', because its default value ({1}) has no type. Write the parameter type.</source>
+        <target state="new">Cannot infer the type of parameter '{0}', because its default value ({1}) has no type. Write the parameter type.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperInferUsesInferredMethod">
         <source>Cannot infer the return type of '{0}', because its body uses '{1}', whose return type is inferred too. Write the return type of one of them.</source>
         <target state="new">Cannot infer the return type of '{0}', because its body uses '{1}', whose return type is inferred too. Write the return type of one of them.</target>
