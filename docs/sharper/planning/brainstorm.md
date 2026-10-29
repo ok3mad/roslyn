@@ -707,7 +707,7 @@ static infer ProcessBatch(List<RawOrder> raws, IAccounts accts, IFx fx) =>
 Inside the real FX adapter, a failing REST call becomes a value at the boundary:
 
 ```
-try http.GetFromJsonAsync<RateTable>(url) catch
+try await http.GetFromJsonAsync<RateTable>(url) catch
 {
     HttpRequestException { StatusCode: 404 }             => new NoRate(from, to),
     HttpRequestException { StatusCode: >=500 and val s } => new FxUnavailable((int)s),
@@ -757,6 +757,10 @@ What is settled so far, what was tried and dropped, and what waits for a later s
 - Errors accumulate through the plain function `collect` across independent pure checks, and fail fast between dependent stages. It is a function, not new syntax.
 - `Parse` functions live on the types and take only raw strings, while constructors take typed values.
 - Exceptions are handled with `try expr catch { ... }`, and there is no `finally`; low-level code lives in C#.
+- `try` expression (#28), slice 1 (see the [implementation plan](implementation-plan.md#feature-8-try-expression-slice-1-design)):
+  - **Result type.** Target-typed to a declared C# 15 union, which each case value converts into, or the best common type of the body and the arms. No anonymous unions until #31.
+  - **Arms** are switch arms over the exception: patterns, `when` clauses, no exhaustiveness. They run in a catch filter, so an unmatched exception is never caught and keeps its stack trace; there is no rethrow arm.
+  - **An awaitable body is awaited explicitly:** `try await F()`. Without `await`, only synchronous throws would be caught, so it warns.
 - Sorting and similar functions take an explicit comparator function instead of generic constraints.
 - Short type forms: `T[..]` for sequences, `T~` for `Task<T>` (`void~` for `Task`; `ValueTask` stays spelled out), and `() -> T` for functions.
 - `->` is only the arrow of function types; lambdas keep `=>`. A function type is `Func` or `Action`, never a synthesized delegate (see [function types](../features/function-types.md)).
