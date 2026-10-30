@@ -39,4 +39,9 @@ namespace Microsoft.CodeAnalysis.CSharp
     {
         protected override ImmutableArray<BoundNode?> Children => ImmutableArray.Create<BoundNode?>(this.Expression);
     }
+
+    partial class BoundConvertedTryExpression
+    {
+        protected override ImmutableArray<BoundNode?> Children => ImmutableArray.Create<BoundNode?>(this.Body);
+    }
 }

@@ -809,6 +809,27 @@ namespace Microsoft.CodeAnalysis.CSharp
             }
         }
 
+        public override void VisitTryExpression(TryExpressionSyntax node)
+        {
+            // A Sharper try expression: the arms are switch expression arms over the caught exception. Their patterns and
+            // `when` clauses run in a catch filter, and their values in the catch block.
+            Visit(node.Expression, _enclosing);
+            foreach (SwitchExpressionArmSyntax arm in node.Arms)
+            {
+                var armScopeBinder = new ExpressionVariableBinder(arm, _enclosing);
+                var armBinder = new SwitchExpressionArmBinder(arm, armScopeBinder, switchExpressionBinder: null);
+                AddToMap(arm, armBinder);
+                var filterBinder = armBinder.WithAdditionalFlags(BinderFlags.InCatchFilter);
+                Visit(arm.Pattern, filterBinder);
+                if (arm.WhenClause != null)
+                {
+                    Visit(arm.WhenClause, filterBinder);
+                }
+
+                Visit(arm.Expression, armBinder.WithAdditionalFlags(BinderFlags.InCatchBlock));
+            }
+        }
+
         public override void VisitBinaryPattern(BinaryPatternSyntax node)
         {
             // Users (such as ourselves) can have many, many nested binary patterns. To avoid crashing, do left recursion manually.

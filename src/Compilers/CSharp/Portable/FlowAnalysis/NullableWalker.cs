@@ -2267,7 +2267,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                                     }
                                     break;
 
-                                case ConversionKind.ConditionalExpression or ConversionKind.SwitchExpression or ConversionKind.ObjectCreation when
+                                case ConversionKind.ConditionalExpression or ConversionKind.SwitchExpression or ConversionKind.SharperTryExpression or ConversionKind.ObjectCreation when
                                          IsTargetTypedExpression(conv.Operand) &&
                                          TypeSymbol.Equals(conv.Type, conv.Operand.Type, TypeCompareKind.IgnoreNullableModifiersForReferenceTypes):
                                 case ConversionKind.Identity:
@@ -5315,6 +5315,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         {
             return node is BoundConditionalOperator { WasTargetTyped: true } or
                            BoundConvertedSwitchExpression { WasTargetTyped: true } or
+                           BoundConvertedTryExpression { WasTargetTyped: true } or
                            BoundObjectCreationExpressionBase { WasTargetTyped: true } or
                            BoundDelegateCreationExpression { WasTargetTyped: true } or
                            BoundCollectionExpression { WasTargetTyped: true };
@@ -10065,6 +10066,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 case ConversionKind.CollectionExpression:
                 case ConversionKind.SwitchExpression:
                 case ConversionKind.ConditionalExpression:
+                case ConversionKind.SharperTryExpression:
                     resultState = getConversionResultState(operandType);
                     break;
 

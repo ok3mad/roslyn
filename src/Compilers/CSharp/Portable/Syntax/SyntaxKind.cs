@@ -963,5 +963,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         TaskType = 9901,
         /// <summary>Represents Sharper's parenthesized type, such as <c>((int) -> int)</c> in <c>((int) -> int)?</c>.</summary>
         ParenthesizedType = 9902,
+        /// <summary>Represents Sharper's try expression, such as <c>try F() catch { IOException => 0 }</c>.</summary>
+        TryExpression = 9903,
     }
 }

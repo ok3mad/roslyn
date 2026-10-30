@@ -152,6 +152,8 @@ namespace Microsoft.CodeAnalysis.CSharp
         SwitchExpressionArm,
         UnconvertedSwitchExpression,
         ConvertedSwitchExpression,
+        UnconvertedTryExpression,
+        ConvertedTryExpression,
         DecisionDag,
         EvaluationDecisionDagNode,
         TestDecisionDagNode,
@@ -5076,6 +5078,95 @@ namespace Microsoft.CodeAnalysis.CSharp
         }
     }
 
+    internal abstract partial class BoundTryExpression : BoundExpression
+    {
+        protected BoundTryExpression(BoundKind kind, SyntaxNode syntax, BoundExpression body, ImmutableArray<BoundSwitchExpressionArm> arms, BoundValuePlaceholder exceptionPlaceholder, BoundDecisionDag reachabilityDecisionDag, LabelSymbol? defaultLabel, TypeSymbol? type, bool hasErrors = false)
+            : base(kind, syntax, type, hasErrors)
+        {
+
+            RoslynDebug.Assert(body is object, "Field 'body' cannot be null (make the type nullable in BoundNodes.xml to remove this check)");
+            RoslynDebug.Assert(!arms.IsDefault, "Field 'arms' cannot be null (use Null=\"allow\" in BoundNodes.xml to remove this check)");
+            RoslynDebug.Assert(exceptionPlaceholder is object, "Field 'exceptionPlaceholder' cannot be null (make the type nullable in BoundNodes.xml to remove this check)");
+            RoslynDebug.Assert(reachabilityDecisionDag is object, "Field 'reachabilityDecisionDag' cannot be null (make the type nullable in BoundNodes.xml to remove this check)");
+
+            this.Body = body;
+            this.Arms = arms;
+            this.ExceptionPlaceholder = exceptionPlaceholder;
+            this.ReachabilityDecisionDag = reachabilityDecisionDag;
+            this.DefaultLabel = defaultLabel;
+        }
+
+        public BoundExpression Body { get; }
+        public ImmutableArray<BoundSwitchExpressionArm> Arms { get; }
+        public BoundValuePlaceholder ExceptionPlaceholder { get; }
+        public BoundDecisionDag ReachabilityDecisionDag { get; }
+        public LabelSymbol? DefaultLabel { get; }
+    }
+
+    internal sealed partial class BoundUnconvertedTryExpression : BoundTryExpression
+    {
+        public BoundUnconvertedTryExpression(SyntaxNode syntax, BoundExpression body, ImmutableArray<BoundSwitchExpressionArm> arms, BoundValuePlaceholder exceptionPlaceholder, BoundDecisionDag reachabilityDecisionDag, LabelSymbol? defaultLabel, TypeSymbol? type, bool hasErrors = false)
+            : base(BoundKind.UnconvertedTryExpression, syntax, body, arms, exceptionPlaceholder, reachabilityDecisionDag, defaultLabel, type, hasErrors || body.HasErrors() || arms.HasErrors() || exceptionPlaceholder.HasErrors() || reachabilityDecisionDag.HasErrors())
+        {
+
+            RoslynDebug.Assert(body is object, "Field 'body' cannot be null (make the type nullable in BoundNodes.xml to remove this check)");
+            RoslynDebug.Assert(!arms.IsDefault, "Field 'arms' cannot be null (use Null=\"allow\" in BoundNodes.xml to remove this check)");
+            RoslynDebug.Assert(exceptionPlaceholder is object, "Field 'exceptionPlaceholder' cannot be null (make the type nullable in BoundNodes.xml to remove this check)");
+            RoslynDebug.Assert(reachabilityDecisionDag is object, "Field 'reachabilityDecisionDag' cannot be null (make the type nullable in BoundNodes.xml to remove this check)");
+
+        }
+
+
+        [DebuggerStepThrough]
+        public override BoundNode? Accept(BoundTreeVisitor visitor) => visitor.VisitUnconvertedTryExpression(this);
+
+        public BoundUnconvertedTryExpression Update(BoundExpression body, ImmutableArray<BoundSwitchExpressionArm> arms, BoundValuePlaceholder exceptionPlaceholder, BoundDecisionDag reachabilityDecisionDag, LabelSymbol? defaultLabel, TypeSymbol? type)
+        {
+            if (body != this.Body || arms != this.Arms || exceptionPlaceholder != this.ExceptionPlaceholder || reachabilityDecisionDag != this.ReachabilityDecisionDag || !Symbols.SymbolEqualityComparer.ConsiderEverything.Equals(defaultLabel, this.DefaultLabel) || !TypeSymbol.Equals(type, this.Type, TypeCompareKind.ConsiderEverything))
+            {
+                var result = new BoundUnconvertedTryExpression(this.Syntax, body, arms, exceptionPlaceholder, reachabilityDecisionDag, defaultLabel, type, this.HasErrors);
+                result.CopyAttributes(this);
+                return result;
+            }
+            return this;
+        }
+    }
+
+    internal sealed partial class BoundConvertedTryExpression : BoundTryExpression
+    {
+        public BoundConvertedTryExpression(SyntaxNode syntax, TypeSymbol? naturalTypeOpt, bool wasTargetTyped, BoundExpression body, ImmutableArray<BoundSwitchExpressionArm> arms, BoundValuePlaceholder exceptionPlaceholder, BoundDecisionDag reachabilityDecisionDag, LabelSymbol? defaultLabel, TypeSymbol type, bool hasErrors = false)
+            : base(BoundKind.ConvertedTryExpression, syntax, body, arms, exceptionPlaceholder, reachabilityDecisionDag, defaultLabel, type, hasErrors || body.HasErrors() || arms.HasErrors() || exceptionPlaceholder.HasErrors() || reachabilityDecisionDag.HasErrors())
+        {
+
+            RoslynDebug.Assert(body is object, "Field 'body' cannot be null (make the type nullable in BoundNodes.xml to remove this check)");
+            RoslynDebug.Assert(!arms.IsDefault, "Field 'arms' cannot be null (use Null=\"allow\" in BoundNodes.xml to remove this check)");
+            RoslynDebug.Assert(exceptionPlaceholder is object, "Field 'exceptionPlaceholder' cannot be null (make the type nullable in BoundNodes.xml to remove this check)");
+            RoslynDebug.Assert(reachabilityDecisionDag is object, "Field 'reachabilityDecisionDag' cannot be null (make the type nullable in BoundNodes.xml to remove this check)");
+            RoslynDebug.Assert(type is object, "Field 'type' cannot be null (make the type nullable in BoundNodes.xml to remove this check)");
+
+            this.NaturalTypeOpt = naturalTypeOpt;
+            this.WasTargetTyped = wasTargetTyped;
+        }
+
+        public new TypeSymbol Type => base.Type!;
+        public TypeSymbol? NaturalTypeOpt { get; }
+        public bool WasTargetTyped { get; }
+
+        [DebuggerStepThrough]
+        public override BoundNode? Accept(BoundTreeVisitor visitor) => visitor.VisitConvertedTryExpression(this);
+
+        public BoundConvertedTryExpression Update(TypeSymbol? naturalTypeOpt, bool wasTargetTyped, BoundExpression body, ImmutableArray<BoundSwitchExpressionArm> arms, BoundValuePlaceholder exceptionPlaceholder, BoundDecisionDag reachabilityDecisionDag, LabelSymbol? defaultLabel, TypeSymbol type)
+        {
+            if (!TypeSymbol.Equals(naturalTypeOpt, this.NaturalTypeOpt, TypeCompareKind.ConsiderEverything) || wasTargetTyped != this.WasTargetTyped || body != this.Body || arms != this.Arms || exceptionPlaceholder != this.ExceptionPlaceholder || reachabilityDecisionDag != this.ReachabilityDecisionDag || !Symbols.SymbolEqualityComparer.ConsiderEverything.Equals(defaultLabel, this.DefaultLabel) || !TypeSymbol.Equals(type, this.Type, TypeCompareKind.ConsiderEverything))
+            {
+                var result = new BoundConvertedTryExpression(this.Syntax, naturalTypeOpt, wasTargetTyped, body, arms, exceptionPlaceholder, reachabilityDecisionDag, defaultLabel, type, this.HasErrors);
+                result.CopyAttributes(this);
+                return result;
+            }
+            return this;
+        }
+    }
+
     internal sealed partial class BoundDecisionDag : BoundNode
     {
         public BoundDecisionDag(SyntaxNode syntax, BoundDecisionDagNode rootNode, bool suitableForLowering, bool hasErrors = false)
@@ -9373,6 +9464,10 @@ namespace Microsoft.CodeAnalysis.CSharp
                     return VisitUnconvertedSwitchExpression((BoundUnconvertedSwitchExpression)node, arg);
                 case BoundKind.ConvertedSwitchExpression:
                     return VisitConvertedSwitchExpression((BoundConvertedSwitchExpression)node, arg);
+                case BoundKind.UnconvertedTryExpression:
+                    return VisitUnconvertedTryExpression((BoundUnconvertedTryExpression)node, arg);
+                case BoundKind.ConvertedTryExpression:
+                    return VisitConvertedTryExpression((BoundConvertedTryExpression)node, arg);
                 case BoundKind.DecisionDag:
                     return VisitDecisionDag((BoundDecisionDag)node, arg);
                 case BoundKind.EvaluationDecisionDagNode:
@@ -9725,6 +9820,8 @@ namespace Microsoft.CodeAnalysis.CSharp
         public virtual R VisitSwitchExpressionArm(BoundSwitchExpressionArm node, A arg) => this.DefaultVisit(node, arg);
         public virtual R VisitUnconvertedSwitchExpression(BoundUnconvertedSwitchExpression node, A arg) => this.DefaultVisit(node, arg);
         public virtual R VisitConvertedSwitchExpression(BoundConvertedSwitchExpression node, A arg) => this.DefaultVisit(node, arg);
+        public virtual R VisitUnconvertedTryExpression(BoundUnconvertedTryExpression node, A arg) => this.DefaultVisit(node, arg);
+        public virtual R VisitConvertedTryExpression(BoundConvertedTryExpression node, A arg) => this.DefaultVisit(node, arg);
         public virtual R VisitDecisionDag(BoundDecisionDag node, A arg) => this.DefaultVisit(node, arg);
         public virtual R VisitEvaluationDecisionDagNode(BoundEvaluationDecisionDagNode node, A arg) => this.DefaultVisit(node, arg);
         public virtual R VisitTestDecisionDagNode(BoundTestDecisionDagNode node, A arg) => this.DefaultVisit(node, arg);
@@ -9967,6 +10064,8 @@ namespace Microsoft.CodeAnalysis.CSharp
         public virtual BoundNode? VisitSwitchExpressionArm(BoundSwitchExpressionArm node) => this.DefaultVisit(node);
         public virtual BoundNode? VisitUnconvertedSwitchExpression(BoundUnconvertedSwitchExpression node) => this.DefaultVisit(node);
         public virtual BoundNode? VisitConvertedSwitchExpression(BoundConvertedSwitchExpression node) => this.DefaultVisit(node);
+        public virtual BoundNode? VisitUnconvertedTryExpression(BoundUnconvertedTryExpression node) => this.DefaultVisit(node);
+        public virtual BoundNode? VisitConvertedTryExpression(BoundConvertedTryExpression node) => this.DefaultVisit(node);
         public virtual BoundNode? VisitDecisionDag(BoundDecisionDag node) => this.DefaultVisit(node);
         public virtual BoundNode? VisitEvaluationDecisionDagNode(BoundEvaluationDecisionDagNode node) => this.DefaultVisit(node);
         public virtual BoundNode? VisitTestDecisionDagNode(BoundTestDecisionDagNode node) => this.DefaultVisit(node);
@@ -10601,6 +10700,18 @@ namespace Microsoft.CodeAnalysis.CSharp
         {
             this.Visit(node.Expression);
             this.VisitList(node.SwitchArms);
+            return null;
+        }
+        public override BoundNode? VisitUnconvertedTryExpression(BoundUnconvertedTryExpression node)
+        {
+            this.Visit(node.Body);
+            this.VisitList(node.Arms);
+            return null;
+        }
+        public override BoundNode? VisitConvertedTryExpression(BoundConvertedTryExpression node)
+        {
+            this.Visit(node.Body);
+            this.VisitList(node.Arms);
             return null;
         }
         public override BoundNode? VisitDecisionDag(BoundDecisionDag node)
@@ -11995,6 +12106,27 @@ namespace Microsoft.CodeAnalysis.CSharp
             TypeSymbol? naturalTypeOpt = this.VisitType(node.NaturalTypeOpt);
             TypeSymbol? type = this.VisitType(node.Type);
             return node.Update(naturalTypeOpt, node.WasTargetTyped, expression, switchArms, reachabilityDecisionDag, defaultLabel, node.ReportedNotExhaustive, type);
+        }
+        public override BoundNode? VisitUnconvertedTryExpression(BoundUnconvertedTryExpression node)
+        {
+            LabelSymbol? defaultLabel = this.VisitLabelSymbol(node.DefaultLabel);
+            BoundExpression body = (BoundExpression)this.Visit(node.Body);
+            ImmutableArray<BoundSwitchExpressionArm> arms = this.VisitList(node.Arms);
+            BoundValuePlaceholder exceptionPlaceholder = node.ExceptionPlaceholder;
+            BoundDecisionDag reachabilityDecisionDag = node.ReachabilityDecisionDag;
+            TypeSymbol? type = this.VisitType(node.Type);
+            return node.Update(body, arms, exceptionPlaceholder, reachabilityDecisionDag, defaultLabel, type);
+        }
+        public override BoundNode? VisitConvertedTryExpression(BoundConvertedTryExpression node)
+        {
+            LabelSymbol? defaultLabel = this.VisitLabelSymbol(node.DefaultLabel);
+            BoundExpression body = (BoundExpression)this.Visit(node.Body);
+            ImmutableArray<BoundSwitchExpressionArm> arms = this.VisitList(node.Arms);
+            BoundValuePlaceholder exceptionPlaceholder = node.ExceptionPlaceholder;
+            BoundDecisionDag reachabilityDecisionDag = node.ReachabilityDecisionDag;
+            TypeSymbol? naturalTypeOpt = this.VisitType(node.NaturalTypeOpt);
+            TypeSymbol? type = this.VisitType(node.Type);
+            return node.Update(naturalTypeOpt, node.WasTargetTyped, body, arms, exceptionPlaceholder, reachabilityDecisionDag, defaultLabel, type);
         }
         public override BoundNode? VisitDecisionDag(BoundDecisionDag node)
         {
@@ -14212,6 +14344,47 @@ namespace Microsoft.CodeAnalysis.CSharp
             else
             {
                 updatedNode = node.Update(naturalTypeOpt, node.WasTargetTyped, expression, switchArms, reachabilityDecisionDag, node.DefaultLabel, node.ReportedNotExhaustive, node.Type);
+            }
+            return updatedNode;
+        }
+
+        public override BoundNode? VisitUnconvertedTryExpression(BoundUnconvertedTryExpression node)
+        {
+            BoundExpression body = (BoundExpression)this.Visit(node.Body);
+            ImmutableArray<BoundSwitchExpressionArm> arms = this.VisitList(node.Arms);
+            BoundValuePlaceholder exceptionPlaceholder = node.ExceptionPlaceholder;
+            BoundDecisionDag reachabilityDecisionDag = node.ReachabilityDecisionDag;
+            BoundUnconvertedTryExpression updatedNode;
+
+            if (_updatedNullabilities.TryGetValue(node, out (NullabilityInfo Info, TypeSymbol? Type) infoAndType))
+            {
+                updatedNode = node.Update(body, arms, exceptionPlaceholder, reachabilityDecisionDag, node.DefaultLabel, infoAndType.Type);
+                updatedNode.TopLevelNullability = infoAndType.Info;
+            }
+            else
+            {
+                updatedNode = node.Update(body, arms, exceptionPlaceholder, reachabilityDecisionDag, node.DefaultLabel, node.Type);
+            }
+            return updatedNode;
+        }
+
+        public override BoundNode? VisitConvertedTryExpression(BoundConvertedTryExpression node)
+        {
+            TypeSymbol? naturalTypeOpt = GetUpdatedSymbol(node, node.NaturalTypeOpt);
+            BoundExpression body = (BoundExpression)this.Visit(node.Body);
+            ImmutableArray<BoundSwitchExpressionArm> arms = this.VisitList(node.Arms);
+            BoundValuePlaceholder exceptionPlaceholder = node.ExceptionPlaceholder;
+            BoundDecisionDag reachabilityDecisionDag = node.ReachabilityDecisionDag;
+            BoundConvertedTryExpression updatedNode;
+
+            if (_updatedNullabilities.TryGetValue(node, out (NullabilityInfo Info, TypeSymbol? Type) infoAndType))
+            {
+                updatedNode = node.Update(naturalTypeOpt, node.WasTargetTyped, body, arms, exceptionPlaceholder, reachabilityDecisionDag, node.DefaultLabel, infoAndType.Type!);
+                updatedNode.TopLevelNullability = infoAndType.Info;
+            }
+            else
+            {
+                updatedNode = node.Update(naturalTypeOpt, node.WasTargetTyped, body, arms, exceptionPlaceholder, reachabilityDecisionDag, node.DefaultLabel, node.Type);
             }
             return updatedNode;
         }
@@ -16687,6 +16860,32 @@ namespace Microsoft.CodeAnalysis.CSharp
             new TreeDumperNode("hasErrors", node.HasErrors, null)
         }
         );
+        public override TreeDumperNode VisitUnconvertedTryExpression(BoundUnconvertedTryExpression node, object? arg) => new TreeDumperNode("unconvertedTryExpression", null, new TreeDumperNode[]
+        {
+            new TreeDumperNode("body", null, new TreeDumperNode[] { Visit(node.Body, null) }),
+            new TreeDumperNode("arms", null, from x in node.Arms select Visit(x, null)),
+            new TreeDumperNode("exceptionPlaceholder", null, new TreeDumperNode[] { Visit(node.ExceptionPlaceholder, null) }),
+            new TreeDumperNode("reachabilityDecisionDag", null, new TreeDumperNode[] { Visit(node.ReachabilityDecisionDag, null) }),
+            new TreeDumperNode("defaultLabel", node.DefaultLabel, null),
+            new TreeDumperNode("type", node.Type, null),
+            new TreeDumperNode("isSuppressed", node.IsSuppressed, null),
+            new TreeDumperNode("hasErrors", node.HasErrors, null)
+        }
+        );
+        public override TreeDumperNode VisitConvertedTryExpression(BoundConvertedTryExpression node, object? arg) => new TreeDumperNode("convertedTryExpression", null, new TreeDumperNode[]
+        {
+            new TreeDumperNode("naturalTypeOpt", node.NaturalTypeOpt, null),
+            new TreeDumperNode("wasTargetTyped", node.WasTargetTyped, null),
+            new TreeDumperNode("body", null, new TreeDumperNode[] { Visit(node.Body, null) }),
+            new TreeDumperNode("arms", null, from x in node.Arms select Visit(x, null)),
+            new TreeDumperNode("exceptionPlaceholder", null, new TreeDumperNode[] { Visit(node.ExceptionPlaceholder, null) }),
+            new TreeDumperNode("reachabilityDecisionDag", null, new TreeDumperNode[] { Visit(node.ReachabilityDecisionDag, null) }),
+            new TreeDumperNode("defaultLabel", node.DefaultLabel, null),
+            new TreeDumperNode("type", node.Type, null),
+            new TreeDumperNode("isSuppressed", node.IsSuppressed, null),
+            new TreeDumperNode("hasErrors", node.HasErrors, null)
+        }
+        );
         public override TreeDumperNode VisitDecisionDag(BoundDecisionDag node, object? arg) => new TreeDumperNode("decisionDag", null, new TreeDumperNode[]
         {
             new TreeDumperNode("rootNode", null, new TreeDumperNode[] { Visit(node.RootNode, null) }),
@@ -17784,6 +17983,8 @@ namespace Microsoft.CodeAnalysis.CSharp
                 BoundKind.IfStatement => PipelinePhase.LocalRewriting,
                 BoundKind.UsingStatement => PipelinePhase.LocalRewriting,
                 BoundKind.UnconvertedSwitchExpression => PipelinePhase.InitialBinding,
+                BoundKind.UnconvertedTryExpression => PipelinePhase.InitialBinding,
+                BoundKind.ConvertedTryExpression => PipelinePhase.LocalRewriting,
                 BoundKind.SpillSequence => PipelinePhase.Spilling,
                 BoundKind.UnconvertedObjectCreationExpression => PipelinePhase.InitialBinding,
                 BoundKind.UnconvertedCollectionExpression => PipelinePhase.InitialBinding,

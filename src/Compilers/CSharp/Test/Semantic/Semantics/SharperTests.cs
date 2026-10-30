@@ -14,7 +14,7 @@ using Xunit;
 
 namespace Microsoft.CodeAnalysis.CSharp.UnitTests
 {
-    public sealed class SharperTests : CSharpTestBase
+    public sealed partial class SharperTests : CSharpTestBase
     {
         [Fact]
         public void Gating_DisabledByDefault()

@@ -1587,6 +1587,33 @@
     <Field Name="WasTargetTyped" Type="bool" />
   </Node>
 
+  <!--
+  Sharper's try expression, try Body catch { Arms }. The arms are switch expression arms over the caught exception, and
+  an exception that no arm matches propagates. Like a switch expression, it converts to a target type, and once
+  converted it cannot be target-typed again.
+  -->
+  <AbstractNode Name="BoundTryExpression" Base="BoundExpression">
+    <Field Name="Body" Type="BoundExpression" Null="disallow"/>
+    <Field Name="Arms" Type="ImmutableArray&lt;BoundSwitchExpressionArm&gt;"/>
+    <!-- The input of the decision dag: a placeholder for the caught exception, of type System.Exception. -->
+    <Field Name="ExceptionPlaceholder" Type="BoundValuePlaceholder" Null="disallow" SkipInVisitor="true"/>
+    <Field Name="ReachabilityDecisionDag" Type="BoundDecisionDag" Null="disallow" SkipInVisitor="true"/>
+    <!-- The label the decision dag reaches when no arm matches; null when an arm matches every exception. -->
+    <Field Name="DefaultLabel" Type="LabelSymbol?"/>
+  </AbstractNode>
+
+  <!-- The Type is the natural type (the best common type of the body and the arms), if any. -->
+  <Node Name="BoundUnconvertedTryExpression" Base="BoundTryExpression" DoesNotSurvive="InitialBinding">
+  </Node>
+
+  <Node Name="BoundConvertedTryExpression" Base="BoundTryExpression" DoesNotSurvive="LocalRewriting">
+    <!-- A converted try expression must have a type, even if that's an error type. -->
+    <Field Name="Type" Type="TypeSymbol" Override="true" Null="disallow"/>
+    <!-- Natural type is preserved for the purpose of semantic model. Can be `null`. -->
+    <Field Name="NaturalTypeOpt" Type="TypeSymbol?" Null="allow"/>
+    <Field Name="WasTargetTyped" Type="bool" />
+  </Node>
+
   <Node Name="BoundDecisionDag" Base="BoundNode">
     <Field Name="RootNode" Type="BoundDecisionDagNode" Null="disallow"/>
     <Field Name="SuitableForLowering" Type="bool"/>

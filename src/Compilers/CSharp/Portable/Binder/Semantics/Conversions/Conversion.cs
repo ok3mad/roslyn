@@ -397,6 +397,14 @@ namespace Microsoft.CodeAnalysis.CSharp
             return new Conversion(ConversionKind.ConditionalExpression, innerConversions);
         }
 
+        /// <summary>
+        /// A conversion of a Sharper try expression: the conversions of its body, then of each arm.
+        /// </summary>
+        internal static Conversion MakeSharperTryExpression(ImmutableArray<Conversion> innerConversions)
+        {
+            return new Conversion(ConversionKind.SharperTryExpression, innerConversions);
+        }
+
         internal ConversionKind Kind
         {
             get

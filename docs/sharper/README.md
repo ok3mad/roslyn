@@ -96,6 +96,7 @@ Not done yet:
 | [Inferred return type](features/inferred-return-type.md) | `private static infer Greeting(int id) => $"Hello, {id}!";` returns `string`. Steps R1 and R2: expression and block bodies of private methods and local functions, iterators and `async`. | Prototype; R1 merged into `main`, R2 on `sharper/infer-return-r2` | [#67](https://github.com/ok3mad/roslyn/issues/67), [#68](https://github.com/ok3mad/roslyn/issues/68), under [#22](https://github.com/ok3mad/roslyn/issues/22) |
 | [Inferred parameter type](features/inferred-parameter-type.md) | `void Fetch(string url, infer retries = 3)` gives `retries` the type of its default value, `int`. Step P1: default values, on every member kind and lambdas. | Prototype of step P1, on `sharper/infer-parameter-p1` | [#72](https://github.com/ok3mad/roslyn/issues/72), under [#27](https://github.com/ok3mad/roslyn/issues/27) |
 | [Implicit `it`](features/implicit-it.md) | `xs.Select(it.Name)` is `xs.Select(x => x.Name)`: an argument that uses `it` is a lambda, if the innermost parameter around it takes a one-parameter function. | Prototype, merged into `main` | [#24](https://github.com/ok3mad/roslyn/issues/24) |
+| [`try` expression](features/try-expression.md) | `try int.Parse(s) catch { FormatException => -1 }` turns exceptions into values with switch arms; an unmatched exception propagates untouched. Slice 1: a declared union or the best common type as the result. | Prototype of slice 1, on `sharper/try-expression-slice1` | [#28](https://github.com/ok3mad/roslyn/issues/28) |
 
 Every planned feature has an issue, one per row of the
 [syntax roadmap](planning/implementation-plan.md#syntax-roadmap), collected under the tracking issue
@@ -117,7 +118,7 @@ git grep -n "PROTOTYPE(sharper)"
 - `sharper/<feature>` branches hold features in progress; `sharper/gating`, `sharper/val`,
   `sharper/val-designations`, `sharper/val-patterns`, `sharper/function-types`, `sharper/task-type`, `sharper/val-lambda-parameters` and
   `sharper/readonly-locals`, `sharper/infer-return-r1` and `sharper/implicit-it` are merged. `sharper/readonly-parameters`,
-  `sharper/infer-return-r2` and `sharper/infer-parameter-p1` are in progress.
+  `sharper/infer-return-r2`, `sharper/infer-parameter-p1` and `sharper/try-expression-slice1` are in progress.
 
 ## Diagnostics
 
@@ -156,6 +157,9 @@ in `#pragma warning`, `/nowarn` and `.editorconfig`.
 | CS20026 | Error | Cannot infer the type of parameter '{0}', because its default value ({1}) has no type. Write the parameter type. |
 | CS20027 | Error | Cannot infer the type of parameter '{0}', because it has no default value. Write the parameter type. |
 | CS20028 | Error | Cannot infer the type of parameter '{0}', because its default value depends on the type of '{0}' itself. Write the parameter type. |
+| CS20029 | Error | The try expression has no type, because its body and arms ({0}) have no best common type. Give it a target type, such as a declared union of these types. |
+| CS20030 | Warning | The body of this try expression is a '{0}', so the arms catch only the exceptions thrown before the task is returned. Write 'try await ...' to catch the exceptions of the operation. |
+| CS20031 | Error | An expression tree cannot contain a try expression. |
 
 ## Where the code is
 
@@ -163,11 +167,11 @@ in `#pragma warning`, `/nowarn` and `.editorconfig`.
 | --- | --- |
 | Feature flag | `src/Compilers/CSharp/Portable/Errors/MessageID.cs` (`IDS_FeatureSharper`), `src/Compilers/Core/Portable/CommandLine/Feature.cs` (`Feature.Sharper`) |
 | Parser | `src/Compilers/CSharp/Portable/Parser/LanguageParser.cs` (search for `IDS_FeatureSharper`) |
-| Binding | `src/Compilers/CSharp/Portable/Binder/` (search for `IDS_FeatureSharper`); short type forms such as `T[..]` in `Binder_SharperTypes.cs`; inferred return types in `Binder_SharperInferredReturnType.cs` and `Symbols/Source/SharperInferredReturnType.cs`; inferred parameter types in `Binder_SharperInferredParameterType.cs` and `Symbols/Source/SharperInferredParameterType.cs`; implicit `it` in `Binder_SharperImplicitIt.cs` |
-| Syntax nodes | `src/Compilers/CSharp/Portable/Syntax/Syntax.xml` (`FunctionTypeSyntax`, `TaskTypeSyntax`, `ParenthesizedTypeSyntax`); Sharper kinds in `SyntaxKind.cs` count up from 9900 |
+| Binding | `src/Compilers/CSharp/Portable/Binder/` (search for `IDS_FeatureSharper`); short type forms such as `T[..]` in `Binder_SharperTypes.cs`; inferred return types in `Binder_SharperInferredReturnType.cs` and `Symbols/Source/SharperInferredReturnType.cs`; inferred parameter types in `Binder_SharperInferredParameterType.cs` and `Symbols/Source/SharperInferredParameterType.cs`; implicit `it` in `Binder_SharperImplicitIt.cs`; the `try` expression in `Binder_SharperTryExpression.cs` |
+| Syntax nodes | `src/Compilers/CSharp/Portable/Syntax/Syntax.xml` (`FunctionTypeSyntax`, `TaskTypeSyntax`, `ParenthesizedTypeSyntax`, `TryExpressionSyntax`); Sharper kinds in `SyntaxKind.cs` count up from 9900 |
 | Bound nodes | `src/Compilers/CSharp/Portable/BoundTree/BoundNodes.xml` |
 | Lowering | `src/Compilers/CSharp/Portable/Lowering/LocalRewriter/` |
-| Tests | `src/Compilers/CSharp/Test/Semantic/Semantics/SharperTests.cs` |
+| Tests | `src/Compilers/CSharp/Test/Semantic/Semantics/SharperTests.cs` and the other files of the partial class `SharperTests`, such as `SharperTests_TryExpression.cs` |
 
 ## Building and testing
 

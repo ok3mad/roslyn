@@ -162,6 +162,12 @@ namespace Microsoft.CodeAnalysis.CSharp
             => (Type is null) ? MessageID.IDS_FeatureSwitchExpression.Localize() : base.Display;
     }
 
+    internal partial class BoundUnconvertedTryExpression
+    {
+        public override object Display
+            => (Type is null) ? MessageID.IDS_SharperTryExpression.Localize() : base.Display;
+    }
+
     internal partial class BoundUnconvertedConditionalOperator
     {
         public override object Display

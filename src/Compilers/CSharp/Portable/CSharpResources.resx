@@ -375,6 +375,9 @@
   <data name="IDS_SharperInferOnOperator" xml:space="preserve">
     <value>on an operator</value>
   </data>
+  <data name="IDS_SharperTryExpression" xml:space="preserve">
+    <value>try expression</value>
+  </data>
   <data name="IDS_FIXEDLOCAL" xml:space="preserve">
     <value>fixed variable</value>
   </data>
@@ -8367,6 +8370,18 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
   </data>
   <data name="ERR_SharperInferParameterCycle" xml:space="preserve">
     <value>Cannot infer the type of parameter '{0}', because its default value depends on the type of '{0}' itself. Write the parameter type.</value>
+  </data>
+  <data name="ERR_SharperTryExpressionNoType" xml:space="preserve">
+    <value>The try expression has no type, because its body and arms ({0}) have no best common type. Give it a target type, such as a declared union of these types.</value>
+  </data>
+  <data name="WRN_SharperTryExpressionAwaitableBody" xml:space="preserve">
+    <value>The body of this try expression is a '{0}', so the arms catch only the exceptions thrown before the task is returned. Write 'try await ...' to catch the exceptions of the operation.</value>
+  </data>
+  <data name="WRN_SharperTryExpressionAwaitableBody_Title" xml:space="preserve">
+    <value>The body of a try expression is a task that is not awaited</value>
+  </data>
+  <data name="ERR_SharperTryExpressionInExpressionTree" xml:space="preserve">
+    <value>An expression tree cannot contain a try expression.</value>
   </data>
   <data name="WRN_RedundantPattern" xml:space="preserve">
     <value>The pattern is redundant.</value>

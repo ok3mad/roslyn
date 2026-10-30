@@ -16235,7 +16235,8 @@ IConditionalOperation (OperationKind.Conditional, Type: R) (Syntax: 'b ? new A()
             // The union conversion of a possibly null 'a' warns when it converts 'a' directly (Test5), but not when 'a' is
             // an arm or a branch that converts to the target type (Test1, Test2): NullableWalker.VisitUnionConversion checks
             // the operand against the case parameter with reportTopLevelWarnings, which the target-typed switch and
-            // conditional turn off. A user-defined conversion warns in both places (Test6, Test7).
+            // conditional turn off. A user-defined conversion warns in both places (Test6, Test7). Tracked by
+            // https://github.com/ok3mad/roslyn/issues/146.
             comp.VerifyDiagnostics(
                 // (8,29): warning CS8604: Possible null reference argument for parameter 'value' in 'R.R(A value)'.
                 //     static R Test5(A? a) => a;

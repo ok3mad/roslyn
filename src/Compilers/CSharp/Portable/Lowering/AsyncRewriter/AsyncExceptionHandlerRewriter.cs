@@ -605,8 +605,9 @@ namespace Microsoft.CodeAnalysis.CSharp
             var currentAwaitCatchFrame = _currentAwaitCatchFrame;
             if (currentAwaitCatchFrame == null)
             {
-                Debug.Assert(node.Syntax.IsKind(SyntaxKind.CatchClause));
-                var tryStatementSyntax = (TryStatementSyntax)node.Syntax.Parent;
+                // Sharper: the catch block of a try expression has the syntax of the try expression.
+                Debug.Assert(node.Syntax.IsKind(SyntaxKind.CatchClause) || node.Syntax.IsKind(SyntaxKind.TryExpression));
+                var tryStatementSyntax = node.Syntax.IsKind(SyntaxKind.TryExpression) ? node.Syntax : node.Syntax.Parent;
 
                 currentAwaitCatchFrame = _currentAwaitCatchFrame = new AwaitCatchFrame(_F, tryStatementSyntax, parentAwaitCatchFrame);
             }
@@ -1126,7 +1127,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             private readonly Dictionary<LocalSymbol, LocalSymbol> _hoistedLocals;
             private readonly List<LocalSymbol> _orderedHoistedLocals;
 
-            public AwaitCatchFrame(SyntheticBoundNodeFactory F, TryStatementSyntax tryStatementSyntax, AwaitCatchFrame parentOpt)
+            public AwaitCatchFrame(SyntheticBoundNodeFactory F, SyntaxNode tryStatementSyntax, AwaitCatchFrame parentOpt)
             {
                 this.pendingCaughtException = new SynthesizedLocal(F.CurrentFunction, TypeWithAnnotations.Create(F.SpecialType(SpecialType.System_Object)), SynthesizedLocalKind.TryAwaitPendingCaughtException, tryStatementSyntax);
                 this.pendingCatch = new SynthesizedLocal(F.CurrentFunction, TypeWithAnnotations.Create(F.SpecialType(SpecialType.System_Int32)), SynthesizedLocalKind.TryAwaitPendingCatch, tryStatementSyntax);

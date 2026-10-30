@@ -11646,6 +11646,7 @@ done:
                 case SyntaxKind.ParenthesizedLambdaExpression:
                 case SyntaxKind.SimpleLambdaExpression:
                 case SyntaxKind.AnonymousMethodExpression:
+                case SyntaxKind.TryExpression:
                     return Precedence.Lambda;
                 case SyntaxKind.SimpleAssignmentExpression:
                 case SyntaxKind.AddAssignmentExpression:
@@ -11871,6 +11872,9 @@ done:
             // if (...
             // parse out a missing name node for the expression, and keep on going
             var tk = this.CurrentToken.Kind;
+            if (tk == SyntaxKind.TryKeyword && IsSharperTryExpressionStart())
+                return ParseSharperTryExpression(precedence);
+
             if (IsInvalidSubExpression(tk))
                 return this.AddError(this.CreateMissingIdentifierName(), ErrorCode.ERR_InvalidExprTerm, SyntaxFacts.GetText(tk));
 
@@ -11940,6 +11944,39 @@ done:
         }
 
 #nullable enable
+
+        /// <summary>
+        /// Whether a <c>try</c> in expression position starts a Sharper try expression. C# reports CS1525 for any
+        /// <c>try</c> there; <c>try {</c> keeps that error, because it is a try statement written where an expression
+        /// was expected, and no expression starts with a brace.
+        /// </summary>
+        private bool IsSharperTryExpressionStart()
+        {
+            Debug.Assert(this.CurrentToken.Kind == SyntaxKind.TryKeyword);
+            return this.PeekToken(1).Kind != SyntaxKind.OpenBraceToken && IsFeatureEnabled(MessageID.IDS_FeatureSharper);
+        }
+
+        /// <summary>
+        /// Parses a Sharper try expression, <c>try body catch { arms }</c>. The body runs up to <c>catch</c>, and the arms
+        /// are switch expression arms. Like a lambda, it has the lowest precedence, so nothing continues it: an operand of
+        /// a binary operator or a member access needs parentheses.
+        /// </summary>
+        private TryExpressionSyntax ParseSharperTryExpression(Precedence precedence)
+        {
+            var tryKeyword = this.EatToken(SyntaxKind.TryKeyword);
+            var result = _syntaxFactory.TryExpression(
+                tryKeyword,
+                this.ParseExpressionCore(),
+                this.EatToken(SyntaxKind.CatchKeyword),
+                this.EatToken(SyntaxKind.OpenBraceToken),
+                this.ParseSwitchExpressionArms(),
+                this.EatToken(SyntaxKind.CloseBraceToken));
+
+            // Parsed even at the wrong precedence for better recovery, as a throw expression is.
+            return precedence > Precedence.Lambda
+                ? this.AddError(result, ErrorCode.ERR_InvalidExprTerm, SyntaxFacts.GetText(SyntaxKind.TryKeyword))
+                : result;
+        }
 
         /// <summary>
         /// Takes in an initial unary expression or primary expression, and then consumes what follows as long as its

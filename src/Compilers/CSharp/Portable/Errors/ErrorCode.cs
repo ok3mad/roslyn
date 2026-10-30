@@ -2543,6 +2543,9 @@ namespace Microsoft.CodeAnalysis.CSharp
         ERR_SharperInferParameterNoType = SharperErrorCodes.Base + 26,
         ERR_SharperInferParameterNoDefault = SharperErrorCodes.Base + 27,
         ERR_SharperInferParameterCycle = SharperErrorCodes.Base + 28,
+        ERR_SharperTryExpressionNoType = SharperErrorCodes.Base + 29,
+        WRN_SharperTryExpressionAwaitableBody = SharperErrorCodes.Base + 30,
+        ERR_SharperTryExpressionInExpressionTree = SharperErrorCodes.Base + 31,
 
         // Note: you will need to do the following after adding errors:
         //  1) Update ErrorFacts.IsBuildOnlyDiagnostic (src/Compilers/CSharp/Portable/Errors/ErrorFacts.cs)

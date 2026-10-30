@@ -3137,6 +3137,45 @@
     <Field Name="Expression" Type="ExpressionSyntax"/>
   </Node>
 
+  <Node Name="TryExpressionSyntax" Base="ExpressionSyntax">
+    <!-- Sharper's try expression, try e catch { arms }. The arms are switch expression arms over the caught exception. -->
+    <Kind Name="TryExpression"/>
+    <Field Name="TryKeyword" Type="SyntaxToken">
+      <Kind Name="TryKeyword"/>
+      <PropertyComment>
+        <summary>SyntaxToken representing the try keyword.</summary>
+      </PropertyComment>
+    </Field>
+    <Field Name="Expression" Type="ExpressionSyntax">
+      <PropertyComment>
+        <summary>ExpressionSyntax node representing the body, whose exceptions the arms catch.</summary>
+      </PropertyComment>
+    </Field>
+    <Field Name="CatchKeyword" Type="SyntaxToken">
+      <Kind Name="CatchKeyword"/>
+      <PropertyComment>
+        <summary>SyntaxToken representing the catch keyword.</summary>
+      </PropertyComment>
+    </Field>
+    <Field Name="OpenBraceToken" Type="SyntaxToken">
+      <Kind Name="OpenBraceToken"/>
+    </Field>
+    <Field Name="Arms" Type="SeparatedSyntaxList&lt;SwitchExpressionArmSyntax&gt;" AllowTrailingSeparator="true">
+      <PropertyComment>
+        <summary>The arms, which match the caught exception as the arms of a switch expression match its input.</summary>
+      </PropertyComment>
+    </Field>
+    <Field Name="CloseBraceToken" Type="SyntaxToken">
+      <Kind Name="CloseBraceToken"/>
+    </Field>
+    <TypeComment>
+      <summary>Class which represents the syntax node for a Sharper try expression, such as try F() catch { IOException => 0 }.</summary>
+    </TypeComment>
+    <FactoryComment>
+      <summary>Creates a TryExpressionSyntax node.</summary>
+    </FactoryComment>
+  </Node>
+
   <Node Name="TryStatementSyntax" Base="StatementSyntax">
     <Kind Name="TryStatement"/>
     <Field Name="AttributeLists" Type="SyntaxList&lt;AttributeListSyntax&gt;" Override="true"/>

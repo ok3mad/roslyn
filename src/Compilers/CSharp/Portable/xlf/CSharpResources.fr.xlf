@@ -2702,6 +2702,16 @@
         <target state="new">A spread 'yield return ..' cannot enumerate '{0}' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperTryExpressionInExpressionTree">
+        <source>An expression tree cannot contain a try expression.</source>
+        <target state="new">An expression tree cannot contain a try expression.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperTryExpressionNoType">
+        <source>The try expression has no type, because its body and arms ({0}) have no best common type. Give it a target type, such as a declared union of these types.</source>
+        <target state="new">The try expression has no type, because its body and arms ({0}) have no best common type. Give it a target type, such as a declared union of these types.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperValDeconstructionDisallowsSpecificType">
         <source>Deconstruction 'val (...)' form disallows a specific type for 'val'. Use '@val' for the type.</source>
         <target state="new">Deconstruction 'val (...)' form disallows a specific type for 'val'. Use '@val' for the type.</target>
@@ -3522,6 +3532,11 @@
         <target state="new">on a ref return</target>
         <note />
       </trans-unit>
+      <trans-unit id="IDS_SharperTryExpression">
+        <source>try expression</source>
+        <target state="new">try expression</target>
+        <note />
+      </trans-unit>
       <trans-unit id="IDS_VALLOCAL">
         <source>val variable</source>
         <target state="new">val variable</target>
@@ -4300,6 +4315,16 @@
       <trans-unit id="WRN_SharperReadOnlyParameterMemberCallOnCopy_Title">
         <source>Call to a non-readonly member on a readonly parameter runs on a copy</source>
         <target state="new">Call to a non-readonly member on a readonly parameter runs on a copy</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WRN_SharperTryExpressionAwaitableBody">
+        <source>The body of this try expression is a '{0}', so the arms catch only the exceptions thrown before the task is returned. Write 'try await ...' to catch the exceptions of the operation.</source>
+        <target state="new">The body of this try expression is a '{0}', so the arms catch only the exceptions thrown before the task is returned. Write 'try await ...' to catch the exceptions of the operation.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WRN_SharperTryExpressionAwaitableBody_Title">
+        <source>The body of a try expression is a task that is not awaited</source>
+        <target state="new">The body of a try expression is a task that is not awaited</target>
         <note />
       </trans-unit>
       <trans-unit id="WRN_SharperValMemberCallOnCopy">

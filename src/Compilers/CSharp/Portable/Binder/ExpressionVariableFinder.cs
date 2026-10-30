@@ -71,6 +71,12 @@ namespace Microsoft.CodeAnalysis.CSharp
             // Each case has its own scope.
         }
 
+        public override void VisitTryExpression(TryExpressionSyntax node)
+        {
+            Visit(node.Expression);
+            // Each arm has its own scope, as in a switch expression.
+        }
+
         public override void VisitSwitchExpressionArm(SwitchExpressionArmSyntax node)
         {
             SyntaxNode previousNodeToBind = _nodeToBind;

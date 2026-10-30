@@ -334,6 +334,24 @@ namespace Microsoft.CodeAnalysis.CSharp
                         result = ConvertSwitchExpression(expr, commonType, conversionIfTargetTyped: null, diagnostics, hasErrors);
                     }
                     break;
+                case BoundUnconvertedTryExpression expr:
+                    {
+                        var commonType = expr.Type;
+                        bool hasErrors = expression.HasErrors;
+                        if (commonType is null)
+                        {
+                            if (!expr.HasAnyErrors)
+                            {
+                                ReportSharperTryExpressionNoType(expr, diagnostics);
+                            }
+
+                            commonType = CreateErrorType();
+                            hasErrors = true;
+                        }
+
+                        result = ConvertSharperTryExpression(expr, commonType, conversionIfTargetTyped: null, diagnostics, hasErrors);
+                    }
+                    break;
                 case BoundUnconvertedConditionalOperator op:
                     {
                         TypeSymbol type = op.Type;
@@ -744,6 +762,9 @@ namespace Microsoft.CodeAnalysis.CSharp
 
                     case SyntaxKind.SwitchExpression:
                         return BindSwitchExpression((SwitchExpressionSyntax)node, diagnostics);
+
+                    case SyntaxKind.TryExpression:
+                        return BindSharperTryExpression((TryExpressionSyntax)node, diagnostics);
 
                     case SyntaxKind.NumericLiteralExpression:
                     case SyntaxKind.StringLiteralExpression:
@@ -2950,6 +2971,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                     }
                 case BoundKind.UnconvertedConditionalOperator when operand.Type is null:
                 case BoundKind.UnconvertedSwitchExpression when operand.Type is null:
+                case BoundKind.UnconvertedTryExpression when operand.Type is null:
                     {
                         GenerateImplicitConversionError(diagnostics, operand.Syntax, conversion, operand, targetType);
                         return;
