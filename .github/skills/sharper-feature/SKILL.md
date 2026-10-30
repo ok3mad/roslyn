@@ -243,6 +243,26 @@ implementation plan, "Feature 3"):
    cycle without an error, so marking the cycle when the outer inference ends is too late: publish the error for every
    parameter of the cycle at the moment it is found. Test cycles from each end, and on two threads at once.
 
+29. **A lowering that builds a try statement owes what `VisitTryStatement` does.** The try expression lowers to a
+   `BoundTryStatement` it makes itself, so the local rewriter's own try lowering never ran: an `await` in a catch block
+   must set `_sawAwaitInExceptionHandler` (save `_sawAwait`, visit the handler, merge), or `AsyncExceptionHandlerRewriter`
+   is skipped and codegen crashes in `ILBuilder.BlockedBranchDestinationSlow` on a branch into the handler. That
+   rewriter also took a catch block's syntax to be a `CatchClause` inside a `TryStatementSyntax`. Dump the lowered tree
+   (`BoundNode.DumpSource()` before codegen) when emit crashes; the shape shows which pass did not run. An expression
+   that lowers to a try block also inherits IL's limits: a catch filter cannot contain one, so report an error under
+   `BinderFlags.InCatchFilter` (CS20032), or codegen asserts.
+30. **The nullable walker refuses unregistered placeholders.** A decision DAG over a value that is not in the tree (the
+   caught exception) needs an input expression; a `BoundValuePlaceholder` trips `AssertPlaceholderAllowedWithoutRegistration`
+   in `LearnFromNonNullTest`. Give `LearnFromDecisionDag` a `BoundExpressionWithNullability` over it instead, which gets
+   a DAG temp slot like any expression without one.
+31. **Sub-parts with their own scope need two visitors.** `LocalBinderFactory` and `ExpressionVariableFinder` are syntax
+   walkers: without a `Visit<Node>` they descend into the arms, which then get no binders and put their pattern
+   variables in the enclosing statement's scope. Override both, as `VisitSwitchExpression` does.
+32. **A `NoneOperation`'s children must survive the control flow graph.** The CFG builder visits them as expressions:
+   switch arms cannot be visited outside a switch, and `ControlFlowGraphVerifier` requires an owning region for every
+   referenced local, so pattern variables cannot appear. Keep only children that are plain expressions (the try
+   expression keeps its body) and note what is missing.
+
 ## Inferred Types
 
 Inference from a body (`infer` return types, rows 10 and 15) reuses `var`'s rules for the natural type of an
@@ -261,7 +281,8 @@ in the implementation plan, "Feature 9".
 
 ## Testing
 
-- Tests live in `src/Compilers/CSharp/Test/Semantic/Semantics/SharperTests.cs`. Use
+- Tests live in `src/Compilers/CSharp/Test/Semantic/Semantics/SharperTests.cs`; `SharperTests` is partial, so a large
+  feature can take its own file (`SharperTests_TryExpression.cs`) and the `~SharperTests` filter still runs it. Use
   `TestOptions.Regular.WithExperimental(MessageID.IDS_FeatureSharper)` as parse options.
 - Compile against `TargetFramework.Net90`; the default test framework lacks types such as `System.Range`. Guard
   runtime output with `ExecutionConditionUtil.IsCoreClr ? "<output>" : null`.

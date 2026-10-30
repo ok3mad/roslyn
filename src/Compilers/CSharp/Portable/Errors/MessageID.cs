@@ -327,6 +327,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         IDS_SharperInferOnExtensionMember = MessageBase + 12875,
         IDS_SharperInferOnPropertyOrIndexer = MessageBase + 12876,
         IDS_SharperInferOnOperator = MessageBase + 12877,
+        IDS_SharperTryExpression = MessageBase + 12878,
     }
 
     // Message IDs may refer to strings that need to be localized.
