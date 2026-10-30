@@ -399,15 +399,24 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         /// <summary>
         /// A localizable sentence fragment with arguments, such as "'Xs' has type 'List&lt;int&gt;', which is not immutable".
         /// </summary>
-        private sealed class Reason(MessageID id, object[] arguments) : IFormattable
+        private sealed class Reason : IFormattable
         {
+            private readonly MessageID _id;
+            private readonly object[] _arguments;
+
+            internal Reason(MessageID id, object[] arguments)
+            {
+                _id = id;
+                _arguments = arguments;
+            }
+
             public override string ToString() => ToString(null, null);
 
             public string ToString(string? format, IFormatProvider? formatProvider)
             {
                 var culture = formatProvider as CultureInfo;
-                var formatted = arguments.Select(a => a is Symbol symbol ? symbol.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat) : a).ToArray();
-                return string.Format(culture, ErrorFacts.GetMessage(id, culture), formatted);
+                var formatted = _arguments.Select(a => a is Symbol symbol ? symbol.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat) : a).ToArray();
+                return string.Format(culture, ErrorFacts.GetMessage(_id, culture), formatted);
             }
         }
 
@@ -768,9 +777,22 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             => HasAttribute(method.OriginalDefinition, SharperImmutabilityAttribute.AssumePure) ||
                (method.AssociatedSymbol is PropertySymbol property && HasAttribute(property.OriginalDefinition, SharperImmutabilityAttribute.AssumePure));
 
-        private sealed class PurityWalker(SharperImmutability owner, MethodSymbol observer, NamedTypeSymbol definition, bool localOnly) : BoundTreeWalkerWithStackGuard
+        private sealed class PurityWalker : BoundTreeWalkerWithStackGuard
         {
+            private readonly SharperImmutability _owner;
+            private readonly MethodSymbol _observer;
+            private readonly NamedTypeSymbol _definition;
+            private readonly bool _localOnly;
+
             internal BoundNode? Impure;
+
+            internal PurityWalker(SharperImmutability owner, MethodSymbol observer, NamedTypeSymbol definition, bool localOnly)
+            {
+                _owner = owner;
+                _observer = observer;
+                _definition = definition;
+                _localOnly = localOnly;
+            }
 
             public override BoundNode? Visit(BoundNode? node)
             {
@@ -906,7 +928,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 {
                     BoundLocal => true,
                     BoundDiscardExpression => true,
-                    BoundParameter parameter => parameter.ParameterSymbol.ContainingSymbol == (object)observer,
+                    BoundParameter parameter => parameter.ParameterSymbol.ContainingSymbol == (object)_observer,
                     BoundFieldAccess fieldAccess => HasAttribute(fieldAccess.FieldSymbol.OriginalDefinition, SharperImmutabilityAttribute.UnobservableWrite),
                     _ => false,
                 };
@@ -958,13 +980,13 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     return true;
                 }
 
-                if (receiver?.Type is { } receiverType && owner.CheckType(receiverType, exact: false, definition, localOnly) == TypeFailure.None)
+                if (receiver?.Type is { } receiverType && _owner.CheckType(receiverType, exact: false, _definition, _localOnly) == TypeFailure.None)
                 {
                     return true;
                 }
 
                 return (!isVirtual || containingType.IsSealed || containingType.IsValueType) &&
-                    owner.CheckType(containingType, exact: true, definition, localOnly) == TypeFailure.None;
+                    _owner.CheckType(containingType, exact: true, _definition, _localOnly) == TypeFailure.None;
             }
 
             /// <summary>
