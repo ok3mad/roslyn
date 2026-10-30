@@ -7524,7 +7524,13 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                     private static infer S() => R(3);
                 }
                 """;
-            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics();
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (6,20): error CS20029: Cannot infer the return type of 'C.P(long)', because it depends on itself: 'C.P(long)' uses 'C.Q()', which uses 'C.P(long)'. Write the return type of one of these methods.
+                //     private static infer P(long x) => Q();
+                Diagnostic(ErrorCode.ERR_SharperInferCycle, "infer").WithArguments("C.P(long)", "'C.P(long)' uses 'C.Q()', which uses 'C.P(long)'").WithLocation(6, 20),
+                // (7,20): error CS20029: Cannot infer the return type of 'C.Q()', because it depends on itself: 'C.Q()' uses 'C.P(long)', which uses 'C.Q()'. Write the return type of one of these methods.
+                //     private static infer Q() { Func<int, int> f = P; return f(3); }
+                Diagnostic(ErrorCode.ERR_SharperInferCycle, "infer").WithArguments("C.Q()", "'C.Q()' uses 'C.P(long)', which uses 'C.Q()'").WithLocation(7, 20));
         }
 
         [Fact]

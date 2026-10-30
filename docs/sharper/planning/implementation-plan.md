@@ -554,7 +554,10 @@ on whichever member closes it (`SourceLocalSymbol.s_LocalTypeInferenceInProgress
 Tests: 7 new `Infer_UsesInferredMethod*` and `Infer_Cycle*` tests in `SharperTests.cs`: chains, method groups,
 iterators and local functions next to C# twins with runtime output, every order of inference, partial declarations,
 nested types, overloads and method group conversions, cycles of two and three methods and of local functions, and
-cycles and chains on many threads at once. R1's and R2's tests of CS20017 now infer.
+cycles and chains on many threads at once. R1's and R2's tests of CS20017 now infer. All 283 Sharper test cases pass,
+also with `ROSLYN_TEST_IOPERATION=1`. Regression run (net10.0, Debug): Semantic 20,104 passed, Symbol 13,923, Emit
+7,312, Emit2 2,191 and Emit3 27,951, none failed; the Syntax project with `ROSLYN_TEST_SHARPER=1` has the 37 expected
+failures listed under Follow-ups and no other.
 
 ## Feature 7: implicit `it`
 
