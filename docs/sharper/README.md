@@ -163,6 +163,7 @@ in `#pragma warning`, `/nowarn` and `.editorconfig`.
 | CS20031 | Error | An expression tree cannot contain a try expression. |
 | CS20032 | Error | A try expression cannot be used in a 'when' clause, because a catch filter cannot contain a try block. Move it out of the filter. |
 | CS20033 | Error | Cannot infer the return type of '{0}', because it depends on itself: {1}. Write the return type of one of these methods. |
+| CS20034 | Error | A 'val' lambda parameter needs parentheses. Write '(val {0}) => ...'. |
 
 ## Where the code is
 
