@@ -242,6 +242,13 @@ implementation plan, "Feature 3"):
    outer inference is still running. Another thread can now find that signature complete and infer the rest of the
    cycle without an error, so marking the cycle when the outer inference ends is too late: publish the error for every
    parameter of the cycle at the moment it is found. Test cycles from each end, and on two threads at once.
+29. **A cycle found on a stack depends on where the search started.** With inference nested on a thread-static stack,
+   "a member on the stack is a cycle" misses a member that reaches the cycle through a member that already finished
+   and published its error, so whether it errs depends on the starting member and the thread. Find cycles as strongly
+   connected components (Tarjan's algorithm on the frames, `SharperInferredReturnType`): publish a member only with
+   its whole component, and decide all of a component's results before publishing any, so a thread whose search was
+   cut short by a published member adopts the decided results. Test every starting member and many threads, and
+   compare the diagnostics, not just their count.
 
 ## Inferred Types
 
@@ -250,8 +257,9 @@ expression body (`BindToNaturalType`, `BindToInferredDelegateType`) and the lamb
 (`BoundLambda.InferSharperReturnType`: best common type, `void`, `Task` and `Task<T>`), with lambdas' nullable
 re-inference (`NullableWalker` with `returnTypesOpt`). The body is bound once to infer and again to compile; drop the
 diagnostics of the first binding unless they are the inference's own, and make sure the second binding reports
-whatever made the inference fail (an error type return must not end up with no diagnostic). The design and the plan
-for the later steps are in the implementation plan, "Feature 6".
+whatever made the inference fail (an error type return must not end up with no diagnostic). An inference that reads
+another inferred type infers it in a nested frame; cycles are components, not stack hits (trap 29). The design and the
+plan for the later steps are in the implementation plan, "Feature 6".
 
 Inference of a parameter type (`infer x = 3`, row 15) has one entry point, `ParameterHelpers.MakeParameter`, which
 every member kind uses (lambdas: `Binder.BindLambdaParameterType`). A new source for a parameter type (the overridden

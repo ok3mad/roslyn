@@ -180,7 +180,7 @@ Return type (#10):
 | --- | --- | --- | --- |
 | R1 | `infer` as a return type: gating, a type named `infer` wins, CS0246 with the flag off. Expression bodies of private methods and local functions that call only methods with written return types | S–M | Prototype ([#67](https://github.com/ok3mad/roslyn/issues/67)). Decided: nothing to infer from is CS20014, where `var` reports CS0815, CS8917 or CS8716 |
 | R2 | Block bodies: several `return` statements with the best common type, no return value as `void`, iterators, `async` | M | Prototype ([#68](https://github.com/ok3mad/roslyn/issues/68)). Decided: one maybe-null `return` makes the type annotated, as for a lambda. Async iterators wait |
-| R3 | Methods with inferred return types calling each other: binding order across members, cycle and recursion errors | L | Whether a recursive method with a non-recursive `return` is allowed later |
+| R3 | Methods with inferred return types calling each other: binding order across members, cycle and recursion errors | L | Prototype ([#69](https://github.com/ok3mad/roslyn/issues/69)). Decided: a recursive method with a non-recursive `return` stays CS20018; a cycle is CS20029 on every member, naming it |
 | R4 | Every member kind and accessibility: public and protected members, `virtual`, `partial`, operators, metadata emission, Edit and Continue (a body edit that changes the type is a signature change) | M | None for public members: they infer like any other (decided) |
 | R5 | IDE: Quick Info and inlay hints show the inferred type, a fixer writes it out | M | |
 
@@ -449,8 +449,8 @@ with a thread-static set) and lambda return types (`UnboundLambda.InferReturnTyp
 | Nothing to infer from | CS20014, on the expression, where `var` reports CS0815, CS8917 or CS8716 | One message for every expression without a type, naming the method |
 | Body with errors | Error type, no extra diagnostic | The body binding reports the errors when the method is compiled |
 | Nullable annotation | From the flow state of the body; oblivious where annotations are disabled at `infer` | Matches lambda return types; a maybe-null body is the R2 open point for several returns |
-| Using itself | CS20018, permanent | The brainstorm's F# rule. A recursive method with a non-recursive `return` stays the R3 open point |
-| Using another inferred method | CS20017 in R1, reported on the user | Ordering is R3; reporting on the user keeps the other method valid, and the error type is never cached, so the result does not depend on the order |
+| Using itself | CS20018, permanent | The brainstorm's F# rule. A recursive method with a non-recursive `return` was the R3 open point; R3 keeps the error |
+| Using another inferred method | CS20017 in R1, reported on the user; R3 infers the other method first and retires CS20017 | Ordering is R3; reporting on the user keeps the other method valid, and the error type is never cached, so the result does not depend on the order |
 | Unsupported positions | CS20015 with the position, CS20016 for no body; properties, indexers and operators included | A clear "not yet" instead of CS0246 for a type named `infer` |
 | Where the diagnostics are | On `infer` for CS20015 to CS20018, on the body for CS20014 | The use of an inferred method is found through the symbol, which has no syntax |
 
@@ -458,7 +458,9 @@ with a thread-static set) and lambda return types (`UnboundLambda.InferReturnTyp
 
 - **R2, block bodies.** Done; see [step R2](#feature-6-inferred-return-type-step-r2). The plan held, except that the
   binder reads the method's own return type in more places than the return statement.
-- **R3, inferred methods using each other.** Turn the thread-static frame into a stack. A read of another inferred
+- **R3, inferred methods using each other.** Done; see [step R3](#feature-6-inferred-return-type-step-r3). The plan
+  held, except that a cycle is found as a strongly connected component, so that its members and messages do not
+  depend on where the inference started. The original plan: turn the thread-static frame into a stack. A read of another inferred
   method whose type is not published infers it in a nested frame on the same thread (no lock is held, so nothing can
   deadlock); a method already on the stack is a cycle, reported on every method of the cycle. Two threads may infer
   the same method at once and compute the same type. A published type is read directly, also during inference,
@@ -507,13 +509,52 @@ its siblings for `async`. The nullable walker reads it for `yield return` and sp
 | Async iterators | CS20015, not supported yet | Lambdas cannot be iterators, so there is no lambda rule to copy. `IAsyncEnumerable<T>` is the natural answer for a later step |
 | Errors in a block body | An error in a returned value (or a `ref` return) gives an error type silently; other errors do not stop the inference | The second binding reports both. Unrelated errors should not cascade into every caller |
 | Spread in an inferred iterator | A spread when the operand is a sequence, otherwise the C# range | There is no written element type to try the C# meaning against. The second binding, against the inferred type, applies the usual rule and agrees |
-| Inferred local functions declared in an inferred body | CS20017 even when unused, until R3 | Binding the declaration reads the local function's return type; R3's nested frames remove the error |
+| Inferred local functions declared in an inferred body | CS20017 even when unused, until R3 | Binding the declaration reads the local function's return type; R3's nested frames remove the error (done) |
 
 Tests: 8 `Infer_Block_*` tests in `SharperTests.cs` next to the C# twins (types, runtime output, errors, nullable
 annotations, the semantic model and IOperation), and the R1 tests updated for `async` and async iterators. All 261
 Sharper test cases pass, also with `ROSLYN_TEST_IOPERATION=1`. Regression run (net10.0, Debug): Semantic 20,083
 passed, Emit 7,312, Emit2 2,191 and Emit3 27,951, none failed; the Syntax project with `ROSLYN_TEST_SHARPER=1` has the
 37 expected failures listed under Follow-ups and no other.
+
+## Feature 6: inferred return type, step R3
+
+Inferred methods that use each other ([#69](https://github.com/ok3mad/roslyn/issues/69), on branch
+`sharper/infer-return-r3`): `private static infer Hello(User u) => $"Hello, {Name(u)}!";` infers `Name` first. The
+step changes only `SharperInferredReturnType` and adds no syntax, bound node or public API.
+
+**Probe.** R1's frame already sat outside every lock, so a nested inference on the same thread cannot deadlock. A
+plain stack with "a method on the stack is a cycle" (R1's plan, and P1's mechanism) is not deterministic for return
+types, though: a method `Z` in a cycle with `A` and `B` reads `B` after `B` finished and published its error, and then
+sees no cycle, so whether `Z` reports an error depended on where the inference started. With several threads the
+same happens across threads. The C# precedents do not help here: `var` locals and script `var` fields report a cycle
+on whichever member closes it (`SourceLocalSymbol.s_LocalTypeInferenceInProgress`,
+`SourceMemberFieldSymbol` with its `fieldsBeingBound` list), and lambdas never refer to each other by name.
+
+| Piece | What it does |
+| --- | --- |
+| Frame stack (`SharperInferredReturnType.Context`) | Per thread: the frames whose bodies are being bound, innermost last. A read of an unpublished inferred return type infers it in a nested frame; `IsBeingInferred` asks the innermost frame |
+| Tarjan's algorithm on the frames | Each frame is a node with an index and a low link, and records the inferred methods its body reads. A read of a method on Tarjan's stack lowers the reader's low link and gets an uncached error type. A frame whose body is done waits on the stack until its component is complete |
+| `DecideAndPublish` | For a complete component: one method with no use of itself keeps its type; a method that uses itself gets CS20018; every other member of a larger component gets CS20029. All results are decided (compare-exchange) before any is published, with its diagnostics |
+| `FormatCycle` | The cycle named in CS20029: the shortest path from the method back to itself through the component, breadth first, taking each body's uses in order |
+
+### Decisions
+
+| Question | Decision | Why |
+| --- | --- | --- |
+| A recursive method with a non-recursive `return` (the R3 open point) | Stays CS20018 | Inferring from the base case and checking the rest is a fixed point that can widen the type (`return 1;` then `return F() + 1L;`), and the type would then depend on the order of the `return` statements. F# asks for the type too; writing it is short |
+| Methods that need each other | CS20029 on every member of the cycle, naming the cycle from that member | Each member is equally the place to write a type; naming the path tells which methods to look at. Reporting only one member would depend on the order |
+| Which methods are in a cycle | The strongly connected components of "reads the inferred return type of", found by Tarjan's algorithm as the frames nest | A plain stack finds a cycle only from some starting points (see the probe). Components are a property of the uses, so the result is the same from any start |
+| Another thread's results | All results of a component are decided before any is published; a thread that finds a result decided takes it | A thread that reads a published member of a cycle cannot see the whole cycle, and would compute a smaller one. A member is published only after every member is decided, so that thread finds its own results decided |
+| A method that uses a cycle without being in it | Error type, no diagnostic | The same as a use of any method with errors; the cycle reports once, on its members |
+| Overload resolution | Reads the return types it reads for written types | A call reads none, so overloads never depend on each other's bodies; a method group conversion or type inference from a method group reads the candidates it checks. Reading fewer would change which overload wins compared with the written type |
+| CS20017 | Retired; CS20029 is new | Using another inferred method is no longer an error, and the cycle message has a different argument |
+| A local function in the body that calls the method | A cycle (CS20018 on the method) | Inferring the method binds the local function's body. Skipping it during inference would break the body's nullable analysis; the case is rare |
+
+Tests: 7 new `Infer_UsesInferredMethod*` and `Infer_Cycle*` tests in `SharperTests.cs`: chains, method groups,
+iterators and local functions next to C# twins with runtime output, every order of inference, partial declarations,
+nested types, overloads and method group conversions, cycles of two and three methods and of local functions, and
+cycles and chains on many threads at once. R1's and R2's tests of CS20017 now infer.
 
 ## Feature 7: implicit `it`
 
@@ -758,7 +799,7 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 - [ ] `readonly` locals: IDE support (completion, refactorings that drop or break `readonly`). [#96](https://github.com/ok3mad/roslyn/issues/96)
 - [x] `readonly` parameters, the grid's remaining explicitly typed corner. [#97](https://github.com/ok3mad/roslyn/issues/97)
 - [ ] Inferred parameter type: steps P2 to P8 ([#73](https://github.com/ok3mad/roslyn/issues/73), [#74](https://github.com/ok3mad/roslyn/issues/74) and the rest of [#27](https://github.com/ok3mad/roslyn/issues/27)); the default value is bound twice, once to infer and once against the type.
-- [ ] Inferred return type: steps R3 to R5 ([#69](https://github.com/ok3mad/roslyn/issues/69) to [#71](https://github.com/ok3mad/roslyn/issues/71)); a local function's nullable inference sees captured variables at their declared state.
+- [ ] Inferred return type: steps R4 and R5 ([#70](https://github.com/ok3mad/roslyn/issues/70), [#71](https://github.com/ok3mad/roslyn/issues/71)); a local function's nullable inference sees captured variables at their declared state; a local function that calls the inferred method around it makes a cycle even when the method never calls it.
 - [ ] Inferred return type: async iterators (`IAsyncEnumerable<T>`), and an inferred union when the returned values have no best common type, which waits for [#31](https://github.com/ok3mad/roslyn/issues/31).
 - [ ] `readonly` locals share the `val` follow-ups: silence CS20010 with CS20003 (#84), the "never reassigned" fixer can offer `readonly int` (#89), and the public API (#88) and Edit and Continue (#90) items cover them too.
 - [x] Run the upstream parser tests with Sharper on ([#63](https://github.com/ok3mad/roslyn/issues/63)): `ROSLYN_TEST_SHARPER=1` adds the feature to the test parse options (`TestOptions`, `CSharpTestSource.Parse`, the `ParsingTests` helpers). Tests that call `SyntaxFactory` without options are not covered. Last run (net10.0, Debug, `main` with `val`, `readonly` locals and parameters, `T[..]`, function types, also parenthesized and in patterns, and `T~`), with no valid C# parsing differently:
