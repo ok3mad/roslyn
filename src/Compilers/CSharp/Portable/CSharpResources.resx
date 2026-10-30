@@ -375,6 +375,42 @@
   <data name="IDS_SharperInferOnOperator" xml:space="preserve">
     <value>on an operator</value>
   </data>
+  <data name="IDS_SharperImmutableReasonBase" xml:space="preserve">
+    <value>its base type '{0}' is not immutable</value>
+  </data>
+  <data name="IDS_SharperImmutableReasonNotClaimed" xml:space="preserve">
+    <value>'{0}' is not marked [Immutable]</value>
+  </data>
+  <data name="IDS_SharperImmutableReasonFieldNotReadOnly" xml:space="preserve">
+    <value>'{0}' is not readonly</value>
+  </data>
+  <data name="IDS_SharperImmutableReasonSetAccessor" xml:space="preserve">
+    <value>'{0}' has a set accessor</value>
+  </data>
+  <data name="IDS_SharperImmutableReasonCapturedParameter" xml:space="preserve">
+    <value>the parameter '{0}' is captured in a field that is not readonly</value>
+  </data>
+  <data name="IDS_SharperImmutableReasonRefField" xml:space="preserve">
+    <value>'{0}' is a ref field</value>
+  </data>
+  <data name="IDS_SharperImmutableReasonTypeNotImmutable" xml:space="preserve">
+    <value>'{0}' has type '{1}', which is not immutable</value>
+  </data>
+  <data name="IDS_SharperImmutableReasonTypeNotSealed" xml:space="preserve">
+    <value>'{0}' has type '{1}', which is neither sealed nor marked [ImmutableHierarchy]</value>
+  </data>
+  <data name="IDS_SharperImmutableReasonTypeNotClaimed" xml:space="preserve">
+    <value>'{0}' has type '{1}', which comes from another assembly and is not marked [Immutable]</value>
+  </data>
+  <data name="IDS_SharperImmutableReasonTypePhantom" xml:space="preserve">
+    <value>'{0}' has type '{1}', which uses a [Phantom] type parameter</value>
+  </data>
+  <data name="IDS_SharperImmutableReasonObserver" xml:space="preserve">
+    <value>the observer '{0}' does more than read fields and pure observers: '{1}'</value>
+  </data>
+  <data name="IDS_SharperImmutableReasonEvent" xml:space="preserve">
+    <value>'{0}' is an event, which can be subscribed to</value>
+  </data>
   <data name="IDS_FIXEDLOCAL" xml:space="preserve">
     <value>fixed variable</value>
   </data>
@@ -8367,6 +8403,33 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
   </data>
   <data name="ERR_SharperInferParameterCycle" xml:space="preserve">
     <value>Cannot infer the type of parameter '{0}', because its default value depends on the type of '{0}' itself. Write the parameter type.</value>
+  </data>
+  <data name="ERR_SharperImmutableNotProven" xml:space="preserve">
+    <value>'{0}' is marked [Immutable], but it cannot be proven immutable: {1}.</value>
+  </data>
+  <data name="ERR_SharperImmutableDisproven" xml:space="preserve">
+    <value>'{0}' is marked [Immutable], but it is mutable: {1}.</value>
+  </data>
+  <data name="ERR_SharperImmutableBaseNotImmutable" xml:space="preserve">
+    <value>'{0}' is marked [Immutable], but its base type '{1}' is not immutable.</value>
+  </data>
+  <data name="ERR_SharperImmutableHierarchyViolated" xml:space="preserve">
+    <value>'{0}' must be immutable, because '{1}' is marked [ImmutableHierarchy], but {2}.</value>
+  </data>
+  <data name="WRN_SharperImmutableHierarchyViolated" xml:space="preserve">
+    <value>'{0}' must be immutable, because '{1}' is marked [ImmutableHierarchy], but {2}.</value>
+  </data>
+  <data name="WRN_SharperImmutableHierarchyViolated_Title" xml:space="preserve">
+    <value>A type in an [ImmutableHierarchy] is not immutable.</value>
+  </data>
+  <data name="ERR_SharperImmutableHierarchyWithoutImmutable" xml:space="preserve">
+    <value>'{0}' is marked [ImmutableHierarchy], so it must also be marked [Immutable].</value>
+  </data>
+  <data name="ERR_SharperMisplacedUnobservableWrite" xml:space="preserve">
+    <value>[UnobservableWrite] is only valid on a field that is not readonly, of a class marked [Immutable].</value>
+  </data>
+  <data name="ERR_SharperPhantomTypeParameterInState" xml:space="preserve">
+    <value>Type parameter '{0}' is marked [Phantom], but '{1}' uses it in the state of the type.</value>
   </data>
   <data name="WRN_RedundantPattern" xml:space="preserve">
     <value>The pattern is redundant.</value>
