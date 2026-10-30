@@ -7372,60 +7372,292 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         [Fact]
         public void Infer_UsesInferredMethod()
         {
-            // Inferring a return type from a body that uses another inferred return type is step R3.
+            // A body that uses another inferred return type infers that one first. Each method next to its C# twin.
             var source = """
+                using System;
+
+                class User(string first, string last)
+                {
+                    public string First => first;
+                    public string Last => last;
+                }
+
                 class C
                 {
-                    private static infer A() => B() + 1;
-                    private static infer B() => 1;
-                    private static infer D() => B;
-                    private static int E() => A() + B();
+                    private static infer Name(User u) => u.First + " " + u.Last;
+                    private static string NameCSharp(User u) => u.First + " " + u.Last;
+                    private static infer Greeting(User u) => $"Hello, {Name(u)}!";
+                    private static string GreetingCSharp(User u) => $"Hello, {NameCSharp(u)}!";
+                    private static infer Length(User u) { var n = Greeting(u); return n.Length; }
+                    private static int LengthCSharp(User u) { var n = GreetingCSharp(u); return n.Length; }
+                    private static infer Getter() => Name;
+                    private static Func<User, string> GetterCSharp() => NameCSharp;
+                    private static infer Lengths(User u) { yield return Length(u); yield return Name(u).Length; }
+                    private static System.Collections.Generic.IEnumerable<int> LengthsCSharp(User u) { yield return LengthCSharp(u); yield return NameCSharp(u).Length; }
 
                     static void Main()
                     {
-                        infer L1() => 1;
-                        infer L2() => L1() + B();
-                        int L3() => L1() + L2();
+                        var u = new User("Ada", "Lovelace");
+                        infer Twice(int x) => x * 2;
+                        int TwiceCSharp(int x) => x * 2;
+                        infer Both() => Twice(Length(u)) + Twice(1);
+                        int BothCSharp() => TwiceCSharp(LengthCSharp(u)) + TwiceCSharp(1);
+                        Console.WriteLine(Greeting(u) + GreetingCSharp(u));
+                        Console.WriteLine(Getter()(u) + GetterCSharp()(u));
+                        Console.WriteLine(string.Join(",", Lengths(u)) + string.Join(",", LengthsCSharp(u)));
+                        Console.WriteLine($"{Both()} {BothCSharp()}");
                     }
                 }
                 """;
-            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
-                // (3,20): error CS20017: Cannot infer the return type of 'C.A()', because its body uses 'C.B()', whose return type is inferred too. Write the return type of one of them.
-                //     private static infer A() => B() + 1;
-                Diagnostic(ErrorCode.ERR_SharperInferUsesInferredMethod, "infer").WithArguments("C.A()", "C.B()").WithLocation(3, 20),
-                // (5,20): error CS20017: Cannot infer the return type of 'C.D()', because its body uses 'C.B()', whose return type is inferred too. Write the return type of one of them.
-                //     private static infer D() => B;
-                Diagnostic(ErrorCode.ERR_SharperInferUsesInferredMethod, "infer").WithArguments("C.D()", "C.B()").WithLocation(5, 20),
-                // (11,9): error CS20017: Cannot infer the return type of 'L2()', because its body uses 'L1()', whose return type is inferred too. Write the return type of one of them.
-                //         infer L2() => L1() + B();
-                Diagnostic(ErrorCode.ERR_SharperInferUsesInferredMethod, "infer").WithArguments("L2()", "L1()").WithLocation(11, 9),
-                // (12,13): warning CS8321: The local function 'L3' is declared but never used
-                //         int L3() => L1() + L2();
-                Diagnostic(ErrorCode.WRN_UnreferencedLocalFunction, "L3").WithArguments("L3").WithLocation(12, 13));
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, options: TestOptions.DebugExe);
+            CompileAndVerify(comp, expectedOutput: ExecutionConditionUtil.IsCoreClr ? """
+                Hello, Ada Lovelace!Hello, Ada Lovelace!
+                Ada LovelaceAda Lovelace
+                20,1220,12
+                42 42
+                """ : null).VerifyDiagnostics();
+            foreach (var name in new[] { "Name", "Greeting", "Length", "Getter", "Lengths" })
+            {
+                Assert.Equal(comp.GetMember<MethodSymbol>("C." + name + "CSharp").ReturnType.ToTestDisplayString(), comp.GetMember<MethodSymbol>("C." + name).ReturnType.ToTestDisplayString());
+            }
         }
 
         [Fact]
-        public void Infer_UsesInferredMethod_OrderDoesNotMatter()
+        public void Infer_UsesInferredMethod_Order()
         {
-            // Whichever method is inferred first, the method that uses the other reports the error.
+            // Whichever method is asked for first, a chain of inferred methods infers the same types.
+            var source = """
+                class C
+                {
+                    private static infer A() => B() + 1L;
+                    private static infer B() => D() * 2;
+                    private static infer D() => 1;
+                    private static infer E() => (A(), F());
+                    private static infer F() { if (D() > 0) return null; return "a"; }
+                }
+                """;
+            foreach (var first in new[] { "C.A", "C.B", "C.D", "C.E", "C.F" })
+            {
+                var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+                _ = comp.GetMember<MethodSymbol>(first).ReturnType;
+                comp.VerifyDiagnostics();
+                Assert.Equal("System.Int64", comp.GetMember<MethodSymbol>("C.A").ReturnType.ToTestDisplayString());
+                Assert.Equal("System.Int32", comp.GetMember<MethodSymbol>("C.B").ReturnType.ToTestDisplayString());
+                Assert.Equal("(System.Int64, System.String)", comp.GetMember<MethodSymbol>("C.E").ReturnType.ToTestDisplayString());
+            }
+        }
+
+        [Fact]
+        public void Infer_UsesInferredMethod_Members()
+        {
+            // Inference crosses partial declarations, nested types and local functions, and follows overload resolution.
+            var source1 = """
+                using System;
+                using System.Collections.Generic;
+
+                partial class C
+                {
+                    private static infer A() => B() + 1;
+                    private static infer Count() => Nested.Items().Count;
+
+                    private static class Nested
+                    {
+                        private static infer Seed() => C.B();
+                        internal static List<long> Items() => [Seed(), Seed()];
+                    }
+
+                    private static infer F(int x) => G(x);
+                    private static infer G(int x) => x + 1;
+                    private static infer G(string s) => F(s.Length);
+                    private static infer H() { Func<int, int> f = G; return f(1); }
+                    private static infer K() => Apply(G);
+                    private static T Apply<T>(Func<int, T> f) => f(2);
+
+                    private static infer Outer()
+                    {
+                        infer Inner() => A() * 2;
+                        return Inner();
+                    }
+
+                    private static infer Unused()
+                    {
+                        infer Never() { return "a"; }
+                        return 1;
+                    }
+                }
+                """;
+            var source2 = """
+                partial class C
+                {
+                    private static infer B() => 41;
+
+                    static void Main()
+                    {
+                        System.Console.Write($"{A()} {Count()} {F(1)} {G("ab")} {H()} {K()} {Outer()} {Unused()}");
+                    }
+                }
+                """;
+            var comp = CreateCompilation([source1, source2], parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, options: TestOptions.DebugExe);
+            CompileAndVerify(comp, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "42 2 2 3 2 3 84 1" : null).VerifyDiagnostics(
+                // (30,19): warning CS8321: The local function 'Never' is declared but never used
+                //         infer Never() { return "a"; }
+                Diagnostic(ErrorCode.WRN_UnreferencedLocalFunction, "Never").WithArguments("Never").WithLocation(30, 15));
+            Assert.Equal("System.Int32", comp.GetMember<MethodSymbol>("C.K").ReturnType.ToTestDisplayString());
+            Assert.Equal("System.Int32", comp.GetMember<MethodSymbol>("C.Count").ReturnType.ToTestDisplayString());
+        }
+
+        [Fact]
+        public void Infer_UsesInferredMethod_MethodGroupConversion()
+        {
+            // A method group conversion checks the return types of the applicable overloads, as it does for written types,
+            // so a candidate that is not picked is still inferred first, and can make a cycle. A call checks none.
+            var source = """
+                using System;
+
+                class C
+                {
+                    private static infer P(int x) => x;
+                    private static infer P(long x) => Q();
+                    private static infer Q() { Func<int, int> f = P; return f(3); }
+                    private static infer R(int x) => x;
+                    private static infer R(long x) => S();
+                    private static infer S() => R(3);
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (6,20): error CS20033: Cannot infer the return type of 'C.P(long)', because it depends on itself: 'C.P(long)' uses 'C.Q()', which uses 'C.P(long)'. Write the return type of one of these methods.
+                //     private static infer P(long x) => Q();
+                Diagnostic(ErrorCode.ERR_SharperInferCycle, "infer").WithArguments("C.P(long)", "'C.P(long)' uses 'C.Q()', which uses 'C.P(long)'").WithLocation(6, 20),
+                // (7,20): error CS20033: Cannot infer the return type of 'C.Q()', because it depends on itself: 'C.Q()' uses 'C.P(long)', which uses 'C.Q()'. Write the return type of one of these methods.
+                //     private static infer Q() { Func<int, int> f = P; return f(3); }
+                Diagnostic(ErrorCode.ERR_SharperInferCycle, "infer").WithArguments("C.Q()", "'C.Q()' uses 'C.P(long)', which uses 'C.Q()'").WithLocation(7, 20));
+        }
+
+        [Fact]
+        public void Infer_Cycle()
+        {
+            // Methods that need each other's inferred return types must write one of them, as in F#. Every method of the
+            // cycle reports it and names its cycle, whichever method is asked for first.
             var source = """
                 class C
                 {
                     private static infer A() => B() + 1;
-                    private static infer B() => 1;
+                    private static infer B() => A() + 1;
+                    private static infer X(int i) => i > 0 ? Y(i - 1) : 0;
+                    private static infer Y(int i) => Z(i);
+                    private static infer Z(int i) { if (i == 0) return 1; return X(i); }
+                    private static infer UsesCycle() => A() + 1;
+                    private static int Written() => A();
+                    private static infer IsEven(int n) => n == 0 || IsOdd(n - 1);
+                    private static infer IsOdd(int n) => n != 0 && IsEven(n - 1);
+                    private static bool IsEvenCSharp(int n) => n == 0 || IsOddCSharp(n - 1);
+                    private static bool IsOddCSharp(int n) => n != 0 && IsEvenCSharp(n - 1);
+
+                    static void Main()
+                    {
+                        infer L1() => L2();
+                        infer L2() => L1();
+                        infer Self() { infer Inner() => Self(); return 1; }
+                        L1();
+                        Self();
+                    }
                 }
                 """;
-            foreach (var first in new[] { "C.A", "C.B" })
+            foreach (var first in new[] { "C.A", "C.B", "C.X", "C.Y", "C.Z", "C.UsesCycle", "C.IsOdd" })
             {
                 var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
                 _ = comp.GetMember<MethodSymbol>(first).ReturnType;
                 comp.VerifyDiagnostics(
-                    // (3,20): error CS20017: Cannot infer the return type of 'C.A()', because its body uses 'C.B()', whose return type is inferred too. Write the return type of one of them.
-                    //     private static infer A() => B() + 1;
-                    Diagnostic(ErrorCode.ERR_SharperInferUsesInferredMethod, "infer").WithArguments("C.A()", "C.B()").WithLocation(3, 20));
-                Assert.Equal("infer", comp.GetMember<MethodSymbol>("C.A").ReturnType.ToTestDisplayString());
-                Assert.Equal("System.Int32", comp.GetMember<MethodSymbol>("C.B").ReturnType.ToTestDisplayString());
+                // (3,20): error CS20033: Cannot infer the return type of 'C.A()', because it depends on itself: 'C.A()' uses 'C.B()', which uses 'C.A()'. Write the return type of one of these methods.
+                //     private static infer A() => B() + 1;
+                Diagnostic(ErrorCode.ERR_SharperInferCycle, "infer").WithArguments("C.A()", "'C.A()' uses 'C.B()', which uses 'C.A()'").WithLocation(3, 20),
+                // (4,20): error CS20033: Cannot infer the return type of 'C.B()', because it depends on itself: 'C.B()' uses 'C.A()', which uses 'C.B()'. Write the return type of one of these methods.
+                //     private static infer B() => A() + 1;
+                Diagnostic(ErrorCode.ERR_SharperInferCycle, "infer").WithArguments("C.B()", "'C.B()' uses 'C.A()', which uses 'C.B()'").WithLocation(4, 20),
+                // (5,20): error CS20033: Cannot infer the return type of 'C.X(int)', because it depends on itself: 'C.X(int)' uses 'C.Y(int)', which uses 'C.Z(int)', which uses 'C.X(int)'. Write the return type of one of these methods.
+                //     private static infer X(int i) => i > 0 ? Y(i - 1) : 0;
+                Diagnostic(ErrorCode.ERR_SharperInferCycle, "infer").WithArguments("C.X(int)", "'C.X(int)' uses 'C.Y(int)', which uses 'C.Z(int)', which uses 'C.X(int)'").WithLocation(5, 20),
+                // (6,20): error CS20033: Cannot infer the return type of 'C.Y(int)', because it depends on itself: 'C.Y(int)' uses 'C.Z(int)', which uses 'C.X(int)', which uses 'C.Y(int)'. Write the return type of one of these methods.
+                //     private static infer Y(int i) => Z(i);
+                Diagnostic(ErrorCode.ERR_SharperInferCycle, "infer").WithArguments("C.Y(int)", "'C.Y(int)' uses 'C.Z(int)', which uses 'C.X(int)', which uses 'C.Y(int)'").WithLocation(6, 20),
+                // (7,20): error CS20033: Cannot infer the return type of 'C.Z(int)', because it depends on itself: 'C.Z(int)' uses 'C.X(int)', which uses 'C.Y(int)', which uses 'C.Z(int)'. Write the return type of one of these methods.
+                //     private static infer Z(int i) { if (i == 0) return 1; return X(i); }
+                Diagnostic(ErrorCode.ERR_SharperInferCycle, "infer").WithArguments("C.Z(int)", "'C.Z(int)' uses 'C.X(int)', which uses 'C.Y(int)', which uses 'C.Z(int)'").WithLocation(7, 20),
+                // (10,20): error CS20033: Cannot infer the return type of 'C.IsEven(int)', because it depends on itself: 'C.IsEven(int)' uses 'C.IsOdd(int)', which uses 'C.IsEven(int)'. Write the return type of one of these methods.
+                //     private static infer IsEven(int n) => n == 0 || IsOdd(n - 1);
+                Diagnostic(ErrorCode.ERR_SharperInferCycle, "infer").WithArguments("C.IsEven(int)", "'C.IsEven(int)' uses 'C.IsOdd(int)', which uses 'C.IsEven(int)'").WithLocation(10, 20),
+                // (11,20): error CS20033: Cannot infer the return type of 'C.IsOdd(int)', because it depends on itself: 'C.IsOdd(int)' uses 'C.IsEven(int)', which uses 'C.IsOdd(int)'. Write the return type of one of these methods.
+                //     private static infer IsOdd(int n) => n != 0 && IsEven(n - 1);
+                Diagnostic(ErrorCode.ERR_SharperInferCycle, "infer").WithArguments("C.IsOdd(int)", "'C.IsOdd(int)' uses 'C.IsEven(int)', which uses 'C.IsOdd(int)'").WithLocation(11, 20),
+                // (17,9): error CS20033: Cannot infer the return type of 'L1()', because it depends on itself: 'L1()' uses 'L2()', which uses 'L1()'. Write the return type of one of these methods.
+                //         infer L1() => L2();
+                Diagnostic(ErrorCode.ERR_SharperInferCycle, "infer").WithArguments("L1()", "'L1()' uses 'L2()', which uses 'L1()'").WithLocation(17, 9),
+                // (18,9): error CS20033: Cannot infer the return type of 'L2()', because it depends on itself: 'L2()' uses 'L1()', which uses 'L2()'. Write the return type of one of these methods.
+                //         infer L2() => L1();
+                Diagnostic(ErrorCode.ERR_SharperInferCycle, "infer").WithArguments("L2()", "'L2()' uses 'L1()', which uses 'L2()'").WithLocation(18, 9),
+                // (19,9): error CS20018: Cannot infer the return type of 'Self()', because its body uses 'Self()' itself. Write the return type.
+                //         infer Self() { infer Inner() => Self(); return 1; }
+                Diagnostic(ErrorCode.ERR_SharperInferUsesItself, "infer").WithArguments("Self()").WithLocation(19, 9),
+                // (19,24): error CS20033: Cannot infer the return type of 'Inner()', because it depends on itself: 'Inner()' uses 'Self()', which uses 'Inner()'. Write the return type of one of these methods.
+                //         infer Self() { infer Inner() => Self(); return 1; }
+                Diagnostic(ErrorCode.ERR_SharperInferCycle, "infer").WithArguments("Inner()", "'Inner()' uses 'Self()', which uses 'Inner()'").WithLocation(19, 24),
+                // (19,30): warning CS8321: The local function 'Inner' is declared but never used
+                //         infer Self() { infer Inner() => Self(); return 1; }
+                Diagnostic(ErrorCode.WRN_UnreferencedLocalFunction, "Inner").WithArguments("Inner").WithLocation(19, 30));
+                // A method that uses a method of a cycle, but is not in it, gets an error type and no error of its own.
+                Assert.True(comp.GetMember<MethodSymbol>("C.UsesCycle").ReturnType.IsErrorType());
             }
+        }
+
+        [Fact]
+        public void Infer_Cycle_Concurrent()
+        {
+            // Threads that start from different methods of the same cycles agree on the errors and report each once.
+            var source = """
+                class C
+                {
+                    private static infer A() => B() + C1() + D();
+                    private static infer B() => C1() + 1;
+                    private static infer C1() => A() + B();
+                    private static infer D() => 1;
+                    private static infer E() => A();
+                }
+                """;
+            for (int i = 0; i < 20; i++)
+            {
+                var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+                var methods = new[] { "C.A", "C.B", "C.C1", "C.D", "C.E" }.Select(name => comp.GetMember<MethodSymbol>(name)).ToArray();
+                System.Threading.Tasks.Parallel.For(0, 10, t => _ = methods[t % methods.Length].ReturnType);
+                var diagnostics = comp.GetDiagnostics().Select(d => d.ToString()).OrderBy(d => d, StringComparer.Ordinal).ToArray();
+                var expected = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).GetDiagnostics().Select(d => d.ToString()).OrderBy(d => d, StringComparer.Ordinal).ToArray();
+                Assert.Equal(expected, diagnostics);
+                Assert.Equal(3, diagnostics.Length);
+                Assert.Equal("System.Int32", methods[3].ReturnType.ToTestDisplayString());
+            }
+        }
+
+        [Fact]
+        public void Infer_UsesInferredMethod_Concurrent()
+        {
+            // A long chain of inferred methods, asked for from many threads at once: each infers the rest of the chain
+            // in nested frames on its own thread, and every thread gets the same types.
+            var builder = new System.Text.StringBuilder("class C\n{\n");
+            for (int i = 0; i < 100; i++)
+            {
+                builder.AppendLine(i < 99
+                    ? $"    private static infer M{i}() => M{i + 1}() + {(i % 2 == 0 ? "1L" : "1")};"
+                    : $"    private static infer M{i}() => 1;");
+            }
+
+            builder.AppendLine("}");
+            var comp = CreateCompilation(builder.ToString(), parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            var methods = Enumerable.Range(0, 100).Select(i => comp.GetMember<MethodSymbol>("C.M" + i)).ToArray();
+            System.Threading.Tasks.Parallel.For(0, 100, i =>
+            {
+                int index = i % 2 == 0 ? i : 99 - i;
+                Assert.Equal(index == 99 ? "System.Int32" : "System.Int64", methods[index].ReturnType.ToTestDisplayString());
+            });
+            comp.VerifyDiagnostics();
         }
 
         [Fact]
@@ -7916,7 +8148,8 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         [Fact]
         public void Infer_Block_UsesItselfOrInferred()
         {
-            // The R1 rules on uses of inferred methods apply to block bodies, iterators and async methods.
+            // A block body, an iterator or an async method that uses itself must write its return type; one that uses another
+            // inferred method infers that one first, also a local function declared in the body.
             var source = """
                 class C
                 {
@@ -7947,12 +8180,6 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (5,26): error CS20018: Cannot infer the return type of 'C.Wait(int)', because its body uses 'C.Wait(int)' itself. Write the return type.
                 //     private static async infer Wait(int i) { if (i > 0) await Wait(i - 1); }
                 Diagnostic(ErrorCode.ERR_SharperInferUsesItself, "infer").WithArguments("C.Wait(int)").WithLocation(5, 26),
-                // (7,20): error CS20017: Cannot infer the return type of 'C.Two()', because its body uses 'C.One()', whose return type is inferred too. Write the return type of one of them.
-                //     private static infer Two() { return One() + One(); }
-                Diagnostic(ErrorCode.ERR_SharperInferUsesInferredMethod, "infer").WithArguments("C.Two()", "C.One()").WithLocation(7, 20),
-                // (11,9): error CS20017: Cannot infer the return type of 'Outer()', because its body uses 'Inner()', whose return type is inferred too. Write the return type of one of them.
-                //         infer Outer()
-                Diagnostic(ErrorCode.ERR_SharperInferUsesInferredMethod, "infer").WithArguments("Outer()", "Inner()").WithLocation(11, 9),
                 // (13,19): warning CS8321: The local function 'Inner' is declared but never used
                 //             infer Inner() { return 1; }
                 Diagnostic(ErrorCode.WRN_UnreferencedLocalFunction, "Inner").WithArguments("Inner").WithLocation(13, 19));

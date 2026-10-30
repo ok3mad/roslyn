@@ -2612,6 +2612,11 @@
         <target state="new">A function type cannot have more than {0} parameters, because no 'System.Func' or 'System.Action' delegate has more.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperInferCycle">
+        <source>Cannot infer the return type of '{0}', because it depends on itself: {1}. Write the return type of one of these methods.</source>
+        <target state="new">Cannot infer the return type of '{0}', because it depends on itself: {1}. Write the return type of one of these methods.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperInferIteratorYieldsNothing">
         <source>Cannot infer the return type of the iterator '{0}', because it has no 'yield return' to infer the element type from. Write the return type.</source>
         <target state="new">Cannot infer the return type of the iterator '{0}', because it has no 'yield return' to infer the element type from. Write the return type.</target>
@@ -2650,11 +2655,6 @@
       <trans-unit id="ERR_SharperInferParameterNoType">
         <source>Cannot infer the type of parameter '{0}', because its default value ({1}) has no type. Write the parameter type.</source>
         <target state="new">Cannot infer the type of parameter '{0}', because its default value ({1}) has no type. Write the parameter type.</target>
-        <note />
-      </trans-unit>
-      <trans-unit id="ERR_SharperInferUsesInferredMethod">
-        <source>Cannot infer the return type of '{0}', because its body uses '{1}', whose return type is inferred too. Write the return type of one of them.</source>
-        <target state="new">Cannot infer the return type of '{0}', because its body uses '{1}', whose return type is inferred too. Write the return type of one of them.</target>
         <note />
       </trans-unit>
       <trans-unit id="ERR_SharperInferUsesItself">

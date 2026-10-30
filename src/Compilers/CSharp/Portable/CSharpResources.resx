@@ -8335,9 +8335,6 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
   <data name="ERR_SharperInferNoBody" xml:space="preserve">
     <value>'{0}' has no body to infer its return type from. Write the return type.</value>
   </data>
-  <data name="ERR_SharperInferUsesInferredMethod" xml:space="preserve">
-    <value>Cannot infer the return type of '{0}', because its body uses '{1}', whose return type is inferred too. Write the return type of one of them.</value>
-  </data>
   <data name="ERR_SharperInferUsesItself" xml:space="preserve">
     <value>Cannot infer the return type of '{0}', because its body uses '{0}' itself. Write the return type.</value>
   </data>
@@ -8385,6 +8382,9 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
   </data>
   <data name="ERR_SharperTryExpressionInCatchFilter" xml:space="preserve">
     <value>A try expression cannot be used in a 'when' clause, because a catch filter cannot contain a try block. Move it out of the filter.</value>
+  </data>
+  <data name="ERR_SharperInferCycle" xml:space="preserve">
+    <value>Cannot infer the return type of '{0}', because it depends on itself: {1}. Write the return type of one of these methods.</value>
   </data>
   <data name="WRN_RedundantPattern" xml:space="preserve">
     <value>The pattern is redundant.</value>

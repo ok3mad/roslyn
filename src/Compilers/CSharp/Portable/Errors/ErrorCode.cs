@@ -2531,7 +2531,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         ERR_SharperInferNoType = SharperErrorCodes.Base + 14,
         ERR_SharperInferNotSupportedYet = SharperErrorCodes.Base + 15,
         ERR_SharperInferNoBody = SharperErrorCodes.Base + 16,
-        ERR_SharperInferUsesInferredMethod = SharperErrorCodes.Base + 17,
+        // ERR_SharperInferUsesInferredMethod = SharperErrorCodes.Base + 17,   Retired in step R3, which infers the other method first.
         ERR_SharperInferUsesItself = SharperErrorCodes.Base + 18,
         ERR_SharperItNoLambda = SharperErrorCodes.Base + 19,
         ERR_SharperItTwoMeanings = SharperErrorCodes.Base + 20,
@@ -2547,6 +2547,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         WRN_SharperTryExpressionAwaitableBody = SharperErrorCodes.Base + 30,
         ERR_SharperTryExpressionInExpressionTree = SharperErrorCodes.Base + 31,
         ERR_SharperTryExpressionInCatchFilter = SharperErrorCodes.Base + 32,
+        ERR_SharperInferCycle = SharperErrorCodes.Base + 33,
 
         // Note: you will need to do the following after adding errors:
         //  1) Update ErrorFacts.IsBuildOnlyDiagnostic (src/Compilers/CSharp/Portable/Errors/ErrorFacts.cs)

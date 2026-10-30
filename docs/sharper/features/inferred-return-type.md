@@ -1,8 +1,9 @@
 # Inferred return type (`infer`)
 
-**Status:** Prototype of steps R1 (merged into `main`) and R2 (branch `sharper/infer-return-r2`). Requires
+**Status:** Prototype of steps R1 to R3, merged into `main`. Requires
 `/features:sharper`. Issues: [#67](https://github.com/ok3mad/roslyn/issues/67) (R1),
-[#68](https://github.com/ok3mad/roslyn/issues/68) (R2), under [#22](https://github.com/ok3mad/roslyn/issues/22).
+[#68](https://github.com/ok3mad/roslyn/issues/68) (R2), [#69](https://github.com/ok3mad/roslyn/issues/69) (R3), under
+[#22](https://github.com/ok3mad/roslyn/issues/22).
 
 ## Summary
 
@@ -23,12 +24,16 @@ private static infer Classify(int n)                          // string
 }
 private static infer Evens(int max) { for (var i = 0; i < max; i += 2) yield return i; }   // IEnumerable<int>
 private static async infer LoadAsync(int id) { await Task.Yield(); return id; }          // Task<int>
+
+private static infer Name(User u) => u.First + " " + u.Last;                              // string
+private static infer Hello(User u) => $"Hello, {Name(u)}!";                                // string, after Name
+private static infer Fib(int i) => i < 2 ? 1 : Fib(i - 1) + Fib(i - 2);                   // error CS20018
 ```
 
 The method is an ordinary method with that return type: callers, the semantic model, IOperation and metadata all see
-`string Greeting(int)`. Steps R1 and R2 cover the bodies of private methods and local functions: expression bodies
-(R1), block bodies, iterators and `async` (R2). Inferred methods that use each other (R3) and other members (R4) are
-the next steps of the [work breakdown](../planning/implementation-plan.md#type-inference-work-breakdown).
+`string Greeting(int)`. Steps R1 to R3 cover the bodies of private methods and local functions: expression bodies
+(R1), block bodies, iterators and `async` (R2), and inferred methods that use each other (R3). Other members (R4) are
+the next step of the [work breakdown](../planning/implementation-plan.md#type-inference-work-breakdown).
 
 ## Rules
 
@@ -61,11 +66,23 @@ the next steps of the [work breakdown](../planning/implementation-plan.md#type-i
   type is oblivious, as a written type would be.
 - **A type named `infer`.** Like `var`, `infer` is a keyword only when no type named `infer` is in scope. With the
   flag off it is an ordinary type name: CS0246 when there is none.
+- **Using another inferred method.** A body can call, convert or otherwise use methods whose return types are inferred
+  too: their types are inferred first, in whatever order the uses need, also across partial declarations, nested
+  types and local functions. A local function declared in an inferred body is inferred when the body is, since
+  binding it needs its type. Overload resolution reads the return types it would read if they were written: a call
+  reads none, a method group conversion reads those of the applicable candidates, and type inference from a method
+  group (`Apply(G)` for `Apply<T>(Func<int, T>)`) reads that of the method it picks.
 - **Using itself.** A method whose body uses its own inferred return type, directly (`Fib` calling `Fib`) or as a
-  method group, reports CS20018 and must write its return type, as in F#. This stays an error in later steps.
-- **Using another inferred method.** A body that calls or converts another method whose return type is inferred
-  reports CS20017 in R1 and R2. Step R3 orders the inference instead. Methods with written return types can call inferred
-  ones freely.
+  method group, reports CS20018 and must write its return type, as in F#. A local function in the body that uses the
+  method counts, since the body contains it. A recursive method that has a non-recursive `return` to start from is
+  no exception: `if (i < 2) return 1; return Fib(i - 1) + Fib(i - 2);` is CS20018 too (decided in R3).
+- **Cycles.** Methods that need each other's inferred return types (`IsEven` calling `IsOdd`, which calls `IsEven`)
+  report CS20033 on each of them, naming the cycle from that method:
+  `'C.IsEven(int)' uses 'C.IsOdd(int)', which uses 'C.IsEven(int)'`. One of them must write its return type. The named
+  cycle is the shortest from the method back to itself, preferring the uses that come first in each body. A method that
+  uses a method of a cycle without being in it gets an error type and no error of its own, as for any use of a method
+  with errors. Which methods are in error, and the messages, do not depend on which method is compiled first, or on
+  which thread.
 - **The checks of a written return type** apply to the inferred one: file-local types in signatures (CS9051),
   restricted types (CS1599), and nullable and native integer attributes.
 
@@ -106,28 +123,34 @@ No syntax, bound node or lowering is added: `infer` parses as a type name, and t
 3. **No lock.** `MethodChecks` holds a per-method lock, so inferring there could deadlock two methods that use each
    other on two threads. The inference runs outside of any lock and publishes the type once; binding is
    deterministic, so threads that race compute the same type, and only the winner reports diagnostics.
-4. **Uses of inferred methods.** While a body is inferred, a thread-static frame records the inference in progress.
-   Any read of an inferred return type during it (the method itself, or another inferred method) is recorded and gets
-   an error type that is never cached, so the result never depends on which method was inferred first. R3 turns the
-   frame into a stack: a nested read infers the other method, and a method already on the stack is a cycle.
+4. **Uses of inferred methods.** The inferences in progress on a thread are a stack of frames. A read of an inferred
+   return type that is not published yet infers that method in a nested frame on the same thread; no lock is held, so
+   nothing can deadlock. A read of a method already on the stack is a cycle and gets an error type that is never
+   cached. The frames are the nodes of Tarjan's algorithm for strongly connected components: a method in a cycle is not
+   published when its body is done, but together with the rest of its component, when all their uses are known. That
+   makes the members and the named cycles independent of where the inference started. All the results of a component
+   are decided (compare-exchange) before any is published, so another thread that reads one of them, and therefore
+   cannot see the whole cycle itself, takes the decided results rather than its own.
 5. **Semantic model.** `GetTypeInfo` and `GetSymbolInfo` on `infer` return the inferred type, with its nullable
    annotation, like `var`.
 
 The design for the later steps, and why, is in the implementation plan:
-[step R1](../planning/implementation-plan.md#feature-6-inferred-return-type-step-r1) and
-[step R2](../planning/implementation-plan.md#feature-6-inferred-return-type-step-r2).
+[step R1](../planning/implementation-plan.md#feature-6-inferred-return-type-step-r1),
+[step R2](../planning/implementation-plan.md#feature-6-inferred-return-type-step-r2) and
+[step R3](../planning/implementation-plan.md#feature-6-inferred-return-type-step-r3).
 
 ## Follow-ups
 
 - A local function's body is analyzed for nullability on its own, so a captured `var` local counts as maybe null
   (`PROTOTYPE(sharper)` in `Binder_SharperInferredReturnType.cs`).
-- An inferred local function declared in the body of another inferred method or local function counts as a use of it
-  (CS20017), even when it is never called, because binding its declaration reads its return type. R3 infers it in a
-  nested frame instead.
+- A local function in an inferred body that calls the method makes a cycle even when the method never calls the local
+  function, because inferring the method binds the local function's body (CS20018 on the method, CS20033 on the local
+  function). Skipping local function bodies during inference would remove it, but the nullable analysis of the body
+  visits them.
 - Values with no best common type are an error; an inferred union of their types waits for unions
   ([#31](https://github.com/ok3mad/roslyn/issues/31), parked).
 - Async iterators, which would return `IAsyncEnumerable<T>`.
-- CS20017 and CS20018 are reported on `infer`, not on the use in the body, because the use is found through the
+- CS20018 and CS20033 are reported on `infer`, not on the use in the body, because the use is found through the
   symbol, which has no syntax.
 - The IDE does not know `infer` yet (R5, [#71](https://github.com/ok3mad/roslyn/issues/71)).
 
@@ -137,4 +160,5 @@ The design for the later steps, and why, is in the implementation plan:
 classes nested in `SourceOrdinaryMethodSymbol` and `LocalFunctionSymbol`, and
 `NullableWalker.AnalyzeSharperInferredReturnType`, the binder's checks of `IsSharperReturnTypeBeingInferred` (return
 statements, `yield return` and the async helpers in `Binder_Statements.cs`, `InMethodBinder.GetIteratorElementType`)
-and `BoundLambda.InferSharperReturnType`. Tests: `Infer_*` and `Infer_Block_*` in `SharperTests.cs`.
+and `BoundLambda.InferSharperReturnType`. Tests: `Infer_*` and `Infer_Block_*` in `SharperTests.cs`; R3's are
+`Infer_UsesInferredMethod*` and `Infer_Cycle*`.
