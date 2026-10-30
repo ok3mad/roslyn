@@ -8386,6 +8386,9 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
   <data name="ERR_SharperInferCycle" xml:space="preserve">
     <value>Cannot infer the return type of '{0}', because it depends on itself: {1}. Write the return type of one of these methods.</value>
   </data>
+  <data name="ERR_SharperValSimpleLambdaNeedsParentheses" xml:space="preserve">
+    <value>A 'val' lambda parameter needs parentheses. Write '(val {0}) => ...'.</value>
+  </data>
   <data name="WRN_RedundantPattern" xml:space="preserve">
     <value>The pattern is redundant.</value>
   </data>

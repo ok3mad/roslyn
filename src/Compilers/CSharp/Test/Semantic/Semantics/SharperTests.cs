@@ -5377,8 +5377,9 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         [CombinatorialData]
         public void ValLambda_SimpleLambdaNeedsParentheses(bool sharper)
         {
-            // Like C#'s parameter modifiers, val needs the parenthesized form: val x => x is the same syntax error with or without
-            // Sharper. A clearer error is https://github.com/ok3mad/roslyn/issues/98.
+            // Like C#'s parameter modifiers, val needs the parenthesized form. With Sharper, val x => x is one error that
+            // suggests (val x) => x, and the lambda binds as that form, so the body reports nothing more. Without Sharper,
+            // it is the C# syntax error.
             var source = """
                 using System;
                 class C
@@ -5386,19 +5387,139 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                     void M()
                     {
                         Func<int, int> f = val x => x;
+                        Func<int, int> g = val y => { y = 1; return y; };
                     }
                 }
                 """;
-            CreateCompilation(source, parseOptions: sharper ? s_sharperOptions : TestOptions.Regular, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
-                // (6,28): error CS0103: The name 'val' does not exist in the current context
-                //         Func<int, int> f = val x => x;
-                Diagnostic(ErrorCode.ERR_NameNotInContext, "val").WithArguments("val").WithLocation(6, 28),
-                // (6,32): error CS1002: ; expected
-                //         Func<int, int> f = val x => x;
-                Diagnostic(ErrorCode.ERR_SemicolonExpected, "x").WithLocation(6, 32),
-                // (6,32): error CS0201: Only assignment, call, increment, decrement, await, and new object expressions can be used as a statement
-                //         Func<int, int> f = val x => x;
-                Diagnostic(ErrorCode.ERR_IllegalStatement, "x => x").WithLocation(6, 32));
+            var comp = CreateCompilation(source, parseOptions: sharper ? s_sharperOptions : TestOptions.Regular, targetFramework: TargetFramework.Net90);
+            if (sharper)
+            {
+                comp.VerifyDiagnostics(
+                    // (6,28): error CS20034: A 'val' lambda parameter needs parentheses. Write '(val x) => ...'.
+                    //         Func<int, int> f = val x => x;
+                    Diagnostic(ErrorCode.ERR_SharperValSimpleLambdaNeedsParentheses, "val x").WithArguments("x").WithLocation(6, 28),
+                    // (7,28): error CS20034: A 'val' lambda parameter needs parentheses. Write '(val y) => ...'.
+                    //         Func<int, int> g = val y => { y = 1; return y; };
+                    Diagnostic(ErrorCode.ERR_SharperValSimpleLambdaNeedsParentheses, "val y").WithArguments("y").WithLocation(7, 28),
+                    // (7,39): error CS1656: Cannot assign to 'y' because it is a 'val variable'
+                    //         Func<int, int> g = val y => { y = 1; return y; };
+                    Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "y").WithArguments("y", "val variable").WithLocation(7, 39));
+            }
+            else
+            {
+                comp.VerifyDiagnostics(
+                    // (6,28): error CS0103: The name 'val' does not exist in the current context
+                    //         Func<int, int> f = val x => x;
+                    Diagnostic(ErrorCode.ERR_NameNotInContext, "val").WithArguments("val").WithLocation(6, 28),
+                    // (6,32): error CS1002: ; expected
+                    //         Func<int, int> f = val x => x;
+                    Diagnostic(ErrorCode.ERR_SemicolonExpected, "x").WithLocation(6, 32),
+                    // (6,32): error CS0201: Only assignment, call, increment, decrement, await, and new object expressions can be used as a statement
+                    //         Func<int, int> f = val x => x;
+                    Diagnostic(ErrorCode.ERR_IllegalStatement, "x => x").WithLocation(6, 32),
+                    // (7,28): error CS0103: The name 'val' does not exist in the current context
+                    //         Func<int, int> g = val y => { y = 1; return y; };
+                    Diagnostic(ErrorCode.ERR_NameNotInContext, "val").WithArguments("val").WithLocation(7, 28),
+                    // (7,32): error CS1002: ; expected
+                    //         Func<int, int> g = val y => { y = 1; return y; };
+                    Diagnostic(ErrorCode.ERR_SemicolonExpected, "y").WithLocation(7, 32),
+                    // (7,32): error CS0201: Only assignment, call, increment, decrement, await, and new object expressions can be used as a statement
+                    //         Func<int, int> g = val y => { y = 1; return y; };
+                    Diagnostic(ErrorCode.ERR_IllegalStatement, "y => { y = 1; return y; }").WithLocation(7, 32));
+            }
+        }
+
+        [Fact]
+        public void ValLambda_SimpleLambdaNeedsParentheses_TypeNamedVal()
+        {
+            // With a type named val in scope, val x => x recovers as (val x) => x does there: an explicitly typed parameter
+            // of that type, which can be reassigned.
+            var source = """
+                using System;
+
+                class val { }
+
+                class C
+                {
+                    void M()
+                    {
+                        Func<val, val> f = val x => { x = new val(); return x; };
+                        Func<int, int> g = val x => x;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (3,7): warning CS8981: The type name 'val' only contains lower-cased ascii characters. Such names may become reserved for the language.
+                // class val { }
+                Diagnostic(ErrorCode.WRN_LowerCaseTypeName, "val").WithArguments("val").WithLocation(3, 7),
+                // (9,28): error CS20034: A 'val' lambda parameter needs parentheses. Write '(val x) => ...'.
+                //         Func<val, val> f = val x => { x = new val(); return x; };
+                Diagnostic(ErrorCode.ERR_SharperValSimpleLambdaNeedsParentheses, "val x").WithArguments("x").WithLocation(9, 28),
+                // (10,28): error CS20034: A 'val' lambda parameter needs parentheses. Write '(val x) => ...'.
+                //         Func<int, int> g = val x => x;
+                Diagnostic(ErrorCode.ERR_SharperValSimpleLambdaNeedsParentheses, "val x").WithArguments("x").WithLocation(10, 28),
+                // (10,32): error CS1678: Parameter 1 is declared as type 'val' but should be 'int'
+                //         Func<int, int> g = val x => x;
+                Diagnostic(ErrorCode.ERR_BadParamType, "x").WithArguments("1", "", "val", "", "int").WithLocation(10, 32),
+                // (10,34): error CS1661: Cannot convert lambda expression to type 'Func<int, int>' because the parameter types do not match the delegate parameter types
+                //         Func<int, int> g = val x => x;
+                Diagnostic(ErrorCode.ERR_CantConvAnonMethParams, "=>").WithArguments("lambda expression", "System.Func<int, int>").WithLocation(10, 34));
+        }
+
+        [Fact]
+        public void ValLambda_SimpleLambdaNeedsParentheses_Parsing()
+        {
+            // With Sharper, val x => ... parses as (val x) => ... with missing parentheses and one error on the parameter, also
+            // after async and static and with a block body. The text round-trips.
+            foreach (var text in new[] { "val x => x", "async val x => x", "static val x => x", "async static val x => x", "val x => { }", "val x => val y => x" })
+            {
+                var lambda = (ParenthesizedLambdaExpressionSyntax)SyntaxFactory.ParseExpression(text, options: s_sharperOptions);
+                Assert.Equal(text, lambda.ToFullString());
+                Assert.True(lambda.ParameterList.OpenParenToken.IsMissing);
+                Assert.True(lambda.ParameterList.CloseParenToken.IsMissing);
+                var parameter = lambda.ParameterList.Parameters.Single();
+                Assert.Equal("val", ((IdentifierNameSyntax)parameter.Type!).Identifier.Text);
+                Assert.Equal("x", parameter.Identifier.Text);
+                var diagnostic = lambda.GetDiagnostics().First();
+                Assert.Equal((int)ErrorCode.ERR_SharperValSimpleLambdaNeedsParentheses, diagnostic.Code);
+                Assert.Equal(parameter.Span, diagnostic.Location.SourceSpan);
+                Assert.Equal(text.Contains("val y") ? 2 : 1, lambda.GetDiagnostics().Count());
+            }
+
+            // Without Sharper, and for @val, the C# parse stays: val is not a lambda.
+            foreach (var (text, options) in new[] { ("val x => x", TestOptions.Regular), ("@val x => x", s_sharperOptions), ("@val x => x", TestOptions.Regular) })
+            {
+                var expression = SyntaxFactory.ParseExpression(text, options: options);
+                Assert.IsType<IdentifierNameSyntax>(expression);
+            }
+        }
+
+        [Theory]
+        [CombinatorialData]
+        public void ValLambda_SimpleLambdaNeedsParentheses_CSharpUnchanged(bool sharper)
+        {
+            // val followed by an identifier and => in valid C#: a declaration pattern in a switch expression arm or switch
+            // statement case, and a val parameter in parentheses. None of them is a simple lambda.
+            var source = """
+                using System;
+
+                class val { }
+
+                class C
+                {
+                    int M(object o)
+                    {
+                        Func<val, val> f = (val x) => x;
+                        switch (o) { case val v when v != null: break; }
+                        return o switch { val v => 1, _ => 0 };
+                    }
+                }
+                """;
+            var tree = SyntaxFactory.ParseSyntaxTree(source, sharper ? s_sharperOptions : TestOptions.Regular);
+            Assert.Empty(tree.GetDiagnostics());
+            var lambda = tree.GetRoot().DescendantNodes().OfType<LambdaExpressionSyntax>().Single();
+            Assert.Equal("(val x) => x", lambda.ToString());
+            Assert.False(((ParenthesizedLambdaExpressionSyntax)lambda).ParameterList.OpenParenToken.IsMissing);
         }
 
         [Fact]

@@ -2732,6 +2732,11 @@
         <target state="new">Cannot ref-assign '{0}' because it is a ref val: it always refers to the same variable. Writes through '{0}' are allowed.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperValSimpleLambdaNeedsParentheses">
+        <source>A 'val' lambda parameter needs parentheses. Write '(val {0}) =&gt; ...'.</source>
+        <target state="new">A 'val' lambda parameter needs parentheses. Write '(val {0}) =&gt; ...'.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SignatureMismatchInRecord">
         <source>Record member '{0}' must return '{1}'.</source>
         <target state="translated">记录成员“{0}”必须返回“{1}”。</target>
