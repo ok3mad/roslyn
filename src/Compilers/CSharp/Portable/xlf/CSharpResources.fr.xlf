@@ -2702,6 +2702,11 @@
         <target state="new">A spread 'yield return ..' cannot enumerate '{0}' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperTryExpressionInCatchFilter">
+        <source>A try expression cannot be used in a 'when' clause, because a catch filter cannot contain a try block. Move it out of the filter.</source>
+        <target state="new">A try expression cannot be used in a 'when' clause, because a catch filter cannot contain a try block. Move it out of the filter.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperTryExpressionInExpressionTree">
         <source>An expression tree cannot contain a try expression.</source>
         <target state="new">An expression tree cannot contain a try expression.</target>

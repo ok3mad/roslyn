@@ -486,6 +486,42 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         }
 
         [Fact]
+        public void TryExpression_InCatchFilter()
+        {
+            // A catch filter cannot contain a try block, so a try expression cannot be in a `when` clause: a C# catch
+            // filter's or a try expression arm's. A lambda in a filter is a method of its own.
+            var source = """
+                using System;
+
+                class C
+                {
+                    static bool F() => true;
+
+                    static void M1()
+                    {
+                        try { } catch (Exception) when (try F() catch { _ => false }) { }
+                    }
+
+                    static int M2() => try 1 catch { Exception e when (try F() catch { _ => false }) => 2 };
+
+                    static void M3()
+                    {
+                        try { } catch (Exception) when (((Func<bool>)(() => try F() catch { _ => false }))()) { }
+                    }
+
+                    static int M4() => try 1 catch { _ => try 2 catch { _ => 3 } };
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyEmitDiagnostics(
+                // (9,41): error CS20032: A try expression cannot be used in a 'when' clause, because a catch filter cannot contain a try block. Move it out of the filter.
+                //         try { } catch (Exception) when (try F() catch { _ => false }) { }
+                Diagnostic(ErrorCode.ERR_SharperTryExpressionInCatchFilter, "try").WithLocation(9, 41),
+                // (12,56): error CS20032: A try expression cannot be used in a 'when' clause, because a catch filter cannot contain a try block. Move it out of the filter.
+                //     static int M2() => try 1 catch { Exception e when (try F() catch { _ => false }) => 2 };
+                Diagnostic(ErrorCode.ERR_SharperTryExpressionInCatchFilter, "try").WithLocation(12, 56));
+        }
+
+        [Fact]
         public void TryExpression_DefiniteAssignmentAndNullable()
         {
             // An arm starts from the state before the body, joined with the states the body passes through, as a catch

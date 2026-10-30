@@ -56,6 +56,8 @@ The design is in the implementation plan,
   returns the task; the rest surfaces when the task is awaited, outside the `try`. CS20030 warns for a body whose type
   is task-like; write `try await F()`. Lifting a task body is [#136](https://github.com/ok3mad/roslyn/issues/136).
 - **Expression trees** cannot contain a try expression (CS20031).
+- **Not in a filter.** A `when` clause, of a C# `catch` or of an arm, cannot contain a try expression (CS20032),
+  because a catch filter cannot contain a try block. A lambda in a filter can, and so can an arm's value.
 - **Flow analysis.** An arm starts from the state before the body, joined with every state the body passes through,
   as a catch block does: a variable assigned in the body is not definitely assigned in an arm (CS0165), and a value
   checked for null in the body may be null again in an arm.

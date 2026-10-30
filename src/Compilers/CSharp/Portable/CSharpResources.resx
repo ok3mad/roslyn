@@ -8383,6 +8383,9 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
   <data name="ERR_SharperTryExpressionInExpressionTree" xml:space="preserve">
     <value>An expression tree cannot contain a try expression.</value>
   </data>
+  <data name="ERR_SharperTryExpressionInCatchFilter" xml:space="preserve">
+    <value>A try expression cannot be used in a 'when' clause, because a catch filter cannot contain a try block. Move it out of the filter.</value>
+  </data>
   <data name="WRN_RedundantPattern" xml:space="preserve">
     <value>The pattern is redundant.</value>
   </data>

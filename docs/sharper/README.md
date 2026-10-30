@@ -160,6 +160,7 @@ in `#pragma warning`, `/nowarn` and `.editorconfig`.
 | CS20029 | Error | The try expression has no type, because its body and arms ({0}) have no best common type. Give it a target type, such as a declared union of these types. |
 | CS20030 | Warning | The body of this try expression is a '{0}', so the arms catch only the exceptions thrown before the task is returned. Write 'try await ...' to catch the exceptions of the operation. |
 | CS20031 | Error | An expression tree cannot contain a try expression. |
+| CS20032 | Error | A try expression cannot be used in a 'when' clause, because a catch filter cannot contain a try block. Move it out of the filter. |
 
 ## Where the code is
 

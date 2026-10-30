@@ -24,6 +24,15 @@ namespace Microsoft.CodeAnalysis.CSharp
             // The parser makes a try expression only with Sharper on, but a tree can be built with SyntaxFactory.
             CheckFeatureAvailability(node.TryKeyword, MessageID.IDS_FeatureSharper, diagnostics);
 
+            // The try expression lowers to a try block, which a catch filter cannot contain. A lambda in a filter is a method
+            // of its own, so its binder has no filter flag.
+            bool hasErrors = false;
+            if (this.Flags.Includes(BinderFlags.InCatchFilter))
+            {
+                diagnostics.Add(ErrorCode.ERR_SharperTryExpressionInCatchFilter, node.TryKeyword.GetLocation());
+                hasErrors = true;
+            }
+
             TypeSymbol exceptionType = GetSharperTryExpressionInputType(node, diagnostics);
             BoundExpression body = BindValue(node.Expression, diagnostics, BindValueKind.RValue);
             ReportSharperTryExpressionAwaitableBody(node, body, diagnostics);
@@ -73,7 +82,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             }
 
             return new BoundUnconvertedTryExpression(
-                node, body, arms, exceptionPlaceholder, decisionDag, defaultLabel, naturalType);
+                node, body, arms, exceptionPlaceholder, decisionDag, defaultLabel, naturalType, hasErrors);
         }
 
         /// <summary>

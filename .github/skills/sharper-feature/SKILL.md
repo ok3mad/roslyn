@@ -248,7 +248,9 @@ implementation plan, "Feature 3"):
    must set `_sawAwaitInExceptionHandler` (save `_sawAwait`, visit the handler, merge), or `AsyncExceptionHandlerRewriter`
    is skipped and codegen crashes in `ILBuilder.BlockedBranchDestinationSlow` on a branch into the handler. That
    rewriter also took a catch block's syntax to be a `CatchClause` inside a `TryStatementSyntax`. Dump the lowered tree
-   (`BoundNode.DumpSource()` before codegen) when emit crashes; the shape shows which pass did not run.
+   (`BoundNode.DumpSource()` before codegen) when emit crashes; the shape shows which pass did not run. An expression
+   that lowers to a try block also inherits IL's limits: a catch filter cannot contain one, so report an error under
+   `BinderFlags.InCatchFilter` (CS20032), or codegen asserts.
 30. **The nullable walker refuses unregistered placeholders.** A decision DAG over a value that is not in the tree (the
    caught exception) needs an input expression; a `BoundValuePlaceholder` trips `AssertPlaceholderAllowedWithoutRegistration`
    in `LearnFromNonNullTest`. Give `LearnFromDecisionDag` a `BoundExpressionWithNullability` over it instead, which gets
