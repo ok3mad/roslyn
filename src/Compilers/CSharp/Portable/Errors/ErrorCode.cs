@@ -2543,6 +2543,14 @@ namespace Microsoft.CodeAnalysis.CSharp
         ERR_SharperInferParameterNoType = SharperErrorCodes.Base + 26,
         ERR_SharperInferParameterNoDefault = SharperErrorCodes.Base + 27,
         ERR_SharperInferParameterCycle = SharperErrorCodes.Base + 28,
+        ERR_SharperImmutableNotProven = SharperErrorCodes.Base + 29,
+        ERR_SharperImmutableDisproven = SharperErrorCodes.Base + 30,
+        ERR_SharperImmutableBaseNotImmutable = SharperErrorCodes.Base + 31,
+        ERR_SharperImmutableHierarchyViolated = SharperErrorCodes.Base + 32,
+        WRN_SharperImmutableHierarchyViolated = SharperErrorCodes.Base + 33,
+        ERR_SharperImmutableHierarchyWithoutImmutable = SharperErrorCodes.Base + 34,
+        ERR_SharperMisplacedUnobservableWrite = SharperErrorCodes.Base + 35,
+        ERR_SharperPhantomTypeParameterInState = SharperErrorCodes.Base + 36,
 
         // Note: you will need to do the following after adding errors:
         //  1) Update ErrorFacts.IsBuildOnlyDiagnostic (src/Compilers/CSharp/Portable/Errors/ErrorFacts.cs)

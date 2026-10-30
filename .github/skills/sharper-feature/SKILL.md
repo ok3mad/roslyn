@@ -243,6 +243,26 @@ implementation plan, "Feature 3"):
    cycle without an error, so marking the cycle when the outer inference ends is too late: publish the error for every
    parameter of the cycle at the moment it is found. Test cycles from each end, and on two threads at once.
 
+29. **An attribute that users write needs a name that binds.** `IsReadOnlyAttribute` and its kin are only emitted, so
+   the compiler synthesizes them at emit time. `[Immutable]` is written by users, so the binder must find it: when
+   lookup of an attribute name finds nothing in a Sharper file, `BindNonGenericSimpleNamespaceOrTypeOrAliasSymbol` binds
+   it to a compilation-level symbol (`SynthesizedEmbeddedSharperAttributeSymbol`, or the compilation's own declaration),
+   and `PEAssemblyBuilder.GetEmbeddedTypes` emits the ones binding created. `CreateEmbeddedAttributesIfNeeded` returns
+   early when no upstream embedded attribute is needed, so it must also know about these, or `[Embedded]` is missing.
+   Recognize such attributes by name (`IsTargetAttribute(namespace, name)`), so metadata and user-declared copies count.
+
+30. **A query over types with cycles must cache per component and report the same reason from any start.**
+   Immutability assumes the best inside a cycle, so a result computed under that assumption is only cached when the
+   cycle's root finishes (Tarjan's algorithm, `SharperImmutability.GetInfo`). Which member is reached first decides
+   which check fails first, so a reason computed on the way depends on the order, and on threads. Explain each failure
+   once every status is known (`SharperImmutability.Explain`), and test from each member and on several threads.
+
+31. **A declaration check that needs a body binds it itself.** `TryGetBodyBinder().BindMethodBody(syntax,
+   BindingDiagnosticBag.Discarded)` binds a getter outside the method compiler, as the `field` keyword's nullability
+   inference does. Skip bodies with errors (the method compiler reports them), and judge the bound tree with a
+   whitelist of node kinds, so a kind nobody reviewed fails safe. Run such checks from
+   `SourceMemberContainerTypeSymbol.AfterMembersChecks`, gated so that compilations without Sharper do nothing.
+
 ## Inferred Types
 
 Inference from a body (`infer` return types, rows 10 and 15) reuses `var`'s rules for the natural type of an
@@ -261,7 +281,8 @@ in the implementation plan, "Feature 9".
 
 ## Testing
 
-- Tests live in `src/Compilers/CSharp/Test/Semantic/Semantics/SharperTests.cs`. Use
+- Tests live in `src/Compilers/CSharp/Test/Semantic/Semantics/SharperTests.cs`; a large feature can take its own file
+  of the same partial class (`SharperTests_ImmutableTypes.cs`), which the `~SharperTests` filter still runs. Use
   `TestOptions.Regular.WithExperimental(MessageID.IDS_FeatureSharper)` as parse options.
 - Compile against `TargetFramework.Net90`; the default test framework lacks types such as `System.Range`. Guard
   runtime output with `ExecutionConditionUtil.IsCoreClr ? "<output>" : null`.

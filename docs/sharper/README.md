@@ -95,6 +95,7 @@ Not done yet:
 | [Task type](features/task-type.md) | `T~` is `Task<T>`, and `void~` is `Task`. | Prototype, merged into `main` | [#20](https://github.com/ok3mad/roslyn/issues/20) |
 | [Inferred return type](features/inferred-return-type.md) | `private static infer Greeting(int id) => $"Hello, {id}!";` returns `string`. Steps R1 and R2: expression and block bodies of private methods and local functions, iterators and `async`. | Prototype; R1 merged into `main`, R2 on `sharper/infer-return-r2` | [#67](https://github.com/ok3mad/roslyn/issues/67), [#68](https://github.com/ok3mad/roslyn/issues/68), under [#22](https://github.com/ok3mad/roslyn/issues/22) |
 | [Inferred parameter type](features/inferred-parameter-type.md) | `void Fetch(string url, infer retries = 3)` gives `retries` the type of its default value, `int`. Step P1: default values, on every member kind and lambdas. | Prototype of step P1, on `sharper/infer-parameter-p1` | [#72](https://github.com/ok3mad/roslyn/issues/72), under [#27](https://github.com/ok3mad/roslyn/issues/27) |
+| [Immutable types](features/immutable-types.md) | `[Immutable] sealed record Money(decimal Amount, string Currency);` is checked to be deeply immutable; `[ImmutableHierarchy]` extends the claim to every subclass. Slice 1: the check, the attributes and their diagnostics. | Prototype of slice 1, on `sharper/immutable-types-slice1` | [#139](https://github.com/ok3mad/roslyn/issues/139), designed in [#92](https://github.com/ok3mad/roslyn/issues/92) |
 | [Implicit `it`](features/implicit-it.md) | `xs.Select(it.Name)` is `xs.Select(x => x.Name)`: an argument that uses `it` is a lambda, if the innermost parameter around it takes a one-parameter function. | Prototype, merged into `main` | [#24](https://github.com/ok3mad/roslyn/issues/24) |
 
 Every planned feature has an issue, one per row of the
@@ -117,7 +118,7 @@ git grep -n "PROTOTYPE(sharper)"
 - `sharper/<feature>` branches hold features in progress; `sharper/gating`, `sharper/val`,
   `sharper/val-designations`, `sharper/val-patterns`, `sharper/function-types`, `sharper/task-type`, `sharper/val-lambda-parameters` and
   `sharper/readonly-locals`, `sharper/infer-return-r1` and `sharper/implicit-it` are merged. `sharper/readonly-parameters`,
-  `sharper/infer-return-r2` and `sharper/infer-parameter-p1` are in progress.
+  `sharper/infer-return-r2`, `sharper/infer-parameter-p1` and `sharper/immutable-types-slice1` are in progress.
 
 ## Diagnostics
 
@@ -156,6 +157,14 @@ in `#pragma warning`, `/nowarn` and `.editorconfig`.
 | CS20026 | Error | Cannot infer the type of parameter '{0}', because its default value ({1}) has no type. Write the parameter type. |
 | CS20027 | Error | Cannot infer the type of parameter '{0}', because it has no default value. Write the parameter type. |
 | CS20028 | Error | Cannot infer the type of parameter '{0}', because its default value depends on the type of '{0}' itself. Write the parameter type. |
+| CS20029 | Error | '{0}' is marked [Immutable], but it cannot be proven immutable: {1}. |
+| CS20030 | Error | '{0}' is marked [Immutable], but it is mutable: {1}. |
+| CS20031 | Error | '{0}' is marked [Immutable], but its base type '{1}' is not immutable. |
+| CS20032 | Error | '{0}' must be immutable, because '{1}' is marked [ImmutableHierarchy], but {2}. |
+| CS20033 | Warning | '{0}' must be immutable, because '{1}' is marked [ImmutableHierarchy], but {2}. |
+| CS20034 | Error | '{0}' is marked [ImmutableHierarchy], so it must also be marked [Immutable]. |
+| CS20035 | Error | [UnobservableWrite] is only valid on a field that is not readonly, of a class marked [Immutable]. |
+| CS20036 | Error | Type parameter '{0}' is marked [Phantom], but '{1}' uses it in the state of the type. |
 
 ## Where the code is
 
@@ -163,11 +172,11 @@ in `#pragma warning`, `/nowarn` and `.editorconfig`.
 | --- | --- |
 | Feature flag | `src/Compilers/CSharp/Portable/Errors/MessageID.cs` (`IDS_FeatureSharper`), `src/Compilers/Core/Portable/CommandLine/Feature.cs` (`Feature.Sharper`) |
 | Parser | `src/Compilers/CSharp/Portable/Parser/LanguageParser.cs` (search for `IDS_FeatureSharper`) |
-| Binding | `src/Compilers/CSharp/Portable/Binder/` (search for `IDS_FeatureSharper`); short type forms such as `T[..]` in `Binder_SharperTypes.cs`; inferred return types in `Binder_SharperInferredReturnType.cs` and `Symbols/Source/SharperInferredReturnType.cs`; inferred parameter types in `Binder_SharperInferredParameterType.cs` and `Symbols/Source/SharperInferredParameterType.cs`; implicit `it` in `Binder_SharperImplicitIt.cs` |
+| Binding | `src/Compilers/CSharp/Portable/Binder/` (search for `IDS_FeatureSharper`); short type forms such as `T[..]` in `Binder_SharperTypes.cs`; inferred return types in `Binder_SharperInferredReturnType.cs` and `Symbols/Source/SharperInferredReturnType.cs`; inferred parameter types in `Binder_SharperInferredParameterType.cs` and `Symbols/Source/SharperInferredParameterType.cs`; implicit `it` in `Binder_SharperImplicitIt.cs`; immutable types in `Symbols/SharperImmutability.cs` |
 | Syntax nodes | `src/Compilers/CSharp/Portable/Syntax/Syntax.xml` (`FunctionTypeSyntax`, `TaskTypeSyntax`, `ParenthesizedTypeSyntax`); Sharper kinds in `SyntaxKind.cs` count up from 9900 |
 | Bound nodes | `src/Compilers/CSharp/Portable/BoundTree/BoundNodes.xml` |
 | Lowering | `src/Compilers/CSharp/Portable/Lowering/LocalRewriter/` |
-| Tests | `src/Compilers/CSharp/Test/Semantic/Semantics/SharperTests.cs` |
+| Tests | `src/Compilers/CSharp/Test/Semantic/Semantics/SharperTests.cs`, and `SharperTests_ImmutableTypes.cs` next to it (one partial class) |
 
 ## Building and testing
 
