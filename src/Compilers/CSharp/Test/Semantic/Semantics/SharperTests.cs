@@ -14,7 +14,7 @@ using Xunit;
 
 namespace Microsoft.CodeAnalysis.CSharp.UnitTests
 {
-    public sealed class SharperTests : CSharpTestBase
+    public sealed partial class SharperTests : CSharpTestBase
     {
         [Fact]
         public void Gating_DisabledByDefault()
@@ -7525,10 +7525,10 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
-                // (6,20): error CS20029: Cannot infer the return type of 'C.P(long)', because it depends on itself: 'C.P(long)' uses 'C.Q()', which uses 'C.P(long)'. Write the return type of one of these methods.
+                // (6,20): error CS20033: Cannot infer the return type of 'C.P(long)', because it depends on itself: 'C.P(long)' uses 'C.Q()', which uses 'C.P(long)'. Write the return type of one of these methods.
                 //     private static infer P(long x) => Q();
                 Diagnostic(ErrorCode.ERR_SharperInferCycle, "infer").WithArguments("C.P(long)", "'C.P(long)' uses 'C.Q()', which uses 'C.P(long)'").WithLocation(6, 20),
-                // (7,20): error CS20029: Cannot infer the return type of 'C.Q()', because it depends on itself: 'C.Q()' uses 'C.P(long)', which uses 'C.Q()'. Write the return type of one of these methods.
+                // (7,20): error CS20033: Cannot infer the return type of 'C.Q()', because it depends on itself: 'C.Q()' uses 'C.P(long)', which uses 'C.Q()'. Write the return type of one of these methods.
                 //     private static infer Q() { Func<int, int> f = P; return f(3); }
                 Diagnostic(ErrorCode.ERR_SharperInferCycle, "infer").WithArguments("C.Q()", "'C.Q()' uses 'C.P(long)', which uses 'C.Q()'").WithLocation(7, 20));
         }
@@ -7568,37 +7568,37 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
                 _ = comp.GetMember<MethodSymbol>(first).ReturnType;
                 comp.VerifyDiagnostics(
-                // (3,20): error CS20029: Cannot infer the return type of 'C.A()', because it depends on itself: 'C.A()' uses 'C.B()', which uses 'C.A()'. Write the return type of one of these methods.
+                // (3,20): error CS20033: Cannot infer the return type of 'C.A()', because it depends on itself: 'C.A()' uses 'C.B()', which uses 'C.A()'. Write the return type of one of these methods.
                 //     private static infer A() => B() + 1;
                 Diagnostic(ErrorCode.ERR_SharperInferCycle, "infer").WithArguments("C.A()", "'C.A()' uses 'C.B()', which uses 'C.A()'").WithLocation(3, 20),
-                // (4,20): error CS20029: Cannot infer the return type of 'C.B()', because it depends on itself: 'C.B()' uses 'C.A()', which uses 'C.B()'. Write the return type of one of these methods.
+                // (4,20): error CS20033: Cannot infer the return type of 'C.B()', because it depends on itself: 'C.B()' uses 'C.A()', which uses 'C.B()'. Write the return type of one of these methods.
                 //     private static infer B() => A() + 1;
                 Diagnostic(ErrorCode.ERR_SharperInferCycle, "infer").WithArguments("C.B()", "'C.B()' uses 'C.A()', which uses 'C.B()'").WithLocation(4, 20),
-                // (5,20): error CS20029: Cannot infer the return type of 'C.X(int)', because it depends on itself: 'C.X(int)' uses 'C.Y(int)', which uses 'C.Z(int)', which uses 'C.X(int)'. Write the return type of one of these methods.
+                // (5,20): error CS20033: Cannot infer the return type of 'C.X(int)', because it depends on itself: 'C.X(int)' uses 'C.Y(int)', which uses 'C.Z(int)', which uses 'C.X(int)'. Write the return type of one of these methods.
                 //     private static infer X(int i) => i > 0 ? Y(i - 1) : 0;
                 Diagnostic(ErrorCode.ERR_SharperInferCycle, "infer").WithArguments("C.X(int)", "'C.X(int)' uses 'C.Y(int)', which uses 'C.Z(int)', which uses 'C.X(int)'").WithLocation(5, 20),
-                // (6,20): error CS20029: Cannot infer the return type of 'C.Y(int)', because it depends on itself: 'C.Y(int)' uses 'C.Z(int)', which uses 'C.X(int)', which uses 'C.Y(int)'. Write the return type of one of these methods.
+                // (6,20): error CS20033: Cannot infer the return type of 'C.Y(int)', because it depends on itself: 'C.Y(int)' uses 'C.Z(int)', which uses 'C.X(int)', which uses 'C.Y(int)'. Write the return type of one of these methods.
                 //     private static infer Y(int i) => Z(i);
                 Diagnostic(ErrorCode.ERR_SharperInferCycle, "infer").WithArguments("C.Y(int)", "'C.Y(int)' uses 'C.Z(int)', which uses 'C.X(int)', which uses 'C.Y(int)'").WithLocation(6, 20),
-                // (7,20): error CS20029: Cannot infer the return type of 'C.Z(int)', because it depends on itself: 'C.Z(int)' uses 'C.X(int)', which uses 'C.Y(int)', which uses 'C.Z(int)'. Write the return type of one of these methods.
+                // (7,20): error CS20033: Cannot infer the return type of 'C.Z(int)', because it depends on itself: 'C.Z(int)' uses 'C.X(int)', which uses 'C.Y(int)', which uses 'C.Z(int)'. Write the return type of one of these methods.
                 //     private static infer Z(int i) { if (i == 0) return 1; return X(i); }
                 Diagnostic(ErrorCode.ERR_SharperInferCycle, "infer").WithArguments("C.Z(int)", "'C.Z(int)' uses 'C.X(int)', which uses 'C.Y(int)', which uses 'C.Z(int)'").WithLocation(7, 20),
-                // (10,20): error CS20029: Cannot infer the return type of 'C.IsEven(int)', because it depends on itself: 'C.IsEven(int)' uses 'C.IsOdd(int)', which uses 'C.IsEven(int)'. Write the return type of one of these methods.
+                // (10,20): error CS20033: Cannot infer the return type of 'C.IsEven(int)', because it depends on itself: 'C.IsEven(int)' uses 'C.IsOdd(int)', which uses 'C.IsEven(int)'. Write the return type of one of these methods.
                 //     private static infer IsEven(int n) => n == 0 || IsOdd(n - 1);
                 Diagnostic(ErrorCode.ERR_SharperInferCycle, "infer").WithArguments("C.IsEven(int)", "'C.IsEven(int)' uses 'C.IsOdd(int)', which uses 'C.IsEven(int)'").WithLocation(10, 20),
-                // (11,20): error CS20029: Cannot infer the return type of 'C.IsOdd(int)', because it depends on itself: 'C.IsOdd(int)' uses 'C.IsEven(int)', which uses 'C.IsOdd(int)'. Write the return type of one of these methods.
+                // (11,20): error CS20033: Cannot infer the return type of 'C.IsOdd(int)', because it depends on itself: 'C.IsOdd(int)' uses 'C.IsEven(int)', which uses 'C.IsOdd(int)'. Write the return type of one of these methods.
                 //     private static infer IsOdd(int n) => n != 0 && IsEven(n - 1);
                 Diagnostic(ErrorCode.ERR_SharperInferCycle, "infer").WithArguments("C.IsOdd(int)", "'C.IsOdd(int)' uses 'C.IsEven(int)', which uses 'C.IsOdd(int)'").WithLocation(11, 20),
-                // (17,9): error CS20029: Cannot infer the return type of 'L1()', because it depends on itself: 'L1()' uses 'L2()', which uses 'L1()'. Write the return type of one of these methods.
+                // (17,9): error CS20033: Cannot infer the return type of 'L1()', because it depends on itself: 'L1()' uses 'L2()', which uses 'L1()'. Write the return type of one of these methods.
                 //         infer L1() => L2();
                 Diagnostic(ErrorCode.ERR_SharperInferCycle, "infer").WithArguments("L1()", "'L1()' uses 'L2()', which uses 'L1()'").WithLocation(17, 9),
-                // (18,9): error CS20029: Cannot infer the return type of 'L2()', because it depends on itself: 'L2()' uses 'L1()', which uses 'L2()'. Write the return type of one of these methods.
+                // (18,9): error CS20033: Cannot infer the return type of 'L2()', because it depends on itself: 'L2()' uses 'L1()', which uses 'L2()'. Write the return type of one of these methods.
                 //         infer L2() => L1();
                 Diagnostic(ErrorCode.ERR_SharperInferCycle, "infer").WithArguments("L2()", "'L2()' uses 'L1()', which uses 'L2()'").WithLocation(18, 9),
                 // (19,9): error CS20018: Cannot infer the return type of 'Self()', because its body uses 'Self()' itself. Write the return type.
                 //         infer Self() { infer Inner() => Self(); return 1; }
                 Diagnostic(ErrorCode.ERR_SharperInferUsesItself, "infer").WithArguments("Self()").WithLocation(19, 9),
-                // (19,24): error CS20029: Cannot infer the return type of 'Inner()', because it depends on itself: 'Inner()' uses 'Self()', which uses 'Inner()'. Write the return type of one of these methods.
+                // (19,24): error CS20033: Cannot infer the return type of 'Inner()', because it depends on itself: 'Inner()' uses 'Self()', which uses 'Inner()'. Write the return type of one of these methods.
                 //         infer Self() { infer Inner() => Self(); return 1; }
                 Diagnostic(ErrorCode.ERR_SharperInferCycle, "infer").WithArguments("Inner()", "'Inner()' uses 'Self()', which uses 'Inner()'").WithLocation(19, 24),
                 // (19,30): warning CS8321: The local function 'Inner' is declared but never used

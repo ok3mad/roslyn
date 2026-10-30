@@ -1,6 +1,6 @@
 # Inferred return type (`infer`)
 
-**Status:** Prototype of steps R1 and R2 (merged into `main`) and R3 (branch `sharper/infer-return-r3`). Requires
+**Status:** Prototype of steps R1 to R3, merged into `main`. Requires
 `/features:sharper`. Issues: [#67](https://github.com/ok3mad/roslyn/issues/67) (R1),
 [#68](https://github.com/ok3mad/roslyn/issues/68) (R2), [#69](https://github.com/ok3mad/roslyn/issues/69) (R3), under
 [#22](https://github.com/ok3mad/roslyn/issues/22).
@@ -77,7 +77,7 @@ the next step of the [work breakdown](../planning/implementation-plan.md#type-in
   method counts, since the body contains it. A recursive method that has a non-recursive `return` to start from is
   no exception: `if (i < 2) return 1; return Fib(i - 1) + Fib(i - 2);` is CS20018 too (decided in R3).
 - **Cycles.** Methods that need each other's inferred return types (`IsEven` calling `IsOdd`, which calls `IsEven`)
-  report CS20029 on each of them, naming the cycle from that method:
+  report CS20033 on each of them, naming the cycle from that method:
   `'C.IsEven(int)' uses 'C.IsOdd(int)', which uses 'C.IsEven(int)'`. One of them must write its return type. The named
   cycle is the shortest from the method back to itself, preferring the uses that come first in each body. A method that
   uses a method of a cycle without being in it gets an error type and no error of its own, as for any use of a method
@@ -144,13 +144,13 @@ The design for the later steps, and why, is in the implementation plan:
 - A local function's body is analyzed for nullability on its own, so a captured `var` local counts as maybe null
   (`PROTOTYPE(sharper)` in `Binder_SharperInferredReturnType.cs`).
 - A local function in an inferred body that calls the method makes a cycle even when the method never calls the local
-  function, because inferring the method binds the local function's body (CS20018 on the method, CS20029 on the local
+  function, because inferring the method binds the local function's body (CS20018 on the method, CS20033 on the local
   function). Skipping local function bodies during inference would remove it, but the nullable analysis of the body
   visits them.
 - Values with no best common type are an error; an inferred union of their types waits for unions
   ([#31](https://github.com/ok3mad/roslyn/issues/31), parked).
 - Async iterators, which would return `IAsyncEnumerable<T>`.
-- CS20018 and CS20029 are reported on `infer`, not on the use in the body, because the use is found through the
+- CS20018 and CS20033 are reported on `infer`, not on the use in the body, because the use is found through the
   symbol, which has no syntax.
 - The IDE does not know `infer` yet (R5, [#71](https://github.com/ok3mad/roslyn/issues/71)).
 

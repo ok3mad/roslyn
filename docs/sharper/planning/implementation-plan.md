@@ -125,7 +125,7 @@ The brainstorm proposes 26 pieces of syntax (#28, discard arguments, is still to
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 12 | Implicit `it` | `xs.Select(Process(it, a))`, `when: it is X` | lambda `x => ...` | none | L | Prototype | Decided: the innermost argument whose parameter is a one-parameter delegate becomes the lambda; one meaning of `it` per lambda or stage; an outer `it` plus value and function overloads is an error; an existing `it` keeps its C# meaning (see [Decided](brainstorm.md#decided)). Calls only so far; `LookupSymbols` and Edit and Continue do not see the lambda yet. See the [feature page](../features/implicit-it.md) | [#24](https://github.com/ok3mad/roslyn/issues/24) |
 | 13 | Pipe, without lifting | `x \|> F`, `x \|> F(it, y)` | nested call | yes (new `\|>` token) | M | Med–High | A bare stage versus a stage that uses `it` | [#25](https://github.com/ok3mad/roslyn/issues/25) |
-| 16 | `try` expression | `try await F(url) catch { HttpRequestException { ... } => ..., }` | try/catch with the arms in a catch filter, with spilling | yes (`try` in expression position) | L (low end) | Med; slice 1 designed | Slice 1: target-typed to a declared C# 15 union, or the best common type of the body and arms; anonymous union results wait for #19. Unmatched exceptions propagate untouched through the filter; no `finally`; an awaitable body must be awaited. See [Feature 8](#feature-8-try-expression-slice-1-design) | [#28](https://github.com/ok3mad/roslyn/issues/28) |
+| 16 | `try` expression | `try await F(url) catch { HttpRequestException { ... } => ..., }` | try/catch with the arms in a catch filter, with spilling | yes (`try` in expression position) | L (low end) | Med; slice 1 prototype | Slice 1: target-typed to a declared C# 15 union, or the best common type of the body and arms; anonymous union results wait for #19. Unmatched exceptions propagate untouched through the filter; no `finally`; an awaitable body must be awaited. See [Feature 8](#feature-8-try-expression-slice-1-design) | [#28](https://github.com/ok3mad/roslyn/issues/28) |
 | 17 | Lambda to single-method interface | `Render(user, id => new Profile())` | generated sealed class | none | M | Med | Only where C# reports an error today; the class needs a readable name for stack traces | [#29](https://github.com/ok3mad/roslyn/issues/29) |
 | 18 | Interface initializer | `new IProfiles { Load = id => ... }`, `_ = Unexpected` | generated class | none (binder only) | M | Med | Builds on #17 | [#30](https://github.com/ok3mad/roslyn/issues/30) |
 
@@ -180,7 +180,7 @@ Return type (#10):
 | --- | --- | --- | --- |
 | R1 | `infer` as a return type: gating, a type named `infer` wins, CS0246 with the flag off. Expression bodies of private methods and local functions that call only methods with written return types | S–M | Prototype ([#67](https://github.com/ok3mad/roslyn/issues/67)). Decided: nothing to infer from is CS20014, where `var` reports CS0815, CS8917 or CS8716 |
 | R2 | Block bodies: several `return` statements with the best common type, no return value as `void`, iterators, `async` | M | Prototype ([#68](https://github.com/ok3mad/roslyn/issues/68)). Decided: one maybe-null `return` makes the type annotated, as for a lambda. Async iterators wait |
-| R3 | Methods with inferred return types calling each other: binding order across members, cycle and recursion errors | L | Prototype ([#69](https://github.com/ok3mad/roslyn/issues/69)). Decided: a recursive method with a non-recursive `return` stays CS20018; a cycle is CS20029 on every member, naming it |
+| R3 | Methods with inferred return types calling each other: binding order across members, cycle and recursion errors | L | Prototype ([#69](https://github.com/ok3mad/roslyn/issues/69)). Decided: a recursive method with a non-recursive `return` stays CS20018; a cycle is CS20033 on every member, naming it |
 | R4 | Every member kind and accessibility: public and protected members, `virtual`, `partial`, operators, metadata emission, Edit and Continue (a body edit that changes the type is a signature change) | M | None for public members: they infer like any other (decided) |
 | R5 | IDE: Quick Info and inlay hints show the inferred type, a fixer writes it out | M | |
 
@@ -535,20 +535,20 @@ on whichever member closes it (`SourceLocalSymbol.s_LocalTypeInferenceInProgress
 | --- | --- |
 | Frame stack (`SharperInferredReturnType.Context`) | Per thread: the frames whose bodies are being bound, innermost last. A read of an unpublished inferred return type infers it in a nested frame; `IsBeingInferred` asks the innermost frame |
 | Tarjan's algorithm on the frames | Each frame is a node with an index and a low link, and records the inferred methods its body reads. A read of a method on Tarjan's stack lowers the reader's low link and gets an uncached error type. A frame whose body is done waits on the stack until its component is complete |
-| `DecideAndPublish` | For a complete component: one method with no use of itself keeps its type; a method that uses itself gets CS20018; every other member of a larger component gets CS20029. All results are decided (compare-exchange) before any is published, with its diagnostics |
-| `FormatCycle` | The cycle named in CS20029: the shortest path from the method back to itself through the component, breadth first, taking each body's uses in order |
+| `DecideAndPublish` | For a complete component: one method with no use of itself keeps its type; a method that uses itself gets CS20018; every other member of a larger component gets CS20033. All results are decided (compare-exchange) before any is published, with its diagnostics |
+| `FormatCycle` | The cycle named in CS20033: the shortest path from the method back to itself through the component, breadth first, taking each body's uses in order |
 
 ### Decisions
 
 | Question | Decision | Why |
 | --- | --- | --- |
 | A recursive method with a non-recursive `return` (the R3 open point) | Stays CS20018 | Inferring from the base case and checking the rest is a fixed point that can widen the type (`return 1;` then `return F() + 1L;`), and the type would then depend on the order of the `return` statements. F# asks for the type too; writing it is short |
-| Methods that need each other | CS20029 on every member of the cycle, naming the cycle from that member | Each member is equally the place to write a type; naming the path tells which methods to look at. Reporting only one member would depend on the order |
+| Methods that need each other | CS20033 on every member of the cycle, naming the cycle from that member | Each member is equally the place to write a type; naming the path tells which methods to look at. Reporting only one member would depend on the order |
 | Which methods are in a cycle | The strongly connected components of "reads the inferred return type of", found by Tarjan's algorithm as the frames nest | A plain stack finds a cycle only from some starting points (see the probe). Components are a property of the uses, so the result is the same from any start |
 | Another thread's results | All results of a component are decided before any is published; a thread that finds a result decided takes it | A thread that reads a published member of a cycle cannot see the whole cycle, and would compute a smaller one. A member is published only after every member is decided, so that thread finds its own results decided |
 | A method that uses a cycle without being in it | Error type, no diagnostic | The same as a use of any method with errors; the cycle reports once, on its members |
 | Overload resolution | Reads the return types it reads for written types | A call reads none, so overloads never depend on each other's bodies; a method group conversion or type inference from a method group reads the candidates it checks. Reading fewer would change which overload wins compared with the written type |
-| CS20017 | Retired; CS20029 is new | Using another inferred method is no longer an error, and the cycle message has a different argument |
+| CS20017 | Retired; CS20033 is new | Using another inferred method is no longer an error, and the cycle message has a different argument |
 | A local function in the body that calls the method | A cycle (CS20018 on the method) | Inferring the method binds the local function's body. Skipping it during inference would break the body's nullable analysis; the case is rare |
 
 Tests: 7 new `Infer_UsesInferredMethod*` and `Infer_Cycle*` tests in `SharperTests.cs`: chains, method groups,
@@ -591,7 +591,8 @@ new NoRate(from, to), TimeoutException => new FxUnavailable(0) };` (issue [#28](
 Exceptions become values through switch-style arms; unmatched exceptions propagate, and there is no `finally`. Slice 1
 needs no anonymous unions: the result is target-typed to a declared C# 15 union, or has a natural type when the body
 and the arms agree. Union results without a target wait for slice 2 of [#31](https://github.com/ok3mad/roslyn/issues/31).
-This section is the design; nothing is implemented yet.
+Slice 1 is implemented as designed below, on `sharper/try-expression-slice1`; [Implementation (slice 1)](#implementation-slice-1)
+lists what the code added to the design. Feature page: [`try` expression](../features/try-expression.md).
 
 **Probe.** What the compiler does today, and what the design reuses:
 
@@ -633,6 +634,25 @@ This section is the design; nothing is implemented yet.
 
 **Size:** L at the low end, about the size of implicit `it`. The parser and the lowering are M; most of the work is the
 target-typed conversion and flow and nullable analysis.
+
+### Implementation (slice 1)
+
+| Question | What the code does | Why |
+| --- | --- | --- |
+| Parse position | Where C# reports CS1525 for `try` (`ParseSubExpressionCore`), unless `{` follows; at a higher precedence than a lambda (`1 + try ...`) it parses and reports CS1525, as a throw expression does | `try {` in an expression is a statement in the wrong place, and no expression starts with `{`, so its recovery stays C#'s |
+| Arm binders | `SwitchExpressionArmBinder` with no switch binder (input `System.Exception`); `LocalBinderFactory` and `ExpressionVariableFinder` get `VisitTryExpression`, so the arms' variables get their own scopes and not the enclosing statement's | One arm binder for both; the flags go on the pattern and `when` clause (`InCatchFilter`) and the value (`InCatchBlock`) as they bind |
+| Bound nodes | `BoundTryExpression` (abstract), `BoundUnconvertedTryExpression` and `BoundConvertedTryExpression`, with the arms, the decision DAG and a placeholder for the exception (the DAG's input) | The switch expression's shape; the conversion is `ConversionKind.SharperTryExpression`, whose underlying conversions are the body's, then each arm's |
+| Diagnostics | CS20029 (no type), CS20030 (task-like body, level 1), CS20031 (expression tree), CS20032 (in a `when` clause: IL has no try block in a filter, and codegen asserts) | The awaitable check covers task-like types (`IsGenericTaskType`, `IsNonGenericTaskType`), not every type with `GetAwaiter` |
+| Nullable | The DAG's input is a `BoundExpressionWithNullability` over the placeholder, not the placeholder itself | `NullableWalker` asserts on unregistered value placeholders (`AssertPlaceholderAllowedWithoutRegistration`) |
+| Lowering | As designed; the arm index dispatches with a `BoundSwitchDispatch` in the catch block. The rewriter records an `await` in an arm as an await in a handler (`_sawAwaitInExceptionHandler`), and `AsyncExceptionHandlerRewriter` takes the try expression's syntax for a catch block's frame | Without the first, the await stayed in the handler and codegen crashed; the second cast the catch's parent to `TryStatementSyntax` |
+| IOperation | `OperationKind.None` with the body as its only child ([#144](https://github.com/ok3mad/roslyn/issues/144)) | The control flow graph has no region for the arms' pattern variables and cannot visit an arm outside a switch |
+| Edit and Continue | `BindsToTryStatement` accepts `TryExpressionSyntax`; no instrumentation and no emit-difference tests yet ([#145](https://github.com/ok3mad/roslyn/issues/145)) | Slice 1 keeps the debugging work for later |
+
+Tests: 22 in `SharperTests_TryExpression.cs` (runtime results next to the C# twins, the issue's union example with
+`await`, stack trace and first-pass order of an unmatched exception, spilling with `await`, `ref` and `stackalloc`,
+iterators, lambdas, errors, definite assignment and nullable, IOperation, flow graph, semantic model, region analysis,
+parsing, the flag off), and five union conversion tests in `UnionsTests` (#137). They found a C# 15 gap: a possibly
+null value converted into a union case in a target-typed arm does not warn ([#146](https://github.com/ok3mad/roslyn/issues/146)).
 
 ## Feature 9: inferred parameter type, step P1
 
@@ -787,9 +807,12 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 - [ ] Implicit `it`: an error that names the inner call when it claims `it` (today CS0411 at the outer call), and a cause string for writes to `it`. [#126](https://github.com/ok3mad/roslyn/issues/126)
 - [ ] Implicit `it`: the cost of the two trials and of the per-call syntax scan. [#127](https://github.com/ok3mad/roslyn/issues/127)
 - [ ] Implicit `it`: IDE support (Quick Info, hints) and the "name the parameter" fixer. [#128](https://github.com/ok3mad/roslyn/issues/128)
-- [ ] `try` expression: test a target-typed switch and `?:` into a C# 15 union before slice 1's binding. [#137](https://github.com/ok3mad/roslyn/issues/137)
+- [x] `try` expression: test a target-typed switch and `?:` into a C# 15 union before slice 1's binding. [#137](https://github.com/ok3mad/roslyn/issues/137)
 - [ ] `try` expression: a warning on a catch-all arm. [#135](https://github.com/ok3mad/roslyn/issues/135)
 - [ ] `try` expression: lift a task body instead of warning, after lifting (#32). [#136](https://github.com/ok3mad/roslyn/issues/136)
+- [ ] `try` expression: an IOperation shape with the arms. [#144](https://github.com/ok3mad/roslyn/issues/144)
+- [ ] `try` expression: sequence points, code coverage and Edit and Continue for the arms. [#145](https://github.com/ok3mad/roslyn/issues/145)
+- [ ] Nullable: a union conversion in a target-typed arm (switch, `?:`, `try`) does not check the case parameter for null. [#146](https://github.com/ok3mad/roslyn/issues/146)
 - [ ] Test `/nowarn` and `.editorconfig` with five-digit Sharper IDs. [#91](https://github.com/ok3mad/roslyn/issues/91)
 - [x] Decide immutability depth: binding, value or deep (a type-level immutability marker). [#92](https://github.com/ok3mad/roslyn/issues/92): deep, see [Feature 10](#feature-10-immutable-types-slice-1-design). Slice 1 is [#139](https://github.com/ok3mad/roslyn/issues/139); follow-ups [#140](https://github.com/ok3mad/roslyn/issues/140), [#141](https://github.com/ok3mad/roslyn/issues/141), [#142](https://github.com/ok3mad/roslyn/issues/142).
 - [ ] Sequence type: decide whether array creation should accept sequence elements (`new int[3][..]`, today CS0178, or `new int[..][3]`). [#64](https://github.com/ok3mad/roslyn/issues/64)

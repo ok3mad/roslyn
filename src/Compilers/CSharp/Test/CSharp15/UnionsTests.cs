@@ -16082,6 +16082,238 @@ class Program
         }
 
         [Fact]
+        public void UnionConversion_59_TargetTyped_SwitchExpression()
+        {
+            var source = """
+                #nullable enable
+                class Program
+                {
+                    static void Main()
+                    {
+                        System.Console.Write(Test(true).Value);
+                        System.Console.Write(" ");
+                        System.Console.Write(Test(false).Value);
+                    }
+
+                    static R Test(bool b)
+                    {
+                        R r = /*<bind>*/b switch { true => new A(), false => new B() }/*</bind>*/;
+                        return r;
+                    }
+                }
+
+                record A;
+                record B;
+                union R(A, B);
+                """;
+            var comp = CreateCompilation([source, UnionAttributeSource, IUnionSource], options: TestOptions.ReleaseExe);
+            CompileAndVerify(comp, expectedOutput: "A { } B { }").VerifyDiagnostics();
+
+            var tree = comp.SyntaxTrees.First();
+            var model = comp.GetSemanticModel(tree);
+            var arm = tree.GetRoot().DescendantNodes().OfType<SwitchExpressionArmSyntax>().First();
+            var typeInfo = model.GetTypeInfo(arm.Expression);
+            Assert.Equal("A", typeInfo.Type.ToTestDisplayString());
+            Assert.Equal("R", typeInfo.ConvertedType.ToTestDisplayString());
+            Assert.Equal(ConversionKind.Union, model.GetConversion(arm.Expression).Kind);
+
+            VerifyOperationTreeForTest<SwitchExpressionSyntax>(comp, """
+ISwitchExpressionOperation (2 arms, IsExhaustive: True) (OperationKind.SwitchExpression, Type: R) (Syntax: 'b switch {  ... > new B() }')
+  Value:
+    IParameterReferenceOperation: b (OperationKind.ParameterReference, Type: System.Boolean) (Syntax: 'b')
+  Arms(2):
+      ISwitchExpressionArmOperation (0 locals) (OperationKind.SwitchExpressionArm, Type: null) (Syntax: 'true => new A()')
+        Pattern:
+          IConstantPatternOperation (OperationKind.ConstantPattern, Type: null) (Syntax: 'true') (InputType: System.Boolean, NarrowedType: System.Boolean)
+            Value:
+              ILiteralOperation (OperationKind.Literal, Type: System.Boolean, Constant: True) (Syntax: 'true')
+        Value:
+          IConversionOperation (TryCast: False, Unchecked) (OperatorMethod: R..ctor(A value)) (OperationKind.Conversion, Type: R, IsImplicit) (Syntax: 'new A()')
+            Conversion: CommonConversion (Exists: True, IsIdentity: False, IsNumeric: False, IsReference: False, IsUserDefined: False, IsUnion: True) (MethodSymbol: R..ctor(A value))
+            Operand:
+              IObjectCreationOperation (Constructor: A..ctor()) (OperationKind.ObjectCreation, Type: A) (Syntax: 'new A()')
+                Arguments(0)
+                Initializer:
+                  null
+      ISwitchExpressionArmOperation (0 locals) (OperationKind.SwitchExpressionArm, Type: null) (Syntax: 'false => new B()')
+        Pattern:
+          IConstantPatternOperation (OperationKind.ConstantPattern, Type: null) (Syntax: 'false') (InputType: System.Boolean, NarrowedType: System.Boolean)
+            Value:
+              ILiteralOperation (OperationKind.Literal, Type: System.Boolean, Constant: False) (Syntax: 'false')
+        Value:
+          IConversionOperation (TryCast: False, Unchecked) (OperatorMethod: R..ctor(B value)) (OperationKind.Conversion, Type: R, IsImplicit) (Syntax: 'new B()')
+            Conversion: CommonConversion (Exists: True, IsIdentity: False, IsNumeric: False, IsReference: False, IsUserDefined: False, IsUnion: True) (MethodSymbol: R..ctor(B value))
+            Operand:
+              IObjectCreationOperation (Constructor: B..ctor()) (OperationKind.ObjectCreation, Type: B) (Syntax: 'new B()')
+                Arguments(0)
+                Initializer:
+                  null
+""");
+        }
+
+        [Fact]
+        public void UnionConversion_60_TargetTyped_ConditionalExpression()
+        {
+            var source = """
+                #nullable enable
+                class Program
+                {
+                    static void Main()
+                    {
+                        System.Console.Write(Test(true).Value);
+                        System.Console.Write(" ");
+                        System.Console.Write(Test(false).Value);
+                    }
+
+                    static R Test(bool b)
+                    {
+                        R r = /*<bind>*/b ? new A() : new B()/*</bind>*/;
+                        return r;
+                    }
+                }
+
+                record A;
+                record B;
+                union R(A, B);
+                """;
+            var comp = CreateCompilation([source, UnionAttributeSource, IUnionSource], options: TestOptions.ReleaseExe);
+            CompileAndVerify(comp, expectedOutput: "A { } B { }").VerifyDiagnostics();
+
+            var tree = comp.SyntaxTrees.First();
+            var model = comp.GetSemanticModel(tree);
+            var conditional = tree.GetRoot().DescendantNodes().OfType<ConditionalExpressionSyntax>().Single();
+            var typeInfo = model.GetTypeInfo(conditional.WhenTrue);
+            Assert.Equal("A", typeInfo.Type.ToTestDisplayString());
+            Assert.Equal("R", typeInfo.ConvertedType.ToTestDisplayString());
+            Assert.Equal(ConversionKind.Union, model.GetConversion(conditional.WhenTrue).Kind);
+
+            VerifyOperationTreeForTest<ConditionalExpressionSyntax>(comp, """
+IConditionalOperation (OperationKind.Conditional, Type: R) (Syntax: 'b ? new A() : new B()')
+  Condition:
+    IParameterReferenceOperation: b (OperationKind.ParameterReference, Type: System.Boolean) (Syntax: 'b')
+  WhenTrue:
+    IConversionOperation (TryCast: False, Unchecked) (OperatorMethod: R..ctor(A value)) (OperationKind.Conversion, Type: R, IsImplicit) (Syntax: 'new A()')
+      Conversion: CommonConversion (Exists: True, IsIdentity: False, IsNumeric: False, IsReference: False, IsUserDefined: False, IsUnion: True) (MethodSymbol: R..ctor(A value))
+      Operand:
+        IObjectCreationOperation (Constructor: A..ctor()) (OperationKind.ObjectCreation, Type: A) (Syntax: 'new A()')
+          Arguments(0)
+          Initializer:
+            null
+  WhenFalse:
+    IConversionOperation (TryCast: False, Unchecked) (OperatorMethod: R..ctor(B value)) (OperationKind.Conversion, Type: R, IsImplicit) (Syntax: 'new B()')
+      Conversion: CommonConversion (Exists: True, IsIdentity: False, IsNumeric: False, IsReference: False, IsUserDefined: False, IsUnion: True) (MethodSymbol: R..ctor(B value))
+      Operand:
+        IObjectCreationOperation (Constructor: B..ctor()) (OperationKind.ObjectCreation, Type: B) (Syntax: 'new B()')
+          Arguments(0)
+          Initializer:
+            null
+""");
+        }
+
+        [Fact]
+        public void UnionConversion_61_TargetTyped_Nullable()
+        {
+            var source = """
+                #nullable enable
+                class Program
+                {
+                    static R Test1(bool b, A? a) => b switch { true => a, false => new B() };
+                    static R Test2(bool b, A? a) => b ? a : new B();
+                    static R Test3(bool b, A? a) => b switch { true => a!, false => new B() };
+                    static R Test4(bool b, A? a) => b ? a! : new B();
+                    static R Test5(A? a) => a;
+                    static D Test6(bool b, A? a) => b switch { true => a, false => new D() };
+                    static D Test7(bool b, A? a) => b ? a : new D();
+                }
+
+                class D { public static implicit operator D(A a) => new D(); }
+                record A;
+                record B;
+                union R(A, B);
+                """;
+            var comp = CreateCompilation([source, UnionAttributeSource, IUnionSource]);
+            // The union conversion of a possibly null 'a' warns when it converts 'a' directly (Test5), but not when 'a' is
+            // an arm or a branch that converts to the target type (Test1, Test2): NullableWalker.VisitUnionConversion checks
+            // the operand against the case parameter with reportTopLevelWarnings, which the target-typed switch and
+            // conditional turn off. A user-defined conversion warns in both places (Test6, Test7). Tracked by
+            // https://github.com/ok3mad/roslyn/issues/146.
+            comp.VerifyDiagnostics(
+                // (8,29): warning CS8604: Possible null reference argument for parameter 'value' in 'R.R(A value)'.
+                //     static R Test5(A? a) => a;
+                Diagnostic(ErrorCode.WRN_NullReferenceArgument, "a").WithArguments("value", "R.R(A value)").WithLocation(8, 29),
+                // (9,56): warning CS8604: Possible null reference argument for parameter 'a' in 'D.implicit operator D(A a)'.
+                //     static D Test6(bool b, A? a) => b switch { true => a, false => new D() };
+                Diagnostic(ErrorCode.WRN_NullReferenceArgument, "a").WithArguments("a", "D.implicit operator D(A a)").WithLocation(9, 56),
+                // (10,41): warning CS8604: Possible null reference argument for parameter 'a' in 'D.implicit operator D(A a)'.
+                //     static D Test7(bool b, A? a) => b ? a : new D();
+                Diagnostic(ErrorCode.WRN_NullReferenceArgument, "a").WithArguments("a", "D.implicit operator D(A a)").WithLocation(10, 41)
+                );
+        }
+
+        [Fact]
+        public void UnionConversion_62_TargetTyped_NotStandard_Conversion()
+        {
+            var source = """
+                class Program
+                {
+                    static R Test1(bool b, byte x) => b switch { true => x, false => "" };
+                    static R Test2(bool b, byte x) => b ? x : "";
+                    static S Test3(bool b, byte x) => b switch { true => x, false => "" };
+                    static S Test4(bool b, byte x) => b ? x : "";
+                }
+
+                class C1
+                {
+                    public static implicit operator C1(byte x) => new C1();
+                }
+
+                union R(C1, string);
+                union S(int, string);
+                """;
+            var comp = CreateCompilation([source, UnionAttributeSource, IUnionSource]);
+            // The union conversion is not a standard conversion, so it does not chain with the user-defined conversion from
+            // 'byte' to 'C1' (UnionConversion_09). A standard conversion to a case type is allowed (Test3, Test4).
+            comp.VerifyDiagnostics(
+                // (3,58): error CS0029: Cannot implicitly convert type 'byte' to 'R'
+                //     static R Test1(bool b, byte x) => b switch { true => x, false => "" };
+                Diagnostic(ErrorCode.ERR_NoImplicitConv, "x").WithArguments("byte", "R").WithLocation(3, 58),
+                // (4,43): error CS0029: Cannot implicitly convert type 'byte' to 'R'
+                //     static R Test2(bool b, byte x) => b ? x : "";
+                Diagnostic(ErrorCode.ERR_NoImplicitConv, "x").WithArguments("byte", "R").WithLocation(4, 43)
+                );
+        }
+
+        [Fact]
+        public void UnionConversion_63_TargetTyped_Ambiguous_Case()
+        {
+            var source = """
+                class Program
+                {
+                    static R Test1(bool b, C c) => b switch { true => c, false => "" };
+                    static R Test2(bool b, C c) => b ? c : "";
+                    static R Test3(C c) => c;
+                }
+
+                interface I1;
+                interface I2;
+                class C : I1, I2;
+                union R(I1, I2, string);
+                """;
+            var comp = CreateCompilation([source, UnionAttributeSource, IUnionSource]);
+            comp.VerifyDiagnostics(
+                // (3,55): error CS0457: Ambiguous user defined conversions 'R.R(I1)' and 'R.R(I2)' when converting from 'C' to 'R'
+                //     static R Test1(bool b, C c) => b switch { true => c, false => "" };
+                Diagnostic(ErrorCode.ERR_AmbigUDConv, "c").WithArguments("R.R(I1)", "R.R(I2)", "C", "R").WithLocation(3, 55),
+                // (4,40): error CS0457: Ambiguous user defined conversions 'R.R(I1)' and 'R.R(I2)' when converting from 'C' to 'R'
+                //     static R Test2(bool b, C c) => b ? c : "";
+                Diagnostic(ErrorCode.ERR_AmbigUDConv, "c").WithArguments("R.R(I1)", "R.R(I2)", "C", "R").WithLocation(4, 40),
+                // (5,28): error CS0457: Ambiguous user defined conversions 'R.R(I1)' and 'R.R(I2)' when converting from 'C' to 'R'
+                //     static R Test3(C c) => c;
+                Diagnostic(ErrorCode.ERR_AmbigUDConv, "c").WithArguments("R.R(I1)", "R.R(I2)", "C", "R").WithLocation(5, 28)
+                );
+        }
+
+        [Fact]
         public void UnionConversion_MemberProvider_01_Implicit()
         {
             var src = @"
