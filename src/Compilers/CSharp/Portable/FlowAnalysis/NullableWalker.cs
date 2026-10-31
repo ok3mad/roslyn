@@ -10798,7 +10798,9 @@ namespace Microsoft.CodeAnalysis.CSharp
                 useLegacyWarnings,
                 AssignmentKind.Argument,
                 parameterOpt: parameter,
-                reportTopLevelWarnings,
+                // Like the operand-to-parameter step of VisitUserDefinedConversion, this checks an argument, so it is
+                // governed by reportRemainingWarnings: a target-typed arm (reportTopLevelWarnings: false) still warns.
+                reportTopLevelWarnings: reportRemainingWarnings,
                 reportRemainingWarnings,
                 trackMembers: false,
                 diagnosticLocation: diagnosticLocation);
