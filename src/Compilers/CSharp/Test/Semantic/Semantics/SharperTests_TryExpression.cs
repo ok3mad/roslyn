@@ -170,9 +170,9 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         [Fact]
         public void TryExpression_UnionNullable()
         {
-            // A possibly null value converted into a union case warns when it is converted directly, but not as the body or
-            // an arm of a target-typed try expression, the same as for a target-typed switch expression
-            // (UnionsTests.UnionConversion_61_TargetTyped_Nullable, #146).
+            // A possibly null value converted into a union case warns when it is converted directly and as the body or an
+            // arm of a target-typed try expression, the same as for a target-typed switch expression
+            // (UnionsTests.UnionConversion_61_TargetTyped_Nullable).
             var source = """
                 #nullable enable
                 class C
@@ -189,7 +189,13 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             CreateCompilation([source, UnionAttributeSource, IUnionSource], parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
                 // (4,26): warning CS8604: Possible null reference argument for parameter 'value' in 'R.R(A value)'.
                 //     static R M1(A? a) => a;
-                Diagnostic(ErrorCode.WRN_NullReferenceArgument, "a").WithArguments("value", "R.R(A value)").WithLocation(4, 26));
+                Diagnostic(ErrorCode.WRN_NullReferenceArgument, "a").WithArguments("value", "R.R(A value)").WithLocation(4, 26),
+                // (5,30): warning CS8604: Possible null reference argument for parameter 'value' in 'R.R(A value)'.
+                //     static R M2(A? a) => try a catch { _ => new B() };
+                Diagnostic(ErrorCode.WRN_NullReferenceArgument, "a").WithArguments("value", "R.R(A value)").WithLocation(5, 30),
+                // (6,53): warning CS8604: Possible null reference argument for parameter 'value' in 'R.R(A value)'.
+                //     static R M3(bool b, A? a) => b switch { true => a, false => new B() };
+                Diagnostic(ErrorCode.WRN_NullReferenceArgument, "a").WithArguments("value", "R.R(A value)").WithLocation(6, 53));
         }
 
         [Fact]
