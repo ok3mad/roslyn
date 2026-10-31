@@ -16232,12 +16232,15 @@ IConditionalOperation (OperationKind.Conditional, Type: R) (Syntax: 'b ? new A()
                 union R(A, B);
                 """;
             var comp = CreateCompilation([source, UnionAttributeSource, IUnionSource]);
-            // The union conversion of a possibly null 'a' warns when it converts 'a' directly (Test5), but not when 'a' is
-            // an arm or a branch that converts to the target type (Test1, Test2): NullableWalker.VisitUnionConversion checks
-            // the operand against the case parameter with reportTopLevelWarnings, which the target-typed switch and
-            // conditional turn off. A user-defined conversion warns in both places (Test6, Test7). Tracked by
-            // https://github.com/ok3mad/roslyn/issues/146.
+            // The union conversion of a possibly null 'a' warns when it converts 'a' directly (Test5) and when 'a' is an arm
+            // or a branch that converts to the target type (Test1, Test2), like a user-defined conversion (Test6, Test7).
             comp.VerifyDiagnostics(
+                // (4,56): warning CS8604: Possible null reference argument for parameter 'value' in 'R.R(A value)'.
+                //     static R Test1(bool b, A? a) => b switch { true => a, false => new B() };
+                Diagnostic(ErrorCode.WRN_NullReferenceArgument, "a").WithArguments("value", "R.R(A value)").WithLocation(4, 56),
+                // (5,41): warning CS8604: Possible null reference argument for parameter 'value' in 'R.R(A value)'.
+                //     static R Test2(bool b, A? a) => b ? a : new B();
+                Diagnostic(ErrorCode.WRN_NullReferenceArgument, "a").WithArguments("value", "R.R(A value)").WithLocation(5, 41),
                 // (8,29): warning CS8604: Possible null reference argument for parameter 'value' in 'R.R(A value)'.
                 //     static R Test5(A? a) => a;
                 Diagnostic(ErrorCode.WRN_NullReferenceArgument, "a").WithArguments("value", "R.R(A value)").WithLocation(8, 29),

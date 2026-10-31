@@ -68,8 +68,6 @@ The design is in the implementation plan,
   operation tree or the control flow graph ([#144](https://github.com/ok3mad/roslyn/issues/144)).
 - Debugging: no sequence points or code coverage for the arms, and no Edit and Continue tests or IDE matching for the
   new node ([#145](https://github.com/ok3mad/roslyn/issues/145)).
-- A possibly null body or arm converted into a union does not warn (CS8604), the same as a target-typed switch
-  expression or conditional in C# 15 ([#146](https://github.com/ok3mad/roslyn/issues/146)).
 - Union results without a declared union wait for anonymous unions
   ([#31](https://github.com/ok3mad/roslyn/issues/31), slice 2). `ref` results are not supported.
 - No IDE support (formatting, classification, completion after `catch {`).
