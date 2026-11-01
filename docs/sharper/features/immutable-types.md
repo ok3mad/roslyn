@@ -21,8 +21,11 @@ designed in [#92](https://github.com/ok3mad/roslyn/issues/92) (implementation pl
 
 `val` and `readonly` make a binding immutable; this makes a value deeply immutable, so that "depends only on its
 arguments" can mean something for purity ([#36](https://github.com/ok3mad/roslyn/issues/36)). Immutable means
-observationally immutable: hold everything outside the object fixed, and every repeated access returns the same
-result. Nothing changes at run time; the type is emitted as written, plus the attribute.
+observationally immutable: hold everything outside the object fixed, and every repeated access returns an equivalent
+result (the same exact type, every field equivalent, primitives compared by bits), and the same reference when the
+result's type is not immutable. Identity is not observable to pure code. Slice 1 still checks observers against the
+earlier, stricter rule that they return the same object, so they may not allocate
+([#153](https://github.com/ok3mad/roslyn/issues/153)). Nothing changes at run time; the type is emitted as written, plus the attribute.
 
 ## The attributes
 
@@ -116,6 +119,9 @@ Sharper behave as upstream). A subclass in another compilation, a mock or a prox
 - An internal `[Immutable]` class whose subclasses are all visible and immutable is not yet treated as closed
   (`PROTOTYPE(sharper)` in `SharperImmutability.IsClosed`).
 - Inference across assemblies: an unmarked type from a reference is not immutable even if its fields would be.
+- Observers that build an immutable result (`new`, string concatenation), and identity comparisons as impure
+  ([#153](https://github.com/ok3mad/roslyn/issues/153)).
+- The structural equivalence that optimizations and other assemblies use ([#154](https://github.com/ok3mad/roslyn/issues/154)).
 - The immutability of a value is not used anywhere yet: purity, memoization and lazy `T[..]` come later.
 
 ## Code
