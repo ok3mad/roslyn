@@ -306,6 +306,10 @@ namespace Microsoft.CodeAnalysis.Operations
                 // Sharper's `yield return ..xs` has no IOperation shape yet, so analyzers see an
                 // OperationKind.None node whose only child is xs.
                 case BoundKind.YieldReturnSpreadStatement:
+                // PROTOTYPE(sharper): Sharper's try expression has no IOperation shape yet either: analyzers see an
+                // OperationKind.None node whose only child is the body. The arms cannot be children, because the control flow
+                // graph has no region for their pattern variables and no switch to visit them in (#144).
+                case BoundKind.ConvertedTryExpression:
                     ConstantValue? constantValue = (boundNode as BoundExpression)?.ConstantValueOpt;
                     bool isImplicit = boundNode.WasCompilerGenerated;
 
@@ -336,6 +340,7 @@ namespace Microsoft.CodeAnalysis.Operations
                 case BoundKind.UnconvertedInterpolatedString:
                 case BoundKind.UnconvertedConditionalOperator:
                 case BoundKind.UnconvertedSwitchExpression:
+                case BoundKind.UnconvertedTryExpression:
                 case BoundKind.AnonymousPropertyDeclaration:
                 default:
                     // If you're hitting this because the IOperation test hook has failed, see

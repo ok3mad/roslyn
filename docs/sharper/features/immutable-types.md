@@ -15,7 +15,7 @@ designed in [#92](https://github.com/ok3mad/roslyn/issues/92) (implementation pl
 [Immutable, ImmutableHierarchy] abstract record Shape;               // every subclass must be immutable too
 
 [Immutable] sealed record Order(List<string> Lines);
-// error CS20029: 'Order' is marked [Immutable], but it cannot be proven immutable: 'Order.Lines' has type
+// error CS20035: 'Order' is marked [Immutable], but it cannot be proven immutable: 'Order.Lines' has type
 // 'System.Collections.Generic.List<string>', which comes from another assembly and is not marked [Immutable].
 ```
 
@@ -49,9 +49,9 @@ A type is immutable for its exact instances when:
   the field is `readonly` (or `[UnobservableWrite]`). A struct's own fields need not be `readonly`: a struct value has
   no aliases, so writes go to a copy. This covers auto-properties and captured primary constructor parameters.
 - **No writes after construction.** In a class, no set accessor other than `init`, no non-`readonly` field and no
-  captured primary constructor parameter (CS20030, "it is mutable"). An instance event is mutable in classes and
+  captured primary constructor parameter (CS20036, "it is mutable"). An instance event is mutable in classes and
   structs. Construction ends after the object initializer, so `init` and `with` are part of it.
-- **Base.** The base class is immutable for its exact instances (CS20031). `object` is.
+- **Base.** The base class is immutable for its exact instances (CS20037). `object` is.
 - **Observers.** Instance getters and indexers, `Equals` and `GetHashCode` only read fields, constants, parameters and
   locals, and call other pure observers: those on `this`, on a value whose static type is immutable, and non-virtual
   ones of immutable types. Operators of the attested types count as pure when they return a value type (`decimal +`,
@@ -67,7 +67,7 @@ sealed class, or `[ImmutableHierarchy]`. An interface is only with `[ImmutableHi
 **Generics.** A generic type is immutable for an instantiation when its type arguments are immutable for every value
 of their static types, except those of `[Phantom]` type parameters. `Box<int>` is immutable, `Box<List<int>>` is not;
 that is not an error, just not immutable. A `[Phantom]` type parameter used in a field or a base type argument is
-CS20036. Conditions are declared, never inferred, so polymorphic recursion such as `Nested<T>(Nested<List<T>>? Next)`
+CS20042. Conditions are declared, never inferred, so polymorphic recursion such as `Nested<T>(Nested<List<T>>? Next)`
 terminates (and fails here, because `List<T>` is not immutable).
 
 **Cycles.** `sealed record Node(int Value, Node? Next)` is immutable: types that depend on each other are assumed
@@ -88,22 +88,22 @@ analysis reaches first; a type in a cycle names its own problem if it has one, a
 ## Where the checks run
 
 Only the project that writes a claim checks it, and only in Sharper files. A type in an `[ImmutableHierarchy]`,
-whether marked or not, must be immutable: in a Sharper file that is error CS20032, in a C# file of the same compilation
-warning CS20033 (only when the hierarchy is declared in a Sharper file of that compilation, so compilations without
+whether marked or not, must be immutable: in a Sharper file that is error CS20038, in a C# file of the same compilation
+warning CS20039 (only when the hierarchy is declared in a Sharper file of that compilation, so compilations without
 Sharper behave as upstream). A subclass in another compilation, a mock or a proxy is trusted.
 
 ## Diagnostics
 
 | Code | Severity | When |
 | --- | --- | --- |
-| CS20029 | Error | `[Immutable]` cannot be proven, with the reason. |
-| CS20030 | Error | `[Immutable]` is disproven: state can be written after construction. |
-| CS20031 | Error | `[Immutable]` with a base class that is not immutable. |
-| CS20032 | Error | A Sharper type in an `[ImmutableHierarchy]` is not immutable. |
-| CS20033 | Warning | The same for a C# type of the same compilation. |
-| CS20034 | Error | `[ImmutableHierarchy]` on a class without `[Immutable]`. |
-| CS20035 | Error | `[UnobservableWrite]` on a static or `readonly` field, or outside a class marked `[Immutable]`. |
-| CS20036 | Error | A `[Phantom]` type parameter used in the state. |
+| CS20035 | Error | `[Immutable]` cannot be proven, with the reason. |
+| CS20036 | Error | `[Immutable]` is disproven: state can be written after construction. |
+| CS20037 | Error | `[Immutable]` with a base class that is not immutable. |
+| CS20038 | Error | A Sharper type in an `[ImmutableHierarchy]` is not immutable. |
+| CS20039 | Warning | The same for a C# type of the same compilation. |
+| CS20040 | Error | `[ImmutableHierarchy]` on a class without `[Immutable]`. |
+| CS20041 | Error | `[UnobservableWrite]` on a static or `readonly` field, or outside a class marked `[Immutable]`. |
+| CS20042 | Error | A `[Phantom]` type parameter used in the state. |
 
 ## Not covered
 

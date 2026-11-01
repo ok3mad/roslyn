@@ -78,25 +78,25 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 [Immutable] struct StructEvent { public event System.Action E; }
                 """;
             CreateImmutableCompilation(source).VerifyDiagnostics(
-                // (2,26): error CS20030: 'Field' is marked [Immutable], but it is mutable: 'Field.X' is not readonly.
+                // (2,26): error CS20036: 'Field' is marked [Immutable], but it is mutable: 'Field.X' is not readonly.
                 // [Immutable] sealed class Field { public int X; }
                 Diagnostic(ErrorCode.ERR_SharperImmutableDisproven, "Field").WithArguments("Field", "'Field.X' is not readonly").WithLocation(2, 26),
                 // (2,45): warning CS0649: Field 'Field.X' is never assigned to, and will always have its default value 0
                 // [Immutable] sealed class Field { public int X; }
                 Diagnostic(ErrorCode.WRN_UnassignedInternalField, "X").WithArguments("Field.X", "0").WithLocation(2, 45),
-                // (3,26): error CS20030: 'Setter' is marked [Immutable], but it is mutable: 'Setter.X' has a set accessor.
+                // (3,26): error CS20036: 'Setter' is marked [Immutable], but it is mutable: 'Setter.X' has a set accessor.
                 // [Immutable] sealed class Setter { public int X { get; set; } }
                 Diagnostic(ErrorCode.ERR_SharperImmutableDisproven, "Setter").WithArguments("Setter", "'Setter.X' has a set accessor").WithLocation(3, 26),
-                // (4,26): error CS20030: 'Captured' is marked [Immutable], but it is mutable: the parameter 'x' is captured in a field that is not readonly.
+                // (4,26): error CS20036: 'Captured' is marked [Immutable], but it is mutable: the parameter 'x' is captured in a field that is not readonly.
                 // [Immutable] sealed class Captured(int x) { public int X => x; }
                 Diagnostic(ErrorCode.ERR_SharperImmutableDisproven, "Captured").WithArguments("Captured", "the parameter 'x' is captured in a field that is not readonly").WithLocation(4, 26),
-                // (5,27): error CS20029: 'ListRecord' is marked [Immutable], but it cannot be proven immutable: 'ListRecord.Xs' has type 'System.Collections.Generic.List<int>', which comes from another assembly and is not marked [Immutable].
+                // (5,27): error CS20035: 'ListRecord' is marked [Immutable], but it cannot be proven immutable: 'ListRecord.Xs' has type 'System.Collections.Generic.List<int>', which comes from another assembly and is not marked [Immutable].
                 // [Immutable] sealed record ListRecord(List<int> Xs);
                 Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "ListRecord").WithArguments("ListRecord", "'ListRecord.Xs' has type 'System.Collections.Generic.List<int>', which comes from another assembly and is not marked [Immutable]").WithLocation(5, 27),
-                // (6,26): error CS20029: 'ArrayField' is marked [Immutable], but it cannot be proven immutable: 'ArrayField.Xs' has type 'int[]', which is not immutable.
+                // (6,26): error CS20035: 'ArrayField' is marked [Immutable], but it cannot be proven immutable: 'ArrayField.Xs' has type 'int[]', which is not immutable.
                 // [Immutable] sealed class ArrayField { public readonly int[] Xs = []; }
                 Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "ArrayField").WithArguments("ArrayField", "'ArrayField.Xs' has type 'int[]', which is not immutable").WithLocation(6, 26),
-                // (7,26): error CS20030: 'Event' is marked [Immutable], but it is mutable: 'Event.E' is an event, which can be subscribed to.
+                // (7,26): error CS20036: 'Event' is marked [Immutable], but it is mutable: 'Event.E' is an event, which can be subscribed to.
                 // [Immutable] sealed class Event { public event System.Action E = null!; }
                 Diagnostic(ErrorCode.ERR_SharperImmutableDisproven, "Event").WithArguments("Event", "'Event.E' is an event, which can be subscribed to").WithLocation(7, 26),
                 // (7,61): warning CS0414: The field 'Event.E' is assigned but its value is never used
@@ -108,16 +108,16 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (9,64): warning CS0649: Field 'MutableStruct.S' is never assigned to, and will always have its default value null
                 // [Immutable] struct MutableStruct { public int X; public string S; public int P { get; set; } }
                 Diagnostic(ErrorCode.WRN_UnassignedInternalField, "S").WithArguments("MutableStruct.S", "null").WithLocation(9, 64),
-                // (10,20): error CS20029: 'StructWithList' is marked [Immutable], but it cannot be proven immutable: 'StructWithList.Xs' has type 'System.Collections.Generic.List<int>', which comes from another assembly and is not marked [Immutable].
+                // (10,20): error CS20035: 'StructWithList' is marked [Immutable], but it cannot be proven immutable: 'StructWithList.Xs' has type 'System.Collections.Generic.List<int>', which comes from another assembly and is not marked [Immutable].
                 // [Immutable] struct StructWithList { public List<int> Xs; }
                 Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "StructWithList").WithArguments("StructWithList", "'StructWithList.Xs' has type 'System.Collections.Generic.List<int>', which comes from another assembly and is not marked [Immutable]").WithLocation(10, 20),
                 // (10,54): warning CS0649: Field 'StructWithList.Xs' is never assigned to, and will always have its default value null
                 // [Immutable] struct StructWithList { public List<int> Xs; }
                 Diagnostic(ErrorCode.WRN_UnassignedInternalField, "Xs").WithArguments("StructWithList.Xs", "null").WithLocation(10, 54),
-                // (11,20): error CS20029: 'StructCaptured' is marked [Immutable], but it cannot be proven immutable: 'xs' has type 'System.Collections.Generic.List<int>', which comes from another assembly and is not marked [Immutable].
+                // (11,20): error CS20035: 'StructCaptured' is marked [Immutable], but it cannot be proven immutable: 'xs' has type 'System.Collections.Generic.List<int>', which comes from another assembly and is not marked [Immutable].
                 // [Immutable] struct StructCaptured(List<int> xs) { public int Count => xs.Count; }
                 Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "StructCaptured").WithArguments("StructCaptured", "'xs' has type 'System.Collections.Generic.List<int>', which comes from another assembly and is not marked [Immutable]").WithLocation(11, 20),
-                // (12,20): error CS20030: 'StructEvent' is marked [Immutable], but it is mutable: 'StructEvent.E' is an event, which can be subscribed to.
+                // (12,20): error CS20036: 'StructEvent' is marked [Immutable], but it is mutable: 'StructEvent.E' is an event, which can be subscribed to.
                 // [Immutable] struct StructEvent { public event System.Action E; }
                 Diagnostic(ErrorCode.ERR_SharperImmutableDisproven, "StructEvent").WithArguments("StructEvent", "'StructEvent.E' is an event, which can be subscribed to").WithLocation(12, 20),
                 // (12,61): warning CS0067: The event 'StructEvent.E' is never used
@@ -144,16 +144,16 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 """;
             var comp = CreateImmutableCompilation(source);
             comp.VerifyDiagnostics(
-                // (6,27): error CS20029: 'HasPerson' is marked [Immutable], but it cannot be proven immutable: 'HasPerson.P' has type 'Person', which is neither sealed nor marked [ImmutableHierarchy].
+                // (6,27): error CS20035: 'HasPerson' is marked [Immutable], but it cannot be proven immutable: 'HasPerson.P' has type 'Person', which is neither sealed nor marked [ImmutableHierarchy].
                 // [Immutable] sealed record HasPerson(Person P);
                 Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "HasPerson").WithArguments("HasPerson", "'HasPerson.P' has type 'Person', which is neither sealed nor marked [ImmutableHierarchy]").WithLocation(6, 27),
-                // (8,27): error CS20029: 'HasOpen' is marked [Immutable], but it cannot be proven immutable: 'HasOpen.O' has type 'IOpen', which is neither sealed nor marked [ImmutableHierarchy].
+                // (8,27): error CS20035: 'HasOpen' is marked [Immutable], but it cannot be proven immutable: 'HasOpen.O' has type 'IOpen', which is neither sealed nor marked [ImmutableHierarchy].
                 // [Immutable] sealed record HasOpen(IOpen O);
                 Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "HasOpen").WithArguments("HasOpen", "'HasOpen.O' has type 'IOpen', which is neither sealed nor marked [ImmutableHierarchy]").WithLocation(8, 27),
-                // (9,27): error CS20029: 'HasObject' is marked [Immutable], but it cannot be proven immutable: 'HasObject.O' has type 'object', which is neither sealed nor marked [ImmutableHierarchy].
+                // (9,27): error CS20035: 'HasObject' is marked [Immutable], but it cannot be proven immutable: 'HasObject.O' has type 'object', which is neither sealed nor marked [ImmutableHierarchy].
                 // [Immutable] sealed record HasObject(object O);
                 Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "HasObject").WithArguments("HasObject", "'HasObject.O' has type 'object', which is neither sealed nor marked [ImmutableHierarchy]").WithLocation(9, 27),
-                // (11,27): error CS20029: 'HasMutableTuple' is marked [Immutable], but it cannot be proven immutable: 'HasMutableTuple.T' has type '(int, System.Collections.Generic.List<int>)', which is not immutable.
+                // (11,27): error CS20035: 'HasMutableTuple' is marked [Immutable], but it cannot be proven immutable: 'HasMutableTuple.T' has type '(int, System.Collections.Generic.List<int>)', which is not immutable.
                 // [Immutable] sealed record HasMutableTuple((int, List<int>) T);
                 Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "HasMutableTuple").WithArguments("HasMutableTuple", "'HasMutableTuple.T' has type '(int, System.Collections.Generic.List<int>)', which is not immutable").WithLocation(11, 27));
             Assert.True(comp.SharperImmutability.IsImmutable(comp.GetSpecialType(SpecialType.System_Object), exact: true));
@@ -197,13 +197,13 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 [Immutable] sealed class Indexer { private readonly int _a; public int this[int i] => i == 0 ? _a : 0; }
                 """;
             CreateImmutableCompilation(source).VerifyDiagnostics(
-                // (3,26): error CS20029: 'Clock' is marked [Immutable], but it cannot be proven immutable: the observer 'Clock.Now' does more than read fields and pure observers: 'DateTime.Now'.
+                // (3,26): error CS20035: 'Clock' is marked [Immutable], but it cannot be proven immutable: the observer 'Clock.Now' does more than read fields and pure observers: 'DateTime.Now'.
                 // [Immutable] sealed class Clock { public DateTime Now => DateTime.Now; }
                 Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "Clock").WithArguments("Clock", "the observer 'Clock.Now' does more than read fields and pure observers: 'DateTime.Now'").WithLocation(3, 26),
-                // (13,26): error CS20029: 'Concat' is marked [Immutable], but it cannot be proven immutable: the observer 'Concat.Both' does more than read fields and pure observers: 'A + B'.
+                // (13,26): error CS20035: 'Concat' is marked [Immutable], but it cannot be proven immutable: the observer 'Concat.Both' does more than read fields and pure observers: 'A + B'.
                 // [Immutable] sealed class Concat { public readonly string A = "", B = ""; public string Both => A + B; }
                 Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "Concat").WithArguments("Concat", "the observer 'Concat.Both' does more than read fields and pure observers: 'A + B'").WithLocation(13, 26),
-                // (14,26): error CS20029: 'Hash' is marked [Immutable], but it cannot be proven immutable: the observer 'Hash.GetHashCode()' does more than read fields and pure observers: 'HashCode.Combine(A)'.
+                // (14,26): error CS20035: 'Hash' is marked [Immutable], but it cannot be proven immutable: the observer 'Hash.GetHashCode()' does more than read fields and pure observers: 'HashCode.Combine(A)'.
                 // [Immutable] sealed class Hash { public readonly int A; public override int GetHashCode() => HashCode.Combine(A); }
                 Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "Hash").WithArguments("Hash", "the observer 'Hash.GetHashCode()' does more than read fields and pure observers: 'HashCode.Combine(A)'").WithLocation(14, 26),
                 // (14,53): warning CS0649: Field 'Hash.A' is never assigned to, and will always have its default value 0
@@ -212,10 +212,10 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (15,56): warning CS0649: Field 'Assumed.A' is never assigned to, and will always have its default value 0
                 // [Immutable] sealed class Assumed { public readonly int A; [AssumePure] public override int GetHashCode() => HashCode.Combine(A); }
                 Diagnostic(ErrorCode.WRN_UnassignedInternalField, "A").WithArguments("Assumed.A", "0").WithLocation(15, 56),
-                // (16,26): error CS20029: 'Fresh' is marked [Immutable], but it cannot be proven immutable: the observer 'Fresh.O' does more than read fields and pure observers: 'new object()'.
+                // (16,26): error CS20035: 'Fresh' is marked [Immutable], but it cannot be proven immutable: the observer 'Fresh.O' does more than read fields and pure observers: 'new object()'.
                 // [Immutable] sealed class Fresh { public object O => new object(); }
                 Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "Fresh").WithArguments("Fresh", "the observer 'Fresh.O' does more than read fields and pure observers: 'new object()'").WithLocation(16, 26),
-                // (17,26): error CS20029: 'Boxing' is marked [Immutable], but it cannot be proven immutable: the observer 'Boxing.O' does more than read fields and pure observers: 'A'.
+                // (17,26): error CS20035: 'Boxing' is marked [Immutable], but it cannot be proven immutable: the observer 'Boxing.O' does more than read fields and pure observers: 'A'.
                 // [Immutable] sealed class Boxing { public readonly int A; public object O => A; }
                 Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "Boxing").WithArguments("Boxing", "the observer 'Boxing.O' does more than read fields and pure observers: 'A'").WithLocation(17, 26),
                 // (17,55): warning CS0649: Field 'Boxing.A' is never assigned to, and will always have its default value 0
@@ -248,13 +248,13 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 var expected = start is "A" or "B" or "C" ? false : true;
                 Assert.Equal(expected, IsImmutable(comp, start, exact: false));
                 comp.VerifyDiagnostics(
-                    // (3,27): error CS20029: 'A' is marked [Immutable], but it cannot be proven immutable: 'A.B' has type 'B', which is not immutable.
+                    // (3,27): error CS20035: 'A' is marked [Immutable], but it cannot be proven immutable: 'A.B' has type 'B', which is not immutable.
                     // [Immutable] sealed record A(B? B);
                     Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "A").WithArguments("A", "'A.B' has type 'B', which is not immutable").WithLocation(3, 27),
-                    // (4,27): error CS20029: 'B' is marked [Immutable], but it cannot be proven immutable: 'B.A' has type 'A', which is not immutable.
+                    // (4,27): error CS20035: 'B' is marked [Immutable], but it cannot be proven immutable: 'B.A' has type 'A', which is not immutable.
                     // [Immutable] sealed record B(A? A, C? C);
                     Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "B").WithArguments("B", "'B.A' has type 'A', which is not immutable").WithLocation(4, 27),
-                    // (5,27): error CS20029: 'C' is marked [Immutable], but it cannot be proven immutable: 'C.Xs' has type 'System.Collections.Generic.List<int>', which comes from another assembly and is not marked [Immutable].
+                    // (5,27): error CS20035: 'C' is marked [Immutable], but it cannot be proven immutable: 'C.Xs' has type 'System.Collections.Generic.List<int>', which comes from another assembly and is not marked [Immutable].
                     // [Immutable] sealed record C(B? B, List<int> Xs);
                     Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "C").WithArguments("C", "'C.Xs' has type 'System.Collections.Generic.List<int>', which comes from another assembly and is not marked [Immutable]").WithLocation(5, 27));
             }
@@ -281,22 +281,22 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 """;
             var comp = CreateImmutableCompilation(source);
             comp.VerifyDiagnostics(
-                // (5,27): error CS20029: 'BadPhantom<T>' is marked [Immutable], but it cannot be proven immutable: 'BadPhantom<T>.Value' has type 'T', which uses a [Phantom] type parameter.
+                // (5,27): error CS20035: 'BadPhantom<T>' is marked [Immutable], but it cannot be proven immutable: 'BadPhantom<T>.Value' has type 'T', which uses a [Phantom] type parameter.
                 // [Immutable] sealed record BadPhantom<[Phantom] T>(T Value);
                 Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "BadPhantom").WithArguments("BadPhantom<T>", "'BadPhantom<T>.Value' has type 'T', which uses a [Phantom] type parameter").WithLocation(5, 27),
-                // (5,48): error CS20036: Type parameter 'T' is marked [Phantom], but 'BadPhantom<T>.Value' uses it in the state of the type.
+                // (5,48): error CS20042: Type parameter 'T' is marked [Phantom], but 'BadPhantom<T>.Value' uses it in the state of the type.
                 // [Immutable] sealed record BadPhantom<[Phantom] T>(T Value);
                 Diagnostic(ErrorCode.ERR_SharperPhantomTypeParameterInState, "T").WithArguments("T", "BadPhantom<T>.Value").WithLocation(5, 48),
-                // (6,27): error CS20029: 'BadPhantomList<T>' is marked [Immutable], but it cannot be proven immutable: 'BadPhantomList<T>.Values' has type 'System.Collections.Generic.List<T>', which comes from another assembly and is not marked [Immutable].
+                // (6,27): error CS20035: 'BadPhantomList<T>' is marked [Immutable], but it cannot be proven immutable: 'BadPhantomList<T>.Values' has type 'System.Collections.Generic.List<T>', which comes from another assembly and is not marked [Immutable].
                 // [Immutable] sealed record BadPhantomList<[Phantom] T>(List<T> Values);
                 Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "BadPhantomList").WithArguments("BadPhantomList<T>", "'BadPhantomList<T>.Values' has type 'System.Collections.Generic.List<T>', which comes from another assembly and is not marked [Immutable]").WithLocation(6, 27),
-                // (6,52): error CS20036: Type parameter 'T' is marked [Phantom], but 'BadPhantomList<T>.Values' uses it in the state of the type.
+                // (6,52): error CS20042: Type parameter 'T' is marked [Phantom], but 'BadPhantomList<T>.Values' uses it in the state of the type.
                 // [Immutable] sealed record BadPhantomList<[Phantom] T>(List<T> Values);
                 Diagnostic(ErrorCode.ERR_SharperPhantomTypeParameterInState, "T").WithArguments("T", "BadPhantomList<T>.Values").WithLocation(6, 52),
-                // (7,27): error CS20029: 'Nested<T>' is marked [Immutable], but it cannot be proven immutable: 'Nested<T>.Next' has type 'Nested<System.Collections.Generic.List<T>>', which is not immutable.
+                // (7,27): error CS20035: 'Nested<T>' is marked [Immutable], but it cannot be proven immutable: 'Nested<T>.Next' has type 'Nested<System.Collections.Generic.List<T>>', which is not immutable.
                 // [Immutable] sealed record Nested<T>(T Value, Nested<List<T>>? Next);
                 Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "Nested").WithArguments("Nested<T>", "'Nested<T>.Next' has type 'Nested<System.Collections.Generic.List<T>>', which is not immutable").WithLocation(7, 27),
-                // (10,27): error CS20029: 'UsesMutableBox' is marked [Immutable], but it cannot be proven immutable: 'UsesMutableBox.L' has type 'Box<System.Collections.Generic.List<int>>', which is not immutable.
+                // (10,27): error CS20035: 'UsesMutableBox' is marked [Immutable], but it cannot be proven immutable: 'UsesMutableBox.L' has type 'Box<System.Collections.Generic.List<int>>', which is not immutable.
                 // [Immutable] sealed record UsesMutableBox(Box<List<int>> L);
                 Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "UsesMutableBox").WithArguments("UsesMutableBox", "'UsesMutableBox.L' has type 'Box<System.Collections.Generic.List<int>>', which is not immutable").WithLocation(10, 27));
         }
@@ -319,13 +319,13 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (2,28): warning CS0649: Field 'Mutable.X' is never assigned to, and will always have its default value 0
                 // class Mutable { public int X; }
                 Diagnostic(ErrorCode.WRN_UnassignedInternalField, "X").WithArguments("Mutable.X", "0").WithLocation(2, 28),
-                // (3,26): error CS20031: 'Derived' is marked [Immutable], but its base type 'Mutable' is not immutable.
+                // (3,26): error CS20037: 'Derived' is marked [Immutable], but its base type 'Mutable' is not immutable.
                 // [Immutable] sealed class Derived : Mutable { }
                 Diagnostic(ErrorCode.ERR_SharperImmutableBaseNotImmutable, "Derived").WithArguments("Derived", "Mutable").WithLocation(3, 26),
-                // (8,26): error CS20031: 'FromException' is marked [Immutable], but its base type 'Exception' is not immutable.
+                // (8,26): error CS20037: 'FromException' is marked [Immutable], but its base type 'Exception' is not immutable.
                 // [Immutable] sealed class FromException : System.Exception { }
                 Diagnostic(ErrorCode.ERR_SharperImmutableBaseNotImmutable, "FromException").WithArguments("FromException", "System.Exception").WithLocation(8, 26),
-                // (9,26): error CS20031: 'FromList' is marked [Immutable], but its base type 'List<int>' is not immutable.
+                // (9,26): error CS20037: 'FromList' is marked [Immutable], but its base type 'List<int>' is not immutable.
                 // [Immutable] sealed class FromList : List<int> { }
                 Diagnostic(ErrorCode.ERR_SharperImmutableBaseNotImmutable, "FromList").WithArguments("FromList", "System.Collections.Generic.List<int>").WithLocation(9, 26));
         }
@@ -346,25 +346,25 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 struct StructValue : IValue { public List<int> Xs; }
                 """;
             CreateImmutableCompilation(source).VerifyDiagnostics(
-                // (4,8): error CS20032: 'Polygon' must be immutable, because 'Shape' is marked [ImmutableHierarchy], but 'Polygon.Points' has type 'System.Collections.Generic.List<int>', which comes from another assembly and is not marked [Immutable].
+                // (4,8): error CS20038: 'Polygon' must be immutable, because 'Shape' is marked [ImmutableHierarchy], but 'Polygon.Points' has type 'System.Collections.Generic.List<int>', which comes from another assembly and is not marked [Immutable].
                 // record Polygon(List<int> Points) : Shape;
                 Diagnostic(ErrorCode.ERR_SharperImmutableHierarchyViolated, "Polygon").WithArguments("Polygon", "Shape", "'Polygon.Points' has type 'System.Collections.Generic.List<int>', which comes from another assembly and is not marked [Immutable]").WithLocation(4, 8),
-                // (6,8): error CS20032: 'Deeper' must be immutable, because 'Shape' is marked [ImmutableHierarchy], but 'Deeper.X' is not readonly.
+                // (6,8): error CS20038: 'Deeper' must be immutable, because 'Shape' is marked [ImmutableHierarchy], but 'Deeper.X' is not readonly.
                 // record Deeper(double Side) : Square(Side) { public int X; }
                 Diagnostic(ErrorCode.ERR_SharperImmutableHierarchyViolated, "Deeper").WithArguments("Deeper", "Shape", "'Deeper.X' is not readonly").WithLocation(6, 8),
                 // (6,56): warning CS0649: Field 'Deeper.X' is never assigned to, and will always have its default value 0
                 // record Deeper(double Side) : Square(Side) { public int X; }
                 Diagnostic(ErrorCode.WRN_UnassignedInternalField, "X").WithArguments("Deeper.X", "0").WithLocation(6, 56),
-                // (7,28): error CS20034: 'NotImmutable' is marked [ImmutableHierarchy], so it must also be marked [Immutable].
+                // (7,28): error CS20040: 'NotImmutable' is marked [ImmutableHierarchy], so it must also be marked [Immutable].
                 // [ImmutableHierarchy] class NotImmutable { }
                 Diagnostic(ErrorCode.ERR_SharperImmutableHierarchyWithoutImmutable, "NotImmutable").WithArguments("NotImmutable").WithLocation(7, 28),
-                // (9,14): error CS20032: 'Value' must be immutable, because 'IValue' is marked [ImmutableHierarchy], but 'Value.X' is not readonly.
+                // (9,14): error CS20038: 'Value' must be immutable, because 'IValue' is marked [ImmutableHierarchy], but 'Value.X' is not readonly.
                 // sealed class Value : IValue { public int X; }
                 Diagnostic(ErrorCode.ERR_SharperImmutableHierarchyViolated, "Value").WithArguments("Value", "IValue", "'Value.X' is not readonly").WithLocation(9, 14),
                 // (9,42): warning CS0649: Field 'Value.X' is never assigned to, and will always have its default value 0
                 // sealed class Value : IValue { public int X; }
                 Diagnostic(ErrorCode.WRN_UnassignedInternalField, "X").WithArguments("Value.X", "0").WithLocation(9, 42),
-                // (10,8): error CS20032: 'StructValue' must be immutable, because 'IValue' is marked [ImmutableHierarchy], but 'StructValue.Xs' has type 'System.Collections.Generic.List<int>', which comes from another assembly and is not marked [Immutable].
+                // (10,8): error CS20038: 'StructValue' must be immutable, because 'IValue' is marked [ImmutableHierarchy], but 'StructValue.Xs' has type 'System.Collections.Generic.List<int>', which comes from another assembly and is not marked [Immutable].
                 // struct StructValue : IValue { public List<int> Xs; }
                 Diagnostic(ErrorCode.ERR_SharperImmutableHierarchyViolated, "StructValue").WithArguments("StructValue", "IValue", "'StructValue.Xs' has type 'System.Collections.Generic.List<int>', which comes from another assembly and is not marked [Immutable]").WithLocation(10, 8),
                 // (10,48): warning CS0649: Field 'StructValue.Xs' is never assigned to, and will always have its default value null
@@ -386,7 +386,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 [CSharpTestSource.Parse(sharper, "a.cx", s_sharperOptions), CSharpTestSource.Parse(csharp, "b.cs", TestOptions.Regular)],
                 targetFramework: TargetFramework.Net90);
             comp.VerifyDiagnostics(
-                // b.cs(1,15): warning CS20033: 'Polygon' must be immutable, because 'Shape' is marked [ImmutableHierarchy], but 'Polygon.Points' has type 'System.Collections.Generic.List<int>', which comes from another assembly and is not marked [Immutable].
+                // b.cs(1,15): warning CS20039: 'Polygon' must be immutable, because 'Shape' is marked [ImmutableHierarchy], but 'Polygon.Points' has type 'System.Collections.Generic.List<int>', which comes from another assembly and is not marked [Immutable].
                 // public record Polygon(System.Collections.Generic.List<int> Points) : Shape;
                 Diagnostic(ErrorCode.WRN_SharperImmutableHierarchyViolated, "Polygon").WithArguments("Polygon", "Shape", "'Polygon.Points' has type 'System.Collections.Generic.List<int>', which comes from another assembly and is not marked [Immutable]").WithLocation(1, 15));
         }
@@ -407,13 +407,13 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 class G<[Phantom] T> { }
                 """;
             CreateImmutableCompilation(source).VerifyDiagnostics(
-                // (3,44): error CS20035: [UnobservableWrite] is only valid on a field that is not readonly, of a class marked [Immutable].
+                // (3,44): error CS20041: [UnobservableWrite] is only valid on a field that is not readonly, of a class marked [Immutable].
                 //     [UnobservableWrite] private static int s_a;
                 Diagnostic(ErrorCode.ERR_SharperMisplacedUnobservableWrite, "s_a").WithLocation(3, 44),
                 // (3,44): warning CS0169: The field 'C.s_a' is never used
                 //     [UnobservableWrite] private static int s_a;
                 Diagnostic(ErrorCode.WRN_UnreferencedField, "s_a").WithArguments("C.s_a").WithLocation(3, 44),
-                // (4,46): error CS20035: [UnobservableWrite] is only valid on a field that is not readonly, of a class marked [Immutable].
+                // (4,46): error CS20041: [UnobservableWrite] is only valid on a field that is not readonly, of a class marked [Immutable].
                 //     [UnobservableWrite] private readonly int _b;
                 Diagnostic(ErrorCode.ERR_SharperMisplacedUnobservableWrite, "_b").WithLocation(4, 46),
                 // (4,46): warning CS0169: The field 'C._b' is never used
@@ -422,13 +422,13 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (5,37): warning CS0169: The field 'C._ok' is never used
                 //     [UnobservableWrite] private int _ok;
                 Diagnostic(ErrorCode.WRN_UnreferencedField, "_ok").WithArguments("C._ok").WithLocation(5, 37),
-                // (7,58): error CS20035: [UnobservableWrite] is only valid on a field that is not readonly, of a class marked [Immutable].
+                // (7,58): error CS20041: [UnobservableWrite] is only valid on a field that is not readonly, of a class marked [Immutable].
                 // sealed class NotMarked { [UnobservableWrite] private int _c; }
                 Diagnostic(ErrorCode.ERR_SharperMisplacedUnobservableWrite, "_c").WithLocation(7, 58),
                 // (7,58): warning CS0169: The field 'NotMarked._c' is never used
                 // sealed class NotMarked { [UnobservableWrite] private int _c; }
                 Diagnostic(ErrorCode.WRN_UnreferencedField, "_c").WithArguments("NotMarked._c").WithLocation(7, 58),
-                // (8,56): error CS20035: [UnobservableWrite] is only valid on a field that is not readonly, of a class marked [Immutable].
+                // (8,56): error CS20041: [UnobservableWrite] is only valid on a field that is not readonly, of a class marked [Immutable].
                 // [Immutable] struct S { [UnobservableWrite] private int _d; }
                 Diagnostic(ErrorCode.ERR_SharperMisplacedUnobservableWrite, "_d").WithLocation(8, 56),
                 // (8,56): warning CS0169: The field 'S._d' is never used
@@ -452,10 +452,10 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 """;
             var comp = CreateImmutableCompilation(source);
             comp.VerifyDiagnostics(
-                // (5,27): error CS20029: 'NotOk' is marked [Immutable], but it cannot be proven immutable: 'NotOk.A' has type 'System.Collections.Immutable.ImmutableArray<int[]>', which is not immutable.
+                // (5,27): error CS20035: 'NotOk' is marked [Immutable], but it cannot be proven immutable: 'NotOk.A' has type 'System.Collections.Immutable.ImmutableArray<int[]>', which is not immutable.
                 // [Immutable] sealed record NotOk(ImmutableArray<int[]> A);
                 Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "NotOk").WithArguments("NotOk", "'NotOk.A' has type 'System.Collections.Immutable.ImmutableArray<int[]>', which is not immutable").WithLocation(5, 27),
-                // (6,27): error CS20029: 'ReadOnlyView' is marked [Immutable], but it cannot be proven immutable: 'ReadOnlyView.Xs' has type 'System.Collections.Generic.IReadOnlyList<int>', which is neither sealed nor marked [ImmutableHierarchy].
+                // (6,27): error CS20035: 'ReadOnlyView' is marked [Immutable], but it cannot be proven immutable: 'ReadOnlyView.Xs' has type 'System.Collections.Generic.IReadOnlyList<int>', which is neither sealed nor marked [ImmutableHierarchy].
                 // [Immutable] sealed record ReadOnlyView(IReadOnlyList<int> Xs);
                 Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "ReadOnlyView").WithArguments("ReadOnlyView", "'ReadOnlyView.Xs' has type 'System.Collections.Generic.IReadOnlyList<int>', which is neither sealed nor marked [ImmutableHierarchy]").WithLocation(6, 27));
 
@@ -488,13 +488,13 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                     record Bad(List<int> Xs) : Shape;
                     """;
                 CreateImmutableCompilation(source, references: [reference]).VerifyDiagnostics(
-                    // (3,27): error CS20029: 'UsesPerson' is marked [Immutable], but it cannot be proven immutable: 'UsesPerson.P' has type 'Person', which is neither sealed nor marked [ImmutableHierarchy].
+                    // (3,27): error CS20035: 'UsesPerson' is marked [Immutable], but it cannot be proven immutable: 'UsesPerson.P' has type 'Person', which is neither sealed nor marked [ImmutableHierarchy].
                     // [Immutable] sealed record UsesPerson(Person P);
                     Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "UsesPerson").WithArguments("UsesPerson", "'UsesPerson.P' has type 'Person', which is neither sealed nor marked [ImmutableHierarchy]").WithLocation(3, 27),
-                    // (4,27): error CS20029: 'UsesUnmarked' is marked [Immutable], but it cannot be proven immutable: 'UsesUnmarked.U' has type 'Unmarked', which comes from another assembly and is not marked [Immutable].
+                    // (4,27): error CS20035: 'UsesUnmarked' is marked [Immutable], but it cannot be proven immutable: 'UsesUnmarked.U' has type 'Unmarked', which comes from another assembly and is not marked [Immutable].
                     // [Immutable] sealed record UsesUnmarked(Unmarked U);
                     Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "UsesUnmarked").WithArguments("UsesUnmarked", "'UsesUnmarked.U' has type 'Unmarked', which comes from another assembly and is not marked [Immutable]").WithLocation(4, 27),
-                    // (6,8): error CS20032: 'Bad' must be immutable, because 'Shape' is marked [ImmutableHierarchy], but 'Bad.Xs' has type 'System.Collections.Generic.List<int>', which comes from another assembly and is not marked [Immutable].
+                    // (6,8): error CS20038: 'Bad' must be immutable, because 'Shape' is marked [ImmutableHierarchy], but 'Bad.Xs' has type 'System.Collections.Generic.List<int>', which comes from another assembly and is not marked [Immutable].
                     // record Bad(List<int> Xs) : Shape;
                     Diagnostic(ErrorCode.ERR_SharperImmutableHierarchyViolated, "Bad").WithArguments("Bad", "Shape", "'Bad.Xs' has type 'System.Collections.Generic.List<int>', which comes from another assembly and is not marked [Immutable]").WithLocation(6, 8));
             }
@@ -534,13 +534,13 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 """;
             var comp = CreateImmutableCompilation(source);
             comp.VerifyDiagnostics(
-                // (6,26): error CS20030: 'C' is marked [Immutable], but it is mutable: 'C.X' is not readonly.
+                // (6,26): error CS20036: 'C' is marked [Immutable], but it is mutable: 'C.X' is not readonly.
                 // [Immutable] sealed class C { public int X; }
                 Diagnostic(ErrorCode.ERR_SharperImmutableDisproven, "C").WithArguments("C", "'C.X' is not readonly").WithLocation(6, 26),
                 // (6,41): warning CS0649: Field 'C.X' is never assigned to, and will always have its default value 0
                 // [Immutable] sealed class C { public int X; }
                 Diagnostic(ErrorCode.WRN_UnassignedInternalField, "X").WithArguments("C.X", "0").WithLocation(6, 41),
-                // (7,34): error CS20030: 'D' is marked [Immutable], but it is mutable: 'D.X' is not readonly.
+                // (7,34): error CS20036: 'D' is marked [Immutable], but it is mutable: 'D.X' is not readonly.
                 // [Sharper.Immutable] sealed class D { public int X; }
                 Diagnostic(ErrorCode.ERR_SharperImmutableDisproven, "D").WithArguments("D", "'D.X' is not readonly").WithLocation(7, 34),
                 // (7,49): warning CS0649: Field 'D.X' is never assigned to, and will always have its default value 0

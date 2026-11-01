@@ -2637,6 +2637,11 @@
         <target state="new">'{0}' is marked [Immutable], but it cannot be proven immutable: {1}.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperInferCycle">
+        <source>Cannot infer the return type of '{0}', because it depends on itself: {1}. Write the return type of one of these methods.</source>
+        <target state="new">Cannot infer the return type of '{0}', because it depends on itself: {1}. Write the return type of one of these methods.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperInferIteratorYieldsNothing">
         <source>Cannot infer the return type of the iterator '{0}', because it has no 'yield return' to infer the element type from. Write the return type.</source>
         <target state="new">Cannot infer the return type of the iterator '{0}', because it has no 'yield return' to infer the element type from. Write the return type.</target>
@@ -2675,11 +2680,6 @@
       <trans-unit id="ERR_SharperInferParameterNoType">
         <source>Cannot infer the type of parameter '{0}', because its default value ({1}) has no type. Write the parameter type.</source>
         <target state="new">Cannot infer the type of parameter '{0}', because its default value ({1}) has no type. Write the parameter type.</target>
-        <note />
-      </trans-unit>
-      <trans-unit id="ERR_SharperInferUsesInferredMethod">
-        <source>Cannot infer the return type of '{0}', because its body uses '{1}', whose return type is inferred too. Write the return type of one of them.</source>
-        <target state="new">Cannot infer the return type of '{0}', because its body uses '{1}', whose return type is inferred too. Write the return type of one of them.</target>
         <note />
       </trans-unit>
       <trans-unit id="ERR_SharperInferUsesItself">
@@ -2737,6 +2737,21 @@
         <target state="new">A spread 'yield return ..' cannot enumerate '{0}' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperTryExpressionInCatchFilter">
+        <source>A try expression cannot be used in a 'when' clause, because a catch filter cannot contain a try block. Move it out of the filter.</source>
+        <target state="new">A try expression cannot be used in a 'when' clause, because a catch filter cannot contain a try block. Move it out of the filter.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperTryExpressionInExpressionTree">
+        <source>An expression tree cannot contain a try expression.</source>
+        <target state="new">An expression tree cannot contain a try expression.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperTryExpressionNoType">
+        <source>The try expression has no type, because its body and arms ({0}) have no best common type. Give it a target type, such as a declared union of these types.</source>
+        <target state="new">The try expression has no type, because its body and arms ({0}) have no best common type. Give it a target type, such as a declared union of these types.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperValDeconstructionDisallowsSpecificType">
         <source>Deconstruction 'val (...)' form disallows a specific type for 'val'. Use '@val' for the type.</source>
         <target state="new">Deconstruction 'val (...)' form disallows a specific type for 'val'. Use '@val' for the type.</target>
@@ -2750,6 +2765,11 @@
       <trans-unit id="ERR_SharperValRefReassignment">
         <source>Cannot ref-assign '{0}' because it is a ref val: it always refers to the same variable. Writes through '{0}' are allowed.</source>
         <target state="new">Cannot ref-assign '{0}' because it is a ref val: it always refers to the same variable. Writes through '{0}' are allowed.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperValSimpleLambdaNeedsParentheses">
+        <source>A 'val' lambda parameter needs parentheses. Write '(val {0}) =&gt; ...'.</source>
+        <target state="new">A 'val' lambda parameter needs parentheses. Write '(val {0}) =&gt; ...'.</target>
         <note />
       </trans-unit>
       <trans-unit id="ERR_SignatureMismatchInRecord">
@@ -3617,6 +3637,11 @@
         <target state="new">on a ref return</target>
         <note />
       </trans-unit>
+      <trans-unit id="IDS_SharperTryExpression">
+        <source>try expression</source>
+        <target state="new">try expression</target>
+        <note />
+      </trans-unit>
       <trans-unit id="IDS_VALLOCAL">
         <source>val variable</source>
         <target state="new">val variable</target>
@@ -4405,6 +4430,16 @@
       <trans-unit id="WRN_SharperReadOnlyParameterMemberCallOnCopy_Title">
         <source>Call to a non-readonly member on a readonly parameter runs on a copy</source>
         <target state="new">Call to a non-readonly member on a readonly parameter runs on a copy</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WRN_SharperTryExpressionAwaitableBody">
+        <source>The body of this try expression is a '{0}', so the arms catch only the exceptions thrown before the task is returned. Write 'try await ...' to catch the exceptions of the operation.</source>
+        <target state="new">The body of this try expression is a '{0}', so the arms catch only the exceptions thrown before the task is returned. Write 'try await ...' to catch the exceptions of the operation.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WRN_SharperTryExpressionAwaitableBody_Title">
+        <source>The body of a try expression is a task that is not awaited</source>
+        <target state="new">The body of a try expression is a task that is not awaited</target>
         <note />
       </trans-unit>
       <trans-unit id="WRN_SharperValMemberCallOnCopy">

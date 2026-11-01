@@ -9250,6 +9250,87 @@ public sealed partial class SwitchExpressionArmSyntax : CSharpSyntaxNode
     public SwitchExpressionArmSyntax WithExpression(ExpressionSyntax expression) => Update(this.Pattern, this.WhenClause, this.EqualsGreaterThanToken, expression);
 }
 
+/// <summary>Class which represents the syntax node for a Sharper try expression, such as try F() catch { IOException =&gt; 0 }.</summary>
+/// <remarks>
+/// <para>This node is associated with the following syntax kinds:</para>
+/// <list type="bullet">
+/// <item><description><see cref="SyntaxKind.TryExpression"/></description></item>
+/// </list>
+/// </remarks>
+public sealed partial class TryExpressionSyntax : ExpressionSyntax
+{
+    private ExpressionSyntax? expression;
+    private SyntaxNode? arms;
+
+    internal TryExpressionSyntax(InternalSyntax.CSharpSyntaxNode green, SyntaxNode? parent, int position)
+      : base(green, parent, position)
+    {
+    }
+
+    /// <summary>SyntaxToken representing the try keyword.</summary>
+    public SyntaxToken TryKeyword => new SyntaxToken(this, ((InternalSyntax.TryExpressionSyntax)this.Green).tryKeyword, Position, 0);
+
+    /// <summary>ExpressionSyntax node representing the body, whose exceptions the arms catch.</summary>
+    public ExpressionSyntax Expression => GetRed(ref this.expression, 1)!;
+
+    /// <summary>SyntaxToken representing the catch keyword.</summary>
+    public SyntaxToken CatchKeyword => new SyntaxToken(this, ((InternalSyntax.TryExpressionSyntax)this.Green).catchKeyword, GetChildPosition(2), GetChildIndex(2));
+
+    public SyntaxToken OpenBraceToken => new SyntaxToken(this, ((InternalSyntax.TryExpressionSyntax)this.Green).openBraceToken, GetChildPosition(3), GetChildIndex(3));
+
+    /// <summary>The arms, which match the caught exception as the arms of a switch expression match its input.</summary>
+    public SeparatedSyntaxList<SwitchExpressionArmSyntax> Arms
+    {
+        get
+        {
+            var red = GetRed(ref this.arms, 4);
+            return red != null ? new SeparatedSyntaxList<SwitchExpressionArmSyntax>(red, GetChildIndex(4)) : default;
+        }
+    }
+
+    public SyntaxToken CloseBraceToken => new SyntaxToken(this, ((InternalSyntax.TryExpressionSyntax)this.Green).closeBraceToken, GetChildPosition(5), GetChildIndex(5));
+
+    internal override SyntaxNode? GetNodeSlot(int index)
+        => index switch
+        {
+            1 => GetRed(ref this.expression, 1)!,
+            4 => GetRed(ref this.arms, 4)!,
+            _ => null,
+        };
+
+    internal override SyntaxNode? GetCachedSlot(int index)
+        => index switch
+        {
+            1 => this.expression,
+            4 => this.arms,
+            _ => null,
+        };
+
+    public override void Accept(CSharpSyntaxVisitor visitor) => visitor.VisitTryExpression(this);
+    public override TResult? Accept<TResult>(CSharpSyntaxVisitor<TResult> visitor) where TResult : default => visitor.VisitTryExpression(this);
+
+    public TryExpressionSyntax Update(SyntaxToken tryKeyword, ExpressionSyntax expression, SyntaxToken catchKeyword, SyntaxToken openBraceToken, SeparatedSyntaxList<SwitchExpressionArmSyntax> arms, SyntaxToken closeBraceToken)
+    {
+        if (tryKeyword != this.TryKeyword || expression != this.Expression || catchKeyword != this.CatchKeyword || openBraceToken != this.OpenBraceToken || arms != this.Arms || closeBraceToken != this.CloseBraceToken)
+        {
+            var newNode = SyntaxFactory.TryExpression(tryKeyword, expression, catchKeyword, openBraceToken, arms, closeBraceToken);
+            var annotations = GetAnnotations();
+            return annotations?.Length > 0 ? newNode.WithAnnotations(annotations) : newNode;
+        }
+
+        return this;
+    }
+
+    public TryExpressionSyntax WithTryKeyword(SyntaxToken tryKeyword) => Update(tryKeyword, this.Expression, this.CatchKeyword, this.OpenBraceToken, this.Arms, this.CloseBraceToken);
+    public TryExpressionSyntax WithExpression(ExpressionSyntax expression) => Update(this.TryKeyword, expression, this.CatchKeyword, this.OpenBraceToken, this.Arms, this.CloseBraceToken);
+    public TryExpressionSyntax WithCatchKeyword(SyntaxToken catchKeyword) => Update(this.TryKeyword, this.Expression, catchKeyword, this.OpenBraceToken, this.Arms, this.CloseBraceToken);
+    public TryExpressionSyntax WithOpenBraceToken(SyntaxToken openBraceToken) => Update(this.TryKeyword, this.Expression, this.CatchKeyword, openBraceToken, this.Arms, this.CloseBraceToken);
+    public TryExpressionSyntax WithArms(SeparatedSyntaxList<SwitchExpressionArmSyntax> arms) => Update(this.TryKeyword, this.Expression, this.CatchKeyword, this.OpenBraceToken, arms, this.CloseBraceToken);
+    public TryExpressionSyntax WithCloseBraceToken(SyntaxToken closeBraceToken) => Update(this.TryKeyword, this.Expression, this.CatchKeyword, this.OpenBraceToken, this.Arms, closeBraceToken);
+
+    public TryExpressionSyntax AddArms(params SwitchExpressionArmSyntax[] items) => WithArms(this.Arms.AddRange(items));
+}
+
 /// <remarks>
 /// <para>This node is associated with the following syntax kinds:</para>
 /// <list type="bullet">

@@ -7487,6 +7487,78 @@ class C
             Assert.Empty(comp.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
         }
 
+        private const string SharperValMemberCallOnCopySource = """
+class C
+{
+    static void M()
+    {
+        S s = new S();
+        val v = s;
+        v.Mutate();
+    }
+}
+
+struct S { public void Mutate() { } }
+""";
+
+        private const string SharperValMemberCallOnCopyMessage = "Call to non-readonly member 'S.Mutate()' on val variable 'v' runs on a copy, so 'v' is not changed.";
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData("/nowarn:20003")]
+        [InlineData("/nowarn:CS20003")]
+        [WorkItem("https://github.com/ok3mad/roslyn/issues/91")]
+        public void SharperDiagnostics_NoWarn(string noWarn)
+        {
+            var dir = Temp.CreateDirectory();
+            var src = dir.CreateFile("a.cs").WriteAllText(SharperValMemberCallOnCopySource);
+
+            var args = new List<string> { "/nologo", "/t:library", "/preferreduilang:en", "/features:sharper", src.Path };
+            if (noWarn != null)
+            {
+                args.Add(noWarn);
+            }
+
+            var outWriter = new StringWriter(CultureInfo.InvariantCulture);
+            var exitCode = CreateCSharpCompiler(null, dir.Path, args.ToArray()).Run(outWriter);
+            Assert.Equal(0, exitCode);
+            Assert.Equal(
+                noWarn == null ? $"a.cs(7,9): warning CS20003: {SharperValMemberCallOnCopyMessage}" : "",
+                outWriter.ToString().Trim());
+        }
+
+        [Fact]
+        [WorkItem("https://github.com/ok3mad/roslyn/issues/91")]
+        public void SharperDiagnostics_WarnAsError()
+        {
+            var dir = Temp.CreateDirectory();
+            var src = dir.CreateFile("a.cs").WriteAllText(SharperValMemberCallOnCopySource);
+
+            var outWriter = new StringWriter(CultureInfo.InvariantCulture);
+            var exitCode = CreateCSharpCompiler(null, dir.Path, new[] { "/nologo", "/t:library", "/preferreduilang:en", "/features:sharper", "/warnaserror:CS20003", src.Path }).Run(outWriter);
+            Assert.Equal(1, exitCode);
+            Assert.Equal($"a.cs(7,9): error CS20003: {SharperValMemberCallOnCopyMessage}", outWriter.ToString().Trim());
+        }
+
+        [Theory]
+        [InlineData("none", 0, "")]
+        [InlineData("error", 1, "a.cs(7,9): error CS20003: " + SharperValMemberCallOnCopyMessage)]
+        [WorkItem("https://github.com/ok3mad/roslyn/issues/91")]
+        public void SharperDiagnostics_AnalyzerConfig(string severity, int expectedExitCode, string expectedOutput)
+        {
+            var dir = Temp.CreateDirectory();
+            var src = dir.CreateFile("a.cs").WriteAllText(SharperValMemberCallOnCopySource);
+            var analyzerConfig = dir.CreateFile(".editorconfig").WriteAllText($"""
+[*.cs]
+dotnet_diagnostic.CS20003.severity = {severity}
+""");
+
+            var outWriter = new StringWriter(CultureInfo.InvariantCulture);
+            var exitCode = CreateCSharpCompiler(null, dir.Path, new[] { "/nologo", "/t:library", "/preferreduilang:en", "/features:sharper", "/analyzerconfig:" + analyzerConfig.Path, src.Path }).Run(outWriter);
+            Assert.Equal(expectedExitCode, exitCode);
+            Assert.Equal(expectedOutput, outWriter.ToString().Trim());
+        }
+
         [Fact]
         public void CreateCompilation_MainAndTargetIncompatibilities()
         {

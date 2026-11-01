@@ -350,6 +350,7 @@
                 case ErrorCode.WRN_SharperValMemberCallOnCopy:
                 case ErrorCode.WRN_SharperReadOnlyLocalMemberCallOnCopy:
                 case ErrorCode.WRN_SharperReadOnlyParameterMemberCallOnCopy:
+                case ErrorCode.WRN_SharperTryExpressionAwaitableBody:
                 case ErrorCode.WRN_SharperImmutableHierarchyViolated:
                     return true;
                 default:

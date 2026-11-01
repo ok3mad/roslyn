@@ -72,5 +72,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         ExplicitSpan, // A conversion from array to (ReadOnly)Span
 
         Union, // An implicit conversion to a union type from its case type.
+
+        SharperTryExpression, // a conversion from a Sharper try expression to a type which its body and each arm can convert to
     }
 }

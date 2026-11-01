@@ -2608,6 +2608,20 @@ namespace Microsoft.CodeAnalysis.CSharp
                         Error(diagnostics, ErrorCode.ERR_InvalidAddrOp, ((BoundAddressOfOperator)operand).Operand.Syntax);
                         return;
                     }
+                case BoundKind.UnconvertedTryExpression:
+                    {
+                        var tryExpression = (BoundUnconvertedTryExpression)operand;
+                        var discardedUseSiteInfo = CompoundUseSiteInfo<AssemblySymbol>.Discarded;
+                        bool reportedError = false;
+                        tryConversion(tryExpression.Body, ref reportedError, ref discardedUseSiteInfo);
+                        foreach (var arm in tryExpression.Arms)
+                        {
+                            tryConversion(arm.Value, ref reportedError, ref discardedUseSiteInfo);
+                        }
+
+                        Debug.Assert(reportedError);
+                        return;
+                    }
                 case BoundKind.UnconvertedConditionalOperator:
                     {
                         var conditionalOperator = (BoundUnconvertedConditionalOperator)operand;

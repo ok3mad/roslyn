@@ -467,6 +467,9 @@ public partial class CSharpSyntaxVisitor<TResult>
     /// <summary>Called when the visitor visits a SwitchExpressionArmSyntax node.</summary>
     public virtual TResult? VisitSwitchExpressionArm(SwitchExpressionArmSyntax node) => this.DefaultVisit(node);
 
+    /// <summary>Called when the visitor visits a TryExpressionSyntax node.</summary>
+    public virtual TResult? VisitTryExpression(TryExpressionSyntax node) => this.DefaultVisit(node);
+
     /// <summary>Called when the visitor visits a TryStatementSyntax node.</summary>
     public virtual TResult? VisitTryStatement(TryStatementSyntax node) => this.DefaultVisit(node);
 
@@ -1230,6 +1233,9 @@ public partial class CSharpSyntaxVisitor
     /// <summary>Called when the visitor visits a SwitchExpressionArmSyntax node.</summary>
     public virtual void VisitSwitchExpressionArm(SwitchExpressionArmSyntax node) => this.DefaultVisit(node);
 
+    /// <summary>Called when the visitor visits a TryExpressionSyntax node.</summary>
+    public virtual void VisitTryExpression(TryExpressionSyntax node) => this.DefaultVisit(node);
+
     /// <summary>Called when the visitor visits a TryStatementSyntax node.</summary>
     public virtual void VisitTryStatement(TryStatementSyntax node) => this.DefaultVisit(node);
 
@@ -1992,6 +1998,9 @@ public partial class CSharpSyntaxRewriter : CSharpSyntaxVisitor<SyntaxNode?>
 
     public override SyntaxNode? VisitSwitchExpressionArm(SwitchExpressionArmSyntax node)
         => node.Update((PatternSyntax?)Visit(node.Pattern) ?? throw new ArgumentNullException("pattern"), (WhenClauseSyntax?)Visit(node.WhenClause), VisitToken(node.EqualsGreaterThanToken), (ExpressionSyntax?)Visit(node.Expression) ?? throw new ArgumentNullException("expression"));
+
+    public override SyntaxNode? VisitTryExpression(TryExpressionSyntax node)
+        => node.Update(VisitToken(node.TryKeyword), (ExpressionSyntax?)Visit(node.Expression) ?? throw new ArgumentNullException("expression"), VisitToken(node.CatchKeyword), VisitToken(node.OpenBraceToken), VisitList(node.Arms), VisitToken(node.CloseBraceToken));
 
     public override SyntaxNode? VisitTryStatement(TryStatementSyntax node)
         => node.Update(VisitList(node.AttributeLists), VisitToken(node.TryKeyword), (BlockSyntax?)Visit(node.Block) ?? throw new ArgumentNullException("block"), VisitList(node.Catches), (FinallyClauseSyntax?)Visit(node.Finally));
@@ -4795,6 +4804,25 @@ public static partial class SyntaxFactory
     /// <summary>Creates a new SwitchExpressionArmSyntax instance.</summary>
     public static SwitchExpressionArmSyntax SwitchExpressionArm(PatternSyntax pattern, ExpressionSyntax expression)
         => SyntaxFactory.SwitchExpressionArm(pattern, default, SyntaxFactory.Token(SyntaxKind.EqualsGreaterThanToken), expression);
+
+    /// <summary>Creates a new TryExpressionSyntax instance.</summary>
+    public static TryExpressionSyntax TryExpression(SyntaxToken tryKeyword, ExpressionSyntax expression, SyntaxToken catchKeyword, SyntaxToken openBraceToken, SeparatedSyntaxList<SwitchExpressionArmSyntax> arms, SyntaxToken closeBraceToken)
+    {
+        if (tryKeyword.Kind() != SyntaxKind.TryKeyword) throw new ArgumentException(nameof(tryKeyword));
+        if (expression == null) throw new ArgumentNullException(nameof(expression));
+        if (catchKeyword.Kind() != SyntaxKind.CatchKeyword) throw new ArgumentException(nameof(catchKeyword));
+        if (openBraceToken.Kind() != SyntaxKind.OpenBraceToken) throw new ArgumentException(nameof(openBraceToken));
+        if (closeBraceToken.Kind() != SyntaxKind.CloseBraceToken) throw new ArgumentException(nameof(closeBraceToken));
+        return (TryExpressionSyntax)Syntax.InternalSyntax.SyntaxFactory.TryExpression((Syntax.InternalSyntax.SyntaxToken)tryKeyword.Node!, (Syntax.InternalSyntax.ExpressionSyntax)expression.Green, (Syntax.InternalSyntax.SyntaxToken)catchKeyword.Node!, (Syntax.InternalSyntax.SyntaxToken)openBraceToken.Node!, arms.Node.ToGreenSeparatedList<Syntax.InternalSyntax.SwitchExpressionArmSyntax>(), (Syntax.InternalSyntax.SyntaxToken)closeBraceToken.Node!).CreateRed();
+    }
+
+    /// <summary>Creates a new TryExpressionSyntax instance.</summary>
+    public static TryExpressionSyntax TryExpression(ExpressionSyntax expression, SeparatedSyntaxList<SwitchExpressionArmSyntax> arms)
+        => SyntaxFactory.TryExpression(SyntaxFactory.Token(SyntaxKind.TryKeyword), expression, SyntaxFactory.Token(SyntaxKind.CatchKeyword), SyntaxFactory.Token(SyntaxKind.OpenBraceToken), arms, SyntaxFactory.Token(SyntaxKind.CloseBraceToken));
+
+    /// <summary>Creates a new TryExpressionSyntax instance.</summary>
+    public static TryExpressionSyntax TryExpression(ExpressionSyntax expression)
+        => SyntaxFactory.TryExpression(SyntaxFactory.Token(SyntaxKind.TryKeyword), expression, SyntaxFactory.Token(SyntaxKind.CatchKeyword), SyntaxFactory.Token(SyntaxKind.OpenBraceToken), default, SyntaxFactory.Token(SyntaxKind.CloseBraceToken));
 
     /// <summary>Creates a new TryStatementSyntax instance.</summary>
     public static TryStatementSyntax TryStatement(SyntaxList<AttributeListSyntax> attributeLists, SyntaxToken tryKeyword, BlockSyntax block, SyntaxList<CatchClauseSyntax> catches, FinallyClauseSyntax? @finally)
