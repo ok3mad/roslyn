@@ -8452,6 +8452,15 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
   <data name="ERR_SharperPhantomTypeParameterInState" xml:space="preserve">
     <value>Type parameter '{0}' is marked [Phantom], but '{1}' uses it in the state of the type.</value>
   </data>
+  <data name="ERR_SharperInferNoOverriddenMember" xml:space="preserve">
+    <value>Cannot infer the types of '{0}', because it overrides or implements no member '{0}' with {1} parameters that matches its written types. Write the types.</value>
+  </data>
+  <data name="ERR_SharperInferAmbiguousOverriddenMember" xml:space="preserve">
+    <value>Cannot infer the types of '{0}', because it could override or implement more than one member: {1}. Write the types of the one it overrides or implements.</value>
+  </data>
+  <data name="ERR_SharperInferOverriddenMemberCycle" xml:space="preserve">
+    <value>Cannot infer the types of '{0}' from the member it overrides or implements, because the signature of that member depends on '{0}' itself. Write the types.</value>
+  </data>
   <data name="WRN_RedundantPattern" xml:space="preserve">
     <value>The pattern is redundant.</value>
   </data>

@@ -29,7 +29,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
     /// thread that later finds that signature complete must not infer the rest of the cycle without the error. So the
     /// result does not depend on which member was asked for first, or on which thread.
     /// </remarks>
-    internal static class SharperInferredParameterType
+    internal static partial class SharperInferredParameterType
     {
         internal sealed class Result
         {
@@ -43,8 +43,12 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             }
         }
 
-        /// <summary>The parameters whose types are being inferred on this thread, innermost last.</summary>
-        [ThreadStatic] private static List<ParameterSyntax>? s_inProgress;
+        /// <summary>
+        /// The inferences in progress on this thread, innermost last: a <see cref="ParameterSyntax"/> for a type inferred
+        /// from a default value, a <see cref="MethodDeclarationSyntax"/> for types copied from the member that the method
+        /// overrides or implements (step P2).
+        /// </summary>
+        [ThreadStatic] private static List<SyntaxNode>? s_inProgress;
 
         /// <summary>
         /// Infers the types of the <c>infer</c> parameters in <paramref name="parameterList"/> that have a default value,
@@ -69,6 +73,9 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     }
                 }
             }
+
+            // Step P2: the types copied from the member that a method overrides or implements.
+            GetOverriddenSignature(owner);
         }
 
         /// <summary>
@@ -91,7 +98,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
             if (parameter.Default is null)
             {
-                // PROTOTYPE(sharper): step P2 takes the type from the overridden or implemented member.
+                // A parameter of a method that overrides or implements a member takes its type from there instead
+                // (GetOverriddenSignature, in ParameterHelpers.MakeParameter); this is a parameter with no source.
                 diagnostics.Add(ErrorCode.ERR_SharperInferParameterNoDefault, parameter.Type.Location, parameter.Identifier.ValueText);
                 return TypeWithAnnotations.Create(binder.CreateErrorType("infer"));
             }
@@ -109,16 +117,11 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 return result;
             }
 
-            var inProgress = s_inProgress ??= new List<ParameterSyntax>();
+            var inProgress = s_inProgress ??= new List<SyntaxNode>();
             int cycleStart = inProgress.IndexOf(parameter);
             if (cycleStart >= 0)
             {
-                for (int i = cycleStart; i < inProgress.Count; i++)
-                {
-                    ParameterSyntax inCycle = inProgress[i];
-                    results.GetValue(inCycle, _ => CreateCycleResult(inCycle, binder));
-                }
-
+                PublishCycle(binder.Compilation, inProgress, cycleStart);
                 return results.GetValue(parameter, _ => throw ExceptionUtilities.Unreachable());
             }
 
@@ -140,12 +143,38 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             return results.GetValue(parameter, _ => result);
         }
 
-        private static Result CreateCycleResult(ParameterSyntax parameter, Binder binder)
+        /// <summary>
+        /// Gives every inference from <paramref name="cycleStart"/> to the top of the stack its cycle error, at once:
+        /// CS20028 for a parameter whose type comes from its default value, CS20045 for a method whose types come from
+        /// the member it overrides or implements.
+        /// </summary>
+        private static void PublishCycle(CSharpCompilation compilation, List<SyntaxNode> inProgress, int cycleStart)
+        {
+            for (int i = cycleStart; i < inProgress.Count; i++)
+            {
+                switch (inProgress[i])
+                {
+                    case ParameterSyntax parameter:
+                        compilation.SharperInferredParameterTypes.GetValue(parameter, _ => CreateCycleResult(parameter, compilation));
+                        break;
+                    case MethodDeclarationSyntax method:
+                        compilation.SharperOverriddenSignatures.GetValue(method, _ => OverriddenSignature.CreateCycle(method));
+                        break;
+                    default:
+                        throw ExceptionUtilities.UnexpectedValue(inProgress[i]);
+                }
+            }
+        }
+
+        private static Result CreateCycleResult(ParameterSyntax parameter, CSharpCompilation compilation)
         {
             var diagnostics = BindingDiagnosticBag.GetInstance(withDiagnostics: true, withDependencies: false);
             diagnostics.Add(ErrorCode.ERR_SharperInferParameterCycle, parameter.Type!.Location, parameter.Identifier.ValueText);
-            return new Result(TypeWithAnnotations.Create(binder.CreateErrorType("infer")), diagnostics.ToReadOnlyAndFree());
+            return new Result(CreateErrorType(compilation), diagnostics.ToReadOnlyAndFree());
         }
+
+        private static TypeWithAnnotations CreateErrorType(CSharpCompilation compilation)
+            => TypeWithAnnotations.Create(new ExtendedErrorTypeSymbol(compilation, "infer", arity: 0, errorInfo: null));
 
         /// <summary>
         /// The binder that the default value of a parameter of <paramref name="owner"/> is bound with, as
