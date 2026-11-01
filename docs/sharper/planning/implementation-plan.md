@@ -706,6 +706,70 @@ mutable, and a fixer that offers `sealed`. As a side effect, a struct proven imm
 **Size:** M, about 1.5k lines with tests. No parser change; the work is the symbol query, its cycles and generic
 conditions, and the diagnostics.
 
+## Feature 11: refined types, slice 1 (design)
+
+`static int Page(int i is >=0) => ...;` and, later, `record Money(decimal Amount is >0, Currency Currency);` (issue
+[#33](https://github.com/ok3mad/roslyn/issues/33)). A refinement is a closed pattern over constants attached to a
+declaration; a value reaches it only through a door that proves the pattern, and a runtime guard covers every door the
+compiler cannot see. This section is the design; nothing is implemented yet.
+
+**Probe.** What the compiler does today, and what the design reuses:
+
+| Area | What the code shows |
+| --- | --- |
+| Flag off | `ParseParameter` (`LanguageParser.cs`) reads attributes, modifiers, a type, a name and an optional `= default`; an `is` after the name is a syntax error from the parameter list's recovery. Record parameters take the same path (`ParseParenthesizedParameterList`), and `decimal Amount is >0 { get; }` is a syntax error too, so no valid C# changes meaning |
+| Default values | `int i = 0 is >=0` is valid syntax today: a default value of `(0 is >=0)`. The refinement must come before `=` |
+| Type positions | In expressions a refinement on a type would clash with valid C#: `e is int is >0` is `(e is int) is >0`. Refinements therefore stay on declarations |
+| Pattern parser | `ParsePattern(Precedence...)` (`LanguageParser_Patterns.cs`) parses relational, `and`, `or` and `not` patterns. A relational operand stops at `=`, `,` and `)`, so it ends cleanly inside a parameter list |
+| Proofs | `ValueSetFactory.ForType` (`Utilities/ValueSetFactory.cs`) gives `IConstantValueSet`s with `Related`, `Intersect`, `Complement` and `IsEmpty` for the integer types, `char`, `bool`, `float`, `double`, `decimal`, `string`, `nint`, `nuint` and enums. "A implies B" is `A ∩ ¬B` empty; no decision DAG is needed |
+| Exhaustiveness | The switch DAG starts from `ImmutableDictionary<BoundDagTemp, IValueSet>.Empty` (`DecisionDagBuilder.cs`, the initial `uniquifyState`). Seeding the root input with the refinement's set makes `i switch { 0 or 1 => 1, >=2 => ... }` exhaustive for `int i is >=0`, and `PatternExplainer` then names only missing values inside the domain. The DAG also holds the narrowed set at each arm's leaf, which slice 2 uses |
+| Flow state | Flow analysis tracks only definite assignment and null state. Narrowing after `if (x > 0)` and `assume` ([#39](https://github.com/ok3mad/roslyn/issues/39)) need a new per-slot value-set state, split on true and false like nullable and joined by union |
+| Subsumed arms | An arm that can never match is an error (`ERR_SwitchArmSubsumed`, `SwitchExpressionBinder.cs`); a non-exhaustive switch expression is the warning CS8509 |
+
+### Decisions
+
+| Question | Decision | Why |
+| --- | --- | --- |
+| Spelling | `int i is >=0` after the parameter name, before any `= default`. No refined type form such as `int is >=0` in slice 1 | It reads as a predicate on the name, as in the brainstorm and the Fib example; a type form clashes with `e is int is >0` |
+| Syntax | A new `RefinementClauseSyntax` (`is` keyword, pattern), kind 9900 or above, as a new optional last field of `ParameterSyntax` | The token order needs a slot on the parameter; a new type node (the precedent of `T~`) cannot hold a pattern written after the name. Upstream rarely changes `ParameterSyntax` |
+| What a refinement may contain | Closed patterns over constants (relational, constant, `and`, `or`, `not`, parentheses) on a type `ValueSetFactory` supports. Opaque patterns ([#34](https://github.com/ok3mad/roslyn/issues/34)) are an error | Declared domains stay with constants, so subsumption is exact |
+| Parameter refinements | Always written out; never inferred from a default value or from switch arms. `infer` may carry one: `infer retries is >=0 = 3` is `int is >=0` | A domain is a contract, and an inferred domain would swallow a forgotten arm |
+| Return refinements | Inferred for `infer` returns, as the union of what every return can produce: `infer Sign(int x) => x switch { >0 => 1, 0 => 0, _ => -1 }` is `int is -1 or 0 or 1`. `val y = e` keeps the refinement of `e` | Widening a return domain is meant to break callers at compile time, so they adapt |
+| Where an inferred return refinement goes | With the inferred return type: where `infer` is allowed on a public member, its refinement is emitted too. Slice 1 follows R1 and R2, which cover private methods and local functions | Inferred types are allowed on public members, and whoever cares about a published API writes its types out |
+| Call sites | Proven is silent and disproven is an error (`Page(-1)`). An argument that cannot be proven is an error when its value carries an inferred refinement (a widened return breaks the caller), and a warning when its value has no refinement at all (a C# result, or a value flow analysis does not cover yet) | Slice 1 proves little; the warning tightens as slices 2 and 3 prove more, while inferred refinements already break callers as intended |
+| Exhaustiveness | A switch on a refined value seeds the DAG with the refinement's set. When an inferred refinement widens and a switch is no longer exhaustive, that is an error, not CS8509 | Same reason: the widening must break the caller |
+| Unreachable arms | An arm that is unreachable only because of a refinement is a warning, not `ERR_SwitchArmSubsumed` | Narrowing a domain, by a body change or a better prover, must never break a caller |
+| Runtime guard | At entry, on every accessibility: `if (!(i is >=0)) throw new ArgumentOutOfRangeException(nameof(i), i, "...")`, lowered through the `is`-pattern lowering. In iterators and `async` methods it runs in the kickoff method, so it throws eagerly | Guards make every escape sound: unproven callers, C# callers, method groups converted to delegates, reflection. Eliding proven guards is an optimization for later |
+| Metadata | An embedded `SharperRefinementAttribute(string pattern)` on the parameter (and on the return) holding the normalized pattern text. Sharper consumers re-parse it and trust it; C# callers see the plain type and meet the guard | Readable in decompilers and independent of the type; trust as for `[Immutable]` |
+| Reassignment | A refined parameter is implicitly `readonly` ([#23](https://github.com/ok3mad/roslyn/issues/23)) | The fact then holds for the whole body, which seeding and later flow analysis rely on |
+| Signatures | A refinement is not part of the signature. Slice 1 reports an error on virtual, abstract, override, interface, partial and extern members, on lambdas, and on recursive `infer` returns (as R1 does) | Overriding rules (identical, or wider parameters and narrower returns) can be added later without a break |
+| Default values | The default must satisfy the refinement; a disproven default is an error | It is a call site the compiler always sees |
+
+### Plan
+
+1. **Syntax.** `RefinementClauseSyntax` and the new `ParameterSyntax` field in `Syntax.xml`, with its public API; the
+   gated parse after the parameter name; parser tests with the flag on and off, including `= default` after the clause.
+2. **Binding.** Bind the pattern against the parameter type, check that it is closed and constant, and compute its
+   value set once per parameter symbol; the default-value check; implicit `readonly`.
+3. **Return refinements.** A refinement slot on the return of `infer` methods and local functions and on `val` locals,
+   inferred from constants, a refined parameter or `val` returned unchanged, and switch expressions whose arms all
+   yield such values.
+4. **Call sites and switches.** Proven, disproven and unknown arguments with the error-or-warning rule above; DAG
+   seeding; the exhaustiveness error and the unreachable-arm warning.
+5. **Guard and metadata.** The entry guard (kickoff method for state machines) and the embedded attribute, written
+   and read.
+6. **Tests** in `SharperTests.cs`, next to the C# they stand for: constants in and out of the domain, refined to
+   refined calls, Fib's switch without `_`, a widened inferred return breaking a caller, a narrowed one only warning,
+   guards for C# callers, iterators and `async`, metadata round trips, and the flag off.
+
+Not in slice 1: records and properties, whose `with` and `init` accessors bypass the constructor and need guards
+there, with immutable fields from [#139](https://github.com/ok3mad/roslyn/issues/139); written refinements on
+returns; arm narrowing plus interval arithmetic, which makes `Fib(i - 1)` provable (slice 2); value flow after `if`
+tests and `assume` (slice 3).
+
+**Size:** L, about 3.5k lines with tests. The parser and the guard are S; most of the work is binding, the call-site
+rules and return inference.
+
 ## Follow-ups
 
 Sharper diagnostics were renumbered from `SharperErrorCodes.Base` (20000): CS9402, CS9403 and CS9404 became CS20001, CS20002 and CS20003, and this document uses the new numbers throughout.
