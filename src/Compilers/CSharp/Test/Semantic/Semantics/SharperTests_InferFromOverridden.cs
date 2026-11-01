@@ -401,6 +401,8 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         [Fact]
         public void InferOverridden_Cycle_Concurrent()
         {
+            // Members in a cycle are searched for outside of their locks, so threads that start from either end neither
+            // deadlock nor disagree.
             var source = """
                 class B
                 {
@@ -412,11 +414,14 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                     public override int M(infer x) => 0;
                 }
                 """;
-            for (int i = 0; i < 20; i++)
+            // A thread that completes B.M's signature from the published error of its default value must not then give
+            // D.M a copy of that error type without D.M's own error: the results of a cycle are decided before any is
+            // published.
+            for (int i = 0; i < 100; i++)
             {
                 var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
                 var methods = new[] { comp.GetMember<MethodSymbol>("B.M"), comp.GetMember<MethodSymbol>("D.M") };
-                System.Threading.Tasks.Parallel.For(0, 4, t => Assert.Equal("infer", methods[t % 2].Parameters[0].Type.ToTestDisplayString()));
+                System.Threading.Tasks.Parallel.For(0, 8, t => Assert.Equal("infer", methods[t % 2].Parameters[0].Type.ToTestDisplayString()));
                 Assert.Equal(1, comp.GetDiagnostics().Count(d => d.Code == (int)ErrorCode.ERR_SharperInferParameterCycle));
                 Assert.Equal(1, comp.GetDiagnostics().Count(d => d.Code == (int)ErrorCode.ERR_SharperInferOverriddenMemberCycle));
             }

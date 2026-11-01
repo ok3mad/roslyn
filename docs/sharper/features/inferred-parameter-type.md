@@ -118,7 +118,8 @@ No syntax, bound node or lowering is added: `infer` parses as a type name, and t
 4. **Cycles.** The parameters being inferred on a thread are kept on a stack. A parameter asked for while it is on the
    stack closes a cycle: every parameter from it to the top of the stack gets the CS20028 result at once, before the
    signature that asked for it completes. That keeps a thread that later finds that signature complete from inferring
-   the rest of the cycle without the error.
+   the rest of the cycle without the error. The results of the whole cycle are decided before any is published, and a
+   thread that computed a member of the cycle without seeing it publishes the decided result instead of its own.
 5. **The overridden or implemented member** (P2) is searched for before the signature lock too
    (`SharperInferredParameterType.GetOverriddenSignature`, called from `InferBeforeSignature`), since matching reads the
    candidates' signatures. The result is kept by the compilation per method syntax and published once;

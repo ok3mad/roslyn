@@ -5,6 +5,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Roslyn.Utilities;
 
@@ -140,7 +141,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             }
 
             // A parameter found to be in a cycle while its default value was bound already has its result.
-            return results.GetValue(parameter, _ => result);
+            return Publish(results, binder.Compilation, parameter, result);
         }
 
         /// <summary>
@@ -148,22 +149,50 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         /// CS20028 for a parameter whose type comes from its default value, CS20045 for a method whose types come from
         /// the member it overrides or implements.
         /// </summary>
+        /// <remarks>
+        /// The results are decided for the whole cycle (<see cref="CSharpCompilation.SharperInferenceCycleResults"/>)
+        /// before any is published. Once one is published, another thread can complete a signature with it and compute a
+        /// member of the cycle without seeing the cycle (an override that copies the error type of its base's parameter);
+        /// such a thread then publishes the decided result instead of its own (<see cref="Publish"/>).
+        /// </remarks>
         private static void PublishCycle(CSharpCompilation compilation, List<SyntaxNode> inProgress, int cycleStart)
         {
+            var decided = compilation.SharperInferenceCycleResults;
+            for (int i = cycleStart; i < inProgress.Count; i++)
+            {
+                decided.GetValue(inProgress[i], node => node switch
+                {
+                    ParameterSyntax parameter => CreateCycleResult(parameter, compilation),
+                    MethodDeclarationSyntax method => OverriddenSignature.CreateCycle(method),
+                    _ => throw ExceptionUtilities.UnexpectedValue(node),
+                });
+            }
+
             for (int i = cycleStart; i < inProgress.Count; i++)
             {
                 switch (inProgress[i])
                 {
                     case ParameterSyntax parameter:
-                        compilation.SharperInferredParameterTypes.GetValue(parameter, _ => CreateCycleResult(parameter, compilation));
+                        Publish(compilation.SharperInferredParameterTypes, compilation, parameter, (Result)decided.GetValue(parameter, _ => throw ExceptionUtilities.Unreachable()));
                         break;
                     case MethodDeclarationSyntax method:
-                        compilation.SharperOverriddenSignatures.GetValue(method, _ => OverriddenSignature.CreateCycle(method));
+                        Publish(compilation.SharperOverriddenSignatures, compilation, method, (OverriddenSignature)decided.GetValue(method, _ => throw ExceptionUtilities.Unreachable()));
                         break;
                     default:
                         throw ExceptionUtilities.UnexpectedValue(inProgress[i]);
                 }
             }
+        }
+
+        /// <summary>
+        /// Publishes <paramref name="result"/> for <paramref name="node"/> unless a result is published already, or a cycle
+        /// result was decided for it; returns the published result.
+        /// </summary>
+        private static TResult Publish<TNode, TResult>(ConditionalWeakTable<TNode, TResult> results, CSharpCompilation compilation, TNode node, TResult result)
+            where TNode : SyntaxNode
+            where TResult : class
+        {
+            return results.GetValue(node, _ => compilation.SharperInferenceCycleResults.TryGetValue(node, out object? decided) ? (TResult)decided : result);
         }
 
         private static Result CreateCycleResult(ParameterSyntax parameter, CSharpCompilation compilation)

@@ -241,7 +241,10 @@ implementation plan, "Feature 3"):
    its own member's signature re-enters that member, which then completes its signature with an error type while the
    outer inference is still running. Another thread can now find that signature complete and infer the rest of the
    cycle without an error, so marking the cycle when the outer inference ends is too late: publish the error for every
-   parameter of the cycle at the moment it is found. Test cycles from each end, and on two threads at once.
+   parameter of the cycle at the moment it is found. Publishing them one by one is not enough either: a third thread can
+   complete a signature from the first published error and compute the next member without seeing the cycle. Decide
+   all of the cycle's results first (`CSharpCompilation.SharperInferenceCycleResults`), and let every publication prefer
+   a decided result (`SharperInferredParameterType.Publish`). Test cycles from each end, and on several threads at once.
 29. **A cycle found on a stack depends on where the search started.** With inference nested on a thread-static stack,
    "a member on the stack is a cycle" misses a member that reaches the cycle through a member that already finished
    and published its error, so whether it errs depends on the starting member and the thread. Find cycles as strongly

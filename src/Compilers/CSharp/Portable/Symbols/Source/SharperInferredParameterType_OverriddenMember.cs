@@ -145,7 +145,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             }
 
             // A method found to be in a cycle while its candidates were read already has its result.
-            return results.GetValue(syntax, _ => result);
+            return Publish(results, method.DeclaringCompilation, syntax, result);
         }
 
         /// <summary>

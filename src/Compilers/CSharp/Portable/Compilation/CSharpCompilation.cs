@@ -1588,6 +1588,25 @@ namespace Microsoft.CodeAnalysis.CSharp
             }
         }
 
+        private System.Runtime.CompilerServices.ConditionalWeakTable<SyntaxNode, object>? _lazySharperInferenceCycleResults;
+
+        /// <summary>
+        /// Sharper: the results decided for the members of an inference cycle, before they are published in
+        /// <see cref="SharperInferredParameterTypes"/> and <see cref="SharperOverriddenSignatures"/>.
+        /// </summary>
+        internal System.Runtime.CompilerServices.ConditionalWeakTable<SyntaxNode, object> SharperInferenceCycleResults
+        {
+            get
+            {
+                if (_lazySharperInferenceCycleResults == null)
+                {
+                    Interlocked.CompareExchange(ref _lazySharperInferenceCycleResults, new System.Runtime.CompilerServices.ConditionalWeakTable<SyntaxNode, object>(), null);
+                }
+
+                return _lazySharperInferenceCycleResults;
+            }
+        }
+
         private System.Runtime.CompilerServices.ConditionalWeakTable<MethodDeclarationSyntax, SharperInferredParameterType.OverriddenSignature>? _lazySharperOverriddenSignatures;
 
         /// <summary>
