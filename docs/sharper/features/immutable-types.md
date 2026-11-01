@@ -21,8 +21,11 @@ designed in [#92](https://github.com/ok3mad/roslyn/issues/92) (implementation pl
 
 `val` and `readonly` make a binding immutable; this makes a value deeply immutable, so that "depends only on its
 arguments" can mean something for purity ([#36](https://github.com/ok3mad/roslyn/issues/36)). Immutable means
-observationally immutable: hold everything outside the object fixed, and every repeated access returns the same
-result. Nothing changes at run time; the type is emitted as written, plus the attribute.
+observationally immutable: hold everything outside the object fixed, and every repeated access returns an equivalent
+result. Equivalence is structural (the same exact type, every field equivalent, primitives compared by bits,
+`[UnobservableWrite]` fields skipped); a result whose type is not statically immutable must be the same reference.
+Identity is not observable to pure code. Nothing changes at run time; the type is emitted as written, plus the
+attribute.
 
 ## The attributes
 
@@ -55,9 +58,26 @@ A type is immutable for its exact instances when:
 - **Observers.** Instance getters and indexers, `Equals` and `GetHashCode` only read fields, constants, parameters and
   locals, and call other pure observers: those on `this`, on a value whose static type is immutable, and non-virtual
   ones of immutable types. Operators of the attested types count as pure when they return a value type (`decimal +`,
-  `string ==`). Anything else, such as `DateTime.Now`, `new`, boxing, string concatenation, `HashCode.Combine` or a
-  write to a field, is reported with the expression, unless the observer is `[AssumePure]`. Records' generated members
-  and auto-property getters are pure. Ordinary methods are not observers and may be impure.
+  `string ==`). When the observer's return type is statically immutable, it may also create a result equivalent to the
+  last one:
+  - `new` of a statically immutable type whose constructor is pure (`Total => new Money(Net + Tax, "EUR")`). A
+    constructor is pure when it writes only the fields and auto-properties of its own `this` and otherwise follows the
+    observer rules, and so do the instance initializers it runs and the constructor it calls; a record's or a primary
+    constructor is checked the same way. An object initializer, `with` and a constructor from another assembly (unless
+    `[AssumePure]`) are not covered yet;
+  - string concatenation and interpolation whose parts are strings or `char` (`FullName => $"{First} {Last}"`); any
+    other part formats with the current culture;
+  - `HashCode.Combine` and the other members of `System.HashCode`, attested: the seed is per process, part of the
+    outside held fixed.
+
+  Otherwise nothing may be allocated, because two callers sharing one memoized mutable result would alias it. Identity
+  is impure: `ReferenceEquals`, `==` and `!=` on references without a user-defined operator (a comparison with `null`,
+  `is null`, `?.` and `??` are fine), and `Equals(object)` and `GetHashCode()` that run `object`'s implementation,
+  decided by whether the receiver's type overrides them. Not overriding them is not an error; only such calls are
+  impure. A hand-written `Equals` may start with `if (ReferenceEquals(this, other)) return true;` (or
+  `(object)this == other`), since identical values are equivalent. Anything else, such as `DateTime.Now`, boxing, a
+  lambda or a write to a field, is reported with the expression, unless the observer is `[AssumePure]`. Records'
+  generated members and auto-property getters are pure. Ordinary methods are not observers and may be impure.
 
 Every value of a static type `T` is immutable when `T` is immutable for its exact instances and is a value type, a
 sealed class, or `[ImmutableHierarchy]`. An interface is only with `[ImmutableHierarchy]`. So a field of type

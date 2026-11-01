@@ -200,12 +200,6 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (3,26): error CS20035: 'Clock' is marked [Immutable], but it cannot be proven immutable: the observer 'Clock.Now' does more than read fields and pure observers: 'DateTime.Now'.
                 // [Immutable] sealed class Clock { public DateTime Now => DateTime.Now; }
                 Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "Clock").WithArguments("Clock", "the observer 'Clock.Now' does more than read fields and pure observers: 'DateTime.Now'").WithLocation(3, 26),
-                // (13,26): error CS20035: 'Concat' is marked [Immutable], but it cannot be proven immutable: the observer 'Concat.Both' does more than read fields and pure observers: 'A + B'.
-                // [Immutable] sealed class Concat { public readonly string A = "", B = ""; public string Both => A + B; }
-                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "Concat").WithArguments("Concat", "the observer 'Concat.Both' does more than read fields and pure observers: 'A + B'").WithLocation(13, 26),
-                // (14,26): error CS20035: 'Hash' is marked [Immutable], but it cannot be proven immutable: the observer 'Hash.GetHashCode()' does more than read fields and pure observers: 'HashCode.Combine(A)'.
-                // [Immutable] sealed class Hash { public readonly int A; public override int GetHashCode() => HashCode.Combine(A); }
-                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "Hash").WithArguments("Hash", "the observer 'Hash.GetHashCode()' does more than read fields and pure observers: 'HashCode.Combine(A)'").WithLocation(14, 26),
                 // (14,53): warning CS0649: Field 'Hash.A' is never assigned to, and will always have its default value 0
                 // [Immutable] sealed class Hash { public readonly int A; public override int GetHashCode() => HashCode.Combine(A); }
                 Diagnostic(ErrorCode.WRN_UnassignedInternalField, "A").WithArguments("Hash.A", "0").WithLocation(14, 53),
@@ -227,6 +221,279 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (31,57): warning CS0649: Field 'Indexer._a' is never assigned to, and will always have its default value 0
                 // [Immutable] sealed class Indexer { private readonly int _a; public int this[int i] => i == 0 ? _a : 0; }
                 Diagnostic(ErrorCode.WRN_UnassignedInternalField, "_a").WithArguments("Indexer._a", "0").WithLocation(31, 57));
+        }
+
+        [Fact]
+        public void Immutable_Observers_Creation()
+        {
+            // An observer whose return type is statically immutable may create a statically immutable value with a pure
+            // constructor: every access returns an equivalent result. Otherwise nothing may be allocated.
+            var source = """
+                #nullable enable
+                using System;
+                using System.Collections.Generic;
+                [Immutable] sealed record Money(decimal Amount, string Currency);
+                [Immutable] sealed class Order(decimal net, decimal tax)
+                {
+                    public readonly decimal Net = net, Tax = tax;
+                    public Money Total => new Money(Net + Tax, "EUR");
+                }
+                [Immutable] sealed class Pair
+                {
+                    public readonly int X, Y;
+                    public Pair(int x, int y) { X = x; Y = y; }
+                    public Pair(int x) : this(x, x) { }
+                    public Pair Swapped => new Pair(Y, X);
+                    public Pair Twin => new(X);
+                }
+                [Immutable] readonly struct Point { public int X { get; } public Point(int x) => X = x; }
+                [Immutable] sealed class Points { public Point Origin => new Point(0); public Point Zero => new Point(); }
+                [Immutable] sealed class FreshList { public List<int> Xs => new List<int>(); }
+                [Immutable] sealed class FreshMoney { public object M => new Money(1, "EUR"); }
+                [Immutable] record Person(string Name);
+                [Immutable] sealed class FreshPerson { public Person P => new Person("Ann"); }
+                [Immutable] sealed class Stamp { public readonly long Ticks; public Stamp() { Ticks = DateTime.Now.Ticks; } }
+                [Immutable] sealed class FreshStamp { public Stamp S => new Stamp(); }
+                [Immutable] sealed record Rolled(int A) { public int B { get; } = Random.Shared.Next(); }
+                [Immutable] sealed class FreshRolled { public Rolled R => new Rolled(1); }
+                [Immutable] sealed class Counted { private static int s_count; public readonly int N; public Counted() { N = s_count++; } }
+                [Immutable] sealed class FreshCounted { public Counted C => new Counted(); }
+                [Immutable] sealed class Initialized { public Money M => new Money(1, "EUR") { Amount = 2 }; }
+                [Immutable] sealed class FromMetadata { public DateOnly D => new DateOnly(2020, 1, 1); }
+                """;
+            var comp = CreateImmutableCompilation(source);
+            comp.VerifyDiagnostics(
+                // (20,26): error CS20035: 'FreshList' is marked [Immutable], but it cannot be proven immutable: the observer 'FreshList.Xs' does more than read fields and pure observers: 'new List<int>()'.
+                // [Immutable] sealed class FreshList { public List<int> Xs => new List<int>(); }
+                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "FreshList").WithArguments("FreshList", "the observer 'FreshList.Xs' does more than read fields and pure observers: 'new List<int>()'").WithLocation(20, 26),
+                // (21,26): error CS20035: 'FreshMoney' is marked [Immutable], but it cannot be proven immutable: the observer 'FreshMoney.M' does more than read fields and pure observers: 'new Money(1, "EUR")'.
+                // [Immutable] sealed class FreshMoney { public object M => new Money(1, "EUR"); }
+                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "FreshMoney").WithArguments("FreshMoney", @"the observer 'FreshMoney.M' does more than read fields and pure observers: 'new Money(1, ""EUR"")'").WithLocation(21, 26),
+                // (23,26): error CS20035: 'FreshPerson' is marked [Immutable], but it cannot be proven immutable: the observer 'FreshPerson.P' does more than read fields and pure observers: 'new Person("Ann")'.
+                // [Immutable] sealed class FreshPerson { public Person P => new Person("Ann"); }
+                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "FreshPerson").WithArguments("FreshPerson", @"the observer 'FreshPerson.P' does more than read fields and pure observers: 'new Person(""Ann"")'").WithLocation(23, 26),
+                // (25,26): error CS20035: 'FreshStamp' is marked [Immutable], but it cannot be proven immutable: the observer 'FreshStamp.S' does more than read fields and pure observers: 'new Stamp()'.
+                // [Immutable] sealed class FreshStamp { public Stamp S => new Stamp(); }
+                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "FreshStamp").WithArguments("FreshStamp", "the observer 'FreshStamp.S' does more than read fields and pure observers: 'new Stamp()'").WithLocation(25, 26),
+                // (27,26): error CS20035: 'FreshRolled' is marked [Immutable], but it cannot be proven immutable: the observer 'FreshRolled.R' does more than read fields and pure observers: 'new Rolled(1)'.
+                // [Immutable] sealed class FreshRolled { public Rolled R => new Rolled(1); }
+                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "FreshRolled").WithArguments("FreshRolled", "the observer 'FreshRolled.R' does more than read fields and pure observers: 'new Rolled(1)'").WithLocation(27, 26),
+                // (29,26): error CS20035: 'FreshCounted' is marked [Immutable], but it cannot be proven immutable: the observer 'FreshCounted.C' does more than read fields and pure observers: 'new Counted()'.
+                // [Immutable] sealed class FreshCounted { public Counted C => new Counted(); }
+                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "FreshCounted").WithArguments("FreshCounted", "the observer 'FreshCounted.C' does more than read fields and pure observers: 'new Counted()'").WithLocation(29, 26),
+                // (30,26): error CS20035: 'Initialized' is marked [Immutable], but it cannot be proven immutable: the observer 'Initialized.M' does more than read fields and pure observers: 'new Money(1, "EUR") { Amount = 2 }'.
+                // [Immutable] sealed class Initialized { public Money M => new Money(1, "EUR") { Amount = 2 }; }
+                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "Initialized").WithArguments("Initialized", @"the observer 'Initialized.M' does more than read fields and pure observers: 'new Money(1, ""EUR"") { Amount = 2 }'").WithLocation(30, 26),
+                // (31,26): error CS20035: 'FromMetadata' is marked [Immutable], but it cannot be proven immutable: the observer 'FromMetadata.D' does more than read fields and pure observers: 'new DateOnly(2020, 1, 1)'.
+                // [Immutable] sealed class FromMetadata { public DateOnly D => new DateOnly(2020, 1, 1); }
+                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "FromMetadata").WithArguments("FromMetadata", "the observer 'FromMetadata.D' does more than read fields and pure observers: 'new DateOnly(2020, 1, 1)'").WithLocation(31, 26));
+
+            // Constructors are not observers: Stamp, Rolled and Counted are immutable, but creating them is not pure.
+            Assert.True(IsImmutable(comp, "Stamp", exact: false));
+            Assert.True(IsImmutable(comp, "Rolled", exact: false));
+            Assert.True(IsImmutable(comp, "Counted", exact: false));
+        }
+
+        [Fact]
+        public void Immutable_Observers_Strings()
+        {
+            // String concatenation and interpolation create an equivalent string when every part is a string or a char.
+            // Other parts format with the current culture.
+            var source = """
+                #nullable enable
+                [Immutable] sealed record Name(string First, string Last)
+                {
+                    public string FullName => $"{First} {Last}";
+                    public string Initials => $"{First[0]}. {Last[0]}.";
+                    public string Sorted => Last + ", " + First;
+                    public string Initial => First[0] + ".";
+                    public string Aligned => $"{First,10}|{Last,-10}";
+                    public string Long => $"{First}{Last}{First}{Last}{First}{Last}";
+                }
+                [Immutable] sealed record Age(string Name, int Years) { public string Text => $"{Name} ({Years})"; }
+                [Immutable] sealed record AgeConcat(string Name, int Years) { public string Text => Name + Years; }
+                [Immutable] sealed record Untyped(string Name) { public object Text => Name + "!"; }
+                [Immutable] sealed record UntypedInterpolation(string Name) { public object Text => $"{Name}!"; }
+                """;
+            CreateImmutableCompilation(source).VerifyDiagnostics(
+                // (11,27): error CS20035: 'Age' is marked [Immutable], but it cannot be proven immutable: the observer 'Age.Text' does more than read fields and pure observers: 'Years'.
+                // [Immutable] sealed record Age(string Name, int Years) { public string Text => $"{Name} ({Years})"; }
+                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "Age").WithArguments("Age", "the observer 'Age.Text' does more than read fields and pure observers: 'Years'").WithLocation(11, 27),
+                // (12,27): error CS20035: 'AgeConcat' is marked [Immutable], but it cannot be proven immutable: the observer 'AgeConcat.Text' does more than read fields and pure observers: 'Name + Years'.
+                // [Immutable] sealed record AgeConcat(string Name, int Years) { public string Text => Name + Years; }
+                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "AgeConcat").WithArguments("AgeConcat", "the observer 'AgeConcat.Text' does more than read fields and pure observers: 'Name + Years'").WithLocation(12, 27),
+                // (13,27): error CS20035: 'Untyped' is marked [Immutable], but it cannot be proven immutable: the observer 'Untyped.Text' does more than read fields and pure observers: 'Name + "!"'.
+                // [Immutable] sealed record Untyped(string Name) { public object Text => Name + "!"; }
+                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "Untyped").WithArguments("Untyped", @"the observer 'Untyped.Text' does more than read fields and pure observers: 'Name + ""!""'").WithLocation(13, 27),
+                // (14,27): error CS20035: 'UntypedInterpolation' is marked [Immutable], but it cannot be proven immutable: the observer 'UntypedInterpolation.Text' does more than read fields and pure observers: '$"{Name}!"'.
+                // [Immutable] sealed record UntypedInterpolation(string Name) { public object Text => $"{Name}!"; }
+                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "UntypedInterpolation").WithArguments("UntypedInterpolation", @"the observer 'UntypedInterpolation.Text' does more than read fields and pure observers: '$""{Name}!""'").WithLocation(14, 27));
+        }
+
+        [Fact]
+        public void Immutable_Observers_HashCode()
+        {
+            // System.HashCode is attested: its seed is per process, part of the outside that is held fixed.
+            var source = """
+                #nullable enable
+                using System;
+                using System.Collections.Generic;
+                [Immutable] sealed class Combined(int a, string b)
+                {
+                    public readonly int A = a;
+                    public readonly string B = b;
+                    public override int GetHashCode() => HashCode.Combine(A, B);
+                    public int Hash
+                    {
+                        get
+                        {
+                            var hash = new HashCode();
+                            hash.Add(A);
+                            hash.Add(B);
+                            return hash.ToHashCode();
+                        }
+                    }
+                }
+                [Immutable] sealed class NotImmutableResult(int a)
+                {
+                    public readonly int A = a;
+                    public List<int>? Hashes => HashCode.Combine(A) == 0 ? null : null;
+                }
+                """;
+            CreateImmutableCompilation(source).VerifyDiagnostics(
+                // (20,26): error CS20035: 'NotImmutableResult' is marked [Immutable], but it cannot be proven immutable: the observer 'NotImmutableResult.Hashes' does more than read fields and pure observers: 'HashCode.Combine(A)'.
+                // [Immutable] sealed class NotImmutableResult(int a)
+                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "NotImmutableResult").WithArguments("NotImmutableResult", "the observer 'NotImmutableResult.Hashes' does more than read fields and pure observers: 'HashCode.Combine(A)'").WithLocation(20, 26));
+        }
+
+        [Fact]
+        public void Immutable_Observers_Identity()
+        {
+            // Identity is not observable to pure code: reference equality and object's Equals and GetHashCode are impure.
+            // A comparison with null is not about identity.
+            var source = """
+                #nullable enable
+                [Immutable] sealed class Tag { }
+                [Immutable] sealed record Money(decimal Amount);
+                [Immutable] readonly struct Point { public readonly int X; public Point(int x) => X = x; }
+                [Immutable] sealed class Nulls(Tag? tag, Money? money)
+                {
+                    public readonly Tag? T = tag;
+                    public readonly Money? M = money;
+                    public bool HasTag => T != null;
+                    public bool NoTag => T == null || T is null;
+                    public decimal Amount => M?.Amount ?? 0;
+                }
+                [Immutable] sealed class Overridden(Money money, Point point, string name)
+                {
+                    public readonly Money M = money;
+                    public readonly Point P = point;
+                    public readonly string N = name;
+                    public override int GetHashCode() => M.GetHashCode() ^ P.GetHashCode() ^ N.GetHashCode();
+                    public override bool Equals(object? o) => o is Overridden other && M.Equals((object)other.M) && N.Equals(other.N);
+                }
+                [Immutable] sealed class RefEquals(Tag a, Tag b) { public readonly Tag A = a, B = b; public bool Same => ReferenceEquals(A, B); }
+                [Immutable] sealed class RefOperator(Tag a, Tag b) { public readonly Tag A = a, B = b; public bool Same => A == B; }
+                [Immutable] sealed class RefNotEqual(Tag a, string b) { public readonly Tag A = a; public readonly string B = b; public bool Differ => (object)A != B; }
+                [Immutable] sealed class ObjectHash(Tag tag) { public readonly Tag T = tag; public override int GetHashCode() => T.GetHashCode(); }
+                [Immutable] sealed class ObjectEquals(Tag tag) { public readonly Tag T = tag; public bool Same => T.Equals(T); }
+                [Immutable] sealed class OwnHash { public int Hash => GetHashCode(); }
+                [Immutable] class Open { public readonly int X; public Open(int x) => X = x; }
+                [Immutable] sealed class Derived(int x) : Open(x) { public override int GetHashCode() => base.GetHashCode(); }
+                """;
+            var comp = CreateImmutableCompilation(source);
+            comp.VerifyDiagnostics(
+                // (21,26): error CS20035: 'RefEquals' is marked [Immutable], but it cannot be proven immutable: the observer 'RefEquals.Same' observes object identity: 'ReferenceEquals(A, B)'.
+                // [Immutable] sealed class RefEquals(Tag a, Tag b) { public readonly Tag A = a, B = b; public bool Same => ReferenceEquals(A, B); }
+                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "RefEquals").WithArguments("RefEquals", "the observer 'RefEquals.Same' observes object identity: 'ReferenceEquals(A, B)'").WithLocation(21, 26),
+                // (22,26): error CS20035: 'RefOperator' is marked [Immutable], but it cannot be proven immutable: the observer 'RefOperator.Same' observes object identity: 'A == B'.
+                // [Immutable] sealed class RefOperator(Tag a, Tag b) { public readonly Tag A = a, B = b; public bool Same => A == B; }
+                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "RefOperator").WithArguments("RefOperator", "the observer 'RefOperator.Same' observes object identity: 'A == B'").WithLocation(22, 26),
+                // (23,26): error CS20035: 'RefNotEqual' is marked [Immutable], but it cannot be proven immutable: the observer 'RefNotEqual.Differ' observes object identity: '(object)A != B'.
+                // [Immutable] sealed class RefNotEqual(Tag a, string b) { public readonly Tag A = a; public readonly string B = b; public bool Differ => (object)A != B; }
+                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "RefNotEqual").WithArguments("RefNotEqual", "the observer 'RefNotEqual.Differ' observes object identity: '(object)A != B'").WithLocation(23, 26),
+                // (24,26): error CS20035: 'ObjectHash' is marked [Immutable], but it cannot be proven immutable: the observer 'ObjectHash.GetHashCode()' observes object identity: 'T.GetHashCode()'.
+                // [Immutable] sealed class ObjectHash(Tag tag) { public readonly Tag T = tag; public override int GetHashCode() => T.GetHashCode(); }
+                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "ObjectHash").WithArguments("ObjectHash", "the observer 'ObjectHash.GetHashCode()' observes object identity: 'T.GetHashCode()'").WithLocation(24, 26),
+                // (25,26): error CS20035: 'ObjectEquals' is marked [Immutable], but it cannot be proven immutable: the observer 'ObjectEquals.Same' observes object identity: 'T.Equals(T)'.
+                // [Immutable] sealed class ObjectEquals(Tag tag) { public readonly Tag T = tag; public bool Same => T.Equals(T); }
+                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "ObjectEquals").WithArguments("ObjectEquals", "the observer 'ObjectEquals.Same' observes object identity: 'T.Equals(T)'").WithLocation(25, 26),
+                // (26,26): error CS20035: 'OwnHash' is marked [Immutable], but it cannot be proven immutable: the observer 'OwnHash.Hash' observes object identity: 'GetHashCode()'.
+                // [Immutable] sealed class OwnHash { public int Hash => GetHashCode(); }
+                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "OwnHash").WithArguments("OwnHash", "the observer 'OwnHash.Hash' observes object identity: 'GetHashCode()'").WithLocation(26, 26),
+                // (28,26): error CS20035: 'Derived' is marked [Immutable], but it cannot be proven immutable: the observer 'Derived.GetHashCode()' observes object identity: 'base.GetHashCode()'.
+                // [Immutable] sealed class Derived(int x) : Open(x) { public override int GetHashCode() => base.GetHashCode(); }
+                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "Derived").WithArguments("Derived", "the observer 'Derived.GetHashCode()' observes object identity: 'base.GetHashCode()'").WithLocation(28, 26));
+
+            // Not overriding Equals and GetHashCode is not an error: the type stays immutable.
+            Assert.True(IsImmutable(comp, "Tag", exact: false));
+            Assert.True(IsImmutable(comp, "Open", exact: true));
+        }
+
+        [Fact]
+        public void Immutable_Observers_EqualsFastPath()
+        {
+            // Identical values are always equivalent, so a hand-written Equals may start with the identity fast path.
+            var source = """
+                #nullable enable
+                using System;
+                [Immutable] sealed class Money(decimal amount, string currency) : IEquatable<Money>
+                {
+                    public readonly decimal Amount = amount;
+                    public readonly string Currency = currency;
+                    public bool Equals(Money? other)
+                    {
+                        if (ReferenceEquals(this, other)) return true;
+                        return other is not null && Amount == other.Amount && Currency == other.Currency;
+                    }
+                    public override bool Equals(object? obj)
+                    {
+                        if ((object)this == obj)
+                        {
+                            return true;
+                        }
+                        return Equals(obj as Money);
+                    }
+                    public override int GetHashCode() => HashCode.Combine(Amount, Currency);
+                }
+                [Immutable] sealed class Expression(int a)
+                {
+                    public readonly int A = a;
+                    public override bool Equals(object? obj) => ReferenceEquals(this, obj) || obj is Expression e && e.A == A;
+                    public override int GetHashCode() => A;
+                }
+                [Immutable] sealed class Second(int a)
+                {
+                    public readonly int A = a;
+                    public override bool Equals(object? obj)
+                    {
+                        if (obj is null) return false;
+                        if (ReferenceEquals(this, obj)) return true;
+                        return obj is Second s && s.A == A;
+                    }
+                    public override int GetHashCode() => A;
+                }
+                [Immutable] sealed class ReturnsFalse(int a)
+                {
+                    public readonly int A = a;
+                    public override bool Equals(object? obj)
+                    {
+                        if (ReferenceEquals(this, obj)) return false;
+                        return obj is ReturnsFalse r && r.A == A;
+                    }
+                    public override int GetHashCode() => A;
+                }
+                """;
+            CreateImmutableCompilation(source).VerifyDiagnostics(
+                // (22,26): error CS20035: 'Expression' is marked [Immutable], but it cannot be proven immutable: the observer 'Expression.Equals(object?)' observes object identity: 'ReferenceEquals(this, obj)'.
+                // [Immutable] sealed class Expression(int a)
+                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "Expression").WithArguments("Expression", "the observer 'Expression.Equals(object?)' observes object identity: 'ReferenceEquals(this, obj)'").WithLocation(22, 26),
+                // (28,26): error CS20035: 'Second' is marked [Immutable], but it cannot be proven immutable: the observer 'Second.Equals(object?)' observes object identity: 'ReferenceEquals(this, obj)'.
+                // [Immutable] sealed class Second(int a)
+                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "Second").WithArguments("Second", "the observer 'Second.Equals(object?)' observes object identity: 'ReferenceEquals(this, obj)'").WithLocation(28, 26),
+                // (39,26): error CS20035: 'ReturnsFalse' is marked [Immutable], but it cannot be proven immutable: the observer 'ReturnsFalse.Equals(object?)' observes object identity: 'ReferenceEquals(this, obj)'.
+                // [Immutable] sealed class ReturnsFalse(int a)
+                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "ReturnsFalse").WithArguments("ReturnsFalse", "the observer 'ReturnsFalse.Equals(object?)' observes object identity: 'ReferenceEquals(this, obj)'").WithLocation(39, 26));
         }
 
         [Fact]
