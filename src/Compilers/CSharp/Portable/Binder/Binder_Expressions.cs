@@ -766,6 +766,9 @@ namespace Microsoft.CodeAnalysis.CSharp
                     case SyntaxKind.TryExpression:
                         return BindSharperTryExpression((TryExpressionSyntax)node, diagnostics);
 
+                    case SyntaxKind.PipeExpression:
+                        return BindSharperPipe((PipeExpressionSyntax)node, diagnostics);
+
                     case SyntaxKind.NumericLiteralExpression:
                     case SyntaxKind.StringLiteralExpression:
                     case SyntaxKind.CharacterLiteralExpression:

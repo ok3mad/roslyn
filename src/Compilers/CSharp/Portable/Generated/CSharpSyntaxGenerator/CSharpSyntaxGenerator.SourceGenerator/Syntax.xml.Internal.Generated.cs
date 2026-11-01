@@ -15014,6 +15014,95 @@ internal sealed partial class TryExpressionSyntax : ExpressionSyntax
         => new TryExpressionSyntax(this.Kind, this.tryKeyword, this.expression, this.catchKeyword, this.openBraceToken, this.arms, this.closeBraceToken, GetDiagnostics(), annotations);
 }
 
+/// <summary>Class which represents the syntax node for a Sharper pipe expression, such as raw |&gt; Parse.</summary>
+internal sealed partial class PipeExpressionSyntax : ExpressionSyntax
+{
+    internal readonly ExpressionSyntax left;
+    internal readonly SyntaxToken operatorToken;
+    internal readonly ExpressionSyntax stage;
+
+    internal PipeExpressionSyntax(SyntaxKind kind, ExpressionSyntax left, SyntaxToken operatorToken, ExpressionSyntax stage, DiagnosticInfo[]? diagnostics, SyntaxAnnotation[]? annotations)
+      : base(kind, diagnostics, annotations)
+    {
+        this.SlotCount = 3;
+        this.AdjustFlagsAndWidth(left);
+        this.left = left;
+        this.AdjustFlagsAndWidth(operatorToken);
+        this.operatorToken = operatorToken;
+        this.AdjustFlagsAndWidth(stage);
+        this.stage = stage;
+    }
+
+    internal PipeExpressionSyntax(SyntaxKind kind, ExpressionSyntax left, SyntaxToken operatorToken, ExpressionSyntax stage, SyntaxFactoryContext context)
+      : base(kind)
+    {
+        this.SetFactoryContext(context);
+        this.SlotCount = 3;
+        this.AdjustFlagsAndWidth(left);
+        this.left = left;
+        this.AdjustFlagsAndWidth(operatorToken);
+        this.operatorToken = operatorToken;
+        this.AdjustFlagsAndWidth(stage);
+        this.stage = stage;
+    }
+
+    internal PipeExpressionSyntax(SyntaxKind kind, ExpressionSyntax left, SyntaxToken operatorToken, ExpressionSyntax stage)
+      : base(kind)
+    {
+        this.SlotCount = 3;
+        this.AdjustFlagsAndWidth(left);
+        this.left = left;
+        this.AdjustFlagsAndWidth(operatorToken);
+        this.operatorToken = operatorToken;
+        this.AdjustFlagsAndWidth(stage);
+        this.stage = stage;
+    }
+
+    /// <summary>ExpressionSyntax node representing the value passed to the stage.</summary>
+    public ExpressionSyntax Left => this.left;
+    /// <summary>SyntaxToken representing the pipe operator, |&gt;.</summary>
+    public SyntaxToken OperatorToken => this.operatorToken;
+    /// <summary>ExpressionSyntax node representing the stage: an expression that uses 'it', or a function, such as a method group.</summary>
+    public ExpressionSyntax Stage => this.stage;
+
+    internal override GreenNode? GetSlot(int index)
+        => index switch
+        {
+            0 => this.left,
+            1 => this.operatorToken,
+            2 => this.stage,
+            _ => null,
+        };
+
+    internal override SyntaxNode CreateRed(SyntaxNode? parent, int position) => new CSharp.Syntax.PipeExpressionSyntax(this, parent, position);
+
+    public override void Accept(CSharpSyntaxVisitor visitor) => visitor.VisitPipeExpression(this);
+    public override TResult Accept<TResult>(CSharpSyntaxVisitor<TResult> visitor) => visitor.VisitPipeExpression(this);
+
+    public PipeExpressionSyntax Update(ExpressionSyntax left, SyntaxToken operatorToken, ExpressionSyntax stage)
+    {
+        if (left != this.Left || operatorToken != this.OperatorToken || stage != this.Stage)
+        {
+            var newNode = SyntaxFactory.PipeExpression(left, operatorToken, stage);
+            var diags = GetDiagnostics();
+            if (diags?.Length > 0)
+                newNode = newNode.WithDiagnosticsGreen(diags);
+            var annotations = GetAnnotations();
+            if (annotations?.Length > 0)
+                newNode = newNode.WithAnnotationsGreen(annotations);
+            return newNode;
+        }
+
+        return this;
+    }
+
+    internal override GreenNode SetDiagnostics(DiagnosticInfo[]? diagnostics)
+        => new PipeExpressionSyntax(this.Kind, this.left, this.operatorToken, this.stage, diagnostics, GetAnnotations());
+
+    internal override GreenNode SetAnnotations(SyntaxAnnotation[]? annotations)
+        => new PipeExpressionSyntax(this.Kind, this.left, this.operatorToken, this.stage, GetDiagnostics(), annotations);
+}
+
 internal sealed partial class TryStatementSyntax : StatementSyntax
 {
     internal readonly GreenNode? attributeLists;
@@ -27976,6 +28065,7 @@ internal partial class CSharpSyntaxVisitor<TResult>
     public virtual TResult VisitSwitchExpression(SwitchExpressionSyntax node) => this.DefaultVisit(node);
     public virtual TResult VisitSwitchExpressionArm(SwitchExpressionArmSyntax node) => this.DefaultVisit(node);
     public virtual TResult VisitTryExpression(TryExpressionSyntax node) => this.DefaultVisit(node);
+    public virtual TResult VisitPipeExpression(PipeExpressionSyntax node) => this.DefaultVisit(node);
     public virtual TResult VisitTryStatement(TryStatementSyntax node) => this.DefaultVisit(node);
     public virtual TResult VisitCatchClause(CatchClauseSyntax node) => this.DefaultVisit(node);
     public virtual TResult VisitCatchDeclaration(CatchDeclarationSyntax node) => this.DefaultVisit(node);
@@ -28234,6 +28324,7 @@ internal partial class CSharpSyntaxVisitor
     public virtual void VisitSwitchExpression(SwitchExpressionSyntax node) => this.DefaultVisit(node);
     public virtual void VisitSwitchExpressionArm(SwitchExpressionArmSyntax node) => this.DefaultVisit(node);
     public virtual void VisitTryExpression(TryExpressionSyntax node) => this.DefaultVisit(node);
+    public virtual void VisitPipeExpression(PipeExpressionSyntax node) => this.DefaultVisit(node);
     public virtual void VisitTryStatement(TryStatementSyntax node) => this.DefaultVisit(node);
     public virtual void VisitCatchClause(CatchClauseSyntax node) => this.DefaultVisit(node);
     public virtual void VisitCatchDeclaration(CatchDeclarationSyntax node) => this.DefaultVisit(node);
@@ -28793,6 +28884,9 @@ internal partial class CSharpSyntaxRewriter : CSharpSyntaxVisitor<CSharpSyntaxNo
 
     public override CSharpSyntaxNode VisitTryExpression(TryExpressionSyntax node)
         => node.Update((SyntaxToken)Visit(node.TryKeyword), (ExpressionSyntax)Visit(node.Expression), (SyntaxToken)Visit(node.CatchKeyword), (SyntaxToken)Visit(node.OpenBraceToken), VisitList(node.Arms), (SyntaxToken)Visit(node.CloseBraceToken));
+
+    public override CSharpSyntaxNode VisitPipeExpression(PipeExpressionSyntax node)
+        => node.Update((ExpressionSyntax)Visit(node.Left), (SyntaxToken)Visit(node.OperatorToken), (ExpressionSyntax)Visit(node.Stage));
 
     public override CSharpSyntaxNode VisitTryStatement(TryStatementSyntax node)
         => node.Update(VisitList(node.AttributeLists), (SyntaxToken)Visit(node.TryKeyword), (BlockSyntax)Visit(node.Block), VisitList(node.Catches), (FinallyClauseSyntax)Visit(node.Finally));
@@ -32327,6 +32421,28 @@ internal partial class ContextAwareSyntax
 #endif
 
         return new TryExpressionSyntax(SyntaxKind.TryExpression, tryKeyword, expression, catchKeyword, openBraceToken, arms.Node, closeBraceToken, this.context);
+    }
+
+    public PipeExpressionSyntax PipeExpression(ExpressionSyntax left, SyntaxToken operatorToken, ExpressionSyntax stage)
+    {
+#if DEBUG
+        if (left == null) throw new ArgumentNullException(nameof(left));
+        if (operatorToken == null) throw new ArgumentNullException(nameof(operatorToken));
+        if (operatorToken.Kind != SyntaxKind.BarGreaterThanToken) throw new ArgumentException(nameof(operatorToken));
+        if (stage == null) throw new ArgumentNullException(nameof(stage));
+#endif
+
+        int hash;
+        var cached = CSharpSyntaxNodeCache.TryGetNode((int)SyntaxKind.PipeExpression, left, operatorToken, stage, this.context, out hash);
+        if (cached != null) return (PipeExpressionSyntax)cached;
+
+        var result = new PipeExpressionSyntax(SyntaxKind.PipeExpression, left, operatorToken, stage, this.context);
+        if (hash >= 0)
+        {
+            SyntaxNodeCache.AddNode(result, hash);
+        }
+
+        return result;
     }
 
     public TryStatementSyntax TryStatement(CoreSyntax.SyntaxList<AttributeListSyntax> attributeLists, SyntaxToken tryKeyword, BlockSyntax block, CoreSyntax.SyntaxList<CatchClauseSyntax> catches, FinallyClauseSyntax? @finally)
@@ -37830,6 +37946,28 @@ internal static partial class SyntaxFactory
 #endif
 
         return new TryExpressionSyntax(SyntaxKind.TryExpression, tryKeyword, expression, catchKeyword, openBraceToken, arms.Node, closeBraceToken);
+    }
+
+    public static PipeExpressionSyntax PipeExpression(ExpressionSyntax left, SyntaxToken operatorToken, ExpressionSyntax stage)
+    {
+#if DEBUG
+        if (left == null) throw new ArgumentNullException(nameof(left));
+        if (operatorToken == null) throw new ArgumentNullException(nameof(operatorToken));
+        if (operatorToken.Kind != SyntaxKind.BarGreaterThanToken) throw new ArgumentException(nameof(operatorToken));
+        if (stage == null) throw new ArgumentNullException(nameof(stage));
+#endif
+
+        int hash;
+        var cached = SyntaxNodeCache.TryGetNode((int)SyntaxKind.PipeExpression, left, operatorToken, stage, out hash);
+        if (cached != null) return (PipeExpressionSyntax)cached;
+
+        var result = new PipeExpressionSyntax(SyntaxKind.PipeExpression, left, operatorToken, stage);
+        if (hash >= 0)
+        {
+            SyntaxNodeCache.AddNode(result, hash);
+        }
+
+        return result;
     }
 
     public static TryStatementSyntax TryStatement(CoreSyntax.SyntaxList<AttributeListSyntax> attributeLists, SyntaxToken tryKeyword, BlockSyntax block, CoreSyntax.SyntaxList<CatchClauseSyntax> catches, FinallyClauseSyntax? @finally)

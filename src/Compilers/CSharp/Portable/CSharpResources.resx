@@ -8452,6 +8452,18 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
   <data name="ERR_SharperPhantomTypeParameterInState" xml:space="preserve">
     <value>Type parameter '{0}' is marked [Phantom], but '{1}' uses it in the state of the type.</value>
   </data>
+  <data name="ERR_SharperPipeNoValue" xml:space="preserve">
+    <value>The left side of '|&gt;' must be a value with a type, but it is {0}.</value>
+  </data>
+  <data name="ERR_SharperPipeStageItNotUsed" xml:space="preserve">
+    <value>This stage does not use the value piped into it: its 'it' belongs to an inner lambda, the argument of '{0}'. Name that lambda's parameter, as in 'x =&gt; ...', or use the piped 'it' outside it.</value>
+  </data>
+  <data name="ERR_SharperPipeInExpressionTree" xml:space="preserve">
+    <value>An expression tree cannot contain a pipe '|&gt;'.</value>
+  </data>
+  <data name="ERR_SharperPipeStageNotFunction" xml:space="preserve">
+    <value>The stage after '|&gt;' must be a function, such as a method group or a delegate, or an expression that uses 'it', but it is {0}.</value>
+  </data>
   <data name="WRN_RedundantPattern" xml:space="preserve">
     <value>The pattern is redundant.</value>
   </data>

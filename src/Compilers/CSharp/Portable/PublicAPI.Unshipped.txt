@@ -176,3 +176,20 @@ static Microsoft.CodeAnalysis.CSharp.SyntaxFactory.TryExpression(Microsoft.CodeA
 static Microsoft.CodeAnalysis.CSharp.SyntaxFactory.TryExpression(Microsoft.CodeAnalysis.SyntaxToken tryKeyword, Microsoft.CodeAnalysis.CSharp.Syntax.ExpressionSyntax! expression, Microsoft.CodeAnalysis.SyntaxToken catchKeyword, Microsoft.CodeAnalysis.SyntaxToken openBraceToken, Microsoft.CodeAnalysis.SeparatedSyntaxList<Microsoft.CodeAnalysis.CSharp.Syntax.SwitchExpressionArmSyntax!> arms, Microsoft.CodeAnalysis.SyntaxToken closeBraceToken) -> Microsoft.CodeAnalysis.CSharp.Syntax.TryExpressionSyntax!
 virtual Microsoft.CodeAnalysis.CSharp.CSharpSyntaxVisitor.VisitTryExpression(Microsoft.CodeAnalysis.CSharp.Syntax.TryExpressionSyntax! node) -> void
 virtual Microsoft.CodeAnalysis.CSharp.CSharpSyntaxVisitor<TResult>.VisitTryExpression(Microsoft.CodeAnalysis.CSharp.Syntax.TryExpressionSyntax! node) -> TResult?
+Microsoft.CodeAnalysis.CSharp.Syntax.PipeExpressionSyntax
+Microsoft.CodeAnalysis.CSharp.Syntax.PipeExpressionSyntax.Left.get -> Microsoft.CodeAnalysis.CSharp.Syntax.ExpressionSyntax!
+Microsoft.CodeAnalysis.CSharp.Syntax.PipeExpressionSyntax.OperatorToken.get -> Microsoft.CodeAnalysis.SyntaxToken
+Microsoft.CodeAnalysis.CSharp.Syntax.PipeExpressionSyntax.Stage.get -> Microsoft.CodeAnalysis.CSharp.Syntax.ExpressionSyntax!
+Microsoft.CodeAnalysis.CSharp.Syntax.PipeExpressionSyntax.Update(Microsoft.CodeAnalysis.CSharp.Syntax.ExpressionSyntax! left, Microsoft.CodeAnalysis.SyntaxToken operatorToken, Microsoft.CodeAnalysis.CSharp.Syntax.ExpressionSyntax! stage) -> Microsoft.CodeAnalysis.CSharp.Syntax.PipeExpressionSyntax!
+Microsoft.CodeAnalysis.CSharp.Syntax.PipeExpressionSyntax.WithLeft(Microsoft.CodeAnalysis.CSharp.Syntax.ExpressionSyntax! left) -> Microsoft.CodeAnalysis.CSharp.Syntax.PipeExpressionSyntax!
+Microsoft.CodeAnalysis.CSharp.Syntax.PipeExpressionSyntax.WithOperatorToken(Microsoft.CodeAnalysis.SyntaxToken operatorToken) -> Microsoft.CodeAnalysis.CSharp.Syntax.PipeExpressionSyntax!
+Microsoft.CodeAnalysis.CSharp.Syntax.PipeExpressionSyntax.WithStage(Microsoft.CodeAnalysis.CSharp.Syntax.ExpressionSyntax! stage) -> Microsoft.CodeAnalysis.CSharp.Syntax.PipeExpressionSyntax!
+Microsoft.CodeAnalysis.CSharp.SyntaxKind.BarGreaterThanToken = 8231 -> Microsoft.CodeAnalysis.CSharp.SyntaxKind
+Microsoft.CodeAnalysis.CSharp.SyntaxKind.PipeExpression = 9904 -> Microsoft.CodeAnalysis.CSharp.SyntaxKind
+override Microsoft.CodeAnalysis.CSharp.CSharpSyntaxRewriter.VisitPipeExpression(Microsoft.CodeAnalysis.CSharp.Syntax.PipeExpressionSyntax! node) -> Microsoft.CodeAnalysis.SyntaxNode?
+override Microsoft.CodeAnalysis.CSharp.Syntax.PipeExpressionSyntax.Accept(Microsoft.CodeAnalysis.CSharp.CSharpSyntaxVisitor! visitor) -> void
+override Microsoft.CodeAnalysis.CSharp.Syntax.PipeExpressionSyntax.Accept<TResult>(Microsoft.CodeAnalysis.CSharp.CSharpSyntaxVisitor<TResult>! visitor) -> TResult?
+static Microsoft.CodeAnalysis.CSharp.SyntaxFactory.PipeExpression(Microsoft.CodeAnalysis.CSharp.Syntax.ExpressionSyntax! left, Microsoft.CodeAnalysis.CSharp.Syntax.ExpressionSyntax! stage) -> Microsoft.CodeAnalysis.CSharp.Syntax.PipeExpressionSyntax!
+static Microsoft.CodeAnalysis.CSharp.SyntaxFactory.PipeExpression(Microsoft.CodeAnalysis.CSharp.Syntax.ExpressionSyntax! left, Microsoft.CodeAnalysis.SyntaxToken operatorToken, Microsoft.CodeAnalysis.CSharp.Syntax.ExpressionSyntax! stage) -> Microsoft.CodeAnalysis.CSharp.Syntax.PipeExpressionSyntax!
+virtual Microsoft.CodeAnalysis.CSharp.CSharpSyntaxVisitor.VisitPipeExpression(Microsoft.CodeAnalysis.CSharp.Syntax.PipeExpressionSyntax! node) -> void
+virtual Microsoft.CodeAnalysis.CSharp.CSharpSyntaxVisitor<TResult>.VisitPipeExpression(Microsoft.CodeAnalysis.CSharp.Syntax.PipeExpressionSyntax! node) -> TResult?

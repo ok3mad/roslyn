@@ -2722,6 +2722,26 @@
         <target state="new">Type parameter '{0}' is marked [Phantom], but '{1}' uses it in the state of the type.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperPipeInExpressionTree">
+        <source>An expression tree cannot contain a pipe '|&gt;'.</source>
+        <target state="new">An expression tree cannot contain a pipe '|&gt;'.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperPipeNoValue">
+        <source>The left side of '|&gt;' must be a value with a type, but it is {0}.</source>
+        <target state="new">The left side of '|&gt;' must be a value with a type, but it is {0}.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperPipeStageItNotUsed">
+        <source>This stage does not use the value piped into it: its 'it' belongs to an inner lambda, the argument of '{0}'. Name that lambda's parameter, as in 'x =&gt; ...', or use the piped 'it' outside it.</source>
+        <target state="new">This stage does not use the value piped into it: its 'it' belongs to an inner lambda, the argument of '{0}'. Name that lambda's parameter, as in 'x =&gt; ...', or use the piped 'it' outside it.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperPipeStageNotFunction">
+        <source>The stage after '|&gt;' must be a function, such as a method group or a delegate, or an expression that uses 'it', but it is {0}.</source>
+        <target state="new">The stage after '|&gt;' must be a function, such as a method group or a delegate, or an expression that uses 'it', but it is {0}.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperReadOnlyLocalWithNoInitializer">
         <source>A readonly local must be initialized in its declaration, because it cannot be assigned later.</source>
         <target state="new">A readonly local must be initialized in its declaration, because it cannot be assigned later.</target>

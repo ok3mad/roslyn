@@ -809,6 +809,13 @@ namespace Microsoft.CodeAnalysis.CSharp
             }
         }
 
+        public override void VisitPipeExpression(PipeExpressionSyntax node)
+        {
+            // A Sharper pipe stage gets its binders when the pipe binds (SharperPipeStageBinder), because its 'it' has the
+            // type of the piped value.
+            Visit(node.Left, _enclosing);
+        }
+
         public override void VisitTryExpression(TryExpressionSyntax node)
         {
             // A Sharper try expression: the arms are switch expression arms over the caught exception. Their patterns and

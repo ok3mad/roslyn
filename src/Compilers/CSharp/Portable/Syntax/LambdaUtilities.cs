@@ -147,6 +147,16 @@ namespace Microsoft.CodeAnalysis.CSharp
         }
 
         /// <summary>
+        /// Whether the node is a Sharper pipe, <c>x |&gt; stage</c>, whose lowered sequence declares the stage's <c>it</c>:
+        /// a lambda in the stage that reads <c>it</c> gets a closure scoped to the pipe.
+        /// </summary>
+        // PROTOTYPE(sharper): Edit and Continue does not know this closure scope; the IDE's matcher finds scopes by syntax (#158).
+        internal static bool IsSharperPipeClosureScope(SyntaxNode node)
+        {
+            return node.IsKind(SyntaxKind.PipeExpression);
+        }
+
+        /// <summary>
         /// Returns true if the specified <paramref name="node"/> represents a body of a lambda.
         /// </summary>
         public static bool IsLambdaBody(SyntaxNode node, bool allowReducedLambdas = false)

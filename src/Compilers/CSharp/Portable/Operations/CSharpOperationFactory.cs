@@ -310,6 +310,10 @@ namespace Microsoft.CodeAnalysis.Operations
                 // OperationKind.None node whose only child is the body. The arms cannot be children, because the control flow
                 // graph has no region for their pattern variables and no switch to visit them in (#144).
                 case BoundKind.ConvertedTryExpression:
+                // PROTOTYPE(sharper): Sharper's pipe has no IOperation shape yet: analyzers see an OperationKind.None node
+                // whose only child is the left side. The stage cannot be a child, because the control flow graph has no
+                // region for its 'it' (#155).
+                case BoundKind.SharperPipe:
                     ConstantValue? constantValue = (boundNode as BoundExpression)?.ConstantValueOpt;
                     bool isImplicit = boundNode.WasCompilerGenerated;
 

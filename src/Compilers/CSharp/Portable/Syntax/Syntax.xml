@@ -3176,6 +3176,33 @@
     </FactoryComment>
   </Node>
 
+  <Node Name="PipeExpressionSyntax" Base="ExpressionSyntax">
+    <!-- Sharper's pipe, x |> stage. A stage that uses 'it' is an expression whose 'it' is the value; any other stage is a function applied to it. -->
+    <Kind Name="PipeExpression"/>
+    <Field Name="Left" Type="ExpressionSyntax">
+      <PropertyComment>
+        <summary>ExpressionSyntax node representing the value passed to the stage.</summary>
+      </PropertyComment>
+    </Field>
+    <Field Name="OperatorToken" Type="SyntaxToken">
+      <Kind Name="BarGreaterThanToken"/>
+      <PropertyComment>
+        <summary>SyntaxToken representing the pipe operator, |&gt;.</summary>
+      </PropertyComment>
+    </Field>
+    <Field Name="Stage" Type="ExpressionSyntax">
+      <PropertyComment>
+        <summary>ExpressionSyntax node representing the stage: an expression that uses 'it', or a function, such as a method group.</summary>
+      </PropertyComment>
+    </Field>
+    <TypeComment>
+      <summary>Class which represents the syntax node for a Sharper pipe expression, such as raw |&gt; Parse.</summary>
+    </TypeComment>
+    <FactoryComment>
+      <summary>Creates a PipeExpressionSyntax node.</summary>
+    </FactoryComment>
+  </Node>
+
   <Node Name="TryStatementSyntax" Base="StatementSyntax">
     <Kind Name="TryStatement"/>
     <Field Name="AttributeLists" Type="SyntaxList&lt;AttributeListSyntax&gt;" Override="true"/>
