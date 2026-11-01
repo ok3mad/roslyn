@@ -56,7 +56,10 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                         isExtensionMethodThis: ordinal == 0 && thisKeyword.Kind() != SyntaxKind.None,
                         addRefReadOnlyModifier,
                         scope,
-                        declarationDiagnostics);
+                        declarationDiagnostics,
+                        isParamsFromOverriddenMember: syntax is { Type.IsInfer: true, Default: null } &&
+                            SharperInferredParameterType.GetOverriddenSignature(owner) is { IsApplicable: true } overridden &&
+                            overridden.IsParams(ordinal));
                 });
         }
 
@@ -308,11 +311,24 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             TypeWithAnnotations parameterType;
             if (parameterSyntax is ParameterSyntax { Type.IsInfer: true } inferParameter)
             {
-                // Sharper: 'infer' takes the type of the default value.
+                // Sharper: 'infer' takes the type of the default value, or else that of the parameter of the member that the
+                // method overrides or implements, with its ref kind unless one is written (step P2).
                 parameterType = withTypeParametersBinder.BindTypeOrSharperInferKeyword(inferParameter.Type, diagnostics, out bool isInfer);
                 if (isInfer)
                 {
-                    parameterType = SharperInferredParameterType.GetType(owner, inferParameter, diagnostics);
+                    if (inferParameter.Default is null &&
+                        SharperInferredParameterType.GetOverriddenSignature(owner) is { IsApplicable: true } overridden)
+                    {
+                        parameterType = overridden.GetParameterType(parameterIndex, withTypeParametersBinder.Compilation);
+                        if (refnessKeyword.Kind() == SyntaxKind.None)
+                        {
+                            refKind = overridden.GetRefKind(parameterIndex);
+                        }
+                    }
+                    else
+                    {
+                        parameterType = SharperInferredParameterType.GetType(owner, inferParameter, diagnostics);
+                    }
                 }
             }
             else

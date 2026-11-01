@@ -112,6 +112,29 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
         private bool HasAnyBody => flags.HasAnyBody;
 
+#nullable enable
+        /// <summary>
+        /// Set by the method checks when the return type is Sharper's <c>infer</c>, copied from the member this method
+        /// overrides or implements (step P2).
+        /// </summary>
+        private bool _isSharperReturnTypeFromOverriddenMember;
+
+        /// <summary>
+        /// True if the return type is Sharper's <c>infer</c>, copied from the member this method overrides or implements.
+        /// </summary>
+        internal bool IsSharperReturnTypeFromOverriddenMember
+        {
+            get
+            {
+                LazyMethodChecks();
+                return _isSharperReturnTypeFromOverriddenMember;
+            }
+        }
+
+        /// <summary>The interface an explicit implementation names, which Sharper's step P2 reads before the method checks.</summary>
+        internal TypeSymbol? SharperExplicitInterfaceType => ExplicitInterfaceType;
+#nullable disable
+
         private (TypeWithAnnotations ReturnType, ImmutableArray<ParameterSymbol> Parameters, ImmutableArray<TypeParameterConstraintClause> DeclaredConstraintsForOverrideOrImplementation, SharperInferredReturnType InferredReturnType) MakeParametersAndBindReturnType(BindingDiagnosticBag diagnostics)
         {
             var syntax = GetSyntax();
@@ -138,7 +161,21 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             TypeWithAnnotations returnType = signatureBinder.BindTypeOrSharperInferKeyword(returnTypeSyntax, diagnostics, out bool isInfer);
             SharperInferredReturnType inferredReturnType = null;
 
-            if (isInfer)
+            // Sharper, step P2: the 'infer' types of an override or an implementation are copied from the member it
+            // overrides or implements. The errors of that search are reported once, here.
+            var overridden = SharperInferredParameterType.GetOverriddenSignature(this);
+            if (overridden.IsApplicable)
+            {
+                diagnostics.AddRange(overridden.Diagnostics, allowMismatchInDependencyAccumulation: true);
+            }
+
+            if (isInfer && overridden.IsApplicable)
+            {
+                // Nothing is inferred from the body, so the limits of an inferred return type do not apply.
+                returnType = overridden.GetReturnType(DeclaringCompilation);
+                _isSharperReturnTypeFromOverriddenMember = true;
+            }
+            else if (isInfer)
             {
                 // The return type is inferred from the body, after the method checks (see SharperInferredReturnType).
                 if (CheckSharperInferredReturnTypeSupported(returnTypeSyntax, diagnostics))
