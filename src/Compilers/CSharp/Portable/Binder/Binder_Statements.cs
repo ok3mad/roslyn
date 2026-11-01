@@ -237,7 +237,15 @@ namespace Microsoft.CodeAnalysis.CSharp
             TypeSymbol elementType = GetIteratorElementType().Type;
             BoundStatement result;
 
-            if (node.Expression is RangeExpressionSyntax { LeftOperand: null, RightOperand: { } spreadOperand } &&
+            if (elementType is null &&
+                node.Expression is RangeExpressionSyntax { LeftOperand: null, RightOperand: { } inferredSpreadOperand } &&
+                IsSharperReturnTypeBeingInferred(ContainingMemberOrLambda as MethodSymbol) &&
+                node.Expression.IsFeatureEnabled(MessageID.IDS_FeatureSharper))
+            {
+                // The element type is being inferred ('infer'), so there is no C# meaning to try first.
+                result = BindSharperInferredYieldReturnSpread(node, inferredSpreadOperand, diagnostics);
+            }
+            else if (node.Expression is RangeExpressionSyntax { LeftOperand: null, RightOperand: { } spreadOperand } &&
                 elementType is { } &&
                 node.Expression.IsFeatureEnabled(MessageID.IDS_FeatureSharper))
             {
@@ -316,6 +324,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             }
         }
 
+        /// <param name="elementType">The iterator element type, or null while it is inferred ('infer'): each element then keeps its type.</param>
         private BoundYieldReturnSpreadStatement BindYieldReturnSpread(YieldStatementSyntax node, ExpressionSyntax operandSyntax, TypeSymbol elementType, BindingDiagnosticBag diagnostics)
         {
             // Bound like the collection of a foreach statement.
@@ -376,7 +385,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             // A failed conversion is reported but not always marked as an error on the result, so check the diagnostics.
             var elementPlaceholder = new BoundValuePlaceholder(operandSyntax, inferredType.Type).MakeCompilerGenerated();
             var elementDiagnostics = BindingDiagnosticBag.GetInstance(withDiagnostics: true, withDependencies: diagnostics.AccumulatesDependencies);
-            BoundExpression elementConversion = GenerateConversionForAssignment(elementType, elementPlaceholder, elementDiagnostics);
+            BoundExpression elementConversion = GenerateConversionForAssignment(elementType ?? inferredType.Type, elementPlaceholder, elementDiagnostics);
             hasErrors = elementConversion.HasErrors || elementDiagnostics.HasAnyErrors();
             diagnostics.AddRangeAndFree(elementDiagnostics);
 
@@ -392,6 +401,11 @@ namespace Microsoft.CodeAnalysis.CSharp
             if (elementType is { } && node.Expression != null)
             {
                 argument = GenerateConversionForAssignment(elementType, argument, diagnostics);
+            }
+            else if (node.Expression != null && IsSharperReturnTypeBeingInferred(ContainingMemberOrLambda as MethodSymbol))
+            {
+                // Like the expression of a return statement in a lambda whose return type is being inferred, the value
+                // keeps its own type (or none) for the best common type.
             }
             else
             {
@@ -750,7 +764,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                         {
                             block = FlowAnalysisPass.AppendImplicitReturn(block, localSymbol);
                         }
-                        else
+                        else if (!SharperInferredReturnType.HasFailedInference(localSymbol))
                         {
                             blockDiagnostics.Add(ErrorCode.ERR_ReturnExpected, localSymbol.GetFirstLocation(), localSymbol);
                         }
@@ -2594,6 +2608,20 @@ namespace Microsoft.CodeAnalysis.CSharp
                         Error(diagnostics, ErrorCode.ERR_InvalidAddrOp, ((BoundAddressOfOperator)operand).Operand.Syntax);
                         return;
                     }
+                case BoundKind.UnconvertedTryExpression:
+                    {
+                        var tryExpression = (BoundUnconvertedTryExpression)operand;
+                        var discardedUseSiteInfo = CompoundUseSiteInfo<AssemblySymbol>.Discarded;
+                        bool reportedError = false;
+                        tryConversion(tryExpression.Body, ref reportedError, ref discardedUseSiteInfo);
+                        foreach (var arm in tryExpression.Arms)
+                        {
+                            tryConversion(arm.Value, ref reportedError, ref discardedUseSiteInfo);
+                        }
+
+                        Debug.Assert(reportedError);
+                        return;
+                    }
                 case BoundKind.UnconvertedConditionalOperator:
                     {
                         var conditionalOperator = (BoundUnconvertedConditionalOperator)operand;
@@ -3155,13 +3183,13 @@ namespace Microsoft.CodeAnalysis.CSharp
         protected bool IsEffectivelyTaskReturningAsyncMethod()
         {
             var symbol = this.ContainingMemberOrLambda;
-            return symbol?.Kind == SymbolKind.Method && ((MethodSymbol)symbol).IsAsyncEffectivelyReturningTask(this.Compilation);
+            return symbol?.Kind == SymbolKind.Method && !IsSharperReturnTypeBeingInferred((MethodSymbol)symbol) && ((MethodSymbol)symbol).IsAsyncEffectivelyReturningTask(this.Compilation);
         }
 
         protected bool IsEffectivelyGenericTaskReturningAsyncMethod()
         {
             var symbol = this.ContainingMemberOrLambda;
-            return symbol?.Kind == SymbolKind.Method && ((MethodSymbol)symbol).IsAsyncEffectivelyReturningGenericTask(this.Compilation);
+            return symbol?.Kind == SymbolKind.Method && !IsSharperReturnTypeBeingInferred((MethodSymbol)symbol) && ((MethodSymbol)symbol).IsAsyncEffectivelyReturningGenericTask(this.Compilation);
         }
 
         protected bool IsIAsyncEnumerableOrIAsyncEnumeratorReturningAsyncMethod()
@@ -3170,8 +3198,9 @@ namespace Microsoft.CodeAnalysis.CSharp
             if (symbol?.Kind == SymbolKind.Method)
             {
                 var method = (MethodSymbol)symbol;
-                return method.IsAsyncReturningIAsyncEnumerable(this.Compilation) ||
-                    method.IsAsyncReturningIAsyncEnumerator(this.Compilation);
+                return !IsSharperReturnTypeBeingInferred(method) &&
+                    (method.IsAsyncReturningIAsyncEnumerable(this.Compilation) ||
+                    method.IsAsyncReturningIAsyncEnumerator(this.Compilation));
             }
             return false;
         }
@@ -3182,6 +3211,12 @@ namespace Microsoft.CodeAnalysis.CSharp
             if ((object)symbol != null)
             {
                 refKind = symbol.RefKind;
+
+                if (IsSharperReturnTypeBeingInferred(symbol))
+                {
+                    // Like a lambda whose return type is being inferred.
+                    return null;
+                }
 
                 TypeSymbol returnType = symbol.ReturnType;
 

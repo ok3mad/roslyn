@@ -406,6 +406,12 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 return ConstantValue.Bad;
             }
 
+            if (parameterSyntax.Type is { IsInfer: true } && Type.IsErrorType())
+            {
+                // Sharper: the inference of the type from this default value failed and reported why.
+                return ConstantValue.Bad;
+            }
+
             BoundExpression convertedExpression = parameterEqualsValue.Value;
             bool hasErrors = ParameterHelpers.ReportDefaultParameterErrors(binder, ContainingSymbol, parameterSyntax, this, valueBeforeConversion, convertedExpression, diagnostics);
             if (hasErrors)

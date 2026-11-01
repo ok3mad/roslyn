@@ -28,6 +28,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         private ImmutableArray<ImmutableArray<TypeWithAnnotations>> _lazyTypeParameterConstraintTypes;
         private ImmutableArray<TypeParameterConstraintKind> _lazyTypeParameterConstraintKinds;
         private volatile TypeWithAnnotations.Boxed? _lazyReturnType;
+        // Sharper: set before _lazyReturnType, which is then unused, when the return type is inferred ('infer').
+        private SharperInferredReturnType? _lazySharperInferredReturnType;
         private ImmutableArray<CustomModifier> _lazyRefCustomModifiers;
 
         // Lock for initializing lazy fields and registering their diagnostics
@@ -127,6 +129,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             }
 
             ComputeReturnType();
+            _ = ReturnTypeWithAnnotations;
 
             GetAttributes();
             GetReturnTypeAttributes();
@@ -263,7 +266,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             get
             {
                 ComputeReturnType();
-                return _lazyReturnType!.Value;
+                return _lazySharperInferredReturnType is { } inferred ? inferred.GetReturnType() : _lazyReturnType!.Value;
             }
         }
 
@@ -282,13 +285,25 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
             TypeSyntax returnTypeSyntax = Syntax.ReturnType;
             Debug.Assert(returnTypeSyntax is not ScopedTypeSyntax);
-            TypeWithAnnotations returnType = WithTypeParametersBinder.BindType(returnTypeSyntax.SkipScoped(out _).SkipRef(), diagnostics);
+            TypeWithAnnotations returnType = WithTypeParametersBinder.BindTypeOrSharperInferKeyword(returnTypeSyntax.SkipScoped(out _).SkipRef(), diagnostics, out bool isInfer);
+            SharperInferredReturnType? inferredReturnType = null;
+
+            if (isInfer)
+            {
+                // The return type is inferred from the body on first use (see SharperInferredReturnType).
+                if (CheckSharperInferredReturnTypeSupported(returnTypeSyntax, diagnostics))
+                {
+                    inferredReturnType = new InferredReturnType(this, returnTypeSyntax, (CSharpSyntaxNode?)Syntax.Body ?? Syntax.ExpressionBody!);
+                }
+
+                returnType = TypeWithAnnotations.Create(WithTypeParametersBinder.CreateErrorType("infer"));
+            }
 
             var compilation = DeclaringCompilation;
 
             // Skip some diagnostics when the local function is not associated with a compilation
             // (specifically, local functions nested in expressions in the EE).
-            if (compilation is object)
+            if (compilation is object && inferredReturnType is null)
             {
                 Location? location = null;
                 if (_refKind == RefKind.RefReadOnly)
@@ -332,6 +347,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 _declarationDiagnostics.AddRange(diagnostics.DiagnosticBag);
                 _declarationDependencies.AddAll(diagnostics.DependenciesBag);
                 diagnostics.Free();
+                _lazySharperInferredReturnType = inferredReturnType;
 #pragma warning disable CS0420 // A reference to a volatile field will not be treated as volatile
                 Interlocked.CompareExchange(ref _lazyReturnType, new TypeWithAnnotations.Boxed(returnType), null);
 #pragma warning restore CS0420 // A reference to a volatile field will not be treated as volatile
@@ -339,6 +355,89 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         }
 
         public override bool ReturnsVoid => ReturnType.IsVoidType();
+
+        /// <summary>
+        /// True if the return type is Sharper's <c>infer</c>, inferred from the body on first use.
+        /// </summary>
+        internal bool IsSharperInferredReturnType
+        {
+            get
+            {
+                ComputeReturnType();
+                return _lazySharperInferredReturnType is not null;
+            }
+        }
+
+        /// <summary>
+        /// A local function with no body can never infer its return type. Async iterators are not supported yet.
+        /// </summary>
+        private bool CheckSharperInferredReturnTypeSupported(TypeSyntax inferSyntax, BindingDiagnosticBag diagnostics)
+        {
+            MessageID notSupportedYet;
+            if (Syntax is { Body: null, ExpressionBody: null })
+            {
+                diagnostics.Add(ErrorCode.ERR_SharperInferNoBody, inferSyntax.Location, this);
+                return false;
+            }
+            else if (IsAsync && IsIterator)
+            {
+                notSupportedYet = MessageID.IDS_SharperInferOnAsyncIterator;
+            }
+            else if (_refKind != RefKind.None)
+            {
+                notSupportedYet = MessageID.IDS_SharperInferOnRefReturn;
+            }
+            else
+            {
+                return true;
+            }
+
+            diagnostics.Add(ErrorCode.ERR_SharperInferNotSupportedYet, inferSyntax.Location, notSupportedYet.Localize());
+            return false;
+        }
+
+        private sealed class InferredReturnType : SharperInferredReturnType
+        {
+            private readonly LocalFunctionSymbol _localFunction;
+
+            internal InferredReturnType(LocalFunctionSymbol localFunction, TypeSyntax inferSyntax, CSharpSyntaxNode body)
+                : base(localFunction, inferSyntax, body)
+            {
+                _localFunction = localFunction;
+            }
+
+            protected override Binder? GetBodyBinder(CSharpSyntaxNode body)
+                => _localFunction.ScopeBinder.GetBinder(body);
+
+            protected override void CheckInferredType(TypeWithAnnotations type, TypeSyntax inferSyntax, BindingDiagnosticBag diagnostics)
+            {
+                var compilation = _localFunction.DeclaringCompilation;
+                if (compilation.ShouldEmitNativeIntegerAttributes(type.Type))
+                {
+                    compilation.EnsureNativeIntegerAttributeExists(diagnostics, inferSyntax.Location, modifyCompilation: false);
+                }
+
+                if (compilation.ShouldEmitNullableAttributes(_localFunction) && type.NeedsNullableAttribute())
+                {
+                    compilation.EnsureNullableAttributeExists(diagnostics, inferSyntax.Location, modifyCompilation: false);
+                }
+
+                // span-like types are returnable in general
+                if (type.IsRestrictedType(ignoreSpanLikeTypes: true))
+                {
+                    // The return type of a method, delegate, or function pointer cannot be '{0}'
+                    diagnostics.Add(ErrorCode.ERR_MethodReturnCantBeRefAny, inferSyntax.Location, type.Type);
+                }
+            }
+
+            protected override void AddDeclarationDiagnostics(BindingDiagnosticBag diagnostics)
+            {
+                lock (_localFunction._declarationDiagnostics)
+                {
+                    _localFunction.AddDeclarationDiagnostics(diagnostics);
+                }
+            }
+        }
 
         public override int Arity => TypeParameters.Length;
 

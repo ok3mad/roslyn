@@ -180,7 +180,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                     }
 
                     // A Sharper (val x) parameter is implicitly typed, like (x).
-                    var typeOpt = p.Type is not null && !IsSharperValParameter(sharperValsOpt, i) ? BindType(p.Type, diagnostics) : default;
+                    var typeOpt = p.Type is not null && !IsSharperValParameter(sharperValsOpt, i) ? BindLambdaParameterType(p, diagnostics) : default;
 
                     var refKind = ParameterHelpers.GetModifiers(p.Modifiers, ignoreParams: false, out _, out var paramsKeyword, out _, out var scope);
                     var isParams = paramsKeyword.Kind() != SyntaxKind.None;
@@ -353,6 +353,22 @@ namespace Microsoft.CodeAnalysis.CSharp
             }
 
             return builder?.ToImmutableAndFree() ?? default;
+        }
+
+        /// <summary>
+        /// Binds the type of an explicitly typed lambda parameter. Sharper's <c>infer</c> takes the type of the default
+        /// value, as for a method parameter.
+        /// </summary>
+        private TypeWithAnnotations BindLambdaParameterType(ParameterSyntax parameter, BindingDiagnosticBag diagnostics)
+        {
+            Debug.Assert(parameter.Type is not null);
+            if (parameter.Type.IsInfer)
+            {
+                TypeWithAnnotations type = BindTypeOrSharperInferKeyword(parameter.Type, diagnostics, out bool isInfer);
+                return isInfer ? SharperInferredParameterType.GetType(ContainingMemberOrLambda!, parameter, this, diagnostics) : type;
+            }
+
+            return BindType(parameter.Type, diagnostics);
         }
 
         private static bool IsSharperValParameter(ImmutableArray<bool> sharperValsOpt, int index) => !sharperValsOpt.IsDefault && sharperValsOpt[index];

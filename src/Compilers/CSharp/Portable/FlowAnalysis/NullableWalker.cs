@@ -1567,6 +1567,42 @@ namespace Microsoft.CodeAnalysis.CSharp
                 requiresAnalysis);
         }
 
+        /// <summary>
+        /// Sharper: analyzes the body of a method whose return type is inferred (<c>infer</c>), and collects the type and
+        /// nullable state of each returned value (each yielded value of an iterator) into <paramref name="returnTypes"/>,
+        /// as for the return type of a lambda. The diagnostics are dropped: the method body is analyzed again, against
+        /// the inferred type, when the method is compiled. Returns false where nullable analysis does not apply.
+        /// </summary>
+        internal static bool AnalyzeSharperInferredReturnType(CSharpCompilation compilation, MethodSymbol method, BoundBlock body, Binder binder, ArrayBuilder<(BoundReturnStatement, TypeWithAnnotations)> returnTypes)
+        {
+            if (!HasRequiredLanguageVersion(compilation))
+            {
+                return false;
+            }
+
+            var diagnostics = DiagnosticBag.GetInstance();
+            Analyze(compilation,
+                method,
+                body,
+                binder,
+                binder.Conversions,
+                diagnostics,
+                useConstructorExitWarnings: false,
+                getterNullResilienceData: null,
+                useDelegateInvokeParameterTypes: false,
+                useDelegateInvokeReturnType: false,
+                delegateInvokeMethodOpt: null,
+                initialState: null,
+                baseOrThisInitializer: null,
+                analyzedNullabilityMapOpt: null,
+                snapshotBuilderOpt: null,
+                returnTypesOpt: returnTypes,
+                getFinalNullableState: false,
+                finalNullableState: out _);
+            diagnostics.Free();
+            return true;
+        }
+
         internal static VariableState? GetAfterInitializersState(CSharpCompilation compilation, Symbol? symbol, BoundNode constructorBody)
         {
             if (symbol is MethodSymbol method
@@ -2231,7 +2267,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                                     }
                                     break;
 
-                                case ConversionKind.ConditionalExpression or ConversionKind.SwitchExpression or ConversionKind.ObjectCreation when
+                                case ConversionKind.ConditionalExpression or ConversionKind.SwitchExpression or ConversionKind.SharperTryExpression or ConversionKind.ObjectCreation when
                                          IsTargetTypedExpression(conv.Operand) &&
                                          TypeSymbol.Equals(conv.Type, conv.Operand.Type, TypeCompareKind.IgnoreNullableModifiersForReferenceTypes):
                                 case ConversionKind.Identity:
@@ -5279,6 +5315,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         {
             return node is BoundConditionalOperator { WasTargetTyped: true } or
                            BoundConvertedSwitchExpression { WasTargetTyped: true } or
+                           BoundConvertedTryExpression { WasTargetTyped: true } or
                            BoundObjectCreationExpressionBase { WasTargetTyped: true } or
                            BoundDelegateCreationExpression { WasTargetTyped: true } or
                            BoundCollectionExpression { WasTargetTyped: true };
@@ -10029,6 +10066,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 case ConversionKind.CollectionExpression:
                 case ConversionKind.SwitchExpression:
                 case ConversionKind.ConditionalExpression:
+                case ConversionKind.SharperTryExpression:
                     resultState = getConversionResultState(operandType);
                     break;
 
@@ -10760,7 +10798,9 @@ namespace Microsoft.CodeAnalysis.CSharp
                 useLegacyWarnings,
                 AssignmentKind.Argument,
                 parameterOpt: parameter,
-                reportTopLevelWarnings,
+                // Like the operand-to-parameter step of VisitUserDefinedConversion, this checks an argument, so it is
+                // governed by reportRemainingWarnings: a target-typed arm (reportTopLevelWarnings: false) still warns.
+                reportTopLevelWarnings: reportRemainingWarnings,
                 reportRemainingWarnings,
                 trackMembers: false,
                 diagnosticLocation: diagnosticLocation);
@@ -13766,6 +13806,15 @@ namespace Microsoft.CodeAnalysis.CSharp
                 return null;
             }
             var method = (MethodSymbol)CurrentSymbol;
+            if (_returnTypesOpt != null && SharperInferredReturnType.IsBeingInferred(method))
+            {
+                // Sharper: the element type is being inferred ('infer'), so the value is collected like a returned value.
+                TypeWithState valueState = VisitRvalueWithState(expr);
+                _returnTypesOpt.Add((new BoundReturnStatement(node.Syntax, RefKind.None, expr, @checked: false), valueState.ToTypeWithAnnotations(compilation)));
+                Unsplit();
+                return null;
+            }
+
             TypeWithAnnotations elementType = InMethodBinder.GetIteratorElementTypeFromReturnType(compilation, RefKind.None,
                 method.ReturnType, errorLocation: null, diagnostics: null);
 
@@ -13794,7 +13843,15 @@ namespace Microsoft.CodeAnalysis.CSharp
             // As for a foreach iteration variable, the element conversion is checked without being visited:
             // it is built on a placeholder that is not part of the tree, so its nullability must not be recorded.
             TypeWithState elementState = node.EnumeratorInfoOpt == null ? default : ResultType;
-            if (!elementState.HasNullType && !node.HasErrors)
+            if (_returnTypesOpt != null && SharperInferredReturnType.IsBeingInferred((MethodSymbol)CurrentSymbol))
+            {
+                // Sharper: the element type is being inferred ('infer'), so the element is collected like a returned value.
+                if (!elementState.HasNullType && !node.HasErrors)
+                {
+                    _returnTypesOpt.Add((new BoundReturnStatement(node.Syntax, RefKind.None, elementPlaceholder, @checked: false), elementState.ToTypeWithAnnotations(compilation)));
+                }
+            }
+            else if (!elementState.HasNullType && !node.HasErrors)
             {
                 var method = (MethodSymbol)CurrentSymbol;
                 TypeWithAnnotations elementType = InMethodBinder.GetIteratorElementTypeFromReturnType(compilation, RefKind.None,

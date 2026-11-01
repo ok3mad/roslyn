@@ -90,7 +90,8 @@ namespace Microsoft.CodeAnalysis.CSharp
             Debug.Assert(
                 syntax.IsAnonymousFunction() ||                                                                 // lambda expressions
                 syntax is ExpressionSyntax && LambdaUtilities.IsLambdaBody(syntax, allowReducedLambdas: true) || // query lambdas
-                LambdaUtilities.IsQueryPairLambda(syntax)                                                       // "pair" lambdas in queries
+                LambdaUtilities.IsQueryPairLambda(syntax) ||                                                    // "pair" lambdas in queries
+                unboundLambda.Data.IsSharperImplicitIt && LambdaUtilities.IsSharperImplicitItLambdaBody(syntax)  // Sharper implicit 'it' lambdas
             );
         }
 
@@ -206,6 +207,16 @@ namespace Microsoft.CodeAnalysis.CSharp
         {
             Debug.Assert(!node.HasExplicitReturnType(out _, out _, out _));
             return InferReturnTypeImpl(returnTypes, node, binder, delegateType, isAsync, conversions, node.WithDependencies);
+        }
+
+        /// <summary>
+        /// Sharper: the return type of a method body whose return type is inferred ('infer'), as for a lambda with no
+        /// delegate type. <paramref name="node"/> is the body.
+        /// </summary>
+        internal static InferredLambdaReturnType InferSharperReturnType(ArrayBuilder<(BoundReturnStatement, TypeWithAnnotations)> returnTypes,
+            BoundNode node, Binder binder, bool isAsync, ConversionsBase conversions, bool withDependencies)
+        {
+            return InferReturnTypeImpl(returnTypes, node, binder, delegateType: null, isAsync, conversions, withDependencies);
         }
 
         /// <summary>
@@ -593,6 +604,12 @@ namespace Microsoft.CodeAnalysis.CSharp
         public abstract string ParameterName(int index);
         public abstract bool ParameterIsDiscard(int index);
         public virtual bool ParameterIsSharperVal(int index) => false;
+
+        /// <summary>
+        /// Whether this is a Sharper implicit <c>it</c> lambda: an argument that uses <c>it</c> and is bound as
+        /// <c>it => argument</c>.
+        /// </summary>
+        public virtual bool IsSharperImplicitIt => false;
         public abstract SyntaxList<AttributeListSyntax> ParameterAttributes(int index);
         public abstract bool HasSignature { get; }
         public abstract bool HasExplicitReturnType(out RefKind refKind, out ImmutableArray<CustomModifier> refCustomModifiers, out TypeWithAnnotations returnType);

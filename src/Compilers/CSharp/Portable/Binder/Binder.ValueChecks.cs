@@ -817,6 +817,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 case BoundKind.UnconvertedCollectionExpression:
                 case BoundKind.UnconvertedConditionalOperator:
                 case BoundKind.UnconvertedSwitchExpression:
+                case BoundKind.UnconvertedTryExpression:
                 case BoundKind.TupleLiteral:
                     if (valueKind == BindValueKind.RValue)
                     {
@@ -4796,6 +4797,11 @@ namespace Microsoft.CodeAnalysis.CSharp
                     var switchExpr = (BoundSwitchExpression)expr;
                     return GetValEscape(switchExpr.SwitchArms.SelectAsArray(a => a.Value));
 
+                case BoundKind.ConvertedTryExpression:
+                case BoundKind.UnconvertedTryExpression:
+                    var tryExpr = (BoundTryExpression)expr;
+                    return GetValEscape(tryExpr.Arms.SelectAsArray(a => a.Value).Insert(0, tryExpr.Body));
+
                 default:
                     // in error situations some unexpected nodes could make here
                     // returning '_localScopeDepth' seems safer than throwing.
@@ -5600,6 +5606,23 @@ namespace Microsoft.CodeAnalysis.CSharp
                     }
 
                     return true;
+
+                case BoundKind.UnconvertedTryExpression:
+                case BoundKind.ConvertedTryExpression:
+                    {
+                        var tryExpr = (BoundTryExpression)expr;
+                        if (!CheckValEscape(tryExpr.Body.Syntax, tryExpr.Body, escapeTo, checkingReceiver: false, diagnostics: diagnostics))
+                            return false;
+
+                        foreach (var arm in tryExpr.Arms)
+                        {
+                            var result = arm.Value;
+                            if (!CheckValEscape(result.Syntax, result, escapeTo, checkingReceiver: false, diagnostics: diagnostics))
+                                return false;
+                        }
+
+                        return true;
+                    }
 
                 default:
                     // in error situations some unexpected nodes could make here

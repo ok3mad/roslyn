@@ -1569,6 +1569,48 @@ namespace Microsoft.CodeAnalysis.CSharp
             return null;
         }
 
+        private System.Runtime.CompilerServices.ConditionalWeakTable<ParameterSyntax, SharperInferredParameterType.Result>? _lazySharperInferredParameterTypes;
+
+        /// <summary>
+        /// Sharper: the inferred types of <c>infer</c> parameters, by parameter syntax (see <see cref="SharperInferredParameterType"/>).
+        /// Weak, so that speculative syntax does not stay alive with the compilation.
+        /// </summary>
+        internal System.Runtime.CompilerServices.ConditionalWeakTable<ParameterSyntax, SharperInferredParameterType.Result> SharperInferredParameterTypes
+        {
+            get
+            {
+                if (_lazySharperInferredParameterTypes == null)
+                {
+                    Interlocked.CompareExchange(ref _lazySharperInferredParameterTypes, new System.Runtime.CompilerServices.ConditionalWeakTable<ParameterSyntax, SharperInferredParameterType.Result>(), null);
+                }
+
+                return _lazySharperInferredParameterTypes;
+            }
+        }
+
+        private SharperImmutability? _lazySharperImmutability;
+
+        /// <summary>
+        /// Sharper: immutable types and their attributes (see <see cref="Symbols.SharperImmutability"/>).
+        /// </summary>
+        internal SharperImmutability SharperImmutability
+        {
+            get
+            {
+                if (_lazySharperImmutability == null)
+                {
+                    Interlocked.CompareExchange(ref _lazySharperImmutability, new SharperImmutability(this), null);
+                }
+
+                return _lazySharperImmutability;
+            }
+        }
+
+        /// <summary>
+        /// Sharper: the immutability attributes that binding synthesized, if any were used.
+        /// </summary>
+        internal SharperImmutability? SharperImmutabilityOpt => _lazySharperImmutability;
+
         private ConcurrentDictionary<string, NamespaceSymbol>? _externAliasTargets;
 
         internal bool GetExternAliasTarget(string aliasName, out NamespaceSymbol @namespace)

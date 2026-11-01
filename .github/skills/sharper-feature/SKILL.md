@@ -148,6 +148,11 @@ implementation plan, "Feature 3"):
    Giving a token field a second kind in `Syntax.xml` silently drops the generated convenience overload that fills in
    the token (`SyntaxFactory.VarPattern(designation)`), a shipped public API and a binary break (#61). Only the
    analyzer build reports it (RS0017); restore such overloads by hand at the end of `Syntax/SyntaxFactory.cs`.
+   Do not make the new keyword a contextual keyword of the lexer or of the text-based `SyntaxFacts` members
+   (`GetContextualKeywordKind(string)`, `GetContextualKeywordKinds()`): those apply to all code, with or without the flag,
+   and callers act on them. Razor ended `@val?.Name` at `val` in ordinary pages (#109). Let the parser check the spelling
+   behind the flag (`IsSharperValIdentifier`) and make the token itself (`ConvertToSharperValKeyword`); keep only the
+   kind-based `IsContextualKeyword(ValKeyword)`, which the incremental parser needs and only Sharper-made tokens reach.
 14. **A new syntax node is public API and hides in type switches.** When no existing node fits (function types), add it
    to `Syntax.xml` with a `SyntaxKind` from 9900 up (Sharper node kinds count up from there, apart from upstream),
    regenerate, and copy the RS0016 list of the analyzer build (`-p:RunAnalyzersDuringBuild=true`; a plain build reports
@@ -155,7 +160,10 @@ implementation plan, "Feature 3"):
    `SyntaxFacts.IsTypeSyntax`, `SyntaxFacts.IsInTypeOnlyContext` (for the semantic model) and
    `SyntaxExtensions.VisitRankSpecifiers`, which throws on unknown type kinds. In the parser, gate every lookahead
    change on Sharper and scan nested parentheses in one pass: trying a second scan after a failed one is exponential in
-   the nesting depth.
+   the nesting depth. Use the node in the source of `DiagnosticAnalyzerAllInOne_Sharper` and run
+   `DiagnosticAnalyzerAllInOne` (`src/Compilers/CSharp/Test/Emit3/Diagnostics/DiagnosticAnalyzerTests.AllInOne.cs`),
+   which checks that a syntax-node analyzer is called for every node kind; it is the only such test and lives in Emit3,
+   outside the Sharper test runs.
 
 15. **The lexer has no `..` token.** It produces two `.` tokens that the parser merges (`IsAtDotDotToken`,
    `EatDotDotToken`); `CurrentToken.Kind == SyntaxKind.DotDotToken` never matches.
@@ -197,9 +205,112 @@ implementation plan, "Feature 3"):
    `SourceSimpleParameterSymbol`, which drops it. Add the condition there so such parameters stay complex
    (`readonly` parameters), or carry the decision in a flag, as `LambdaParameterSymbol.IsSharperVal` does.
 
+23. **A signature inferred from a body must not be computed under the method-checks lock.** `MethodChecks` runs under a
+   per-method lock (`LazyMethodChecks`) and reads the return type itself; binding a body there reads other methods'
+   signatures, so two methods that use each other deadlock on two threads, and a reentrant read sees a half-set symbol.
+   `infer` keeps a `SharperInferredReturnType` instead: computed on first use outside any lock, published once with
+   its diagnostics, and guarded by a thread-static frame that turns a read of an inferred type during inference into
+   an uncached error type, so results never depend on the order of inference (the `var` local precedent:
+   `SourceLocalSymbol.s_LocalTypeInferenceInProgress`). Test the order (force one symbol first) and concurrent reads.
+
+24. **A trial bag inherits "no diagnostics" from its template.** The semantic model binds with a bag that collects
+   none, so `BindingDiagnosticBag.GetInstance(diagnostics)` makes a trial that cannot tell success from failure
+   (`HasAnyErrors` asserts). A trial that decides something takes
+   `GetInstance(withDiagnostics: true, withDependencies: diagnostics.AccumulatesDependencies)`.
+25. **Binding the same arguments twice sets their declared variables twice.** An `out var` or pattern variable in an
+   argument gets its type as the call binds; a second trial with a different outcome trips
+   `SourceLocalSymbol.SetTypeWithAnnotations`. Skip the second trial when the arguments declare variables (implicit
+   `it`). A failed call also binds its lambda arguments again for error recovery, so filter before trying a reading
+   that is likely to fail, or the work multiplies with the nesting depth.
+26. **A lambda without lambda syntax follows the query clause.** `QueryUnboundLambdaState` builds an `UnboundLambda`
+   over a plain expression, and an `ExecutableCodeBinder` rooted there scopes its body; inference, nullable analysis,
+   closures and expression trees then work. Assertions that list lambda syntax kinds (`BoundLambda`,
+   `ClosureConversion.GetLambdaId`, `SynthesizedClosureEnvironment.AssertIsClosureScopeSyntax`), `await` diagnostics
+   (`IsImplicitlyDeclared` means "query"), the semantic model's scope lookup and Edit and Continue all find lambdas
+   by syntax.
+27. **A body bound to infer its own type must not read that type.** The binder reads the containing method's return
+   type for every `return` (`GetCurrentReturnType`), `yield return` (`InMethodBinder.GetIteratorElementType`, which
+   also caches the element type on the symbol) and `async` check (`IsEffectivelyTaskReturningAsyncMethod` and its
+   siblings), and the nullable walker reads it for `yield return`. Under the inference frame each read counts as a use
+   of the method by itself. Guard each one with `IsSharperReturnTypeBeingInferred` and do what a lambda whose return
+   type is being inferred does (no target type), rather than special-casing the symbol.
+
+28. **A cycle found inside a signature must be published before that signature completes.** An inferred parameter type
+   is needed when the parameter symbol is created, inside the signature lock, so it is inferred just before the lock
+   (`SharperInferredParameterType.InferBeforeSignature`) and cached per parameter syntax. A default value that reads
+   its own member's signature re-enters that member, which then completes its signature with an error type while the
+   outer inference is still running. Another thread can now find that signature complete and infer the rest of the
+   cycle without an error, so marking the cycle when the outer inference ends is too late: publish the error for every
+   parameter of the cycle at the moment it is found. Test cycles from each end, and on two threads at once.
+29. **A cycle found on a stack depends on where the search started.** With inference nested on a thread-static stack,
+   "a member on the stack is a cycle" misses a member that reaches the cycle through a member that already finished
+   and published its error, so whether it errs depends on the starting member and the thread. Find cycles as strongly
+   connected components (Tarjan's algorithm on the frames, `SharperInferredReturnType`): publish a member only with
+   its whole component, and decide all of a component's results before publishing any, so a thread whose search was
+   cut short by a published member adopts the decided results. Test every starting member and many threads, and
+   compare the diagnostics, not just their count.
+
+29. **A lowering that builds a try statement owes what `VisitTryStatement` does.** The try expression lowers to a
+   `BoundTryStatement` it makes itself, so the local rewriter's own try lowering never ran: an `await` in a catch block
+   must set `_sawAwaitInExceptionHandler` (save `_sawAwait`, visit the handler, merge), or `AsyncExceptionHandlerRewriter`
+   is skipped and codegen crashes in `ILBuilder.BlockedBranchDestinationSlow` on a branch into the handler. That
+   rewriter also took a catch block's syntax to be a `CatchClause` inside a `TryStatementSyntax`. Dump the lowered tree
+   (`BoundNode.DumpSource()` before codegen) when emit crashes; the shape shows which pass did not run. An expression
+   that lowers to a try block also inherits IL's limits: a catch filter cannot contain one, so report an error under
+   `BinderFlags.InCatchFilter` (CS20032), or codegen asserts.
+30. **The nullable walker refuses unregistered placeholders.** A decision DAG over a value that is not in the tree (the
+   caught exception) needs an input expression; a `BoundValuePlaceholder` trips `AssertPlaceholderAllowedWithoutRegistration`
+   in `LearnFromNonNullTest`. Give `LearnFromDecisionDag` a `BoundExpressionWithNullability` over it instead, which gets
+   a DAG temp slot like any expression without one.
+31. **Sub-parts with their own scope need two visitors.** `LocalBinderFactory` and `ExpressionVariableFinder` are syntax
+   walkers: without a `Visit<Node>` they descend into the arms, which then get no binders and put their pattern
+   variables in the enclosing statement's scope. Override both, as `VisitSwitchExpression` does.
+32. **A `NoneOperation`'s children must survive the control flow graph.** The CFG builder visits them as expressions:
+   switch arms cannot be visited outside a switch, and `ControlFlowGraphVerifier` requires an owning region for every
+   referenced local, so pattern variables cannot appear. Keep only children that are plain expressions (the try
+   expression keeps its body) and note what is missing.
+
+29. **An attribute that users write needs a name that binds.** `IsReadOnlyAttribute` and its kin are only emitted, so
+   the compiler synthesizes them at emit time. `[Immutable]` is written by users, so the binder must find it: when
+   lookup of an attribute name finds nothing in a Sharper file, `BindNonGenericSimpleNamespaceOrTypeOrAliasSymbol` binds
+   it to a compilation-level symbol (`SynthesizedEmbeddedSharperAttributeSymbol`, or the compilation's own declaration),
+   and `PEAssemblyBuilder.GetEmbeddedTypes` emits the ones binding created. `CreateEmbeddedAttributesIfNeeded` returns
+   early when no upstream embedded attribute is needed, so it must also know about these, or `[Embedded]` is missing.
+   Recognize such attributes by name (`IsTargetAttribute(namespace, name)`), so metadata and user-declared copies count.
+
+30. **A query over types with cycles must cache per component and report the same reason from any start.**
+   Immutability assumes the best inside a cycle, so a result computed under that assumption is only cached when the
+   cycle's root finishes (Tarjan's algorithm, `SharperImmutability.GetInfo`). Which member is reached first decides
+   which check fails first, so a reason computed on the way depends on the order, and on threads. Explain each failure
+   once every status is known (`SharperImmutability.Explain`), and test from each member and on several threads.
+
+31. **A declaration check that needs a body binds it itself.** `TryGetBodyBinder().BindMethodBody(syntax,
+   BindingDiagnosticBag.Discarded)` binds a getter outside the method compiler, as the `field` keyword's nullability
+   inference does. Skip bodies with errors (the method compiler reports them), and judge the bound tree with a
+   whitelist of node kinds, so a kind nobody reviewed fails safe. Run such checks from
+   `SourceMemberContainerTypeSymbol.AfterMembersChecks`, gated so that compilations without Sharper do nothing.
+
+## Inferred Types
+
+Inference from a body (`infer` return types, rows 10 and 15) reuses `var`'s rules for the natural type of an
+expression body (`BindToNaturalType`, `BindToInferredDelegateType`) and the lambda's inference for a block body
+(`BoundLambda.InferSharperReturnType`: best common type, `void`, `Task` and `Task<T>`), with lambdas' nullable
+re-inference (`NullableWalker` with `returnTypesOpt`). The body is bound once to infer and again to compile; drop the
+diagnostics of the first binding unless they are the inference's own, and make sure the second binding reports
+whatever made the inference fail (an error type return must not end up with no diagnostic). An inference that reads
+another inferred type infers it in a nested frame; cycles are components, not stack hits (trap 29). The design and the
+plan for the later steps are in the implementation plan, "Feature 6".
+
+Inference of a parameter type (`infer x = 3`, row 15) has one entry point, `ParameterHelpers.MakeParameter`, which
+every member kind uses (lambdas: `Binder.BindLambdaParameterType`). A new source for a parameter type (the overridden
+member, uses in the body) goes into `SharperInferredParameterType.GetType`, keeping its cache and its cycle stack;
+a source that binds something must run before the signature lock, as the default value does (trap 28). The design is
+in the implementation plan, "Feature 9".
+
 ## Testing
 
-- Tests live in `src/Compilers/CSharp/Test/Semantic/Semantics/SharperTests.cs`. Use
+- Tests live in `src/Compilers/CSharp/Test/Semantic/Semantics/SharperTests.cs`; `SharperTests` is partial, so a large
+  feature can take its own file (`SharperTests_TryExpression.cs`, `SharperTests_ImmutableTypes.cs`) and the `~SharperTests` filter still runs it. Use
   `TestOptions.Regular.WithExperimental(MessageID.IDS_FeatureSharper)` as parse options.
 - Compile against `TargetFramework.Net90`; the default test framework lacks types such as `System.Range`. Guard
   runtime output with `ExecutionConditionUtil.IsCoreClr ? "<output>" : null`.
@@ -212,6 +323,8 @@ implementation plan, "Feature 3"):
 - After a parser change, run the whole Syntax test project with `ROSLYN_TEST_SHARPER=1`, which turns Sharper on for
   every parse (design rule 2: valid C# must parse the same). Compare the failures with the last run's list in the
   implementation plan's follow-ups; each new one is a bug or, if it fits the rule, a new accepted break.
+- The Semantic test project must build with 0 warnings (`dotnet build <csproj> -warnaserror`); it is nullable-enabled,
+  so use `!` on semantic model results such as `GetDeclaredSymbol` and `SymbolInfo.Symbol`.
 - Before merging, build with the analyzers on, which the test runs skip: it reports public API changes (RS0016,
   RS0017) and other analyzer errors.
   `dotnet build src/Compilers/CSharp/Portable/Microsoft.CodeAnalysis.CSharp.csproj -p:RunAnalyzersDuringBuild=true`

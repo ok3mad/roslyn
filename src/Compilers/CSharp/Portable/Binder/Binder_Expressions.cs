@@ -334,6 +334,24 @@ namespace Microsoft.CodeAnalysis.CSharp
                         result = ConvertSwitchExpression(expr, commonType, conversionIfTargetTyped: null, diagnostics, hasErrors);
                     }
                     break;
+                case BoundUnconvertedTryExpression expr:
+                    {
+                        var commonType = expr.Type;
+                        bool hasErrors = expression.HasErrors;
+                        if (commonType is null)
+                        {
+                            if (!expr.HasAnyErrors)
+                            {
+                                ReportSharperTryExpressionNoType(expr, diagnostics);
+                            }
+
+                            commonType = CreateErrorType();
+                            hasErrors = true;
+                        }
+
+                        result = ConvertSharperTryExpression(expr, commonType, conversionIfTargetTyped: null, diagnostics, hasErrors);
+                    }
+                    break;
                 case BoundUnconvertedConditionalOperator op:
                     {
                         TypeSymbol type = op.Type;
@@ -521,9 +539,16 @@ namespace Microsoft.CodeAnalysis.CSharp
             ParameterSymbol parameter,
             EqualsValueClauseSyntax defaultValueSyntax)
         {
-            var binder = new LocalScopeBinder(this.WithContainingMemberOrLambda(parameter.ContainingSymbol).WithAdditionalFlags(BinderFlags.ParameterDefaultValue));
+            return CreateBinderForParameterDefaultValue(parameter.ContainingSymbol, defaultValueSyntax);
+        }
+
+        internal Binder CreateBinderForParameterDefaultValue(
+            Symbol containingSymbol,
+            EqualsValueClauseSyntax defaultValueSyntax)
+        {
+            var binder = new LocalScopeBinder(this.WithContainingMemberOrLambda(containingSymbol).WithAdditionalFlags(BinderFlags.ParameterDefaultValue));
             return new ExecutableCodeBinder(defaultValueSyntax,
-                                            parameter.ContainingSymbol,
+                                            containingSymbol,
                                             binder);
         }
 
@@ -737,6 +762,9 @@ namespace Microsoft.CodeAnalysis.CSharp
 
                     case SyntaxKind.SwitchExpression:
                         return BindSwitchExpression((SwitchExpressionSyntax)node, diagnostics);
+
+                    case SyntaxKind.TryExpression:
+                        return BindSharperTryExpression((TryExpressionSyntax)node, diagnostics);
 
                     case SyntaxKind.NumericLiteralExpression:
                     case SyntaxKind.StringLiteralExpression:
@@ -1786,6 +1814,10 @@ namespace Microsoft.CodeAnalysis.CSharp
                     else if (IsInJoinRightKey(node))
                     {
                         Error(diagnostics, ErrorCode.ERR_QueryInnerKey, node, name);
+                    }
+                    else if (IsSharperItIdentifier(node) && node.IsFeatureEnabled(MessageID.IDS_FeatureSharper))
+                    {
+                        Error(diagnostics, ErrorCode.ERR_SharperItNoLambda, node);
                     }
                     else
                     {
@@ -2939,6 +2971,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                     }
                 case BoundKind.UnconvertedConditionalOperator when operand.Type is null:
                 case BoundKind.UnconvertedSwitchExpression when operand.Type is null:
+                case BoundKind.UnconvertedTryExpression when operand.Type is null:
                     {
                         GenerateImplicitConversionError(diagnostics, operand.Syntax, conversion, operand, targetType);
                         return;
@@ -3113,7 +3146,7 @@ namespace Microsoft.CodeAnalysis.CSharp
 
         // Given a list of arguments, create arrays of the bound arguments and the names of those
         // arguments.
-        private void BindArgumentsAndNames(BaseArgumentListSyntax argumentListOpt, BindingDiagnosticBag diagnostics, AnalyzedArguments result, bool allowArglist = false, bool isDelegateCreation = false)
+        private void BindArgumentsAndNames(BaseArgumentListSyntax argumentListOpt, BindingDiagnosticBag diagnostics, AnalyzedArguments result, bool allowArglist = false, bool isDelegateCreation = false, ArrayBuilder<ArgumentSyntax> sharperImplicitItArguments = null)
         {
             if (argumentListOpt is null)
             {
@@ -3131,7 +3164,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             foreach (var argumentSyntax in argumentListOpt.Arguments)
             {
                 BindArgumentAndName(result, diagnostics, ref hadError, ref hadLangVersionError,
-                    argumentSyntax, allowArglist, isDelegateCreation: isDelegateCreation);
+                    argumentSyntax, allowArglist, isDelegateCreation: isDelegateCreation, sharperImplicitItArguments: sharperImplicitItArguments);
             }
         }
 
@@ -3170,14 +3203,18 @@ namespace Microsoft.CodeAnalysis.CSharp
             ref bool hadLangVersionError,
             ArgumentSyntax argumentSyntax,
             bool allowArglist,
-            bool isDelegateCreation)
+            bool isDelegateCreation,
+            ArrayBuilder<ArgumentSyntax> sharperImplicitItArguments = null)
         {
             RefKind origRefKind = argumentSyntax.RefOrOutKeyword.Kind().GetRefKind();
             // The old native compiler ignores ref/out in a delegate creation expression.
             // For compatibility we implement the same bug except in strict mode.
             // Note: Some others should still be rejected when ref/out present. See RefMustBeObeyed.
             RefKind refKind = origRefKind == RefKind.None || RefMustBeObeyed(isDelegateCreation, argumentSyntax) ? origRefKind : RefKind.None;
-            BoundExpression boundArgument = BindArgumentValue(diagnostics, argumentSyntax, allowArglist, refKind);
+            BoundExpression boundArgument =
+                sharperImplicitItArguments?.Contains(argumentSyntax) == true && TryMakeSharperImplicitItLambda(argumentSyntax, diagnostics) is { } implicitItLambda
+                    ? implicitItLambda
+                    : BindArgumentValue(diagnostics, argumentSyntax, allowArglist, refKind);
 
             BindArgumentAndName(
                 result,

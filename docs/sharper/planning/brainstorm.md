@@ -54,14 +54,14 @@ Sharper should read like C# with less ceremony; the sketches below are guesses t
 
 - **Functions are ordinary methods.** What the earlier `fun` declaration bundled is split into separate features that each work on any method, local function or lambda (see [Functions as separate elements](#functions-as-separate-elements)): `infer` in place of a return or parameter type and `readonly` parameters. `fun` itself is parked for a later "functional all in" mode.
 - **`val`** is an immutable binding, used in declarations and patterns: `val (small, large) = ...`.
-- **`it`** is the implicit parameter of any single-parameter lambda or pipe stage, as in Kotlin. Innermost wins, and an explicit parameter is the escape hatch.
+- **`it`** is the implicit parameter of a lambda written without `=>`, or of a pipe stage: `xs.Select(it.Name)` is `xs.Select(x => x.Name)`. The lambda is the innermost argument around `it` whose parameter takes a one-parameter function, and an explicit lambda is the escape hatch (see the [`it` decisions](#decided)).
 - **`|>`** is the pipe. A stage that expects `T` can receive a `Task<T>`, a sequence of `T`, or a union containing `T`, and the pipe lifts it. A stage containing `it` is an expression; a bare stage is a function applied to the value.
 - **`try expr catch { ... }`** turns exceptions into union values, with switch-style arms. Unmatched exceptions propagate, and there is no `finally`.
 - **Refined members** such as `record Money(decimal Amount is >0, Currency Currency)`, so a value can only be built through a door that proves the refinement.
 
 ## Binding mutability
 
-A binding has two independent axes: whether it can be reassigned, and whether its type is explicit or inferred. This is binding immutability only; whether the value itself is immutable is the separate type-level marker. The explicit corners will rarely be written, but they keep every combination spellable and keep "immutable" and "inferred" apart, so `val x` is just shorthand for `readonly var x`.
+A binding has two independent axes: whether it can be reassigned, and whether its type is explicit or inferred. This is binding immutability only; whether the value itself is immutable is the separate type-level marker, `[Immutable]` (see [Decided](#decided)). The explicit corners will rarely be written, but they keep every combination spellable and keep "immutable" and "inferred" apart, so `val x` is just shorthand for `readonly var x`.
 
 Locals and parameters, mutable by default as in C#:
 
@@ -132,8 +132,8 @@ statements of a block body.
   their body (parameter source 1 below).
 - **Ordering and cycles.** Return types are part of signatures, so binding one body can require binding another
   body first. A method that needs its own inferred return type, directly or through other methods, is an error and
-  must write its return type, as in F#. A recursive method with a non-recursive `return` to start from could be
-  allowed later.
+  must write its return type, as in F#. A recursive method with a non-recursive `return` to start from is no
+  exception (decided in step R3): inferring from the base case could widen the type with the recursive `return`s.
 - **Any member, without a nudge.** Public members infer like any other, with no warning, even though their
   signature then follows the body. Inferring a type is the author's choice about their API: whoever cares about a
   published API writes its types out, and most code (anything but a published library) does not need to care. The
@@ -203,7 +203,7 @@ Sequences (`T[..]`) get two additions: spreading a whole sequence into an iterat
 
 - **`yield return ..xs`** yields every element of a sequence, like `yield from` in Python or `yieldAll` in Kotlin. The spread marker is needed because a plain `yield return xs` is ambiguous when the element type is itself a sequence. It lowers to `foreach (var x in xs) yield return x;`.
 - **Recursion cost:** with that lowering a recursive tree walk stays O(depth) per element. A delegating state machine could remove that later, and it is a lowering detail, not a language one.
-- **Eager by semantics.** A collection expression typed `T[..]`, such as `[..Walk(left), node, ..Walk(right)]`, behaves as if it were built eagerly. The compiler may make it lazy when every spread source and element is total, because then the difference cannot be observed. Pure alone is not enough, since a lazy version would move a throw to enumeration time or drop it.
+- **Eager by semantics.** A collection expression typed `T[..]`, such as `[..Walk(left), node, ..Walk(right)]`, behaves as if it were built eagerly. The compiler may make it lazy when every spread source and element is total, and every spread source is immutable or created inside the expression, because then the difference cannot be observed. A `List<T>` converts to `T[..]` silently, so totality alone is not enough. Pure alone is not enough, since a lazy version would move a throw to enumeration time or drop it.
 - **Iterators are lazy by semantics.** Infinite sequences are not total, so they are written as explicit iterators with `yield return`. Expressions are eager by semantics and iterators lazy by semantics, and the optimizer bridges the gap.
 - **No promise either way.** `T[..]` does not promise laziness or eagerness, so consumers cannot depend on it, which is sound because only total expressions may be made lazy.
 - **Lazify only when it pays,** for example a single consumer that does not materialize everything, such as a `Take(5)` pipeline. If the result is enumerated twice, a lazy version recomputes unless it memoizes.
@@ -595,7 +595,7 @@ What it shows:
 - **That is the pitch.** Sharper does not forbid interfaces. It makes the narrow, functional version as cheap to write as the interface one, so the better structure stops costing readability.
 - **One stage is fine in C#.** Each stage costs an `await`, a test and a forwarding `return`, so the function grows linearly and nests. Forwarding an error needs a named case in every stage, and the tidier `is not User user` idiom throws the error away. The trailing `throw` exists because switch statements over unions also have to cover `null`; that is as reported for RC1 and not verified here.
 - **Parameter types decide how much a function owns (current direction).** Lifting only happens on a type mismatch, so a wrapper-typed parameter opts out of it. `T` is a finished value and the pipe lifts. `T~` is a running task, hot and one-shot, so two task parameters run concurrently and the body combines them explicitly (for example with `collect`). `() -> T` is a lazy recipe. `() -> T~` is a restartable async recipe, which is what retry, timeout and fallback need. Whether the parameter type alone decides, or an explicit marker is needed, is still open.
-- **`it` inside a thunk** still means the stage value, because `it` only binds in single-parameter lambdas and a thunk has none.
+- **`it` inside a thunk** still means the stage value, because explicit lambdas never supply `it`, and `Load` takes an `int`, not a function.
 - **Tests.** In the functional Sharper version a plain value embeds into any effect, so the test passes `new Profile { Plan = "Pro" }` where a restartable async recipe is expected, and `new Unavailable()` becomes a recipe that always fails. The interface versions still need a fake class (in Sharper its `Load` can return a plain value, which is lifted), and the functional C# version needs `Task.FromResult` plumbing. That a test boundary fails on an error case is a runner convention that is not settled.
 - **Interfaces as parameters.** Passing an interface hands over every method, while a recipe hands over one capability, and the checker cannot see the implementation behind an interface call. Interface methods would default to impure, and a Sharper-declared interface could mark a method `pure` as a contract for its implementers. A lambda converting to a single-method interface, as in Java, is an open idea.
 - **Purity.** A function that takes a recipe is only as pure as the recipe, which is the same conditional purity as `pure(f)` in the bindings.
@@ -707,7 +707,7 @@ static infer ProcessBatch(List<RawOrder> raws, IAccounts accts, IFx fx) =>
 Inside the real FX adapter, a failing REST call becomes a value at the boundary:
 
 ```
-try http.GetFromJsonAsync<RateTable>(url) catch
+try await http.GetFromJsonAsync<RateTable>(url) catch
 {
     HttpRequestException { StatusCode: 404 }             => new NoRate(from, to),
     HttpRequestException { StatusCode: >=500 and val s } => new FxUnavailable((int)s),
@@ -740,22 +740,40 @@ What is settled so far, what was tried and dropped, and what waits for a later s
 ### Decided
 
 - Lower to plain C# through Roslyn, with Sharper's own checker enforcing the strictness before lowering.
-- Phase one is friendlier inference plus explicit immutability (`val`), leaning towards proper deep immutability.
+- Phase one is friendlier inference plus explicit immutability (`val`), and deep immutability of values (`[Immutable]`, below).
 - A multi-case function is an ordinary C# switch expression over its parameters (`(a, b) switch { ... }`), so evaluation order is the same as in C#. Arms are not a source of parameter types. Plain C# parameter declarations stay valid and mean the same thing when there is nothing to refine.
 - Functions are ordinary methods, and the parts of the earlier `fun` are separate features (see [Functions as separate elements](#functions-as-separate-elements)). `fun` is parked for a later "functional all in" mode.
 - `infer` stands in place of an inferred return or parameter type. Parameter types are copied from a type that a signature or a value names (an overridden member, a default value, a function type, a call that pins one type), never from the shape of their uses.
 - Inferred types are allowed on public members, with no warning: whoever cares about a published API writes its types out.
 - A general default arm after the specific ones expresses a domain rule that also covers cases added later, such as "anything can be cancelled".
-- `it` works in any single-parameter lambda, and lifting through pipes happens one argument at a time.
+- Lifting through pipes happens one argument at a time.
+- `it` (#24), where C# reports that no `it` is in scope (CS0103); a variable, field, parameter or type named `it` keeps its C# meaning:
+  - **Scope.** An `it` belongs to the innermost argument around it whose parameter, in the chosen overload, is a delegate with one parameter; that whole argument becomes the lambda. `xs.Select(Process(it, a))` is `xs.Select(x => Process(x, a))`, because `Process` takes a value. A pipe stage is the outermost slot. A bare `it` argument is never a lambda by itself.
+  - **Explicit lambdas never supply `it`.** In `x => ... it ...` the `it` belongs to a slot further out, so naming the parameter is the escape hatch: `xs.Select(x => ys.Where(it > x))`.
+  - **One meaning per lambda.** Inside one implicit lambda or pipe stage, `it` has one meaning. `orders.Where(it.Lines.Any(it.Qty > 5))` and `x |> Render(it, ys.Where(it.Active))` are errors: a reader would need every signature in between to tell the two apart, and adding a function in between would move the boundary. Name one of them.
+  - **Value and function overloads.** With no outer `it`, the function overload is used (`users.FirstOrDefault(it.IsAdmin)` is the predicate). When an outer `it` exists and the method has both a value and a function overload at that argument (`FirstOrDefault(T)` and `FirstOrDefault(Func<T, bool>)`), it is an error, so a library adding an overload can never silently move `it`.
+  - **Where.** Only in arguments and pipe stages. Elsewhere (`var f = it * 2;`, a `return`, LINQ query clauses, which name their range variables) it is an error.
+  - **`it` is read-only**, like a `val` parameter. For now `await` and variable declarations (`out var v`, `is int n`) inside an implicit lambda are errors; write the lambda.
 - Errors accumulate through the plain function `collect` across independent pure checks, and fail fast between dependent stages. It is a function, not new syntax.
 - `Parse` functions live on the types and take only raw strings, while constructors take typed values.
 - Exceptions are handled with `try expr catch { ... }`, and there is no `finally`; low-level code lives in C#.
+- `try` expression (#28), slice 1 (see the [implementation plan](implementation-plan.md#feature-8-try-expression-slice-1-design)):
+  - **Result type.** Target-typed to a declared C# 15 union, which each case value converts into, or the best common type of the body and the arms. No anonymous unions until #31.
+  - **Arms** are switch arms over the exception: patterns, `when` clauses, no exhaustiveness. They run in a catch filter, so an unmatched exception is never caught and keeps its stack trace; there is no rethrow arm.
+  - **An awaitable body is awaited explicitly:** `try await F()`. Without `await`, only synchronous throws would be caught, so it warns.
 - Sorting and similar functions take an explicit comparator function instead of generic constraints.
 - Short type forms: `T[..]` for sequences, `T~` for `Task<T>` (`void~` for `Task`; `ValueTask` stays spelled out), and `() -> T` for functions.
 - `->` is only the arrow of function types; lambdas keep `=>`. A function type is `Func` or `Action`, never a synthesized delegate (see [function types](../features/function-types.md)).
-- Purity has three levels (impure, pure, total), and `total` is a checked assertion with inference for easy cases.
+- Purity has three levels (impure, pure, total), and `total` is a checked assertion with inference for easy cases. A pure function touching only its arguments is weakly pure; if every parameter is also immutable it is strongly pure, and only strongly pure calls may be memoized, hoisted or made lazy.
+- Immutability (#92; slice 1 is #139, see the [implementation plan](implementation-plan.md#feature-10-immutable-types-slice-1-design)):
+  - **Depth.** Deep, as a property of a type; `val` stays binding-only.
+  - **Definition.** Observational. Hold everything outside the object fixed, and every repeated access returns the same result, including the identity of returned objects. Observers (getters, indexers, `Equals`, `GetHashCode`) must be pure. Ordinary methods may be impure, so a `Roll()` method does not make a type mutable, and immutable does not mean identity-free.
+  - **What the compiler infers.** Only representational immutability plus pure observers. Immutability and purity grow together in a monotone spiral that assumes the best inside cycles, except for totality.
+  - **Claims.** `[Immutable]` is conditional: inference must confirm it. A hard claim names what it vouches for, such as `[UnobservableWrite]` on a lazy cache field. Only the claiming project checks; consumers trust claims, which catch honest mistakes and are not a defense.
+  - **Inheritance.** `[Immutable]` describes exact instances and puts no requirement on subclasses: authored in Sharper, `System.Object` would be immutable. `[ImmutableHierarchy]` is the separate opt-in that every subclass or implementation is immutable. Type arguments are judged statically, so `ImmutableList<Person>` is immutable only when `Person` is sealed or carries `[ImmutableHierarchy]`.
+  - **Views are not immutability.** A read-only view protects the producer, immutability the consumer.
 - The sharpener is minimal and total, cleanup belongs to analyzers and fixers, and lowering undoes sharpening.
-- IL analysis is the baseline for bindings to existing CLR code, with a small hand-written overlay on top and three provenance levels (inferred, attested, declared).
+- IL analysis is the baseline for bindings to existing CLR code, with a small hand-written overlay on top and three provenance levels (inferred, attested, declared). They are not one ladder: inferred is certain for the binary analyzed but says nothing about the next one, while attested and declared are promises over versions. Inside one assembly inference is as good as a declaration; across assemblies only claims count.
 
 ### Dropped
 
@@ -783,9 +801,7 @@ What is settled so far, what was tried and dropped, and what waits for a later s
 
 ## Open Questions
 
-- Immutability depth: shallow readonly marker, or deep immutability where an immutable value can only reach other immutable things? Leaning towards a flexible design that allows proper deep immutability.
-- Is immutability declared per type, per member, or both?
-- How are guarantees (immutability, refined parameter types) preserved across assembly boundaries, through metadata attributes and runtime guards at C# entry points?
+- How are refined parameter types preserved across assembly boundaries, through metadata attributes and runtime guards at C# entry points? Immutability is decided (see [Decided](#decided)): attributes in metadata, trusted by consumers, and a run-time type check where an optimization relies on it.
 - How does the checker's flow analysis tie into the more flexible type inference?
 - What escape hatches are needed to keep the language pragmatic, for example an `assume` that lowers to a runtime check?
 - How are diagnostics mapped back to original source after lowering?
@@ -794,7 +810,7 @@ What is settled so far, what was tried and dropped, and what waits for a later s
 - **Implicit lifting versus an explicit marker (deep dive).** Should the parameter type alone decide whether a pipe stage lifts, or should lifting be spelled out? Implicit lifting is a type-directed coercion, errors from a lift that did not fire will be confusing, and inlay hints in the IDE only partly help.
 - **`T~` is a hot task (deep dive).** Creating it starts the effect, so the type does not describe a computation. `~` means "may suspend", not "impure", and purity is a separate flag. How this relates to cold recipes (`() -> T~`) and to a single coherent effect story is open. It does not block the spelling: `T~` is a plain alias for `Task<T>`, which is already hot in C#. Shipping it does fix one thing, though: `~` can never later become a different type (a cold computation, `ValueTask` or "any awaitable") without breaking every signature written with it.
 - **Structural unions versus reified generics (deep dive).** TypeScript can be structural because erasure is free in JavaScript, but on the CLR generics, overloads, reflection and C# callers all see real types. `A | B` needs a canonical CLR type, yet in generic code the normal form of `T | NotFound` depends on `T` (it should collapse when `T` is `NotFound`), and `Profile~` to `(Profile | Unavailable)~` or `List<Profile>` to `List<Profile | X>` are not CLR conversions. This is a choice, not a fix: nominal or tagged unions in generic positions, erasure to `object` (boxing, opaque to C#), or copying conversions. It subsumes the untagged-unions question above.
-- **Purity needs deep immutability (deep dive).** "Depends only on its arguments" is undefined when an argument is a reference to mutable data, so memoization, hoisting, lazy collection expressions and the rule that `T[..]` promises neither laziness nor eagerness all break on a mutable `List`, and any `List` converts to `T[..]` because it aliases `IEnumerable<T>`. Nullable reference types get away with an unsound erased layer because it never changes codegen, while Sharper's facts would drive optimizations. The choice: make immutability the foundation and treat purity as meaningful only over representationally immutable data (readonly all the way down, verified in IL), or keep the facts advisory and give up the optimizations.
+- **Purity needs deep immutability (deep dive).** Resolved by #92: purity is meaningful over deeply immutable data, which the compiler infers only from representational immutability and lets authors claim beyond that. See [Decided](#decided) and the [implementation plan](implementation-plan.md#feature-10-immutable-types-slice-1-design).
 - **Implicit lifting stops at generics and `object` (deep dive).** Lifting fires on a type mismatch, but a generic `Log<T>(T x)` or an `object` parameter accepts a `Task` with no mismatch, and with the object root every value fits there. A library adding an overload can silently flip a call site between lifting and not lifting. At minimum generic and `object` positions need an explicit lift marker, which largely answers the implicit-versus-explicit question above.
 - **Inferred domains swallow exhaustiveness.** If a refined domain were ever inferred from arm patterns, a forgotten arm would narrow the domain instead of raising a non-exhaustive error, and the errors would surface at call sites instead. That is why arms are not a source of parameter types; domains are written out.
 - **Generic by default (source 5).** Should a parameter that nothing pins become a generic type parameter, or be an error? See [Inferred parameter types](#inferred-parameter-types).

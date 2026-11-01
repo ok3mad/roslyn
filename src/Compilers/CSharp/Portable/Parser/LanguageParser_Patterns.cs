@@ -301,7 +301,9 @@ namespace Microsoft.CodeAnalysis.CSharp.Syntax.InternalSyntax
                     // we have a "var" pattern; "var" is not permitted to be a stand-in for a type (or a constant) in a pattern.
                     // Sharper's "val" is a var pattern with a ValKeyword token: its variables cannot be reassigned. Like "var", it is
                     // a keyword here even where a type named val exists (an accepted break, escaped as @val by the sharpener).
-                    var varToken = ConvertToKeyword(typeIdentifierToken);
+                    var varToken = IsSharperValIdentifier(typeIdentifierToken)
+                        ? ConvertToSharperValKeyword(typeIdentifierToken)
+                        : ConvertToKeyword(typeIdentifierToken);
                     var varDesignation = ParseDesignation(forPattern: true);
                     return _syntaxFactory.VarPattern(varToken, varDesignation);
                 }
@@ -609,62 +611,65 @@ namespace Microsoft.CodeAnalysis.CSharp.Syntax.InternalSyntax
                 governingExpression,
                 switchKeyword,
                 this.EatToken(SyntaxKind.OpenBraceToken),
-                parseSwitchExpressionArms(),
+                ParseSwitchExpressionArms(),
                 this.EatToken(SyntaxKind.CloseBraceToken));
+        }
 
-            SeparatedSyntaxList<SwitchExpressionArmSyntax> parseSwitchExpressionArms()
+        /// <summary>
+        /// Parses the arms of a switch expression, or of a Sharper try expression, up to the closing brace.
+        /// </summary>
+        private SeparatedSyntaxList<SwitchExpressionArmSyntax> ParseSwitchExpressionArms()
+        {
+            var arms = _pool.AllocateSeparated<SwitchExpressionArmSyntax>();
+
+            while (this.CurrentToken.Kind != SyntaxKind.CloseBraceToken)
             {
-                var arms = _pool.AllocateSeparated<SwitchExpressionArmSyntax>();
+                // Help out in the case where a user is converting a switch statement to a switch expression. Note:
+                // `default(...)` and `default` will also be consumed as a legal syntactic patterns (though the
+                // latter will fail during binding).  So if the user has `default:` we will recover fine as we
+                // handle the errant colon below.
+                var errantCase = this.CurrentToken.Kind == SyntaxKind.CaseKeyword
+                    ? AddError(this.EatToken(), ErrorCode.ERR_BadCaseInSwitchArm)
+                    : null;
 
-                while (this.CurrentToken.Kind != SyntaxKind.CloseBraceToken)
+                var savedState = _termState;
+                _termState |= TerminatorState.IsPatternInSwitchExpressionArm;
+                var pattern = ParsePattern(Precedence.Coalescing, inSwitchArmPattern: true);
+                _termState = savedState;
+
+                // We use a precedence that excludes lambdas, assignments, and a conditional which could have a
+                // lambda on the right, because we need the parser to leave the EqualsGreaterThanToken to be
+                // consumed by the switch arm. The strange side-effect of that is that the conditional expression is
+                // not permitted as a constant expression here; it would have to be parenthesized.
+
+                var switchExpressionCase = _syntaxFactory.SwitchExpressionArm(
+                    pattern,
+                    ParseWhenClause(Precedence.Coalescing),
+                    // Help out in the case where a user is converting a switch statement to a switch expression.
+                    // Consume the `:` as a `=>` and report an error.
+                    this.CurrentToken.Kind == SyntaxKind.ColonToken
+                        ? this.EatTokenAsKind(SyntaxKind.EqualsGreaterThanToken)
+                        : this.EatToken(SyntaxKind.EqualsGreaterThanToken),
+                    ParseExpressionCore());
+
+                // If we're not making progress, abort
+                if (errantCase is null && switchExpressionCase.FullWidth == 0 && this.CurrentToken.Kind != SyntaxKind.CommaToken)
+                    break;
+
+                if (errantCase != null)
+                    switchExpressionCase = AddLeadingSkippedSyntax(switchExpressionCase, errantCase);
+
+                arms.Add(switchExpressionCase);
+                if (this.CurrentToken.Kind != SyntaxKind.CloseBraceToken)
                 {
-                    // Help out in the case where a user is converting a switch statement to a switch expression. Note:
-                    // `default(...)` and `default` will also be consumed as a legal syntactic patterns (though the
-                    // latter will fail during binding).  So if the user has `default:` we will recover fine as we
-                    // handle the errant colon below.
-                    var errantCase = this.CurrentToken.Kind == SyntaxKind.CaseKeyword
-                        ? AddError(this.EatToken(), ErrorCode.ERR_BadCaseInSwitchArm)
-                        : null;
-
-                    var savedState = _termState;
-                    _termState |= TerminatorState.IsPatternInSwitchExpressionArm;
-                    var pattern = ParsePattern(Precedence.Coalescing, inSwitchArmPattern: true);
-                    _termState = savedState;
-
-                    // We use a precedence that excludes lambdas, assignments, and a conditional which could have a
-                    // lambda on the right, because we need the parser to leave the EqualsGreaterThanToken to be
-                    // consumed by the switch arm. The strange side-effect of that is that the conditional expression is
-                    // not permitted as a constant expression here; it would have to be parenthesized.
-
-                    var switchExpressionCase = _syntaxFactory.SwitchExpressionArm(
-                        pattern,
-                        ParseWhenClause(Precedence.Coalescing),
-                        // Help out in the case where a user is converting a switch statement to a switch expression.
-                        // Consume the `:` as a `=>` and report an error.
-                        this.CurrentToken.Kind == SyntaxKind.ColonToken
-                            ? this.EatTokenAsKind(SyntaxKind.EqualsGreaterThanToken)
-                            : this.EatToken(SyntaxKind.EqualsGreaterThanToken),
-                        ParseExpressionCore());
-
-                    // If we're not making progress, abort
-                    if (errantCase is null && switchExpressionCase.FullWidth == 0 && this.CurrentToken.Kind != SyntaxKind.CommaToken)
-                        break;
-
-                    if (errantCase != null)
-                        switchExpressionCase = AddLeadingSkippedSyntax(switchExpressionCase, errantCase);
-
-                    arms.Add(switchExpressionCase);
-                    if (this.CurrentToken.Kind != SyntaxKind.CloseBraceToken)
-                    {
-                        var commaToken = this.CurrentToken.Kind == SyntaxKind.SemicolonToken
-                            ? this.EatTokenAsKind(SyntaxKind.CommaToken)
-                            : this.EatToken(SyntaxKind.CommaToken);
-                        arms.AddSeparator(commaToken);
-                    }
+                    var commaToken = this.CurrentToken.Kind == SyntaxKind.SemicolonToken
+                        ? this.EatTokenAsKind(SyntaxKind.CommaToken)
+                        : this.EatToken(SyntaxKind.CommaToken);
+                    arms.AddSeparator(commaToken);
                 }
-
-                return _pool.ToListAndFree(arms);
             }
+
+            return _pool.ToListAndFree(arms);
         }
 
         private ListPatternSyntax ParseListPattern(bool inSwitchArmPattern)

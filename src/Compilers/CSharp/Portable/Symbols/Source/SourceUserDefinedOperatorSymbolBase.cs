@@ -341,7 +341,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 // the operator method as being a varargs method.
             }
 
-            returnType = signatureBinder.BindType(returnTypeSyntax, diagnostics);
+            returnType = signatureBinder.BindTypeReportingSharperInferNotSupportedYet(returnTypeSyntax, MessageID.IDS_SharperInferOnOperator, diagnostics);
 
             // restricted types cannot be returned. 
             // NOTE: Span-like types can be returned (if expression is returnable).

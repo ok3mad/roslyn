@@ -575,6 +575,8 @@ namespace Microsoft.CodeAnalysis.CSharp
                 case ErrorCode.WRN_SharperValMemberCallOnCopy:
                 case ErrorCode.WRN_SharperReadOnlyLocalMemberCallOnCopy:
                 case ErrorCode.WRN_SharperReadOnlyParameterMemberCallOnCopy:
+                case ErrorCode.WRN_SharperTryExpressionAwaitableBody:
+                case ErrorCode.WRN_SharperImmutableHierarchyViolated:
                     return 1;
                 default:
                     return 0;
@@ -2621,6 +2623,34 @@ namespace Microsoft.CodeAnalysis.CSharp
                 or ErrorCode.ERR_SharperReadOnlyLocalWithNoInitializer
                 or ErrorCode.ERR_SharperSpreadRefStructEnumerator
                 or ErrorCode.WRN_SharperReadOnlyParameterMemberCallOnCopy
+                or ErrorCode.ERR_SharperInferNoType
+                or ErrorCode.ERR_SharperInferNotSupportedYet
+                or ErrorCode.ERR_SharperInferNoBody
+                or ErrorCode.ERR_SharperInferUsesItself
+                or ErrorCode.ERR_SharperItNoLambda
+                or ErrorCode.ERR_SharperItTwoMeanings
+                or ErrorCode.ERR_SharperItValueOrFunction
+                or ErrorCode.ERR_SharperItDeclaration
+                or ErrorCode.ERR_SharperItAwait
+                or ErrorCode.ERR_SharperInferNoBestType
+                or ErrorCode.ERR_SharperInferIteratorYieldsNothing
+                or ErrorCode.ERR_SharperInferParameterNoType
+                or ErrorCode.ERR_SharperInferParameterNoDefault
+                or ErrorCode.ERR_SharperInferParameterCycle
+                or ErrorCode.ERR_SharperTryExpressionNoType
+                or ErrorCode.WRN_SharperTryExpressionAwaitableBody
+                or ErrorCode.ERR_SharperTryExpressionInExpressionTree
+                or ErrorCode.ERR_SharperTryExpressionInCatchFilter
+                or ErrorCode.ERR_SharperInferCycle
+                or ErrorCode.ERR_SharperValSimpleLambdaNeedsParentheses
+                or ErrorCode.ERR_SharperImmutableNotProven
+                or ErrorCode.ERR_SharperImmutableDisproven
+                or ErrorCode.ERR_SharperImmutableBaseNotImmutable
+                or ErrorCode.ERR_SharperImmutableHierarchyViolated
+                or ErrorCode.WRN_SharperImmutableHierarchyViolated
+                or ErrorCode.ERR_SharperImmutableHierarchyWithoutImmutable
+                or ErrorCode.ERR_SharperMisplacedUnobservableWrite
+                or ErrorCode.ERR_SharperPhantomTypeParameterInState
                     => false,
             };
 #pragma warning restore CS8524 // The switch expression does not handle some values of its input type (it is not exhaustive) involving an unnamed enum value.

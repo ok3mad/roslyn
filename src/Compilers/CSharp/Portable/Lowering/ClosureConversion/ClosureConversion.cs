@@ -1492,7 +1492,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 isLambdaBody = true;
             }
 
-            Debug.Assert(!isLambdaBody || LambdaUtilities.IsLambdaBody(lambdaOrLambdaBodySyntax));
+            Debug.Assert(!isLambdaBody || LambdaUtilities.IsLambdaBody(lambdaOrLambdaBodySyntax) || LambdaUtilities.IsSharperImplicitItLambdaBody(lambdaOrLambdaBodySyntax));
 
             // determine lambda ordinal and calculate syntax offset
 

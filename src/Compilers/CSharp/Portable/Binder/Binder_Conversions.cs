@@ -213,6 +213,22 @@ namespace Microsoft.CodeAnalysis.CSharp
                         hasErrors);
                 }
 
+                if (conversion.Kind == ConversionKind.SharperTryExpression)
+                {
+                    var convertedTry = ConvertSharperTryExpression((BoundUnconvertedTryExpression)source, destination, conversionIfTargetTyped: conversion, diagnostics);
+                    return new BoundConversion(
+                        syntax,
+                        convertedTry,
+                        conversion,
+                        CheckOverflowAtRuntime,
+                        explicitCastInCode: isCast && !wasCompilerGenerated,
+                        conversionGroupOpt,
+                        inConversionGroupFlags,
+                        constantValueOpt: null,
+                        destination,
+                        hasErrors);
+                }
+
                 if (conversion.Kind == ConversionKind.ConditionalExpression)
                 {
                     var convertedConditional = ConvertConditionalExpression((BoundUnconvertedConditionalOperator)source, destination, conversionIfTargetTyped: conversion, diagnostics);
@@ -261,6 +277,23 @@ namespace Microsoft.CodeAnalysis.CSharp
                     }
 
                     source = ConvertSwitchExpression((BoundUnconvertedSwitchExpression)source, type, conversionIfTargetTyped: null, diagnostics, hasErrors);
+                    if (destination.Equals(type, TypeCompareKind.ConsiderEverything) && wasCompilerGenerated)
+                    {
+                        return source;
+                    }
+                }
+
+                if (source.Kind == BoundKind.UnconvertedTryExpression)
+                {
+                    TypeSymbol? type = source.Type;
+                    if (type is null)
+                    {
+                        Debug.Assert(!conversion.Exists);
+                        type = CreateErrorType();
+                        hasErrors = true;
+                    }
+
+                    source = ConvertSharperTryExpression((BoundUnconvertedTryExpression)source, type, conversionIfTargetTyped: null, diagnostics, hasErrors);
                     if (destination.Equals(type, TypeCompareKind.ConsiderEverything) && wasCompilerGenerated)
                     {
                         return source;

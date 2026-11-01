@@ -45,6 +45,11 @@ Pick work items in this order, and fill free slots from the top:
 
 Within one level, prefer the item that unblocks others (a step others list as "After X"), then the smaller one.
 
+**Review load.** Every work session ends in a PR the user has to review, and design decisions recorded in a PR add to
+that. When the user says review is backed up, or asks for simple items, prefer `size-s` items whose design is fully
+decided (a bug with a named cause, tests only, one diagnostic), say in the prompt that the PR must stay small, and leave
+items with open decisions for a later round. Bugs still come first.
+
 ## Readiness: when an issue can go to a work session
 
 All of these must hold. Otherwise the issue is either a discussion candidate or waits.
@@ -81,6 +86,11 @@ session's first job is to write one (see the prompt template), not to ask the us
   *work* or *discussion* from its title (discussion sessions end in `(discussion)`) and its tags (`triage:work`,
   `triage:discussion`), and note its status and the issue numbers in its title. Use `get_session` only for sessions
   whose state is unclear; do not read session transcripts unless a status summary reports a failure.
+- **Sessions stopped by the usage limit:** a work session whose `status_bucket` is `SESSION_STATUS_BUCKET_FAILED`
+  may only have hit the account's usage limit. Check its last `result` event (`list_events` with `kinds: ["result"]`):
+  `api_error: usage_limit_reached` with a reset time in the past means it can continue. It counts as a running work
+  session for the limit. Report it, and when the user asks, resume it with `send_message`: say that the limit has
+  reset, and ask it to check its working tree and background commands before it continues.
 - **PRs:** open PRs (`list_pull_requests`, state open). For each: which issue it closes, which session made it
   (the `session_...` link in its footer), and whether it merges cleanly.
 - **Issues:** open issues with labels only (`list_issues` with `fields: number, title, labels`). Read bodies and

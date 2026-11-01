@@ -27,6 +27,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         private readonly bool _isSynthesized;
         private readonly bool _isAsync;
         private readonly bool _isStatic;
+        private readonly bool _isSharperImplicitIt;
         private readonly DiagnosticBag _declarationDiagnostics;
         private readonly HashSet<AssemblySymbol> _declarationDependencies;
 
@@ -69,6 +70,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             _isSynthesized = unboundLambda.WasCompilerGenerated;
             _isAsync = unboundLambda.IsAsync;
             _isStatic = unboundLambda.IsStatic;
+            _isSharperImplicitIt = unboundLambda.Data.IsSharperImplicitIt;
             // No point in making this lazy. We are always going to need these soon after creation of the symbol.
             _parameters = MakeParameters(compilation, unboundLambda, parameterTypes, parameterRefKinds);
             _declarationDiagnostics = new DiagnosticBag();
@@ -76,6 +78,11 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         }
 
         public MessageID MessageID { get { return _messageID; } }
+
+        /// <summary>
+        /// Whether this is a Sharper implicit <c>it</c> lambda, whose only parameter is <c>it</c>.
+        /// </summary>
+        internal bool IsSharperImplicitIt => _isSharperImplicitIt;
 
         public override MethodKind MethodKind
         {

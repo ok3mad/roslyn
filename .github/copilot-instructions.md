@@ -122,7 +122,7 @@ For the documentation-assessment checklist and routing rules, see the
 
 ### Skills
 
-Skills live in `.github/skills/<skill-name>/SKILL.md` and are auto-discovered by their YAML `description`. Useful ones here include `sharper-feature`, `sharper-triage`, `code-review`, `ci-analysis`, `analyzer-codefix`, `merge-into-branch`, `snap`, and `update-agent-docs`.
+Skills live in `.github/skills/<skill-name>/SKILL.md` and are auto-discovered by their YAML `description`. Useful ones here include `sharper-feature`, `sharper-triage`, `sharper-self-build`, `code-review`, `ci-analysis`, `analyzer-codefix`, `merge-into-branch`, `snap`, and `update-agent-docs`.
 
 ## Working Loop (plan first)
 

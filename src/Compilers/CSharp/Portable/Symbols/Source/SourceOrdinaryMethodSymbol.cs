@@ -112,7 +112,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
         private bool HasAnyBody => flags.HasAnyBody;
 
-        private (TypeWithAnnotations ReturnType, ImmutableArray<ParameterSymbol> Parameters, ImmutableArray<TypeParameterConstraintClause> DeclaredConstraintsForOverrideOrImplementation) MakeParametersAndBindReturnType(BindingDiagnosticBag diagnostics)
+        private (TypeWithAnnotations ReturnType, ImmutableArray<ParameterSymbol> Parameters, ImmutableArray<TypeParameterConstraintClause> DeclaredConstraintsForOverrideOrImplementation, SharperInferredReturnType InferredReturnType) MakeParametersAndBindReturnType(BindingDiagnosticBag diagnostics)
         {
             var syntax = GetSyntax();
             var withTypeParamsBinder = this.DeclaringCompilation.GetBinderFactory(syntax.SyntaxTree).GetBinder(syntax.ReturnType, syntax, this);
@@ -135,7 +135,20 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             Debug.Assert(returnTypeSyntax is not ScopedTypeSyntax);
 
             returnTypeSyntax = returnTypeSyntax.SkipScoped(out _).SkipRef();
-            TypeWithAnnotations returnType = signatureBinder.BindType(returnTypeSyntax, diagnostics);
+            TypeWithAnnotations returnType = signatureBinder.BindTypeOrSharperInferKeyword(returnTypeSyntax, diagnostics, out bool isInfer);
+            SharperInferredReturnType inferredReturnType = null;
+
+            if (isInfer)
+            {
+                // The return type is inferred from the body, after the method checks (see SharperInferredReturnType).
+                if (CheckSharperInferredReturnTypeSupported(returnTypeSyntax, diagnostics))
+                {
+                    inferredReturnType = new InferredReturnType(this, returnTypeSyntax, (CSharpSyntaxNode)syntax.Body ?? syntax.ExpressionBody);
+                    return (default, parameters, default, inferredReturnType);
+                }
+
+                returnType = TypeWithAnnotations.Create(signatureBinder.CreateErrorType("infer"));
+            }
 
             // span-like types are returnable in general
             if (returnType.IsRestrictedType(ignoreSpanLikeTypes: true))
@@ -184,7 +197,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 forceMethodTypeParameters(returnType, this, declaredConstraints);
             }
 
-            return (returnType, parameters, declaredConstraints);
+            return (returnType, parameters, declaredConstraints, null);
 
             static void forceMethodTypeParameters(TypeWithAnnotations type, SourceOrdinaryMethodSymbol method, ImmutableArray<TypeParameterConstraintClause> declaredConstraints)
             {
@@ -200,6 +213,83 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 }, typePredicate: null, arg: (method, declaredConstraints), canDigThroughNullable: false, useDefaultType: true);
             }
         }
+
+#nullable enable
+        /// <summary>
+        /// Steps R1 and R2 of Sharper's inferred return type support the bodies of private methods only. A member with no
+        /// body can never infer its return type; the others are later steps.
+        /// </summary>
+        private bool CheckSharperInferredReturnTypeSupported(TypeSyntax inferSyntax, BindingDiagnosticBag diagnostics)
+        {
+            MessageID? notSupportedYet;
+            if (!HasAnyBody)
+            {
+                diagnostics.Add(ErrorCode.ERR_SharperInferNoBody, inferSyntax.Location, this);
+                return false;
+            }
+            else if (MethodKind == MethodKind.ExplicitInterfaceImplementation)
+            {
+                notSupportedYet = MessageID.IDS_SharperInferOnExplicitImplementation;
+            }
+            else if (DeclaredAccessibility != Accessibility.Private)
+            {
+                notSupportedYet = MessageID.IDS_SharperInferOnNonPrivateMember;
+            }
+            else if (IsPartial)
+            {
+                notSupportedYet = MessageID.IDS_SharperInferOnPartialMethod;
+            }
+            else if (this.IsExtensionBlockMember())
+            {
+                notSupportedYet = MessageID.IDS_SharperInferOnExtensionMember;
+            }
+            else if (IsAsync && IsIterator)
+            {
+                notSupportedYet = MessageID.IDS_SharperInferOnAsyncIterator;
+            }
+            else if (RefKind != RefKind.None)
+            {
+                notSupportedYet = MessageID.IDS_SharperInferOnRefReturn;
+            }
+            else
+            {
+                return true;
+            }
+
+            diagnostics.Add(ErrorCode.ERR_SharperInferNotSupportedYet, inferSyntax.Location, notSupportedYet.Value.Localize());
+            return false;
+        }
+
+        private sealed class InferredReturnType : SharperInferredReturnType
+        {
+            private readonly SourceOrdinaryMethodSymbol _method;
+
+            internal InferredReturnType(SourceOrdinaryMethodSymbol method, TypeSyntax inferSyntax, CSharpSyntaxNode body)
+                : base(method, inferSyntax, body)
+            {
+                _method = method;
+            }
+
+            protected override Binder? GetBodyBinder(CSharpSyntaxNode body)
+                => _method.TryGetBodyBinder()?.GetBinder(body);
+
+            protected override void CheckInferredType(TypeWithAnnotations type, TypeSyntax inferSyntax, BindingDiagnosticBag diagnostics)
+            {
+                // span-like types are returnable in general
+                if (type.IsRestrictedType(ignoreSpanLikeTypes: true))
+                {
+                    // The return type of a method, delegate, or function pointer cannot be '{0}'
+                    diagnostics.Add(ErrorCode.ERR_MethodReturnCantBeRefAny, inferSyntax.Location, type.Type);
+                }
+
+                _method.CheckEffectiveAccessibility(type, _method.Parameters, diagnostics);
+                _method.CheckFileTypeUsage(type, _method.Parameters, diagnostics);
+            }
+
+            protected override void AddDeclarationDiagnostics(BindingDiagnosticBag diagnostics)
+                => _method.AddDeclarationDiagnostics(diagnostics);
+        }
+#nullable disable
 
         protected sealed override void ExtensionMethodChecks(BindingDiagnosticBag diagnostics)
         {
@@ -689,9 +779,9 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         {
             Debug.Assert(this.MethodKind != MethodKind.UserDefinedOperator, "SourceUserDefinedOperatorSymbolBase overrides this");
 
-            var (returnType, parameters, declaredConstraints) = MakeParametersAndBindReturnType(diagnostics);
+            var (returnType, parameters, declaredConstraints, inferredReturnType) = MakeParametersAndBindReturnType(diagnostics);
 
-            MethodSymbol? overriddenOrExplicitlyImplementedMethod = MethodChecks(returnType, parameters, diagnostics);
+            MethodSymbol? overriddenOrExplicitlyImplementedMethod = MethodChecks(returnType, parameters, diagnostics, inferredReturnType);
 
             if (!declaredConstraints.IsDefault && overriddenOrExplicitlyImplementedMethod is object)
             {
@@ -910,7 +1000,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 // The modifier '{0}' is not valid for this item
                 diagnostics.Add(ErrorCode.ERR_BadMemberFlag, location, SyntaxFacts.GetText(SyntaxKind.SealedKeyword));
             }
-            else if (ReturnType.IsStatic)
+            else if (!IsSharperInferredReturnType && ReturnType.IsStatic)
             {
                 // '{0}': static types cannot be used as return types
                 diagnostics.Add(ErrorFacts.GetStaticClassReturnCode(ContainingType.IsInterfaceType()), location, ReturnType);

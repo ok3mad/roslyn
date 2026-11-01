@@ -115,6 +115,12 @@ namespace Microsoft.CodeAnalysis.CSharp
 
         internal override TypeWithAnnotations GetIteratorElementType()
         {
+            if (IsSharperReturnTypeBeingInferred(_methodSymbol))
+            {
+                // The element type is what is being inferred ('infer'): yielded values keep their own types.
+                return default;
+            }
+
             RefKind refKind = _methodSymbol.RefKind;
             TypeSymbol returnType = _methodSymbol.ReturnType;
 

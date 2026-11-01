@@ -566,6 +566,14 @@ namespace Microsoft.CodeAnalysis.CSharp
             {
                 return GetSymbolInfoFromSymbolOrNone(valParameter.Type);
             }
+            else if (GetSharperInferredReturnTypeMethod(expression, cancellationToken) is { } inferredMethod)
+            {
+                return GetSymbolInfoFromSymbolOrNone(inferredMethod.ReturnType);
+            }
+            else if (GetSharperInferredParameter(expression, cancellationToken) is { } inferredParameter)
+            {
+                return GetSymbolInfoFromSymbolOrNone(inferredParameter.Type);
+            }
             else if (expression is DeclarationExpressionSyntax declaration)
             {
                 if (declaration.Designation.Kind() != SyntaxKind.SingleVariableDesignation)
@@ -1014,6 +1022,18 @@ namespace Microsoft.CodeAnalysis.CSharp
                 var nullabilityInfo = valParameter.NullableAnnotation.ToNullabilityInfo(parameterType);
                 return new CSharpTypeInfo(parameterType, parameterType, nullabilityInfo, nullabilityInfo, Conversion.Identity);
             }
+            else if (GetSharperInferredReturnTypeMethod(expression, cancellationToken) is { } inferredMethod)
+            {
+                var returnType = inferredMethod.ReturnType.GetSymbol();
+                var nullabilityInfo = inferredMethod.ReturnNullableAnnotation.ToNullabilityInfo(returnType);
+                return new CSharpTypeInfo(returnType, returnType, nullabilityInfo, nullabilityInfo, Conversion.Identity);
+            }
+            else if (GetSharperInferredParameter(expression, cancellationToken) is { } inferredParameter)
+            {
+                var parameterType = inferredParameter.Type.GetSymbol();
+                var nullabilityInfo = inferredParameter.NullableAnnotation.ToNullabilityInfo(parameterType);
+                return new CSharpTypeInfo(parameterType, parameterType, nullabilityInfo, nullabilityInfo, Conversion.Identity);
+            }
 
             return GetTypeInfoWorker(expression, cancellationToken);
         }
@@ -1029,6 +1049,53 @@ namespace Microsoft.CodeAnalysis.CSharp
                 parameterSymbol.GetSymbol() is LambdaParameterSymbol { IsSharperVal: true }
                 ? parameterSymbol
                 : null;
+        }
+
+        /// <summary>
+        /// If <paramref name="expression"/> is the Sharper <c>infer</c> return type of a method or local function,
+        /// returns that method. Like <c>var</c>, the <c>infer</c> stands for the inferred type.
+        /// </summary>
+        private IMethodSymbol GetSharperInferredReturnTypeMethod(ExpressionSyntax expression, CancellationToken cancellationToken)
+        {
+            if (expression is not TypeSyntax { IsInfer: true })
+            {
+                return null;
+            }
+
+            IMethodSymbol method = expression.Parent switch
+            {
+                MethodDeclarationSyntax m when m.ReturnType == expression => GetDeclaredSymbol(m, cancellationToken),
+                LocalFunctionStatementSyntax l when l.ReturnType == expression => GetDeclaredSymbol(l, cancellationToken),
+                _ => null,
+            };
+
+            return method.GetSymbol() switch
+            {
+                SourceOrdinaryMethodSymbol { IsSharperInferredReturnType: true } or LocalFunctionSymbol { IsSharperInferredReturnType: true } => method,
+                _ => null,
+            };
+        }
+
+        /// <summary>
+        /// If <paramref name="expression"/> is the Sharper <c>infer</c> type of a parameter, whose type is inferred from
+        /// its default value, returns that parameter. Like <c>var</c>, the <c>infer</c> stands for the inferred type.
+        /// </summary>
+        private IParameterSymbol GetSharperInferredParameter(ExpressionSyntax expression, CancellationToken cancellationToken)
+        {
+            if (expression is not TypeSyntax { IsInfer: true, Parent: ParameterSyntax parameter } inferSyntax || parameter.Type != inferSyntax)
+            {
+                return null;
+            }
+
+            // Like 'var', 'infer' is the keyword only where no type named 'infer' is in scope.
+            Binder binder = GetEnclosingBinder(GetAdjustedNodePosition(inferSyntax));
+            if (binder is null)
+            {
+                return null;
+            }
+
+            binder.BindTypeOrSharperInferKeyword(inferSyntax, BindingDiagnosticBag.Discarded, out bool isInfer);
+            return isInfer ? GetDeclaredSymbol(parameter, cancellationToken) : null;
         }
 
         /// <summary>
@@ -2178,6 +2245,24 @@ namespace Microsoft.CodeAnalysis.CSharp
                     {
                         // There was an explicit cast on top of this
                         type = convertedSwitch.NaturalTypeOpt;
+                        (convertedType, convertedNullability) = (type, nullability);
+                        conversion = Conversion.Identity;
+                    }
+                }
+                else if (boundExpr is BoundConvertedTryExpression { WasTargetTyped: true } convertedTry)
+                {
+                    if (highestBoundExpr is BoundConversion { ConversionKind: ConversionKind.SharperTryExpression, Conversion: var convertedTryConversion })
+                    {
+                        // There was an implicit cast.
+                        type = convertedTry.NaturalTypeOpt;
+                        convertedType = convertedTry.Type;
+                        convertedNullability = convertedTry.TopLevelNullability;
+                        conversion = convertedTryConversion.IsValid ? convertedTryConversion : Conversion.NoConversion;
+                    }
+                    else
+                    {
+                        // There was an explicit cast on top of this
+                        type = convertedTry.NaturalTypeOpt;
                         (convertedType, convertedNullability) = (type, nullability);
                         conversion = Conversion.Identity;
                     }
