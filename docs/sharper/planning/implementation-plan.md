@@ -277,7 +277,7 @@ local.
 | `(scoped val x)` | Allowed: a scoped parameter that cannot be reassigned. |
 | `(params val x)` | CS9272, as for `(params x)`. |
 | `(val x = 1)` | CS9098, as for `(x = 1)`: implicitly typed parameters cannot have default values. |
-| `val x => x` (no parentheses) | A syntax error, with or without the flag, as C# requires parentheses for parameter modifiers. A clearer message is [#98](https://github.com/ok3mad/roslyn/issues/98). |
+| `val x => x` (no parentheses) | An error, as C# requires parentheses for parameter modifiers. With the flag, the parser reports CS20034, which suggests `(val x) => x`, and recovers as that form with missing parentheses (`IsSharperValSimpleLambdaStart` in `LanguageParser.cs`), so the body binds with no further errors ([#98](https://github.com/ok3mad/roslyn/issues/98)). Without the flag, the C# errors stay. |
 | `delegate (val x) { }`, `void Local(val x)` | Out of scope: their parameters are always explicitly typed, so `val` is a type name there (CS0246), as in C#. |
 | Semantic model and IOperation | The parameter is an ordinary `IParameterSymbol`; `GetTypeInfo` and `GetSymbolInfo` on `val` give the inferred type, as for `var`. IOperation is unchanged. |
 

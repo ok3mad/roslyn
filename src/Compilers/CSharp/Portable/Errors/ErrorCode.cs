@@ -2548,6 +2548,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         ERR_SharperTryExpressionInExpressionTree = SharperErrorCodes.Base + 31,
         ERR_SharperTryExpressionInCatchFilter = SharperErrorCodes.Base + 32,
         ERR_SharperInferCycle = SharperErrorCodes.Base + 33,
+        ERR_SharperValSimpleLambdaNeedsParentheses = SharperErrorCodes.Base + 34,
 
         // Note: you will need to do the following after adding errors:
         //  1) Update ErrorFacts.IsBuildOnlyDiagnostic (src/Compilers/CSharp/Portable/Errors/ErrorFacts.cs)

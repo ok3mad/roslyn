@@ -2641,6 +2641,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 or ErrorCode.ERR_SharperTryExpressionInExpressionTree
                 or ErrorCode.ERR_SharperTryExpressionInCatchFilter
                 or ErrorCode.ERR_SharperInferCycle
+                or ErrorCode.ERR_SharperValSimpleLambdaNeedsParentheses
                     => false,
             };
 #pragma warning restore CS8524 // The switch expression does not handle some values of its input type (it is not exhaustive) involving an unnamed enum value.
