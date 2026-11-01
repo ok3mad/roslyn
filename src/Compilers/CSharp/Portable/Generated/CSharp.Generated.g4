@@ -790,6 +790,7 @@ expression
   | member_binding_expression
   | omitted_array_size_expression
   | parenthesized_expression
+  | pipe_expression
   | postfix_unary_expression
   | prefix_unary_expression
   | query_expression
@@ -1050,6 +1051,10 @@ omitted_array_size_expression
 
 parenthesized_expression
   : '(' expression ')'
+  ;
+
+pipe_expression
+  : expression '|>' expression
   ;
 
 postfix_unary_expression
@@ -1787,6 +1792,7 @@ punctuation_token
   | '\\'
   | ']'
   | '{'
+  | '|>'
   | '}'
   ;
 

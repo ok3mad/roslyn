@@ -55,7 +55,7 @@ Sharper should read like C# with less ceremony; the sketches below are guesses t
 - **Functions are ordinary methods.** What the earlier `fun` declaration bundled is split into separate features that each work on any method, local function or lambda (see [Functions as separate elements](#functions-as-separate-elements)): `infer` in place of a return or parameter type and `readonly` parameters. `fun` itself is parked for a later "functional all in" mode.
 - **`val`** is an immutable binding, used in declarations and patterns: `val (small, large) = ...`.
 - **`it`** is the implicit parameter of a lambda written without `=>`, or of a pipe stage: `xs.Select(it.Name)` is `xs.Select(x => x.Name)`. The lambda is the innermost argument around `it` whose parameter takes a one-parameter function, and an explicit lambda is the escape hatch (see the [`it` decisions](#decided)).
-- **`|>`** is the pipe. A stage that expects `T` can receive a `Task<T>`, a sequence of `T`, or a union containing `T`, and the pipe lifts it. A stage containing `it` is an expression; a bare stage is a function applied to the value.
+- **`|>`** is the pipe. A stage that expects `T` can receive a `Task<T>`, a sequence of `T`, or a union containing `T`, and the pipe lifts it. A stage containing `it` is an expression; a bare stage is a function applied to the value. The pipe without lifting is built (see the [`|>` decisions](#decided)); lifting is #32.
 - **`try expr catch { ... }`** turns exceptions into union values, with switch-style arms. Unmatched exceptions propagate, and there is no `finally`.
 - **Refined members** such as `record Money(decimal Amount is >0, Currency Currency)`, so a value can only be built through a door that proves the refinement.
 
@@ -754,6 +754,11 @@ What is settled so far, what was tried and dropped, and what waits for a later s
   - **Value and function overloads.** With no outer `it`, the function overload is used (`users.FirstOrDefault(it.IsAdmin)` is the predicate). When an outer `it` exists and the method has both a value and a function overload at that argument (`FirstOrDefault(T)` and `FirstOrDefault(Func<T, bool>)`), it is an error, so a library adding an overload can never silently move `it`.
   - **Where.** Only in arguments and pipe stages. Elsewhere (`var f = it * 2;`, a `return`, LINQ query clauses, which name their range variables) it is an error.
   - **`it` is read-only**, like a `val` parameter. For now `await` and variable declarations (`out var v`, `is int n`) inside an implicit lambda are errors; write the lambda.
+- `|>` without lifting (#25; see the [implementation plan](implementation-plan.md#feature-11-pipe-without-lifting)):
+  - **Stages.** A stage with an `it` C# does not find is an expression with `it` as a read-only variable; any other stage is a function (a method group or a delegate) called with the value. The left side is evaluated once, first.
+  - **Precedence.** Left-associative, between `??` and `?:`: `s ?? "d" |> Parse` parses the fallback too, and `x |> IsValid ? a : b` tests the result.
+  - **`it`.** A stage is the outermost slot, and an inner implicit lambda in a stage that uses its `it` is an error, as for an implicit lambda. A pipe inside an implicit lambda or a stage is not a second meaning: its extent is syntax.
+  - **Scope.** A stage is its own scope, like a lambda body, and `await` works in it.
 - Errors accumulate through the plain function `collect` across independent pure checks, and fail fast between dependent stages. It is a function, not new syntax.
 - `Parse` functions live on the types and take only raw strings, while constructors take typed values.
 - Exceptions are handled with `try expr catch { ... }`, and there is no `finally`; low-level code lives in C#.

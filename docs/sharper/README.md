@@ -97,6 +97,7 @@ Not done yet:
 | [Inferred parameter type](features/inferred-parameter-type.md) | `void Fetch(string url, infer retries = 3)` gives `retries` the type of its default value, `int`. Step P1: default values, on every member kind and lambdas. | Prototype of step P1, on `sharper/infer-parameter-p1` | [#72](https://github.com/ok3mad/roslyn/issues/72), under [#27](https://github.com/ok3mad/roslyn/issues/27) |
 | [Immutable types](features/immutable-types.md) | `[Immutable] sealed record Money(decimal Amount, string Currency);` is checked to be deeply immutable; `[ImmutableHierarchy]` extends the claim to every subclass. Slice 1: the check, the attributes and their diagnostics. | Prototype of slice 1, on `sharper/immutable-types-slice1` | [#139](https://github.com/ok3mad/roslyn/issues/139), designed in [#92](https://github.com/ok3mad/roslyn/issues/92) |
 | [Implicit `it`](features/implicit-it.md) | `xs.Select(it.Name)` is `xs.Select(x => x.Name)`: an argument that uses `it` is a lambda, if the innermost parameter around it takes a one-parameter function. | Prototype, merged into `main` | [#24](https://github.com/ok3mad/roslyn/issues/24) |
+| [Pipe `\|>`](features/pipe.md) | `raw \|> ParseOrder \|> Resolve(it, accounts)` is `Resolve(ParseOrder(raw), accounts)`: a stage that uses `it` is an expression, any other stage is a function applied to the value. No lifting yet. | Prototype, on `sharper/pipe` | [#25](https://github.com/ok3mad/roslyn/issues/25) |
 | [`try` expression](features/try-expression.md) | `try int.Parse(s) catch { FormatException => -1 }` turns exceptions into values with switch arms; an unmatched exception propagates untouched. Slice 1: a declared union or the best common type as the result. | Prototype of slice 1, on `sharper/try-expression-slice1` | [#28](https://github.com/ok3mad/roslyn/issues/28) |
 
 Every planned feature has an issue, one per row of the
@@ -120,7 +121,7 @@ git grep -n "PROTOTYPE(sharper)"
   `sharper/val-designations`, `sharper/val-patterns`, `sharper/function-types`, `sharper/task-type`, `sharper/val-lambda-parameters` and
   `sharper/readonly-locals`, `sharper/infer-return-r1`, `sharper/infer-return-r2`, `sharper/infer-return-r3`,
   `sharper/infer-parameter-p1`, `sharper/try-expression-slice1` and `sharper/implicit-it` are merged.
-  `sharper/readonly-parameters` and `sharper/immutable-types-slice1` are in progress.
+  `sharper/readonly-parameters`, `sharper/immutable-types-slice1` and `sharper/pipe` are in progress.
 
 ## Diagnostics
 
@@ -173,6 +174,10 @@ in `#pragma warning`, `/nowarn` and `.editorconfig`.
 | CS20040 | Error | '{0}' is marked [ImmutableHierarchy], so it must also be marked [Immutable]. |
 | CS20041 | Error | [UnobservableWrite] is only valid on a field that is not readonly, of a class marked [Immutable]. |
 | CS20042 | Error | Type parameter '{0}' is marked [Phantom], but '{1}' uses it in the state of the type. |
+| CS20043 | Error | The left side of '\|>' must be a value with a type, but it is {0}. |
+| CS20044 | Error | This stage does not use the value piped into it: its 'it' belongs to an inner lambda, the argument of '{0}'. Name that lambda's parameter, as in 'x => ...', or use the piped 'it' outside it. |
+| CS20045 | Error | The stage after '\|>' must be a function, such as a method group or a delegate, or an expression that uses 'it', but it is {0}. |
+| CS20046 | Error | An expression tree cannot contain a pipe '\|>'. |
 
 ## Where the code is
 
@@ -180,11 +185,11 @@ in `#pragma warning`, `/nowarn` and `.editorconfig`.
 | --- | --- |
 | Feature flag | `src/Compilers/CSharp/Portable/Errors/MessageID.cs` (`IDS_FeatureSharper`), `src/Compilers/Core/Portable/CommandLine/Feature.cs` (`Feature.Sharper`) |
 | Parser | `src/Compilers/CSharp/Portable/Parser/LanguageParser.cs` (search for `IDS_FeatureSharper`) |
-| Binding | `src/Compilers/CSharp/Portable/Binder/` (search for `IDS_FeatureSharper`); short type forms such as `T[..]` in `Binder_SharperTypes.cs`; inferred return types in `Binder_SharperInferredReturnType.cs` and `Symbols/Source/SharperInferredReturnType.cs`; inferred parameter types in `Binder_SharperInferredParameterType.cs` and `Symbols/Source/SharperInferredParameterType.cs`; implicit `it` in `Binder_SharperImplicitIt.cs`; immutable types in `Symbols/SharperImmutability.cs`; the `try` expression in `Binder_SharperTryExpression.cs` |
-| Syntax nodes | `src/Compilers/CSharp/Portable/Syntax/Syntax.xml` (`FunctionTypeSyntax`, `TaskTypeSyntax`, `ParenthesizedTypeSyntax`, `TryExpressionSyntax`); Sharper kinds in `SyntaxKind.cs` count up from 9900 |
+| Binding | `src/Compilers/CSharp/Portable/Binder/` (search for `IDS_FeatureSharper`); short type forms such as `T[..]` in `Binder_SharperTypes.cs`; inferred return types in `Binder_SharperInferredReturnType.cs` and `Symbols/Source/SharperInferredReturnType.cs`; inferred parameter types in `Binder_SharperInferredParameterType.cs` and `Symbols/Source/SharperInferredParameterType.cs`; implicit `it` in `Binder_SharperImplicitIt.cs`; the pipe in `Binder_SharperPipe.cs`; immutable types in `Symbols/SharperImmutability.cs`; the `try` expression in `Binder_SharperTryExpression.cs` |
+| Syntax nodes | `src/Compilers/CSharp/Portable/Syntax/Syntax.xml` (`FunctionTypeSyntax`, `TaskTypeSyntax`, `ParenthesizedTypeSyntax`, `TryExpressionSyntax`, `PipeExpressionSyntax`); Sharper kinds in `SyntaxKind.cs` count up from 9900, and the pipe token `BarGreaterThanToken` takes 8231, the top of the free punctuation gap |
 | Bound nodes | `src/Compilers/CSharp/Portable/BoundTree/BoundNodes.xml` |
 | Lowering | `src/Compilers/CSharp/Portable/Lowering/LocalRewriter/` |
-| Tests | `src/Compilers/CSharp/Test/Semantic/Semantics/SharperTests.cs` and the other files of the partial class `SharperTests`, such as `SharperTests_TryExpression.cs` and `SharperTests_ImmutableTypes.cs` |
+| Tests | `src/Compilers/CSharp/Test/Semantic/Semantics/SharperTests.cs` and the other files of the partial class `SharperTests`, such as `SharperTests_TryExpression.cs`, `SharperTests_ImmutableTypes.cs` and `SharperTests_Pipe.cs` |
 
 ## Building and testing
 

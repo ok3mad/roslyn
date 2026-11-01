@@ -79,6 +79,9 @@ namespace Microsoft.CodeAnalysis.CSharp
         SlashToken = 8221,
         /// <summary>Represents <c>..</c> token.</summary>
         DotDotToken = 8222,
+        /// <summary>Represents Sharper's pipe token <c>|&gt;</c>. It takes the top free slot of the punctuation gap, away from upstream,
+        /// which fills the gap from the bottom. SharperTests checks that no other SyntaxKind takes this value.</summary>
+        BarGreaterThanToken = 8231,
 
         // Values ranging from 8193 (TildeToken) to 8287 (GreaterThanGreaterThanGreaterThanEqualsToken) are reserved for punctuation kinds.
         // This gap is included within that range. So if you add a value here make sure `SyntaxFacts.GetPunctuationKinds` includes it in the returned enumeration
@@ -965,5 +968,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         ParenthesizedType = 9902,
         /// <summary>Represents Sharper's try expression, such as <c>try F() catch { IOException => 0 }</c>.</summary>
         TryExpression = 9903,
+        /// <summary>Represents Sharper's pipe expression, such as <c>raw |&gt; Parse</c> or <c>order |&gt; Resolve(it, accounts)</c>.</summary>
+        PipeExpression = 9904,
     }
 }
