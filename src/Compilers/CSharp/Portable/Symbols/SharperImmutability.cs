@@ -706,9 +706,12 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     _ => null,
                 };
 
-                if (observer is not null && FindImpureExpression(observer, definition, localOnly) is { } impure)
+                if (observer is not null && FindImpureExpression(observer, definition, localOnly, out bool identity) is { } impure)
                 {
-                    return DefinitionInfo.NotProven(MessageID.IDS_SharperImmutableReasonObserver, member, impure.ToString());
+                    return DefinitionInfo.NotProven(
+                        identity ? MessageID.IDS_SharperImmutableReasonObserverIdentity : MessageID.IDS_SharperImmutableReasonObserver,
+                        member,
+                        impure.ToString());
                 }
             }
 
@@ -742,12 +745,15 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         #region Observers
 
         /// <summary>
-        /// The first expression of an observer (a getter, <c>Equals</c> or <c>GetHashCode</c>) that does more than read
-        /// fields, constants and other pure observers, or null when it is pure. Slice 1 needs no purity checker: that
-        /// is all an observer may do, unless it is <c>[AssumePure]</c>.
+        /// The first expression of an observer (a getter, <c>Equals</c> or <c>GetHashCode</c>) that is not pure, or null
+        /// when it is pure, unless it is <c>[AssumePure]</c>. An observer must return an equivalent result on every
+        /// access: it reads fields, constants and other pure observers, and when its return type is statically
+        /// immutable it may also create immutable values. Identity is not observable to pure code; <paramref
+        /// name="identity"/> says that the expression found compares it.
         /// </summary>
-        private SyntaxNode? FindImpureExpression(MethodSymbol observer, NamedTypeSymbol definition, bool localOnly)
+        private SyntaxNode? FindImpureExpression(MethodSymbol observer, NamedTypeSymbol definition, bool localOnly, out bool identity)
         {
+            identity = false;
             if (IsAssumedPure(observer) ||
                 observer.IsImplicitlyDeclared ||
                 observer.IsAbstract ||
@@ -768,14 +774,113 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 return null;
             }
 
-            var walker = new PurityWalker(this, observer, definition, localOnly);
+            // An observer whose result is statically immutable may create one: equivalent results suffice. Otherwise two
+            // callers sharing one memoized result would alias a mutable object, so nothing may be allocated.
+            bool allowsCreation = CheckType(observer.ReturnType, exact: false, definition, localOnly) == TypeFailure.None;
+            var walker = new PurityWalker(this, observer, definition, localOnly, allowsCreation, constructorsInProgress: null);
+            if (observer.Name == WellKnownMemberNames.ObjectEquals && observer.ParameterCount == 1)
+            {
+                walker.Skipped = FindReferenceEqualsFastPath(body, observer.Parameters[0]);
+            }
+
             walker.Visit(body);
+            identity = walker.ImpureIsIdentity;
             return walker.Impure?.Syntax;
+        }
+
+        /// <summary>
+        /// <c>if (ReferenceEquals(this, other)) return true;</c> (or <c>(object)this == other</c>) as the first statement
+        /// of a hand-written <c>Equals</c>: identical values are always equivalent, so the fast path is harmless.
+        /// </summary>
+        private static BoundStatement? FindReferenceEqualsFastPath(BoundNode body, ParameterSymbol other)
+        {
+            if (body is not BoundNonConstructorMethodBody { BlockBody.Statements: [BoundIfStatement { AlternativeOpt: null } first, ..] })
+            {
+                return null;
+            }
+
+            var consequence = first.Consequence is BoundBlock { Statements: [var single], Locals.IsEmpty: true } ? single : first.Consequence;
+            if (consequence is not BoundReturnStatement { ExpressionOpt.ConstantValueOpt: { IsBoolean: true, BooleanValue: true } })
+            {
+                return null;
+            }
+
+            var (left, right) = first.Condition switch
+            {
+                BoundCall { Method: { IsStatic: true, Name: "ReferenceEquals", ContainingType.SpecialType: SpecialType.System_Object }, Arguments: [var a, var b] } => (a, b),
+                BoundBinaryOperator { OperatorKind: BinaryOperatorKind.ObjectEqual } binary => (binary.Left, binary.Right),
+                _ => (null, null),
+            };
+
+            if (left is null || right is null)
+            {
+                return null;
+            }
+
+            left = StripConversions(left);
+            right = StripConversions(right);
+            bool isThis(BoundExpression e) => e is BoundThisReference;
+            bool isOther(BoundExpression e) => e is BoundParameter { ParameterSymbol: var p } && p == (object)other;
+            return (isThis(left) && isOther(right)) || (isOther(left) && isThis(right)) ? first : null;
+        }
+
+        private static BoundExpression StripConversions(BoundExpression expression)
+        {
+            while (expression is BoundConversion { Conversion.IsUserDefined: false } conversion)
+            {
+                expression = conversion.Operand;
+            }
+
+            return expression;
         }
 
         private static bool IsAssumedPure(MethodSymbol method)
             => HasAttribute(method.OriginalDefinition, SharperImmutabilityAttribute.AssumePure) ||
                (method.AssociatedSymbol is PropertySymbol property && HasAttribute(property.OriginalDefinition, SharperImmutabilityAttribute.AssumePure));
+
+        /// <summary><c>System.HashCode</c>, attested as pure: its seed is per process, part of the outside held fixed.</summary>
+        private static bool IsSystemHashCode(TypeSymbol? type)
+            => type is NamedTypeSymbol { Name: "HashCode", Arity: 0, ContainingType: null, ContainingNamespace: { Name: "System", ContainingNamespace.IsGlobalNamespace: true } };
+
+        /// <summary>
+        /// Whether a call of <c>object.Equals(object)</c> or <c>object.GetHashCode()</c> runs <c>object</c>'s identity-based
+        /// implementation. A call binds to the least derived declaration, so this is decided by whether the receiver's
+        /// type overrides it.
+        /// </summary>
+        private static bool IsObjectIdentityMember(MethodSymbol method, BoundExpression? receiver)
+        {
+            if (method.IsStatic ||
+                method.OriginalDefinition.ContainingType.SpecialType != SpecialType.System_Object ||
+                !IsObserverMethod(method))
+            {
+                return false;
+            }
+
+            var type = receiver?.Type switch
+            {
+                TypeParameterSymbol typeParameter => typeParameter.EffectiveBaseClassNoUseSiteDiagnostics,
+                NamedTypeSymbol named => named,
+                _ => null,
+            };
+
+            for (; type is not null && type.SpecialType != SpecialType.System_Object; type = type.BaseTypeNoUseSiteDiagnostics)
+            {
+                foreach (var member in type.GetMembers(method.Name))
+                {
+                    if (member is MethodSymbol { IsOverride: true, IsStatic: false } candidate &&
+                        candidate.ParameterCount == method.ParameterCount &&
+                        (candidate.ParameterCount == 0 || candidate.Parameters[0].Type.IsObjectType()))
+                    {
+                        return false;
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        private static bool IsObserverMethod(MethodSymbol method)
+            => method is { Name: WellKnownMemberNames.ObjectEquals, ParameterCount: 1 } or { Name: WellKnownMemberNames.ObjectGetHashCode, ParameterCount: 0 };
 
         private sealed class PurityWalker : BoundTreeWalkerWithStackGuard
         {
@@ -783,20 +888,33 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             private readonly MethodSymbol _observer;
             private readonly NamedTypeSymbol _definition;
             private readonly bool _localOnly;
+            private readonly bool _allowsCreation;
+
+            /// <summary>The constructors being checked, outermost first; the last one is this walker's when it checks a constructor.</summary>
+            private readonly ArrayBuilder<MethodSymbol>? _constructorsInProgress;
+
+            /// <summary>Boxing conversions that a string concatenation of a <c>char</c> needs.</summary>
+            private HashSet<BoundNode>? _allowedConversions;
 
             internal BoundNode? Impure;
+            internal bool ImpureIsIdentity;
+            internal BoundStatement? Skipped;
 
-            internal PurityWalker(SharperImmutability owner, MethodSymbol observer, NamedTypeSymbol definition, bool localOnly)
+            internal PurityWalker(SharperImmutability owner, MethodSymbol observer, NamedTypeSymbol definition, bool localOnly, bool allowsCreation, ArrayBuilder<MethodSymbol>? constructorsInProgress)
             {
                 _owner = owner;
                 _observer = observer;
                 _definition = definition;
                 _localOnly = localOnly;
+                _allowsCreation = allowsCreation;
+                _constructorsInProgress = constructorsInProgress;
             }
+
+            private bool IsConstructor => _observer.MethodKind == MethodKind.Constructor;
 
             public override BoundNode? Visit(BoundNode? node)
             {
-                if (node is null || Impure is not null)
+                if (node is null || Impure is not null || node == (object?)Skipped)
                 {
                     return null;
                 }
@@ -810,8 +928,52 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 return base.Visit(node);
             }
 
+            public override BoundNode? VisitInterpolatedString(BoundInterpolatedString node)
+            {
+                // The handler or the string.Format call is how the string is made, not what it depends on: visit the holes.
+                foreach (var part in node.Parts)
+                {
+                    var hole = part is BoundStringInsert insert ? insert.Value : part;
+                    if (hole is BoundCall { ReceiverOpt: BoundInterpolatedStringHandlerPlaceholder } append)
+                    {
+                        // AppendLiteral(string) or AppendFormatted(value, alignment, format).
+                        if (append.Arguments.IsEmpty)
+                        {
+                            continue;
+                        }
+
+                        hole = append.Arguments[0];
+                    }
+
+                    if (hole is BoundLiteral)
+                    {
+                        continue;
+                    }
+
+                    hole = StripConversions(hole);
+                    if (!IsStringOrChar(hole.Type))
+                    {
+                        // Other holes format with the current culture.
+                        Impure = hole;
+                        return null;
+                    }
+
+                    Visit(hole);
+                }
+
+                return null;
+            }
+
+            private static bool IsStringOrChar(TypeSymbol? type)
+                => type?.SpecialType is SpecialType.System_String or SpecialType.System_Char;
+
             private bool IsAllowed(BoundNode node)
             {
+                if (_allowedConversions?.Contains(node) == true)
+                {
+                    return true;
+                }
+
                 switch (node)
                 {
                     case BoundNonConstructorMethodBody:
@@ -856,6 +1018,19 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     case BoundDiscardExpression:
                         return true;
 
+                    case BoundConstructorMethodBody:
+                    case BoundFieldEqualsValue:
+                    case BoundPropertyEqualsValue:
+                        // The constructor writes the fields of its own 'this'.
+                        return IsConstructor;
+
+                    case BoundInterpolatedString:
+                        // Visited by VisitInterpolatedString: the holes must be strings or chars.
+                        return _allowsCreation;
+
+                    case BoundObjectCreationExpression creation:
+                        return _allowsCreation && IsPureCreation(creation);
+
                     case BoundRecursivePattern recursive:
                         return recursive.DeconstructMethod is null;
 
@@ -877,13 +1052,17 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                         return IsPureGetter(indexerAccess.Indexer, indexerAccess.ReceiverOpt);
 
                     case BoundCall call:
+                        if (IsObjectIdentityMember(call.Method, call.ReceiverOpt) ||
+                            call.Method is { IsStatic: true, Name: "ReferenceEquals", ContainingType.SpecialType: SpecialType.System_Object })
+                        {
+                            ImpureIsIdentity = true;
+                            return false;
+                        }
+
                         return IsPureCall(call.Method, call.ReceiverOpt);
 
                     case BoundBinaryOperator binary:
-                        // String concatenation and delegate combination create an object on each access.
-                        return !binary.OperatorKind.IsUserDefined()
-                            ? binary.OperatorKind.Operator() != BinaryOperatorKind.Addition || binary.Type.IsValueType
-                            : binary.BinaryOperatorMethod is { } method && IsPureOperator(method);
+                        return IsPureBinaryOperator(binary);
 
                     case BoundUnaryOperator unary:
                         return !unary.OperatorKind.IsUserDefined() || (unary.MethodOpt is { } unaryMethod && IsPureOperator(unaryMethod));
@@ -912,16 +1091,74 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                             (increment.MethodOpt is not { } incrementMethod || IsPureOperator(incrementMethod));
 
                     default:
-                        // Object and array creation, lambdas, interpolated strings, await, dynamic and everything else.
+                        // Array creation, lambdas, await, dynamic and everything else.
                         return false;
                 }
+            }
+
+            private bool IsPureBinaryOperator(BoundBinaryOperator binary)
+            {
+                var kind = binary.OperatorKind;
+                if (kind.IsUserDefined())
+                {
+                    return binary.BinaryOperatorMethod is { } method && IsPureOperator(method);
+                }
+
+                switch (kind.Operator())
+                {
+                    case BinaryOperatorKind.Addition when !binary.Type.IsValueType:
+                        // Delegate combination creates an object that is not immutable. String concatenation creates an
+                        // equivalent string; an operand that is neither a string nor a char formats with the current culture.
+                        return _allowsCreation && kind.OperandTypes() switch
+                        {
+                            BinaryOperatorKind.String => true,
+                            BinaryOperatorKind.StringAndObject => AllowConcatenatedObject(binary.Right),
+                            BinaryOperatorKind.ObjectAndString => AllowConcatenatedObject(binary.Left),
+                            _ => false,
+                        };
+
+                    case BinaryOperatorKind.Equal:
+                    case BinaryOperatorKind.NotEqual:
+                        // Reference equality observes identity; a comparison with null does not.
+                        if (kind.OperandTypes() == BinaryOperatorKind.Object &&
+                            binary.Left.ConstantValueOpt?.IsNull != true &&
+                            binary.Right.ConstantValueOpt?.IsNull != true)
+                        {
+                            ImpureIsIdentity = true;
+                            return false;
+                        }
+
+                        return true;
+
+                    default:
+                        return true;
+                }
+            }
+
+            private bool AllowConcatenatedObject(BoundExpression operand)
+            {
+                if (operand.ConstantValueOpt?.IsNull == true)
+                {
+                    return true;
+                }
+
+                if (operand is BoundConversion { Conversion.IsBoxing: true, Operand.Type.SpecialType: SpecialType.System_Char })
+                {
+                    (_allowedConversions ??= new HashSet<BoundNode>(ReferenceEqualityComparer.Instance)).Add(operand);
+                    return true;
+                }
+
+                return IsStringOrChar(StripConversions(operand).Type);
             }
 
             private static bool IsReadableField(FieldSymbol field)
                 // Statics outside the object are held fixed, but only readonly ones are known to be.
                 => !field.IsStatic || field.IsReadOnly || field.IsConst;
 
-            /// <summary>Locals and the observer's own parameters; a field only with [UnobservableWrite].</summary>
+            /// <summary>
+            /// Locals and the observer's own parameters; a field only with [UnobservableWrite]. A constructor also
+            /// writes the fields and auto-properties of its own 'this'.
+            /// </summary>
             private bool IsWritableLocalState(BoundExpression target)
             {
                 return target switch
@@ -929,10 +1166,16 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     BoundLocal => true,
                     BoundDiscardExpression => true,
                     BoundParameter parameter => parameter.ParameterSymbol.ContainingSymbol == (object)_observer,
+                    BoundFieldAccess { ReceiverOpt: BoundThisReference } fieldAccess when IsConstructor && IsOwnMember(fieldAccess.FieldSymbol) => true,
                     BoundFieldAccess fieldAccess => HasAttribute(fieldAccess.FieldSymbol.OriginalDefinition, SharperImmutabilityAttribute.UnobservableWrite),
+                    BoundPropertyAccess { ReceiverOpt: BoundThisReference, PropertySymbol: var property } when IsConstructor && IsOwnMember(property) =>
+                        property.OriginalDefinition is SourcePropertySymbolBase source && (source.HasAutoPropertySet || (source.SetMethod is null && source.HasAutoPropertyGet)),
                     _ => false,
                 };
             }
+
+            private bool IsOwnMember(Symbol member)
+                => member.ContainingType.OriginalDefinition == (object)_observer.ContainingType.OriginalDefinition;
 
             private bool IsPureGetter(PropertySymbol property, BoundExpression? receiver)
             {
@@ -957,6 +1200,17 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     return true;
                 }
 
+                if (_allowsCreation && IsSystemHashCode(method.ContainingType))
+                {
+                    return true;
+                }
+
+                if (method.MethodKind == MethodKind.Constructor && receiver is BoundThisReference or BoundBaseReference)
+                {
+                    // The constructor initializer of a constructor being checked.
+                    return IsConstructor && IsPureConstructor(method);
+                }
+
                 if (method.IsStatic || !IsObserverMethod(method))
                 {
                     return false;
@@ -964,9 +1218,6 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
                 return IsPureObserverOf(method.ContainingType, method.IsVirtual || method.IsAbstract || (method.IsOverride && !method.IsSealed), receiver);
             }
-
-            private static bool IsObserverMethod(MethodSymbol method)
-                => method is { Name: WellKnownMemberNames.ObjectEquals, ParameterCount: 1 } or { Name: WellKnownMemberNames.ObjectGetHashCode, ParameterCount: 0 };
 
             /// <summary>
             /// An observer of an immutable type is pure. On 'this' or 'base' it is one of the observers of this type
@@ -996,6 +1247,111 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             private static bool IsPureOperator(MethodSymbol method)
                 => IsAssumedPure(method) ||
                    (IsAttested(method.ContainingType.OriginalDefinition, out _) && method.ReturnType.IsValueType);
+
+            /// <summary>
+            /// A new value of a statically immutable type, made by a pure constructor, is equivalent to the one made by
+            /// the previous access. <c>System.HashCode</c> is attested. An object initializer runs setters and is not
+            /// covered yet.
+            /// </summary>
+            private bool IsPureCreation(BoundObjectCreationExpression creation)
+            {
+                if (IsSystemHashCode(creation.Type))
+                {
+                    return creation.InitializerExpressionOpt is null;
+                }
+
+                return creation.InitializerExpressionOpt is null &&
+                    _owner.CheckType(creation.Type, exact: false, _definition, _localOnly) == TypeFailure.None &&
+                    IsPureConstructor(creation.Constructor);
+            }
+
+            /// <summary>
+            /// A constructor is pure when it writes only the fields of its own 'this' and otherwise follows the observer
+            /// rules, as do the instance initializers it runs and the constructor it calls. Synthesized record and
+            /// primary constructors are checked the same way, so they are pure unless an initializer or a base argument
+            /// is not. Constructors of other assemblies need [AssumePure].
+            /// </summary>
+            private bool IsPureConstructor(MethodSymbol constructor)
+            {
+                constructor = constructor.OriginalDefinition;
+                if (IsAssumedPure(constructor) ||
+                    (constructor.ContainingType.SpecialType == SpecialType.System_Object && constructor.ParameterCount == 0))
+                {
+                    return true;
+                }
+
+                if (_constructorsInProgress?.Contains(constructor) == true)
+                {
+                    // Assume the best inside a cycle; the outer check decides.
+                    return true;
+                }
+
+                if (!_owner.IsInThisCompilation(constructor.ContainingType))
+                {
+                    return false;
+                }
+
+                var inProgress = _constructorsInProgress ?? ArrayBuilder<MethodSymbol>.GetInstance();
+                inProgress.Add(constructor);
+                try
+                {
+                    var walker = new PurityWalker(_owner, constructor, constructor.ContainingType, _localOnly, allowsCreation: true, inProgress);
+                    bool callsThis;
+                    if (constructor is SourceMemberMethodSymbol sourceConstructor && sourceConstructor.TryGetBodyBinder() is { } binder)
+                    {
+                        var body = binder.BindMethodBody(sourceConstructor.SyntaxNode, BindingDiagnosticBag.Discarded);
+                        if (body is null)
+                        {
+                            // A partial or extern constructor without a body.
+                            return false;
+                        }
+
+                        if (body.HasErrors)
+                        {
+                            return true;
+                        }
+
+                        // A base constructor initializer has a 'this' receiver too; 'this(...)' calls a constructor of the same type.
+                        callsThis = body is BoundConstructorMethodBody { Initializer: BoundExpressionStatement { Expression: BoundCall { Method: var initializerMethod } } } &&
+                            initializerMethod.ContainingType.OriginalDefinition == (object)constructor.ContainingType;
+                        walker.Visit(body);
+                    }
+                    else if (constructor.IsImplicitlyDeclared)
+                    {
+                        // A default constructor: the base constructor and the initializers.
+                        callsThis = false;
+                        if (Binder.BindImplicitConstructorInitializer(constructor, BindingDiagnosticBag.Discarded, _owner._compilation) is { HasErrors: false } baseCall)
+                        {
+                            walker.Visit(baseCall);
+                        }
+                    }
+                    else
+                    {
+                        return false;
+                    }
+
+                    if (!callsThis && walker.Impure is null && constructor.ContainingType is SourceMemberContainerTypeSymbol type)
+                    {
+                        foreach (var initializer in Binder.BindFieldInitializers(_owner._compilation, scriptInitializerOpt: null, type.InstanceInitializers, BindingDiagnosticBag.Discarded, out _))
+                        {
+                            if (!initializer.HasErrors)
+                            {
+                                walker.Visit(initializer);
+                            }
+                        }
+                    }
+
+                    return walker.Impure is null;
+                }
+                finally
+                {
+                    inProgress.RemoveAt(inProgress.Count - 1);
+                    if (_constructorsInProgress is null)
+                    {
+                        inProgress.Free();
+                    }
+                }
+            }
         }
 
         #endregion

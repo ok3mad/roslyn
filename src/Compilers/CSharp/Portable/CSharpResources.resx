@@ -411,6 +411,9 @@
   <data name="IDS_SharperImmutableReasonObserver" xml:space="preserve">
     <value>the observer '{0}' does more than read fields and pure observers: '{1}'</value>
   </data>
+  <data name="IDS_SharperImmutableReasonObserverIdentity" xml:space="preserve">
+    <value>the observer '{0}' observes object identity: '{1}'</value>
+  </data>
   <data name="IDS_SharperImmutableReasonEvent" xml:space="preserve">
     <value>'{0}' is an event, which can be subscribed to</value>
   </data>
