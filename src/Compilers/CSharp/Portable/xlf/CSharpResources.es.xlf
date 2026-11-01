@@ -2612,6 +2612,31 @@
         <target state="new">A function type cannot have more than {0} parameters, because no 'System.Func' or 'System.Action' delegate has more.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperImmutableBaseNotImmutable">
+        <source>'{0}' is marked [Immutable], but its base type '{1}' is not immutable.</source>
+        <target state="new">'{0}' is marked [Immutable], but its base type '{1}' is not immutable.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperImmutableDisproven">
+        <source>'{0}' is marked [Immutable], but it is mutable: {1}.</source>
+        <target state="new">'{0}' is marked [Immutable], but it is mutable: {1}.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperImmutableHierarchyViolated">
+        <source>'{0}' must be immutable, because '{1}' is marked [ImmutableHierarchy], but {2}.</source>
+        <target state="new">'{0}' must be immutable, because '{1}' is marked [ImmutableHierarchy], but {2}.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperImmutableHierarchyWithoutImmutable">
+        <source>'{0}' is marked [ImmutableHierarchy], so it must also be marked [Immutable].</source>
+        <target state="new">'{0}' is marked [ImmutableHierarchy], so it must also be marked [Immutable].</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperImmutableNotProven">
+        <source>'{0}' is marked [Immutable], but it cannot be proven immutable: {1}.</source>
+        <target state="new">'{0}' is marked [Immutable], but it cannot be proven immutable: {1}.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperInferCycle">
         <source>Cannot infer the return type of '{0}', because it depends on itself: {1}. Write the return type of one of these methods.</source>
         <target state="new">Cannot infer the return type of '{0}', because it depends on itself: {1}. Write the return type of one of these methods.</target>
@@ -2685,6 +2710,16 @@
       <trans-unit id="ERR_SharperItValueOrFunction">
         <source>'it' is ambiguous here: '{0}' takes a value or a function at this argument, and the outer 'it' fits both. Write the lambda, as in 'x =&gt; ...', or name the outer value.</source>
         <target state="new">'it' is ambiguous here: '{0}' takes a value or a function at this argument, and the outer 'it' fits both. Write the lambda, as in 'x =&gt; ...', or name the outer value.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperMisplacedUnobservableWrite">
+        <source>[UnobservableWrite] is only valid on a field that is not readonly, of a class marked [Immutable].</source>
+        <target state="new">[UnobservableWrite] is only valid on a field that is not readonly, of a class marked [Immutable].</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperPhantomTypeParameterInState">
+        <source>Type parameter '{0}' is marked [Phantom], but '{1}' uses it in the state of the type.</source>
+        <target state="new">Type parameter '{0}' is marked [Phantom], but '{1}' uses it in the state of the type.</target>
         <note />
       </trans-unit>
       <trans-unit id="ERR_SharperReadOnlyLocalWithNoInitializer">
@@ -3502,6 +3537,66 @@
         <target state="translated">puntero</target>
         <note />
       </trans-unit>
+      <trans-unit id="IDS_SharperImmutableReasonBase">
+        <source>its base type '{0}' is not immutable</source>
+        <target state="new">its base type '{0}' is not immutable</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperImmutableReasonCapturedParameter">
+        <source>the parameter '{0}' is captured in a field that is not readonly</source>
+        <target state="new">the parameter '{0}' is captured in a field that is not readonly</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperImmutableReasonEvent">
+        <source>'{0}' is an event, which can be subscribed to</source>
+        <target state="new">'{0}' is an event, which can be subscribed to</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperImmutableReasonFieldNotReadOnly">
+        <source>'{0}' is not readonly</source>
+        <target state="new">'{0}' is not readonly</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperImmutableReasonNotClaimed">
+        <source>'{0}' is not marked [Immutable]</source>
+        <target state="new">'{0}' is not marked [Immutable]</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperImmutableReasonObserver">
+        <source>the observer '{0}' does more than read fields and pure observers: '{1}'</source>
+        <target state="new">the observer '{0}' does more than read fields and pure observers: '{1}'</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperImmutableReasonRefField">
+        <source>'{0}' is a ref field</source>
+        <target state="new">'{0}' is a ref field</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperImmutableReasonSetAccessor">
+        <source>'{0}' has a set accessor</source>
+        <target state="new">'{0}' has a set accessor</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperImmutableReasonTypeNotClaimed">
+        <source>'{0}' has type '{1}', which comes from another assembly and is not marked [Immutable]</source>
+        <target state="new">'{0}' has type '{1}', which comes from another assembly and is not marked [Immutable]</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperImmutableReasonTypeNotImmutable">
+        <source>'{0}' has type '{1}', which is not immutable</source>
+        <target state="new">'{0}' has type '{1}', which is not immutable</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperImmutableReasonTypeNotSealed">
+        <source>'{0}' has type '{1}', which is neither sealed nor marked [ImmutableHierarchy]</source>
+        <target state="new">'{0}' has type '{1}', which is neither sealed nor marked [ImmutableHierarchy]</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperImmutableReasonTypePhantom">
+        <source>'{0}' has type '{1}', which uses a [Phantom] type parameter</source>
+        <target state="new">'{0}' has type '{1}', which uses a [Phantom] type parameter</target>
+        <note />
+      </trans-unit>
       <trans-unit id="IDS_SharperInferOnAsyncIterator">
         <source>on an async iterator</source>
         <target state="new">on an async iterator</target>
@@ -4305,6 +4400,16 @@
       <trans-unit id="WRN_SharperDynamicRangeNotSpread_Title">
         <source>'..' on a dynamic operand is a range, not a spread</source>
         <target state="new">'..' on a dynamic operand is a range, not a spread</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WRN_SharperImmutableHierarchyViolated">
+        <source>'{0}' must be immutable, because '{1}' is marked [ImmutableHierarchy], but {2}.</source>
+        <target state="new">'{0}' must be immutable, because '{1}' is marked [ImmutableHierarchy], but {2}.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WRN_SharperImmutableHierarchyViolated_Title">
+        <source>A type in an [ImmutableHierarchy] is not immutable.</source>
+        <target state="new">A type in an [ImmutableHierarchy] is not immutable.</target>
         <note />
       </trans-unit>
       <trans-unit id="WRN_SharperReadOnlyLocalMemberCallOnCopy">
