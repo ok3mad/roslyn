@@ -772,6 +772,11 @@ What is settled so far, what was tried and dropped, and what waits for a later s
   - **Claims.** `[Immutable]` is conditional: inference must confirm it. A hard claim names what it vouches for, such as `[UnobservableWrite]` on a lazy cache field. Only the claiming project checks; consumers trust claims, which catch honest mistakes and are not a defense.
   - **Inheritance.** `[Immutable]` describes exact instances and puts no requirement on subclasses: authored in Sharper, `System.Object` would be immutable. `[ImmutableHierarchy]` is the separate opt-in that every subclass or implementation is immutable. Type arguments are judged statically, so `ImmutableList<Person>` is immutable only when `Person` is sealed or carries `[ImmutableHierarchy]`.
   - **Views are not immutability.** A read-only view protects the producer, immutability the consumer.
+- Refined types (#33), slice 1 (see the [implementation plan](implementation-plan.md#feature-11-refined-types-slice-1-design)):
+  - **Spelling.** `int i is >=0` after a parameter name, with closed patterns over constants only.
+  - **Parameters are written, returns are inferred.** A parameter refinement is never inferred, though `infer retries is >=0 = 3` may carry one. An `infer` return gets the union of what its returns produce, and `val` keeps the refinement of its value.
+  - **Widening breaks callers, narrowing never does.** A caller that loses a proof or exhaustiveness because an inferred refinement widened gets an error; an arm unreachable only because of a refinement is a warning. An argument with no refinement at all that cannot be proven is a warning.
+  - **Boundary.** Every refined parameter is guarded at entry with an `ArgumentOutOfRangeException`, and the pattern goes to metadata in an attribute that Sharper consumers trust.
 - The sharpener is minimal and total, cleanup belongs to analyzers and fixers, and lowering undoes sharpening.
 - IL analysis is the baseline for bindings to existing CLR code, with a small hand-written overlay on top and three provenance levels (inferred, attested, declared). They are not one ladder: inferred is certain for the binary analyzed but says nothing about the next one, while attested and declared are promises over versions. Inside one assembly inference is as good as a declaration; across assemblies only claims count.
 
