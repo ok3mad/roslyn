@@ -778,7 +778,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             // callers sharing one memoized result would alias a mutable object, so nothing may be allocated.
             bool allowsCreation = CheckType(observer.ReturnType, exact: false, definition, localOnly) == TypeFailure.None;
             var walker = new PurityWalker(this, observer, definition, localOnly, allowsCreation, constructorsInProgress: null);
-            if (observer.Name == WellKnownMemberNames.ObjectEquals && observer.ParameterCount == 1)
+            if (observer is { Name: WellKnownMemberNames.ObjectEquals, ParameterCount: 1 })
             {
                 walker.Skipped = FindReferenceEqualsFastPath(body, observer.Parameters[0]);
             }
@@ -849,34 +849,32 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         /// </summary>
         private static bool IsObjectIdentityMember(MethodSymbol method, BoundExpression? receiver)
         {
-            if (method.IsStatic ||
-                method.OriginalDefinition.ContainingType.SpecialType != SpecialType.System_Object ||
+            if (method is not { IsStatic: false, OriginalDefinition.ContainingType.SpecialType: SpecialType.System_Object } ||
                 !IsObserverMethod(method))
             {
                 return false;
             }
 
-            var type = receiver?.Type switch
+            var receiverType = receiver?.Type switch
             {
                 TypeParameterSymbol typeParameter => typeParameter.EffectiveBaseClassNoUseSiteDiagnostics,
-                NamedTypeSymbol named => named,
-                _ => null,
+                var type => type as NamedTypeSymbol,
             };
 
-            for (; type is not null && type.SpecialType != SpecialType.System_Object; type = type.BaseTypeNoUseSiteDiagnostics)
-            {
-                foreach (var member in type.GetMembers(method.Name))
-                {
-                    if (member is MethodSymbol { IsOverride: true, IsStatic: false } candidate &&
-                        candidate.ParameterCount == method.ParameterCount &&
-                        (candidate.ParameterCount == 0 || candidate.Parameters[0].Type.IsObjectType()))
-                    {
-                        return false;
-                    }
-                }
-            }
+            return !BaseTypesBelowObject(receiverType)
+                .SelectMany(type => type.GetMembers(method.Name))
+                .Any(member => member is MethodSymbol { IsOverride: true, IsStatic: false } candidate &&
+                    candidate.ParameterCount == method.ParameterCount &&
+                    candidate.Parameters.All(static parameter => parameter.Type.IsObjectType()));
+        }
 
-            return true;
+        /// <summary>A type and its base types, up to but not including <c>object</c>.</summary>
+        private static IEnumerable<NamedTypeSymbol> BaseTypesBelowObject(NamedTypeSymbol? type)
+        {
+            for (; type is not null and not { SpecialType: SpecialType.System_Object }; type = type.BaseTypeNoUseSiteDiagnostics)
+            {
+                yield return type;
+            }
         }
 
         private static bool IsObserverMethod(MethodSymbol method)
@@ -910,7 +908,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 _constructorsInProgress = constructorsInProgress;
             }
 
-            private bool IsConstructor => _observer.MethodKind == MethodKind.Constructor;
+            private bool IsConstructor => _observer is { MethodKind: MethodKind.Constructor };
 
             public override BoundNode? Visit(BoundNode? node)
             {
@@ -931,26 +929,20 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             public override BoundNode? VisitInterpolatedString(BoundInterpolatedString node)
             {
                 // The handler or the string.Format call is how the string is made, not what it depends on: visit the holes.
-                foreach (var part in node.Parts)
-                {
-                    var hole = part is BoundStringInsert insert ? insert.Value : part;
-                    if (hole is BoundCall { ReceiverOpt: BoundInterpolatedStringHandlerPlaceholder } append)
+                var holes = node.Parts
+                    .Select(static part => part is BoundStringInsert insert ? insert.Value : part)
+                    .Select(static part => part switch
                     {
                         // AppendLiteral(string) or AppendFormatted(value, alignment, format).
-                        if (append.Arguments.IsEmpty)
-                        {
-                            continue;
-                        }
+                        BoundCall { ReceiverOpt: BoundInterpolatedStringHandlerPlaceholder, Arguments: [var value, ..] } => value,
+                        BoundCall { ReceiverOpt: BoundInterpolatedStringHandlerPlaceholder } => null,
+                        _ => part,
+                    })
+                    .Where(static hole => hole is not (null or BoundLiteral))
+                    .Select(static hole => StripConversions(hole!));
 
-                        hole = append.Arguments[0];
-                    }
-
-                    if (hole is BoundLiteral)
-                    {
-                        continue;
-                    }
-
-                    hole = StripConversions(hole);
+                foreach (var hole in holes)
+                {
                     if (!IsStringOrChar(hole.Type))
                     {
                         // Other holes format with the current culture.
@@ -969,7 +961,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
             private bool IsAllowed(BoundNode node)
             {
-                if (_allowedConversions?.Contains(node) == true)
+                if (_allowedConversions?.Contains(node) is true)
                 {
                     return true;
                 }
@@ -1055,8 +1047,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                         if (IsObjectIdentityMember(call.Method, call.ReceiverOpt) ||
                             call.Method is { IsStatic: true, Name: "ReferenceEquals", ContainingType.SpecialType: SpecialType.System_Object })
                         {
-                            ImpureIsIdentity = true;
-                            return false;
+                            return ObservesIdentity();
                         }
 
                         return IsPureCall(call.Method, call.ReceiverOpt);
@@ -1104,40 +1095,31 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     return binary.BinaryOperatorMethod is { } method && IsPureOperator(method);
                 }
 
-                switch (kind.Operator())
+                return (kind.Operator(), kind.OperandTypes()) switch
                 {
-                    case BinaryOperatorKind.Addition when !binary.Type.IsValueType:
-                        // Delegate combination creates an object that is not immutable. String concatenation creates an
-                        // equivalent string; an operand that is neither a string nor a char formats with the current culture.
-                        return _allowsCreation && kind.OperandTypes() switch
-                        {
-                            BinaryOperatorKind.String => true,
-                            BinaryOperatorKind.StringAndObject => AllowConcatenatedObject(binary.Right),
-                            BinaryOperatorKind.ObjectAndString => AllowConcatenatedObject(binary.Left),
-                            _ => false,
-                        };
+                    // String concatenation creates an equivalent string; an operand that is neither a string nor a char
+                    // formats with the current culture.
+                    (BinaryOperatorKind.Addition, BinaryOperatorKind.String) => _allowsCreation,
+                    (BinaryOperatorKind.Addition, BinaryOperatorKind.StringAndObject) => _allowsCreation && AllowConcatenatedObject(binary.Right),
+                    (BinaryOperatorKind.Addition, BinaryOperatorKind.ObjectAndString) => _allowsCreation && AllowConcatenatedObject(binary.Left),
+                    // Delegate combination creates an object that is not immutable.
+                    (BinaryOperatorKind.Addition, _) when !binary.Type.IsValueType => false,
+                    // Reference equality observes identity; a comparison with null does not.
+                    (BinaryOperatorKind.Equal or BinaryOperatorKind.NotEqual, BinaryOperatorKind.Object)
+                        when binary is not ({ Left.ConstantValueOpt.IsNull: true } or { Right.ConstantValueOpt.IsNull: true }) => ObservesIdentity(),
+                    _ => true,
+                };
+            }
 
-                    case BinaryOperatorKind.Equal:
-                    case BinaryOperatorKind.NotEqual:
-                        // Reference equality observes identity; a comparison with null does not.
-                        if (kind.OperandTypes() == BinaryOperatorKind.Object &&
-                            binary.Left.ConstantValueOpt?.IsNull != true &&
-                            binary.Right.ConstantValueOpt?.IsNull != true)
-                        {
-                            ImpureIsIdentity = true;
-                            return false;
-                        }
-
-                        return true;
-
-                    default:
-                        return true;
-                }
+            private bool ObservesIdentity()
+            {
+                ImpureIsIdentity = true;
+                return false;
             }
 
             private bool AllowConcatenatedObject(BoundExpression operand)
             {
-                if (operand.ConstantValueOpt?.IsNull == true)
+                if (operand.ConstantValueOpt is { IsNull: true })
                 {
                     return true;
                 }
@@ -1169,7 +1151,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     BoundFieldAccess { ReceiverOpt: BoundThisReference } fieldAccess when IsConstructor && IsOwnMember(fieldAccess.FieldSymbol) => true,
                     BoundFieldAccess fieldAccess => HasAttribute(fieldAccess.FieldSymbol.OriginalDefinition, SharperImmutabilityAttribute.UnobservableWrite),
                     BoundPropertyAccess { ReceiverOpt: BoundThisReference, PropertySymbol: var property } when IsConstructor && IsOwnMember(property) =>
-                        property.OriginalDefinition is SourcePropertySymbolBase source && (source.HasAutoPropertySet || (source.SetMethod is null && source.HasAutoPropertyGet)),
+                        property.OriginalDefinition is SourcePropertySymbolBase { HasAutoPropertySet: true } or SourcePropertySymbolBase { SetMethod: null, HasAutoPropertyGet: true },
                     _ => false,
                 };
             }
@@ -1205,7 +1187,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     return true;
                 }
 
-                if (method.MethodKind == MethodKind.Constructor && receiver is BoundThisReference or BoundBaseReference)
+                if (method is { MethodKind: MethodKind.Constructor } && receiver is BoundThisReference or BoundBaseReference)
                 {
                     // The constructor initializer of a constructor being checked.
                     return IsConstructor && IsPureConstructor(method);
@@ -1275,12 +1257,12 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             {
                 constructor = constructor.OriginalDefinition;
                 if (IsAssumedPure(constructor) ||
-                    (constructor.ContainingType.SpecialType == SpecialType.System_Object && constructor.ParameterCount == 0))
+                    constructor is { ContainingType.SpecialType: SpecialType.System_Object, ParameterCount: 0 })
                 {
                     return true;
                 }
 
-                if (_constructorsInProgress?.Contains(constructor) == true)
+                if (_constructorsInProgress?.Contains(constructor) is true)
                 {
                     // Assume the best inside a cycle; the outer check decides.
                     return true;
@@ -1332,12 +1314,10 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
                     if (!callsThis && walker.Impure is null && constructor.ContainingType is SourceMemberContainerTypeSymbol type)
                     {
-                        foreach (var initializer in Binder.BindFieldInitializers(_owner._compilation, scriptInitializerOpt: null, type.InstanceInitializers, BindingDiagnosticBag.Discarded, out _))
+                        var initializers = Binder.BindFieldInitializers(_owner._compilation, scriptInitializerOpt: null, type.InstanceInitializers, BindingDiagnosticBag.Discarded, out _);
+                        foreach (var initializer in initializers.Where(static initializer => !initializer.HasErrors))
                         {
-                            if (!initializer.HasErrors)
-                            {
-                                walker.Visit(initializer);
-                            }
+                            walker.Visit(initializer);
                         }
                     }
 
