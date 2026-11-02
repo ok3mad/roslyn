@@ -2651,6 +2651,9 @@ namespace Microsoft.CodeAnalysis.CSharp
                 or ErrorCode.ERR_SharperImmutableHierarchyWithoutImmutable
                 or ErrorCode.ERR_SharperMisplacedUnobservableWrite
                 or ErrorCode.ERR_SharperPhantomTypeParameterInState
+                or ErrorCode.ERR_SharperInferNoOverriddenMember
+                or ErrorCode.ERR_SharperInferAmbiguousOverriddenMember
+                or ErrorCode.ERR_SharperInferOverriddenMemberCycle
                     => false,
             };
 #pragma warning restore CS8524 // The switch expression does not handle some values of its input type (it is not exhaustive) involving an unnamed enum value.

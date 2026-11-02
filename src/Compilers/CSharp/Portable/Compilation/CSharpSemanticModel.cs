@@ -1072,6 +1072,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             return method.GetSymbol() switch
             {
                 SourceOrdinaryMethodSymbol { IsSharperInferredReturnType: true } or LocalFunctionSymbol { IsSharperInferredReturnType: true } => method,
+                SourceOrdinaryMethodSymbol { IsSharperReturnTypeFromOverriddenMember: true } => method,
                 _ => null,
             };
         }

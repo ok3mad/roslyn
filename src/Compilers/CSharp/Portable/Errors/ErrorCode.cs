@@ -2557,6 +2557,9 @@ namespace Microsoft.CodeAnalysis.CSharp
         ERR_SharperImmutableHierarchyWithoutImmutable = SharperErrorCodes.Base + 40,
         ERR_SharperMisplacedUnobservableWrite = SharperErrorCodes.Base + 41,
         ERR_SharperPhantomTypeParameterInState = SharperErrorCodes.Base + 42,
+        ERR_SharperInferNoOverriddenMember = SharperErrorCodes.Base + 43,
+        ERR_SharperInferAmbiguousOverriddenMember = SharperErrorCodes.Base + 44,
+        ERR_SharperInferOverriddenMemberCycle = SharperErrorCodes.Base + 45,
 
         // Note: you will need to do the following after adding errors:
         //  1) Update ErrorFacts.IsBuildOnlyDiagnostic (src/Compilers/CSharp/Portable/Errors/ErrorFacts.cs)
