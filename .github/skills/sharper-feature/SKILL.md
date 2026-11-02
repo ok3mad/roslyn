@@ -56,6 +56,7 @@ BCL type; `sharper/sequence-type`). See `SharperTests.cs` for all of them.
 6. **Before merging, make the analyzer build clean** (see Testing). Test runs and plain builds skip the analyzers, so
    public API changes (RS0016, RS0017) show up only there. An error that is already on `main` still blocks: fix it or
    link its issue in the PR.
+7. **Before opening a PR, build the Semantic test project with `-warnaserror`** (see Testing); test runs don't fail on it.
 
 ## Layer Checklist
 
