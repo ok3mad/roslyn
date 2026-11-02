@@ -136,6 +136,7 @@ Sharper behave as upstream). A subclass in another compilation, a mock or a prox
 - An internal `[Immutable]` class whose subclasses are all visible and immutable is not yet treated as closed
   (`PROTOTYPE(sharper)` in `SharperImmutability.IsClosed`).
 - Inference across assemblies: an unmarked type from a reference is not immutable even if its fields would be.
+- The structural equivalence that optimizations and other assemblies use ([#154](https://github.com/ok3mad/roslyn/issues/154)).
 - The immutability of a value is not used anywhere yet: purity, memoization and lazy `T[..]` come later.
 
 ## Code
