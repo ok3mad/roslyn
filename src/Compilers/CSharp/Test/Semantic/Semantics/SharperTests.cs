@@ -8324,14 +8324,14 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             var methods = tree.GetRoot().DescendantNodes().OfType<MethodDeclarationSyntax>().ToArray();
             for (int i = 0; i < methods.Length; i += 2)
             {
-                var method = model.GetDeclaredSymbol(methods[i]);
-                var twin = model.GetDeclaredSymbol(methods[i + 1]);
+                var method = model.GetDeclaredSymbol(methods[i])!;
+                var twin = model.GetDeclaredSymbol(methods[i + 1])!;
                 Assert.Equal(twin.ReturnType.ToTestDisplayString(), method.ReturnType.ToTestDisplayString());
                 Assert.True(twin.ReturnType.Equals(model.GetTypeInfo(methods[i].ReturnType).Type, SymbolEqualityComparer.Default));
 
                 // The return statements convert to the inferred type, as to the written one.
-                var returns = methods[i].DescendantNodes().OfType<ReturnStatementSyntax>().Select(r => model.GetTypeInfo(r.Expression).ConvertedType.ToTestDisplayString());
-                var twinReturns = methods[i + 1].DescendantNodes().OfType<ReturnStatementSyntax>().Select(r => model.GetTypeInfo(r.Expression).ConvertedType.ToTestDisplayString());
+                var returns = methods[i].DescendantNodes().OfType<ReturnStatementSyntax>().Select(r => model.GetTypeInfo(r.Expression!).ConvertedType.ToTestDisplayString());
+                var twinReturns = methods[i + 1].DescendantNodes().OfType<ReturnStatementSyntax>().Select(r => model.GetTypeInfo(r.Expression!).ConvertedType.ToTestDisplayString());
                 Assert.Equal(twinReturns, returns);
             }
         }
