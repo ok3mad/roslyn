@@ -5,6 +5,7 @@
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.PooledObjects;
@@ -177,219 +178,280 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             return false;
         }
 
+        /// <summary>
+        /// Finds the member that <paramref name="method"/> overrides or implements, in four steps: read the signature the
+        /// method writes, collect the members it could override or implement, copy each one's signature and keep those
+        /// that fit what is written, then pick the one match or report why there is none.
+        /// </summary>
         private static OverriddenSignature FindOverriddenSignature(SourceOrdinaryMethodSymbol method, MethodDeclarationSyntax syntax)
         {
-            CSharpCompilation compilation = method.DeclaringCompilation;
-            Binder binder = compilation.GetBinderFactory(syntax.SyntaxTree).GetBinder(syntax.ReturnType, syntax, method)
-                .WithAdditionalFlagsAndContainingMemberOrLambda(BinderFlags.SuppressConstraintChecks, method);
-
-            // The written types, and the types inferred from default values, narrow the candidates. An open position
-            // (default type) is an 'infer' this source fills; an open ref kind (null) is a parameter that writes none.
-            var parameterSyntaxes = syntax.ParameterList.Parameters;
-            var writtenTypes = ArrayBuilder<TypeWithAnnotations>.GetInstance(parameterSyntaxes.Count);
-            var writtenRefKinds = ArrayBuilder<RefKind?>.GetInstance(parameterSyntaxes.Count);
-            var openParameters = ArrayBuilder<bool>.GetInstance(parameterSyntaxes.Count);
-            try
+            if (WrittenSignature.Read(method, syntax) is not { } written)
             {
+                return OverriddenSignature.NotApplicable;
+            }
+
+            ArrayBuilder<MethodSymbol>? candidates = GetCandidates(method, syntax);
+            if (candidates is null)
+            {
+                return OverriddenSignature.NotApplicable;
+            }
+
+            var matches = ArrayBuilder<CopiedSignature>.GetInstance();
+            foreach (MethodSymbol candidate in candidates)
+            {
+                var copied = CopiedSignature.Create(candidate, method);
+                if (written.Accepts(copied) && !matches.Any(static (match, copied) => match.HasSameSignature(copied), copied))
+                {
+                    matches.Add(copied);
+                }
+            }
+
+            candidates.Free();
+            OverriddenSignature result = Decide(syntax, written, matches);
+            matches.Free();
+            return result;
+        }
+
+        /// <summary>
+        /// The members <paramref name="method"/> could override or implement, with its name, arity and parameter count,
+        /// or null when it is a public method that implements nothing. Members of base classes come nearest first, so
+        /// that of a virtual member and its overrides, which have the same signature, the most derived is kept.
+        /// </summary>
+        private static ArrayBuilder<MethodSymbol>? GetCandidates(SourceOrdinaryMethodSymbol method, MethodDeclarationSyntax syntax)
+        {
+            string name = syntax.Identifier.ValueText;
+            var candidates = ArrayBuilder<MethodSymbol>.GetInstance();
+
+            if (method.IsOverride)
+            {
+                var useSiteInfo = CompoundUseSiteInfo<AssemblySymbol>.Discarded;
+                for (NamedTypeSymbol? type = method.ContainingType.BaseTypeNoUseSiteDiagnostics; type is not null; type = type.BaseTypeNoUseSiteDiagnostics)
+                {
+                    foreach (Symbol member in type.GetMembers(name))
+                    {
+                        if (isCandidate(member, out MethodSymbol? candidate) &&
+                            !candidate.IsStatic &&
+                            (candidate.IsVirtual || candidate.IsAbstract || candidate.IsOverride) &&
+                            AccessCheck.IsSymbolAccessible(candidate, method.ContainingType, ref useSiteInfo))
+                        {
+                            candidates.Add(candidate);
+                        }
+                    }
+                }
+            }
+            else if (method.MethodKind == MethodKind.ExplicitInterfaceImplementation)
+            {
+                if (method.SharperExplicitInterfaceType is NamedTypeSymbol { IsInterface: true } explicitInterface)
+                {
+                    addInterfaceMembers(explicitInterface);
+                }
+            }
+            else
+            {
+                foreach (NamedTypeSymbol @interface in method.ContainingType.AllInterfacesNoUseSiteDiagnostics)
+                {
+                    addInterfaceMembers(@interface);
+                }
+
+                // A public method that overrides nothing implements an interface member only if one has its name and
+                // parameter count; otherwise its 'infer' has no source here.
+                if (candidates.Count == 0)
+                {
+                    candidates.Free();
+                    return null;
+                }
+            }
+
+            return candidates;
+
+            void addInterfaceMembers(NamedTypeSymbol @interface)
+            {
+                foreach (Symbol member in @interface.GetMembers(name))
+                {
+                    if (isCandidate(member, out MethodSymbol? candidate) &&
+                        candidate.IsImplementableInterfaceMember() &&
+                        candidate.IsStatic == method.IsStatic)
+                    {
+                        candidates.Add(candidate);
+                    }
+                }
+            }
+
+            bool isCandidate(Symbol member, [NotNullWhen(true)] out MethodSymbol? candidate)
+            {
+                candidate = member as MethodSymbol;
+                return candidate is { MethodKind: MethodKind.Ordinary, IsVararg: false } &&
+                    candidate.Arity == syntax.Arity &&
+                    candidate.ParameterCount == syntax.ParameterList.Parameters.Count;
+            }
+        }
+
+        /// <summary>The single match, or CS20043 for none and CS20044 for several.</summary>
+        private static OverriddenSignature Decide(MethodDeclarationSyntax syntax, WrittenSignature written, ArrayBuilder<CopiedSignature> matches)
+        {
+            string name = syntax.Identifier.ValueText;
+            if (matches.Count == 1)
+            {
+                CopiedSignature match = matches[0];
+                var isParams = match.Member.Parameters.SelectAsArray(static (p, i, written) => p.IsParams && written.IsOpen(i), written);
+                return OverriddenSignature.Create(match.Member, match.ParameterTypes, isParams, match.ReturnType);
+            }
+
+            var diagnostics = BindingDiagnosticBag.GetInstance(withDiagnostics: true, withDependencies: false);
+            if (matches.Count == 0)
+            {
+                diagnostics.Add(ErrorCode.ERR_SharperInferNoOverriddenMember, syntax.Identifier.GetLocation(), name, syntax.ParameterList.Parameters.Count);
+            }
+            else
+            {
+                string list = string.Join(", ", matches.Select(m => "'" + m.Member.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat) + "'"));
+                diagnostics.Add(ErrorCode.ERR_SharperInferAmbiguousOverriddenMember, syntax.Identifier.GetLocation(), name, list);
+            }
+
+            return OverriddenSignature.CreateError(diagnostics.ToReadOnlyAndFree());
+        }
+
+        /// <summary>
+        /// The signature a method writes: per parameter its type and ref kind, and its return type. An <c>infer</c> that
+        /// the overridden or implemented member fills is open; an <c>infer</c> with a default value counts as written,
+        /// with the type of the default value (P1).
+        /// </summary>
+        private sealed class WrittenSignature
+        {
+            /// <summary>The written types; a default (no type) where the parameter is open.</summary>
+            private readonly ImmutableArray<TypeWithAnnotations> _parameterTypes;
+
+            /// <summary>The written ref kinds; null for an open parameter that writes none, which copies the member's.</summary>
+            private readonly ImmutableArray<RefKind?> _refKinds;
+
+            /// <summary>The written return type; a default (no type) where it is open.</summary>
+            private readonly TypeWithAnnotations _returnType;
+
+            private WrittenSignature(ImmutableArray<TypeWithAnnotations> parameterTypes, ImmutableArray<RefKind?> refKinds, TypeWithAnnotations returnType)
+            {
+                _parameterTypes = parameterTypes;
+                _refKinds = refKinds;
+                _returnType = returnType;
+            }
+
+            internal bool IsOpen(int ordinal) => !_parameterTypes[ordinal].HasType;
+
+            /// <summary>
+            /// Reads the signature of <paramref name="method"/>, or returns null when nothing in it is open (a type named
+            /// <c>infer</c> is in scope) or it has an <c>__arglist</c>.
+            /// </summary>
+            internal static WrittenSignature? Read(SourceOrdinaryMethodSymbol method, MethodDeclarationSyntax syntax)
+            {
+                Binder binder = method.DeclaringCompilation.GetBinderFactory(syntax.SyntaxTree).GetBinder(syntax.ReturnType, syntax, method)
+                    .WithAdditionalFlagsAndContainingMemberOrLambda(BinderFlags.SuppressConstraintChecks, method);
+
+                var parameterTypes = ArrayBuilder<TypeWithAnnotations>.GetInstance();
+                var refKinds = ArrayBuilder<RefKind?>.GetInstance();
                 bool anyOpen = false;
-                foreach (var parameter in parameterSyntaxes)
+                foreach (var parameter in syntax.ParameterList.Parameters)
                 {
                     if (parameter.IsArgList || parameter.Type is null)
                     {
-                        return OverriddenSignature.NotApplicable;
+                        parameterTypes.Free();
+                        refKinds.Free();
+                        return null;
                     }
 
                     RefKind refKind = ParameterHelpers.GetModifiers(parameter.Modifiers, ignoreParams: false, out SyntaxToken refnessKeyword, out _, out _, out _);
                     TypeWithAnnotations type = binder.BindTypeOrSharperInferKeyword(parameter.Type, BindingDiagnosticBag.Discarded, out bool isInfer);
-                    if (isInfer && parameter.Default is not null)
+                    bool isOpen = isInfer && parameter.Default is null;
+                    if (isInfer && !isOpen)
                     {
                         type = GetOrInfer(method, parameter, GetDefaultValueBinder(method, parameter)).Type;
                     }
 
-                    bool isOpen = isInfer && parameter.Default is null;
                     anyOpen |= isOpen;
-                    openParameters.Add(isOpen);
-                    writtenTypes.Add(isOpen ? default : type);
-                    writtenRefKinds.Add(isOpen && refnessKeyword.Kind() == SyntaxKind.None ? null : refKind);
+                    parameterTypes.Add(isOpen ? default : type);
+                    refKinds.Add(isOpen && refnessKeyword.Kind() == SyntaxKind.None ? null : refKind);
                 }
 
-                TypeWithAnnotations writtenReturnType = binder.BindTypeOrSharperInferKeyword(syntax.ReturnType.SkipScoped(out _).SkipRef(), BindingDiagnosticBag.Discarded, out bool returnIsInfer);
+                TypeWithAnnotations returnType = binder.BindTypeOrSharperInferKeyword(syntax.ReturnType.SkipScoped(out _).SkipRef(), BindingDiagnosticBag.Discarded, out bool returnIsInfer);
                 anyOpen |= returnIsInfer;
-                if (!anyOpen)
-                {
-                    // A type named 'infer' is in scope.
-                    return OverriddenSignature.NotApplicable;
-                }
 
-                string name = syntax.Identifier.ValueText;
-                int arity = syntax.Arity;
-                var matches = ArrayBuilder<(MethodSymbol Member, ImmutableArray<TypeWithAnnotations> ParameterTypes, TypeWithAnnotations ReturnType)>.GetInstance();
-                try
-                {
-                    if (method.IsOverride)
-                    {
-                        // The nearest base class comes first, so of members with the same signature (a virtual method and
-                        // its overrides) the most derived is kept.
-                        var useSiteInfo = CompoundUseSiteInfo<AssemblySymbol>.Discarded;
-                        for (NamedTypeSymbol? type = method.ContainingType.BaseTypeNoUseSiteDiagnostics; type is not null; type = type.BaseTypeNoUseSiteDiagnostics)
-                        {
-                            foreach (Symbol member in type.GetMembers(name))
-                            {
-                                if (member is MethodSymbol { MethodKind: MethodKind.Ordinary, IsStatic: false } candidate &&
-                                    (candidate.IsVirtual || candidate.IsAbstract || candidate.IsOverride) &&
-                                    candidate.Arity == arity &&
-                                    AccessCheck.IsSymbolAccessible(candidate, method.ContainingType, ref useSiteInfo))
-                                {
-                                    consider(candidate);
-                                }
-                            }
-                        }
-                    }
-                    else if (method.MethodKind == MethodKind.ExplicitInterfaceImplementation)
-                    {
-                        if (method.SharperExplicitInterfaceType is NamedTypeSymbol { IsInterface: true } explicitInterface)
-                        {
-                            foreach (Symbol member in explicitInterface.GetMembers(name))
-                            {
-                                if (member is MethodSymbol { MethodKind: MethodKind.Ordinary } candidate &&
-                                    candidate.IsImplementableInterfaceMember() &&
-                                    candidate.IsStatic == method.IsStatic &&
-                                    candidate.Arity == arity)
-                                {
-                                    consider(candidate);
-                                }
-                            }
-                        }
-                    }
-                    else
-                    {
-                        // A public method that overrides nothing is an implicit implementation only if an interface of its
-                        // type has a member with its name and parameter count; otherwise its 'infer' has no source here.
-                        bool anyByNameAndCount = false;
-                        foreach (NamedTypeSymbol @interface in method.ContainingType.AllInterfacesNoUseSiteDiagnostics)
-                        {
-                            foreach (Symbol member in @interface.GetMembers(name))
-                            {
-                                if (member is MethodSymbol { MethodKind: MethodKind.Ordinary } candidate &&
-                                    candidate.IsImplementableInterfaceMember() &&
-                                    candidate.IsStatic == method.IsStatic &&
-                                    candidate.Arity == arity &&
-                                    candidate.ParameterCount == parameterSyntaxes.Count)
-                                {
-                                    anyByNameAndCount = true;
-                                    consider(candidate);
-                                }
-                            }
-                        }
-
-                        if (!anyByNameAndCount)
-                        {
-                            return OverriddenSignature.NotApplicable;
-                        }
-                    }
-
-                    var diagnostics = BindingDiagnosticBag.GetInstance(withDiagnostics: true, withDependencies: false);
-                    switch (matches.Count)
-                    {
-                        case 0:
-                            diagnostics.Add(ErrorCode.ERR_SharperInferNoOverriddenMember, syntax.Identifier.GetLocation(), name, parameterSyntaxes.Count);
-                            return OverriddenSignature.CreateError(diagnostics.ToReadOnlyAndFree());
-
-                        case 1:
-                            diagnostics.Free();
-                            MethodSymbol member = matches[0].Member;
-                            var isParams = member.Parameters.SelectAsArray((p, i, open) => p.IsParams && open[i], openParameters);
-                            return OverriddenSignature.Create(member, matches[0].ParameterTypes, isParams, matches[0].ReturnType);
-
-                        default:
-                            string candidates = string.Join(", ", matches.Select(m => "'" + m.Member.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat) + "'"));
-                            diagnostics.Add(ErrorCode.ERR_SharperInferAmbiguousOverriddenMember, syntax.Identifier.GetLocation(), name, candidates);
-                            return OverriddenSignature.CreateError(diagnostics.ToReadOnlyAndFree());
-                    }
-                }
-                finally
-                {
-                    matches.Free();
-                }
-
-                void consider(MethodSymbol candidate)
-                {
-                    if (candidate.IsVararg || candidate.ParameterCount != parameterSyntaxes.Count)
-                    {
-                        return;
-                    }
-
-                    // The candidate's method type parameters become the method's own. A candidate of a constructed base
-                    // type has substituted type parameters, hence the alpha-renaming.
-                    TypeMap? typeMap = arity == 0 ? null : new TypeMap(candidate.TypeParameters, method.TypeParameters, allowAlpha: true);
-                    var parameterTypes = candidate.Parameters.SelectAsArray(p => copy(p.TypeWithAnnotations));
-                    TypeWithAnnotations returnType = copy(candidate.ReturnTypeWithAnnotations);
-
-                    for (int i = 0; i < parameterTypes.Length; i++)
-                    {
-                        if (writtenRefKinds[i] is { } refKind && refKind != candidate.Parameters[i].RefKind)
-                        {
-                            return;
-                        }
-
-                        // A written type with errors of its own narrows nothing; its errors are reported with the signature.
-                        if (writtenTypes[i].HasType && !writtenTypes[i].Type.IsErrorType() &&
-                            !writtenTypes[i].Type.Equals(parameterTypes[i].Type, TypeCompareKind.AllIgnoreOptions))
-                        {
-                            return;
-                        }
-                    }
-
-                    if (!returnIsInfer && !writtenReturnType.Type.IsErrorType() &&
-                        !writtenReturnType.Type.Equals(returnType.Type, TypeCompareKind.AllIgnoreOptions))
-                    {
-                        return;
-                    }
-
-                    foreach (var match in matches)
-                    {
-                        if (haveSameSignature(match.Member, match.ParameterTypes, match.ReturnType, candidate, parameterTypes, returnType))
-                        {
-                            return;
-                        }
-                    }
-
-                    matches.Add((candidate, parameterTypes, returnType));
-
-                    TypeWithAnnotations copy(TypeWithAnnotations type)
-                    {
-                        if (typeMap is not null)
-                        {
-                            type = typeMap.SubstituteType(type);
-                        }
-
-                        // Custom modifiers are copied from an overridden or explicitly implemented member later, by the
-                        // method checks, as for written types.
-                        return type.WithModifiers(ImmutableArray<CustomModifier>.Empty);
-                    }
-                }
-
-                static bool haveSameSignature(
-                    MethodSymbol x, ImmutableArray<TypeWithAnnotations> xParameterTypes, TypeWithAnnotations xReturnType,
-                    MethodSymbol y, ImmutableArray<TypeWithAnnotations> yParameterTypes, TypeWithAnnotations yReturnType)
-                {
-                    for (int i = 0; i < xParameterTypes.Length; i++)
-                    {
-                        if (x.Parameters[i].RefKind != y.Parameters[i].RefKind ||
-                            !xParameterTypes[i].Type.Equals(yParameterTypes[i].Type, TypeCompareKind.AllIgnoreOptions))
-                        {
-                            return false;
-                        }
-                    }
-
-                    return xReturnType.Type.Equals(yReturnType.Type, TypeCompareKind.AllIgnoreOptions);
-                }
+                var result = new WrittenSignature(parameterTypes.ToImmutableAndFree(), refKinds.ToImmutableAndFree(), returnIsInfer ? default : returnType);
+                return anyOpen ? result : null;
             }
-            finally
+
+            /// <summary>
+            /// Whether the member's signature fits what is written: the same ref kinds where they are written, and the
+            /// same types (ignoring nullability, tuple names and <c>dynamic</c>) where they are written. A written type
+            /// with errors of its own fits anything; its errors are reported with the signature.
+            /// </summary>
+            internal bool Accepts(CopiedSignature copied)
             {
-                writtenTypes.Free();
-                writtenRefKinds.Free();
-                openParameters.Free();
+                for (int i = 0; i < _parameterTypes.Length; i++)
+                {
+                    if (_refKinds[i] is { } refKind && refKind != copied.Member.Parameters[i].RefKind)
+                    {
+                        return false;
+                    }
+
+                    if (!fits(_parameterTypes[i], copied.ParameterTypes[i]))
+                    {
+                        return false;
+                    }
+                }
+
+                return fits(_returnType, copied.ReturnType);
+
+                static bool fits(TypeWithAnnotations written, TypeWithAnnotations copied)
+                    => !written.HasType || written.Type.IsErrorType() || written.Type.Equals(copied.Type, TypeCompareKind.AllIgnoreOptions);
+            }
+        }
+
+        /// <summary>The signature of a candidate member, as the method would copy it.</summary>
+        private readonly struct CopiedSignature
+        {
+            internal readonly MethodSymbol Member;
+            internal readonly ImmutableArray<TypeWithAnnotations> ParameterTypes;
+            internal readonly TypeWithAnnotations ReturnType;
+
+            private CopiedSignature(MethodSymbol member, ImmutableArray<TypeWithAnnotations> parameterTypes, TypeWithAnnotations returnType)
+            {
+                Member = member;
+                ParameterTypes = parameterTypes;
+                ReturnType = returnType;
+            }
+
+            /// <summary>
+            /// Copies the types of <paramref name="member"/> for <paramref name="method"/>: the member's method type
+            /// parameters become the method's own (alpha-renamed, since a member of a constructed base type has
+            /// substituted type parameters), and custom modifiers are dropped. The method checks copy those from an
+            /// overridden or explicitly implemented member later, as for written types.
+            /// </summary>
+            internal static CopiedSignature Create(MethodSymbol member, SourceOrdinaryMethodSymbol method)
+            {
+                TypeMap? typeMap = member.Arity == 0 ? null : new TypeMap(member.TypeParameters, method.TypeParameters, allowAlpha: true);
+                return new CopiedSignature(
+                    member,
+                    member.Parameters.SelectAsArray(static (p, typeMap) => copy(p.TypeWithAnnotations, typeMap), typeMap),
+                    copy(member.ReturnTypeWithAnnotations, typeMap));
+
+                static TypeWithAnnotations copy(TypeWithAnnotations type, TypeMap? typeMap)
+                    => (typeMap is null ? type : typeMap.SubstituteType(type)).WithModifiers(ImmutableArray<CustomModifier>.Empty);
+            }
+
+            /// <summary>
+            /// Whether both have the same ref kinds and types, ignoring nullability, tuple names and <c>dynamic</c>: a
+            /// virtual member and its override, or the same member declared by two interfaces.
+            /// </summary>
+            internal bool HasSameSignature(CopiedSignature other)
+            {
+                for (int i = 0; i < ParameterTypes.Length; i++)
+                {
+                    if (Member.Parameters[i].RefKind != other.Member.Parameters[i].RefKind ||
+                        !ParameterTypes[i].Type.Equals(other.ParameterTypes[i].Type, TypeCompareKind.AllIgnoreOptions))
+                    {
+                        return false;
+                    }
+                }
+
+                return ReturnType.Type.Equals(other.ReturnType.Type, TypeCompareKind.AllIgnoreOptions);
             }
         }
     }
