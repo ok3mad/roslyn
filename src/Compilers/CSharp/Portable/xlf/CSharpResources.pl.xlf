@@ -3567,6 +3567,11 @@
         <target state="new">the observer '{0}' does more than read fields and pure observers: '{1}'</target>
         <note />
       </trans-unit>
+      <trans-unit id="IDS_SharperImmutableReasonObserverIdentity">
+        <source>the observer '{0}' observes object identity: '{1}'</source>
+        <target state="new">the observer '{0}' observes object identity: '{1}'</target>
+        <note />
+      </trans-unit>
       <trans-unit id="IDS_SharperImmutableReasonRefField">
         <source>'{0}' is a ref field</source>
         <target state="new">'{0}' is a ref field</target>
