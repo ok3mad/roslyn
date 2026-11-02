@@ -71,7 +71,7 @@ metadata all see `int retries = 3`. Step P1 takes the type from the default valu
   (`class C : B<string>` copies `T` as `string`) and the member's method type parameters, renamed to the method's own.
   A parameter that writes no ref kind copies the member's (`ref`, `out`, `in`, `ref readonly`), and copies `params`.
   The return type's `ref` is written, not copied. Nothing is inferred from the body, so the return type has none of the
-  limits of an [inferred return type](inferred-return-type.md): such members may be public, abstract or without a body.
+  limits of an [inferred return type](inferred-return-type.md): such members may be abstract or without a body.
 - **Which members.** A method declared `override` copies from its base classes, an explicit implementation
   (`infer IProfiles.Load(infer userId)`) from the interface it names, and a public method from the interfaces of its
   type that have a member with its name and parameter count. Properties, indexers, operators and events do not copy

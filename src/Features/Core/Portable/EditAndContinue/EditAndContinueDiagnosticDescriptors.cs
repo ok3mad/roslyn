@@ -184,6 +184,7 @@ internal static class EditAndContinueDiagnosticDescriptors
         AddRudeEdit(RudeEditKind.ImplementsClauseUpdate, nameof(FeaturesResources.Updating_the_Implements_clause_of_a_0_requires_restarting_the_application));
         AddRudeEdit(RudeEditKind.InsertHandlesClause, nameof(FeaturesResources.Adding_0_with_the_Handles_clause_requires_restarting_the_application));
         AddRudeEdit(RudeEditKind.UpdateStaticLocal, nameof(FeaturesResources.Modifying_0_which_contains_a_static_variable_requires_restarting_the_application));
+        AddRudeEdit(RudeEditKind.ChangeSharperInferredReturnType, nameof(FeaturesResources.An_update_that_changes_the_inferred_return_type_of_0_requires_restarting_the_application));
 
         //
         // other Roslyn reported diagnostics:

@@ -294,6 +294,23 @@ implementation plan, "Feature 3"):
    whitelist of node kinds, so a kind nobody reviewed fails safe. Run such checks from
    `SourceMemberContainerTypeSymbol.AfterMembersChecks`, gated so that compilations without Sharper do nothing.
 
+33. **Checks that read a signature can sit inside the method checks.** Lifting a limit on an inferred return type is not
+   enough where the member's own method checks read the type under their lock: operators check their signature there
+   (`CheckOperatorSignatures`), and explicit implementations match the implemented member by return type. Move such a
+   check out (to `AfterAddingTypeMembersChecks`) or keep the limit. Partial methods hide another order: the parts are
+   linked after the definition's method checks, which the partial method comparer runs while merging, so a definition
+   must find its implementation lazily (`SourcePartialImplementation`), not in its method checks.
+34. **Files shared with the IDE see only public compiler API.** Some compiler files are compiled into the IDE too
+   (`Syntax/LambdaUtilities.cs` into the C# Features project), where internal helpers such as
+   `IsFeatureEnabled(MessageID.IDS_FeatureSharper)` do not exist. Gate there with
+   `node.SyntaxTree.Options.Features.ContainsKey("sharper")`, as the IDE's Sharper code does, and build the Features
+   project after touching such a file; the compiler and its tests build fine without it. Edit and Continue decides
+   rude edits from the symbols of both versions, so a type the compiler infers changes the signature with no change in
+   the declaration syntax: an edit of a body that changes an inferred return type is a rude edit
+   (`RudeEditKind.ChangeSharperInferredReturnType`, Sharper kinds from 1000), as the implicit `Main` is. The C# Edit and
+   Continue tests take Sharper parse options through `GetTopEdits(..., parseOptions:)` and
+   `VerifySemanticDiagnostics(parseOptions, ...)` (`SharperTopLevelEditingTests`).
+
 ## Inferred Types
 
 Inference from a body (`infer` return types, rows 10 and 15) reuses `var`'s rules for the natural type of an
@@ -302,8 +319,11 @@ expression body (`BindToNaturalType`, `BindToInferredDelegateType`) and the lamb
 re-inference (`NullableWalker` with `returnTypesOpt`). The body is bound once to infer and again to compile; drop the
 diagnostics of the first binding unless they are the inference's own, and make sure the second binding reports
 whatever made the inference fail (an error type return must not end up with no diagnostic). An inference that reads
-another inferred type infers it in a nested frame; cycles are components, not stack hits (trap 29). The design and the
-plan for the later steps are in the implementation plan, "Feature 6".
+another inferred type infers it in a nested frame; cycles are components, not stack hits (trap 29). Every member kind
+with a body infers (R4): `SourceOrdinaryMethodOrUserDefinedOperatorSymbol` holds the `SharperInferredReturnType` for
+methods and operators, and a partial definition reads its implementation's type. Overrides and implementations copy
+(P2) and never infer from their body. The design and the plan for the later steps are in the implementation plan,
+"Feature 6".
 
 Inference of a parameter type (`infer x = 3`, row 15) has one entry point, `ParameterHelpers.MakeParameter`, which
 every member kind uses (lambdas: `Binder.BindLambdaParameterType`). A new source for a parameter type (uses in the

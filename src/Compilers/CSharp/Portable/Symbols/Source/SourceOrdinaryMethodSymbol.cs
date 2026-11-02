@@ -175,6 +175,13 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 returnType = overridden.GetReturnType(DeclaringCompilation);
                 _isSharperReturnTypeFromOverriddenMember = true;
             }
+            else if (isInfer && IsPartialDefinition)
+            {
+                // A partial definition has no body: it takes the return type of its implementation part, inferred or
+                // written. The parts are linked after these checks, which the partial method comparer runs.
+                inferredReturnType = new ReturnTypeFromPartialImplementation(this, returnTypeSyntax);
+                return (default, parameters, default, inferredReturnType);
+            }
             else if (isInfer)
             {
                 // The return type is inferred from the body, after the method checks (see SharperInferredReturnType).
@@ -253,32 +260,23 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
 #nullable enable
         /// <summary>
-        /// Steps R1 and R2 of Sharper's inferred return type support the bodies of private methods only. A member with no
-        /// body can never infer its return type; the others are later steps.
+        /// Any method with a body can infer its return type, whatever its accessibility (step R4). A member with no
+        /// body can never infer its return type; the remaining limits are later steps.
         /// </summary>
         private bool CheckSharperInferredReturnTypeSupported(TypeSyntax inferSyntax, BindingDiagnosticBag diagnostics)
         {
             MessageID? notSupportedYet;
             if (!HasAnyBody)
             {
+                // Abstract, extern and interface members without a default body, and a partial definition without an
+                // implementation.
                 diagnostics.Add(ErrorCode.ERR_SharperInferNoBody, inferSyntax.Location, this);
                 return false;
             }
             else if (MethodKind == MethodKind.ExplicitInterfaceImplementation)
             {
+                // Not reached: an explicit implementation copies its return type from the member it implements (step P2).
                 notSupportedYet = MessageID.IDS_SharperInferOnExplicitImplementation;
-            }
-            else if (DeclaredAccessibility != Accessibility.Private)
-            {
-                notSupportedYet = MessageID.IDS_SharperInferOnNonPrivateMember;
-            }
-            else if (IsPartial)
-            {
-                notSupportedYet = MessageID.IDS_SharperInferOnPartialMethod;
-            }
-            else if (this.IsExtensionBlockMember())
-            {
-                notSupportedYet = MessageID.IDS_SharperInferOnExtensionMember;
             }
             else if (IsAsync && IsIterator)
             {
@@ -319,12 +317,59 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     diagnostics.Add(ErrorCode.ERR_MethodReturnCantBeRefAny, inferSyntax.Location, type.Type);
                 }
 
+                // PROTOTYPE(sharper): an inferred anonymous union '(A | B)' on a member visible outside the assembly is to be
+                // an error, with a fix that declares a named union (#70), once unions exist (#31, parked).
                 _method.CheckEffectiveAccessibility(type, _method.Parameters, diagnostics);
                 _method.CheckFileTypeUsage(type, _method.Parameters, diagnostics);
             }
 
             protected override void AddDeclarationDiagnostics(BindingDiagnosticBag diagnostics)
                 => _method.AddDeclarationDiagnostics(diagnostics);
+        }
+
+        /// <summary>
+        /// The <c>infer</c> return type of a partial definition, which has no body: the return type of its implementation
+        /// part, inferred from that part's body or written.
+        /// </summary>
+        private sealed class ReturnTypeFromPartialImplementation : SharperInferredReturnType
+        {
+            internal ReturnTypeFromPartialImplementation(SourceOrdinaryMethodSymbol definition, TypeSyntax inferSyntax)
+                : base(definition, inferSyntax, body: null)
+            {
+                Debug.Assert(definition.IsPartialDefinition);
+            }
+
+            /// <summary>
+            /// Read through: the implementation caches its own type, and a read during an inference counts as a use of the
+            /// implementation, so a body that calls its own partial method uses itself (CS20018). A definition without an
+            /// implementation has an error type; the partial method checks report it (CS20016).
+            /// </summary>
+            internal override TypeWithAnnotations GetReturnType()
+            {
+                var definition = (SourceOrdinaryMethodSymbol)Method;
+                if (definition.SourcePartialImplementation is not { } implementation)
+                {
+                    return TypeWithAnnotations.Create(new ExtendedErrorTypeSymbol(definition.DeclaringCompilation, "infer", arity: 0, errorInfo: null));
+                }
+
+                TypeWithAnnotations type = implementation.ReturnTypeWithAnnotations;
+                if (implementation.Arity != 0)
+                {
+                    // The type is in terms of the implementation's type parameters.
+                    type = new TypeMap(implementation.TypeParameters, definition.TypeParameters).SubstituteType(type);
+                }
+
+                return type;
+            }
+
+            protected override Binder? GetBodyBinder(CSharpSyntaxNode body)
+                => throw ExceptionUtilities.Unreachable();
+
+            protected override void CheckInferredType(TypeWithAnnotations type, TypeSyntax inferSyntax, BindingDiagnosticBag diagnostics)
+                => throw ExceptionUtilities.Unreachable();
+
+            protected override void AddDeclarationDiagnostics(BindingDiagnosticBag diagnostics)
+                => throw ExceptionUtilities.Unreachable();
         }
 #nullable disable
 
@@ -618,6 +663,11 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             if ((object)implementingPart != null)
             {
                 PartialMethodChecks(this, implementingPart, diagnostics);
+            }
+            else if (IsPartialDefinition && IsSharperInferredReturnType)
+            {
+                // Sharper: an 'infer' definition takes its return type from the implementation, and there is none.
+                diagnostics.Add(ErrorCode.ERR_SharperInferNoBody, GetSyntax().ReturnType.Location, this);
             }
         }
 

@@ -3627,26 +3627,6 @@
         <target state="new">on an explicit interface implementation</target>
         <note />
       </trans-unit>
-      <trans-unit id="IDS_SharperInferOnExtensionMember">
-        <source>on an extension block member</source>
-        <target state="new">on an extension block member</target>
-        <note />
-      </trans-unit>
-      <trans-unit id="IDS_SharperInferOnNonPrivateMember">
-        <source>on a member that is not private</source>
-        <target state="new">on a member that is not private</target>
-        <note />
-      </trans-unit>
-      <trans-unit id="IDS_SharperInferOnOperator">
-        <source>on an operator</source>
-        <target state="new">on an operator</target>
-        <note />
-      </trans-unit>
-      <trans-unit id="IDS_SharperInferOnPartialMethod">
-        <source>on a partial method</source>
-        <target state="new">on a partial method</target>
-        <note />
-      </trans-unit>
       <trans-unit id="IDS_SharperInferOnPropertyOrIndexer">
         <source>on a property or indexer</source>
         <target state="new">on a property or indexer</target>

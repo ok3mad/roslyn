@@ -351,29 +351,17 @@
   <data name="IDS_READONLYPARAMETER" xml:space="preserve">
     <value>readonly parameter</value>
   </data>
-  <data name="IDS_SharperInferOnNonPrivateMember" xml:space="preserve">
-    <value>on a member that is not private</value>
-  </data>
   <data name="IDS_SharperInferOnAsyncIterator" xml:space="preserve">
     <value>on an async iterator</value>
   </data>
   <data name="IDS_SharperInferOnRefReturn" xml:space="preserve">
     <value>on a ref return</value>
   </data>
-  <data name="IDS_SharperInferOnPartialMethod" xml:space="preserve">
-    <value>on a partial method</value>
-  </data>
   <data name="IDS_SharperInferOnExplicitImplementation" xml:space="preserve">
     <value>on an explicit interface implementation</value>
   </data>
-  <data name="IDS_SharperInferOnExtensionMember" xml:space="preserve">
-    <value>on an extension block member</value>
-  </data>
   <data name="IDS_SharperInferOnPropertyOrIndexer" xml:space="preserve">
     <value>on a property or indexer</value>
-  </data>
-  <data name="IDS_SharperInferOnOperator" xml:space="preserve">
-    <value>on an operator</value>
   </data>
   <data name="IDS_SharperTryExpression" xml:space="preserve">
     <value>try expression</value>

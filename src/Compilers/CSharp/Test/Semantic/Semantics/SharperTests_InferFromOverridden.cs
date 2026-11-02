@@ -302,9 +302,6 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (25,18): error CS20044: Cannot infer the types of 'M', because it could override or implement more than one member: 'I1.M(int)', 'I2.M(int)'. Write the types of the one it overrides or implements.
                 //     public infer M(infer a) => 0;
                 Diagnostic(ErrorCode.ERR_SharperInferAmbiguousOverriddenMember, "M").WithArguments("M", "'I1.M(int)', 'I2.M(int)'").WithLocation(25, 18),
-                // (27,12): error CS20015: An inferred return type ('infer') is not supported on a member that is not private yet. Write the return type.
-                //     public infer Unrelated(infer a) => 0;
-                Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on a member that is not private").WithLocation(27, 12),
                 // (27,28): error CS20027: Cannot infer the type of parameter 'a', because it has no default value. Write the parameter type.
                 //     public infer Unrelated(infer a) => 0;
                 Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("a").WithLocation(27, 28),
@@ -603,7 +600,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         public void InferOverridden_NotApplicable()
         {
             // Without an override or an implementation, 'infer' keeps its other sources and errors: a parameter needs a
-            // default value, a return type a private body. A type named 'infer' wins, as elsewhere.
+            // default value, a return type a body (step R4). A type named 'infer' wins, as elsewhere.
             var source = """
                 interface I { int M(int a); }
 
@@ -630,9 +627,6 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (7,21): error CS20027: Cannot infer the type of parameter 'a', because it has no default value. Write the parameter type.
                 //     internal void N(infer a) { }
                 Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("a").WithLocation(7, 21),
-                // (8,12): error CS20015: An inferred return type ('infer') is not supported on a member that is not private yet. Write the return type.
-                //     public infer Q() => 1;
-                Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on a member that is not private").WithLocation(8, 12),
                 // (13,11): warning CS8981: The type name 'infer' only contains lower-cased ascii characters. Such names may become reserved for the language.
                 //     class infer { }
                 Diagnostic(ErrorCode.WRN_LowerCaseTypeName, "infer").WithArguments("infer").WithLocation(13, 11));

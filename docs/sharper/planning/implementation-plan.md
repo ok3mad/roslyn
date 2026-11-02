@@ -181,7 +181,7 @@ Return type (#10):
 | R1 | `infer` as a return type: gating, a type named `infer` wins, CS0246 with the flag off. Expression bodies of private methods and local functions that call only methods with written return types | S–M | Prototype ([#67](https://github.com/ok3mad/roslyn/issues/67)). Decided: nothing to infer from is CS20014, where `var` reports CS0815, CS8917 or CS8716 |
 | R2 | Block bodies: several `return` statements with the best common type, no return value as `void`, iterators, `async` | M | Prototype ([#68](https://github.com/ok3mad/roslyn/issues/68)). Decided: one maybe-null `return` makes the type annotated, as for a lambda. Async iterators wait |
 | R3 | Methods with inferred return types calling each other: binding order across members, cycle and recursion errors | L | Prototype ([#69](https://github.com/ok3mad/roslyn/issues/69)). Decided: a recursive method with a non-recursive `return` stays CS20018; a cycle is CS20033 on every member, naming it |
-| R4 | Every member kind and accessibility: public and protected members, `virtual`, `partial`, operators, metadata emission, Edit and Continue (a body edit that changes the type is a signature change) | M | None for public members: they infer like any other (decided). Overrides and implementations are not R4's: they copy their return type (P2), and R4's restrictions on public members do not apply to a type that is copied, not inferred from a body |
+| R4 | Every member kind and accessibility: public and protected members, `virtual`, `partial`, operators, metadata emission, Edit and Continue (a body edit that changes the type is a signature change) | M | Prototype ([#70](https://github.com/ok3mad/roslyn/issues/70)). Decided: public members infer like any other; overrides and implementations copy (P2) and never infer from their body; properties and indexers wait for a step with [#166](https://github.com/ok3mad/roslyn/issues/166) |
 | R5 | IDE: Quick Info and inlay hints show the inferred type, a fixer writes it out | M | |
 
 Parameter types (#15):
@@ -466,10 +466,8 @@ with a thread-static set) and lambda return types (`UnboundLambda.InferReturnTyp
   the same method at once and compute the same type. A published type is read directly, also during inference,
   which is safe once nesting is allowed. Partial declarations and other types need nothing more, since inference is
   per symbol.
-- **R4, every member.** Lift the accessibility row. Overrides and implementations copy the type of the member they
-  override or implement (P2, done): that member is found before the method checks, so the custom-modifier copy sees an
-  ordinary return type. Properties need the same lazy type on `SourcePropertySymbolBase`; operators on
-  `SourceUserDefinedOperatorSymbolBase`. Edit and Continue treats a changed inferred type as a signature change.
+- **R4, every member.** Done; see [step R4](#feature-6-inferred-return-type-step-r4). The plan held for methods and
+  operators; properties were left to a later step with [#166](https://github.com/ok3mad/roslyn/issues/166).
 
 Tests: 16 `Infer_*` tests in `SharperTests.cs`: runtime output, every inferred type next to a C# twin, the errors,
 nullable annotations, the semantic model, IOperation, metadata seen from a C# compilation, the order of inference
@@ -653,6 +651,57 @@ Tests: 22 in `SharperTests_TryExpression.cs` (runtime results next to the C# twi
 iterators, lambdas, errors, definite assignment and nullable, IOperation, flow graph, semantic model, region analysis,
 parsing, the flag off), and five union conversion tests in `UnionsTests` (#137). They found a C# 15 gap: a possibly
 null value converted into a union case in a target-typed arm does not warn ([#146](https://github.com/ok3mad/roslyn/issues/146), since fixed).
+
+## Feature 6: inferred return type, step R4
+
+Every member kind and accessibility ([#70](https://github.com/ok3mad/roslyn/issues/70), on branch
+`sharper/infer-return-r4`): `public static infer Hello(int id) => $"Hello, {id}!";` returns `string`, and so do
+`virtual` methods, partial methods, extension block members, operators and conversion operators. The step builds on
+R1 to R3's `SharperInferredReturnType` and on P2's copy from the overridden member, and adds no syntax, bound node or
+public API.
+
+**Probe.** Lifting the accessibility row was enough for methods: the inferred type is published before anything reads
+it, and the checks of a written type (`CheckEffectiveAccessibility`, override and implementation matching, nullable
+attributes) run on it as on a written one. Three member kinds needed more. Operators read their return type in the
+method checks, under the lock (`CheckOperatorSignatures`). A partial definition has no body, and its parts are linked
+after its method checks, which the partial method comparer runs while merging the parts. Edit and Continue saw a body
+edit that changes the type as an ordinary signature change, which the runtime allows, so callers compiled against the
+old type would break.
+
+| Piece | What it does |
+| --- | --- |
+| `SourceOrdinaryMethodSymbol.CheckSharperInferredReturnTypeSupported` | Only async iterators, `ref` returns and members without a body remain; accessibility, partial methods and extension block members are lifted |
+| `ReturnTypeFromPartialImplementation` | The `infer` type of a partial definition: reads its implementation's return type, inferred or written, renaming the type parameters. A read during an inference counts as a use of the implementation, so a body that calls its own partial method is CS20018. A definition without an implementation is CS20016, from the partial method checks |
+| `SourceUserDefinedOperatorSymbolBase` | Creates an `InferredReturnType` for operators and conversion operators (the base class `SourceOrdinaryMethodOrUserDefinedOperatorSymbol` already held one), and moves `CheckOperatorSignatures` to `AfterAddingTypeMembersChecks` for an inferred type |
+| `CSharpSemanticModel.GetSharperInferredReturnTypeMethod` | Also answers for the `infer` of an operator and of a conversion operator |
+| `AbstractEditAndContinueAnalyzer.GetSignatureChangeRudeEdit` | A changed return type of a method whose old and new declarations both have `infer` is `RudeEditKind.ChangeSharperInferredReturnType` (ENC1000), as a change of the implicit `Main`'s return type is. `CSharpEditAndContinueAnalyzer.IsSharperReturnTypeInferred` reads the declaration syntax, since the IDE cannot see the compiler's internal flag |
+
+### Decisions
+
+| Question | Decision | Why |
+| --- | --- | --- |
+| Public members | Infer like private ones, with no warning (decided in the issue) | The author chooses; the public API analyzers still catch an accidental change |
+| A body-inferred type on an override (the issue's check) | Never happens: an override, an explicit implementation and a public method that implements an interface member copy their type (P2), and their body converts to it as to a written type (`override infer V() => "d"` over `int V()` is CS0029). When P2 finds no member, its error stands (CS20043) | Inferring from the body and then comparing with the base would make the body choose between an override and an error; the base already says the type. A method that infers because its own type has no interface member of that name, and that a derived type uses as an implementation, is checked as a written one (CS0738) |
+| Partial methods | The implementation infers from its body; a definition with `infer` takes the implementation's type; written on one part and inferred on the other is compared as usual (CS8817) | The definition has nothing else to infer from, and callers bind to it |
+| Operators and conversion operators | Infer from their body; the signature checks (CS0215, CS0216, CS0448, ...) apply to the inferred type after inference | As for methods. A conversion operator is read by every lookup of its type's user-defined conversions, so one whose body converts from its own type uses itself (CS20018) |
+| Explicit implementations of operators | CS20015 until [#166](https://github.com/ok3mad/roslyn/issues/166) | Their method checks match the implemented operator by return type, under the lock; copying, as P2 does for methods, is #166's |
+| Extension block members | Infer, operators included | The implementation methods read the member's return type lazily (`RewrittenMethodSymbol`), so nothing else was needed |
+| Members without a body | CS20016, permanent | Nothing to infer from |
+| `ref` returns | CS20015, later | The lambda rule the inference follows infers no `ref` returns |
+| Anonymous types on visible members | CS0050, as for any internal type | An anonymous type is internal. The issue's exception for an anonymous union `(A \| B)` on a visible member waits for unions ([#31](https://github.com/ok3mad/roslyn/issues/31)); a `PROTOTYPE(sharper)` comment marks the place |
+| Ref safety | Nothing to add: the second binding, against the inferred type, runs the escape analysis of a written `Span<T>` (CS8352) | The inference binds without a target type, as a lambda does |
+| Properties and indexers (open point) | Not in R4: CS20015 stays, and a later step does them together with [#166](https://github.com/ok3mad/roslyn/issues/166) | A property's type has two sources, the getter and the overridden property, and is read by its accessors, backing field and object initializers before a lazy type exists on `SourcePropertySymbolBase`. One step decides both sources together |
+| Edit and Continue | A body edit that changes the inferred type is a rude edit; one that keeps it is a body update | The runtime would accept the signature change, but callers are not recompiled, so they would call a deleted method. The implicit `Main` is the precedent |
+
+Tests: 15 `InferMember_*` tests in `SharperTests_InferEveryMember.cs`: every accessibility next to C# twins with runtime
+output, `virtual` and overrides, interface default and static virtual members, the errors of overrides and
+implementations against body-inferred bases, partial methods (written and inferred parts, generic, errors), operators
+and conversion operators next to C# twins and their signature errors, extension block members, the accessibility of
+the inferred type, ref safety, metadata seen from a C# compilation (image and compilation references), the semantic
+model, IOperation, the order of inference across operators, conversions and partial methods, and a conversion operator
+in a cycle. `Infer_NotSupportedYet` and two P2 tests lost their rows for public members, partial methods, operators and
+extension members. `SharperTopLevelEditingTests.InferredReturnType_BodyEditChangesType` in the C# Features tests covers
+Edit and Continue.
 
 ## Feature 9: inferred parameter type, step P1
 
@@ -968,7 +1017,9 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 - [ ] `readonly` locals: IDE support (completion, refactorings that drop or break `readonly`). [#96](https://github.com/ok3mad/roslyn/issues/96)
 - [x] `readonly` parameters, the grid's remaining explicitly typed corner. [#97](https://github.com/ok3mad/roslyn/issues/97)
 - [ ] Inferred parameter type: steps P3 to P8 ([#74](https://github.com/ok3mad/roslyn/issues/74) and the rest of [#27](https://github.com/ok3mad/roslyn/issues/27)); the default value is bound twice, once to infer and once against the type. P2 ([#73](https://github.com/ok3mad/roslyn/issues/73)): properties, indexers, operators and events of overrides and implementations do not copy yet.
-- [ ] Inferred return type: steps R4 and R5 ([#70](https://github.com/ok3mad/roslyn/issues/70), [#71](https://github.com/ok3mad/roslyn/issues/71)); a local function's nullable inference sees captured variables at their declared state; a local function that calls the inferred method around it makes a cycle even when the method never calls it.
+- [ ] Inferred return type: step R5 ([#71](https://github.com/ok3mad/roslyn/issues/71)); a local function's nullable inference sees captured variables at their declared state; a local function that calls the inferred method around it makes a cycle even when the method never calls it.
+- [ ] Inferred return type after R4 ([#70](https://github.com/ok3mad/roslyn/issues/70)): properties and indexers, together with [#166](https://github.com/ok3mad/roslyn/issues/166) (P2 for properties, indexers, operators and events, including explicit implementations of operators); `ref` returns; the anonymous union exception for visible members, with unions ([#31](https://github.com/ok3mad/roslyn/issues/31)).
+- [ ] Inferred return type: `Infer_Cycle_Concurrent` fails about once in 2,000 iterations, on `main` too: under threads, the cycle that CS20033 names for one member of a three-member cycle can differ from the single-threaded one (seen while validating R4).
 - [ ] Inferred return type: async iterators (`IAsyncEnumerable<T>`), and an inferred union when the returned values have no best common type, which waits for [#31](https://github.com/ok3mad/roslyn/issues/31).
 - [ ] `readonly` locals share the `val` follow-ups: silence CS20010 with CS20003 (#84), the "never reassigned" fixer can offer `readonly int` (#89), and the public API (#88) and Edit and Continue (#90) items cover them too.
 - [x] Run the upstream parser tests with Sharper on ([#63](https://github.com/ok3mad/roslyn/issues/63)): `ROSLYN_TEST_SHARPER=1` adds the feature to the test parse options (`TestOptions`, `CSharpTestSource.Parse`, the `ParsingTests` helpers). Tests that call `SyntaxFactory` without options are not covered. Last run (net10.0, Debug, `main` with `val`, `readonly` locals and parameters, `T[..]`, function types, also parenthesized and in patterns, and `T~`), with no valid C# parsing differently:
