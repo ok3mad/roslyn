@@ -148,4 +148,7 @@ internal enum RudeEditKind : ushort
     UpdateMightNotHaveAnyEffect = 118,
     TypeUpdateAroundActiveStatement = 119,
     InsertOrMoveComInterfaceMember = 120,
+
+    // Sharper (docs/sharper): kinds count up from 1000, away from upstream's.
+    ChangeSharperInferredReturnType = 1000,
 }

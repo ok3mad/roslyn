@@ -200,6 +200,11 @@ Make sure to use the "tt" specifier for languages for which it's necessary to ma
         <target state="translated">導致隱含 Main 方法的傳回型別變更的更新需要重新啟動應用程式。</target>
         <note>{Locked="Main"} is C# keywords and should not be localized.</note>
       </trans-unit>
+      <trans-unit id="An_update_that_changes_the_inferred_return_type_of_0_requires_restarting_the_application">
+        <source>An update that changes the inferred return type of {0} requires restarting the application.</source>
+        <target state="new">An update that changes the inferred return type of {0} requires restarting the application.</target>
+        <note>{0} is the kind of the member, such as "method".</note>
+      </trans-unit>
       <trans-unit id="Apply_auto_property_preferences">
         <source>Apply auto property preferences</source>
         <target state="translated">套用自動屬性喜好設定</target>

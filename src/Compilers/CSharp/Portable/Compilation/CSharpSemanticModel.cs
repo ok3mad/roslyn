@@ -1066,12 +1066,14 @@ namespace Microsoft.CodeAnalysis.CSharp
             {
                 MethodDeclarationSyntax m when m.ReturnType == expression => GetDeclaredSymbol(m, cancellationToken),
                 LocalFunctionStatementSyntax l when l.ReturnType == expression => GetDeclaredSymbol(l, cancellationToken),
+                OperatorDeclarationSyntax o when o.ReturnType == expression => GetDeclaredSymbol(o, cancellationToken),
+                ConversionOperatorDeclarationSyntax c when c.Type == expression => GetDeclaredSymbol(c, cancellationToken),
                 _ => null,
             };
 
             return method.GetSymbol() switch
             {
-                SourceOrdinaryMethodSymbol { IsSharperInferredReturnType: true } or LocalFunctionSymbol { IsSharperInferredReturnType: true } => method,
+                SourceOrdinaryMethodOrUserDefinedOperatorSymbol { IsSharperInferredReturnType: true } or LocalFunctionSymbol { IsSharperInferredReturnType: true } => method,
                 SourceOrdinaryMethodSymbol { IsSharperReturnTypeFromOverriddenMember: true } => method,
                 _ => null,
             };

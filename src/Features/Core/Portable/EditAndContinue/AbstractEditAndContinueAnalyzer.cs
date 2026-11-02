@@ -4686,7 +4686,7 @@ internal abstract partial class AbstractEditAndContinueAnalyzer : IEditAndContin
         }
     }
 
-    private static RudeEditKind GetSignatureChangeRudeEdit(ISymbol oldMember, ISymbol newMember, EditAndContinueCapabilitiesGrantor capabilities)
+    private RudeEditKind GetSignatureChangeRudeEdit(ISymbol oldMember, ISymbol newMember, EditAndContinueCapabilitiesGrantor capabilities)
     {
         if (oldMember.Kind != newMember.Kind)
         {
@@ -4700,6 +4700,15 @@ internal abstract partial class AbstractEditAndContinueAnalyzer : IEditAndContin
             Debug.Assert(ParameterTypesEquivalent(oldMember.GetParameters(), newMember.GetParameters(), exact: true));
 
             return RudeEditKind.ChangeImplicitMainReturnType;
+        }
+
+        // Sharper: a return type inferred from the body ('infer') changed with an edit of the body. Callers that were
+        // compiled against the old type are not recompiled, so the edit needs a restart, as for the implicit Main.
+        if (oldMember is IMethodSymbol oldMethod && newMember is IMethodSymbol newMethod &&
+            IsSharperReturnTypeInferred(oldMethod) && IsSharperReturnTypeInferred(newMethod) &&
+            !ReturnTypesEquivalent(oldMethod, newMethod, exact: false))
+        {
+            return RudeEditKind.ChangeSharperInferredReturnType;
         }
 
         if (!AllowsDeletion(newMember))
@@ -6997,6 +7006,12 @@ internal abstract partial class AbstractEditAndContinueAnalyzer : IEditAndContin
         public int GetHashCode(KeyValuePair<string, TypedConstant> obj)
              => obj.GetHashCode();
     }
+
+    /// <summary>
+    /// True for a method whose return type Sharper infers from its body (<c>infer</c>, docs/sharper).
+    /// </summary>
+    protected virtual bool IsSharperReturnTypeInferred(IMethodSymbol method)
+        => false;
 
     private static bool IsGlobalMain(ISymbol symbol)
         => symbol is IMethodSymbol { Name: WellKnownMemberNames.TopLevelStatementsEntryPointMethodName };

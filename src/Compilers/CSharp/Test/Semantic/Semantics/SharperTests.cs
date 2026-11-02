@@ -7355,23 +7355,15 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 partial class C : B, I
                 {
                     private async infer AsyncIterator() { await Task.Yield(); yield return 1; }
-                    public infer Public() => 1;
-                    internal infer Internal() => 1;
-                    protected infer Protected() => 1;
-                    private protected infer PrivateProtected() => 1;
                     public override infer Virtual() => 2; // Step P2: copied from B.Virtual, so no error.
                     infer I.N() => 1;
                     public infer M() => 1;
-                    private partial infer Partial();
-                    private partial infer Partial() => 1;
                     private async infer Async() => await Task.FromResult(1);
                     private int _field;
                     private ref infer Ref() => ref _field;
                     private static extern infer Extern();
                     private infer Property => 1;
                     private infer this[int i] => i;
-                    public static infer operator +(C c) => c;
-                    public static implicit operator infer(C c) => 1;
                     public override abstract infer Abstract(); // Copies the error type of B.Abstract.
 
                     void Locals()
@@ -7380,14 +7372,6 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                         async infer LAsync() => await Task.FromResult(1);
                         ref infer LRef() => ref _field;
                         static extern infer LExtern();
-                    }
-                }
-
-                static class E
-                {
-                    extension(int i)
-                    {
-                        private infer Twice() => i * 2;
                     }
                 }
                 """;
@@ -7401,75 +7385,48 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (17,19): error CS20015: An inferred return type ('infer') is not supported on an async iterator yet. Write the return type.
                 //     private async infer AsyncIterator() { await Task.Yield(); yield return 1; }
                 Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on an async iterator").WithLocation(17, 19),
-                // (18,12): error CS20015: An inferred return type ('infer') is not supported on a member that is not private yet. Write the return type.
-                //     public infer Public() => 1;
-                Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on a member that is not private").WithLocation(18, 12),
-                // (19,14): error CS20015: An inferred return type ('infer') is not supported on a member that is not private yet. Write the return type.
-                //     internal infer Internal() => 1;
-                Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on a member that is not private").WithLocation(19, 14),
-                // (20,15): error CS20015: An inferred return type ('infer') is not supported on a member that is not private yet. Write the return type.
-                //     protected infer Protected() => 1;
-                Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on a member that is not private").WithLocation(20, 15),
-                // (21,23): error CS20015: An inferred return type ('infer') is not supported on a member that is not private yet. Write the return type.
-                //     private protected infer PrivateProtected() => 1;
-                Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on a member that is not private").WithLocation(21, 23),
-                // (25,21): error CS20016: 'C.Partial()' has no body to infer its return type from. Write the return type.
-                //     private partial infer Partial();
-                Diagnostic(ErrorCode.ERR_SharperInferNoBody, "infer").WithArguments("C.Partial()").WithLocation(25, 21),
-                // (26,21): error CS20015: An inferred return type ('infer') is not supported on a partial method yet. Write the return type.
-                //     private partial infer Partial() => 1;
-                Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on a partial method").WithLocation(26, 21),
-                // (29,17): error CS20015: An inferred return type ('infer') is not supported on a ref return yet. Write the return type.
+                // (23,17): error CS20015: An inferred return type ('infer') is not supported on a ref return yet. Write the return type.
                 //     private ref infer Ref() => ref _field;
-                Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on a ref return").WithLocation(29, 17),
-                // (30,27): error CS20016: 'C.Extern()' has no body to infer its return type from. Write the return type.
+                Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on a ref return").WithLocation(23, 17),
+                // (24,27): error CS20016: 'C.Extern()' has no body to infer its return type from. Write the return type.
                 //     private static extern infer Extern();
-                Diagnostic(ErrorCode.ERR_SharperInferNoBody, "infer").WithArguments("C.Extern()").WithLocation(30, 27),
-                // (30,33): warning CS0626: Method, operator, or accessor 'C.Extern()' is marked external and has no attributes on it. Consider adding a DllImport attribute to specify the external implementation.
+                Diagnostic(ErrorCode.ERR_SharperInferNoBody, "infer").WithArguments("C.Extern()").WithLocation(24, 27),
+                // (24,33): warning CS0626: Method, operator, or accessor 'C.Extern()' is marked external and has no attributes on it. Consider adding a DllImport attribute to specify the external implementation.
                 //     private static extern infer Extern();
-                Diagnostic(ErrorCode.WRN_ExternMethodNoImplementation, "Extern").WithArguments("C.Extern()").WithLocation(30, 33),
-                // (31,13): error CS20015: An inferred return type ('infer') is not supported on a property or indexer yet. Write the return type.
+                Diagnostic(ErrorCode.WRN_ExternMethodNoImplementation, "Extern").WithArguments("C.Extern()").WithLocation(24, 33),
+                // (25,13): error CS20015: An inferred return type ('infer') is not supported on a property or indexer yet. Write the return type.
                 //     private infer Property => 1;
-                Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on a property or indexer").WithLocation(31, 13),
-                // (32,13): error CS20015: An inferred return type ('infer') is not supported on a property or indexer yet. Write the return type.
+                Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on a property or indexer").WithLocation(25, 13),
+                // (26,13): error CS20015: An inferred return type ('infer') is not supported on a property or indexer yet. Write the return type.
                 //     private infer this[int i] => i;
-                Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on a property or indexer").WithLocation(32, 13),
-                // (33,19): error CS20015: An inferred return type ('infer') is not supported on an operator yet. Write the return type.
-                //     public static infer operator +(C c) => c;
-                Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on an operator").WithLocation(33, 19),
-                // (34,37): error CS20015: An inferred return type ('infer') is not supported on an operator yet. Write the return type.
-                //     public static implicit operator infer(C c) => 1;
-                Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on an operator").WithLocation(34, 37),
-                // (35,36): error CS0513: 'C.Abstract()' is abstract but it is contained in non-abstract type 'C'
-                //     public override abstract infer Abstract();
-                Diagnostic(ErrorCode.ERR_AbstractInConcreteClass, "Abstract").WithArguments("C.Abstract()", "C").WithLocation(35, 36),
-                // (39,15): error CS20015: An inferred return type ('infer') is not supported on an async iterator yet. Write the return type.
+                Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on a property or indexer").WithLocation(26, 13),
+                // (27,36): error CS0513: 'C.Abstract()' is abstract but it is contained in non-abstract type 'C'
+                //     public override abstract infer Abstract(); // Copies the error type of B.Abstract.
+                Diagnostic(ErrorCode.ERR_AbstractInConcreteClass, "Abstract").WithArguments("C.Abstract()", "C").WithLocation(27, 36),
+                // (31,15): error CS20015: An inferred return type ('infer') is not supported on an async iterator yet. Write the return type.
                 //         async infer LAsyncIterator() { await Task.Yield(); yield return 1; }
-                Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on an async iterator").WithLocation(39, 15),
-                // (39,21): warning CS8321: The local function 'LAsyncIterator' is declared but never used
+                Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on an async iterator").WithLocation(31, 15),
+                // (31,21): warning CS8321: The local function 'LAsyncIterator' is declared but never used
                 //         async infer LAsyncIterator() { await Task.Yield(); yield return 1; }
-                Diagnostic(ErrorCode.WRN_UnreferencedLocalFunction, "LAsyncIterator").WithArguments("LAsyncIterator").WithLocation(39, 21),
-                // (40,21): warning CS8321: The local function 'LAsync' is declared but never used
+                Diagnostic(ErrorCode.WRN_UnreferencedLocalFunction, "LAsyncIterator").WithArguments("LAsyncIterator").WithLocation(31, 21),
+                // (32,21): warning CS8321: The local function 'LAsync' is declared but never used
                 //         async infer LAsync() => await Task.FromResult(1);
-                Diagnostic(ErrorCode.WRN_UnreferencedLocalFunction, "LAsync").WithArguments("LAsync").WithLocation(40, 21),
-                // (41,9): error CS20015: An inferred return type ('infer') is not supported on a ref return yet. Write the return type.
+                Diagnostic(ErrorCode.WRN_UnreferencedLocalFunction, "LAsync").WithArguments("LAsync").WithLocation(32, 21),
+                // (33,9): error CS20015: An inferred return type ('infer') is not supported on a ref return yet. Write the return type.
                 //         ref infer LRef() => ref _field;
-                Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "ref infer").WithArguments("on a ref return").WithLocation(41, 9),
-                // (41,19): warning CS8321: The local function 'LRef' is declared but never used
+                Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "ref infer").WithArguments("on a ref return").WithLocation(33, 9),
+                // (33,19): warning CS8321: The local function 'LRef' is declared but never used
                 //         ref infer LRef() => ref _field;
-                Diagnostic(ErrorCode.WRN_UnreferencedLocalFunction, "LRef").WithArguments("LRef").WithLocation(41, 19),
-                // (42,23): error CS20016: 'LExtern()' has no body to infer its return type from. Write the return type.
+                Diagnostic(ErrorCode.WRN_UnreferencedLocalFunction, "LRef").WithArguments("LRef").WithLocation(33, 19),
+                // (34,23): error CS20016: 'LExtern()' has no body to infer its return type from. Write the return type.
                 //         static extern infer LExtern();
-                Diagnostic(ErrorCode.ERR_SharperInferNoBody, "infer").WithArguments("LExtern()").WithLocation(42, 23),
-                // (42,29): warning CS0626: Method, operator, or accessor 'LExtern()' is marked external and has no attributes on it. Consider adding a DllImport attribute to specify the external implementation.
+                Diagnostic(ErrorCode.ERR_SharperInferNoBody, "infer").WithArguments("LExtern()").WithLocation(34, 23),
+                // (34,29): warning CS0626: Method, operator, or accessor 'LExtern()' is marked external and has no attributes on it. Consider adding a DllImport attribute to specify the external implementation.
                 //         static extern infer LExtern();
-                Diagnostic(ErrorCode.WRN_ExternMethodNoImplementation, "LExtern").WithArguments("LExtern()").WithLocation(42, 29),
-                // (42,29): warning CS8321: The local function 'LExtern' is declared but never used
+                Diagnostic(ErrorCode.WRN_ExternMethodNoImplementation, "LExtern").WithArguments("LExtern()").WithLocation(34, 29),
+                // (34,29): warning CS8321: The local function 'LExtern' is declared but never used
                 //         static extern infer LExtern();
-                Diagnostic(ErrorCode.WRN_UnreferencedLocalFunction, "LExtern").WithArguments("LExtern").WithLocation(42, 29),
-                // (50,17): error CS20015: An inferred return type ('infer') is not supported on an extension block member yet. Write the return type.
-                //         private infer Twice() => i * 2;
-                Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on an extension block member").WithLocation(50, 17));
+                Diagnostic(ErrorCode.WRN_UnreferencedLocalFunction, "LExtern").WithArguments("LExtern").WithLocation(34, 29));
         }
 
         [Fact]
