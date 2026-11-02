@@ -241,7 +241,10 @@ implementation plan, "Feature 3"):
    its own member's signature re-enters that member, which then completes its signature with an error type while the
    outer inference is still running. Another thread can now find that signature complete and infer the rest of the
    cycle without an error, so marking the cycle when the outer inference ends is too late: publish the error for every
-   parameter of the cycle at the moment it is found. Test cycles from each end, and on two threads at once.
+   parameter of the cycle at the moment it is found. Publishing them one by one is not enough either: a third thread can
+   complete a signature from the first published error and compute the next member without seeing the cycle. Decide
+   all of the cycle's results first (`CSharpCompilation.SharperInferenceCycleResults`), and let every publication prefer
+   a decided result (`SharperInferredParameterType.Publish`). Test cycles from each end, and on several threads at once.
 29. **A cycle found on a stack depends on where the search started.** With inference nested on a thread-static stack,
    "a member on the stack is a cycle" misses a member that reaches the cycle through a member that already finished
    and published its error, so whether it errs depends on the starting member and the thread. Find cycles as strongly
@@ -302,10 +305,14 @@ another inferred type infers it in a nested frame; cycles are components, not st
 plan for the later steps are in the implementation plan, "Feature 6".
 
 Inference of a parameter type (`infer x = 3`, row 15) has one entry point, `ParameterHelpers.MakeParameter`, which
-every member kind uses (lambdas: `Binder.BindLambdaParameterType`). A new source for a parameter type (the overridden
-member, uses in the body) goes into `SharperInferredParameterType.GetType`, keeping its cache and its cycle stack;
-a source that binds something must run before the signature lock, as the default value does (trap 28). The design is
-in the implementation plan, "Feature 9".
+every member kind uses (lambdas: `Binder.BindLambdaParameterType`). A new source for a parameter type (uses in the
+body) goes into `SharperInferredParameterType`, keeping its cache and its cycle stack; a source that binds something
+or reads other members' signatures must run before the signature lock, as the default value does (trap 28). Step P2
+shows the shape: the overridden or implemented member is searched for once per method
+(`GetOverriddenSignature`, cached per method syntax), from `InferBeforeSignature`, on the same stack of syntax nodes
+as the default values, and its result fills both the parameters and the return type. C# matches overrides and
+implementations by complete signatures, which do not exist yet at that point, so such a search matches by name and
+parameter count and narrows with the types that are written. The design is in the implementation plan, "Feature 9".
 
 ## Testing
 

@@ -93,12 +93,16 @@ Each of these reports CS20015 ("not supported ... yet") or CS20016, instead of C
 | Where | Error | Step |
 | --- | --- | --- |
 | Async iterators (`async` with `yield return`) | CS20015 | Later: lambdas cannot be iterators, so there is no lambda rule to follow |
-| Members that are not private (public, internal, protected, `override`) | CS20015 | R4 |
-| Explicit interface implementations, partial methods, extension block members | CS20015 | R4 / P2 |
+| Members that are not private (public, internal, protected), other than overrides and implementations | CS20015 | R4 |
+| Partial methods, extension block members | CS20015 | R4 |
 | `ref` returns | CS20015 | R4 |
 | Properties and indexers | CS20015 | R4 (open point) |
 | Operators and conversion operators | CS20015 | R4 |
 | Members with no body (`abstract`, `extern`, interface members, partial definitions) | CS20016, permanent | |
+
+An `override`, an explicit interface implementation, and a public method that implements an interface member copy an
+`infer` return type from that member instead, with none of these limits: nothing is inferred from their body (step P2,
+see [inferred parameter type](inferred-parameter-type.md#from-the-overridden-or-implemented-member-step-p2)).
 
 Elsewhere (fields, locals, delegate return types, type arguments) `infer` is an ordinary type name. A parameter type
 `infer` takes the type of the default value ([inferred parameter type](inferred-parameter-type.md), step P1).

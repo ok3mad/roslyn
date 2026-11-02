@@ -181,7 +181,7 @@ Return type (#10):
 | R1 | `infer` as a return type: gating, a type named `infer` wins, CS0246 with the flag off. Expression bodies of private methods and local functions that call only methods with written return types | S–M | Prototype ([#67](https://github.com/ok3mad/roslyn/issues/67)). Decided: nothing to infer from is CS20014, where `var` reports CS0815, CS8917 or CS8716 |
 | R2 | Block bodies: several `return` statements with the best common type, no return value as `void`, iterators, `async` | M | Prototype ([#68](https://github.com/ok3mad/roslyn/issues/68)). Decided: one maybe-null `return` makes the type annotated, as for a lambda. Async iterators wait |
 | R3 | Methods with inferred return types calling each other: binding order across members, cycle and recursion errors | L | Prototype ([#69](https://github.com/ok3mad/roslyn/issues/69)). Decided: a recursive method with a non-recursive `return` stays CS20018; a cycle is CS20033 on every member, naming it |
-| R4 | Every member kind and accessibility: public and protected members, `virtual`, `partial`, operators, metadata emission, Edit and Continue (a body edit that changes the type is a signature change) | M | None for public members: they infer like any other (decided) |
+| R4 | Every member kind and accessibility: public and protected members, `virtual`, `partial`, operators, metadata emission, Edit and Continue (a body edit that changes the type is a signature change) | M | None for public members: they infer like any other (decided). Overrides and implementations are not R4's: they copy their return type (P2), and R4's restrictions on public members do not apply to a type that is copied, not inferred from a body |
 | R5 | IDE: Quick Info and inlay hints show the inferred type, a fixer writes it out | M | |
 
 Parameter types (#15):
@@ -189,7 +189,7 @@ Parameter types (#15):
 | Step | Scope | Size | Open point |
 | --- | --- | --- | --- |
 | P1 | `infer` as a parameter type, with source 2: the default value's type. `null`, `default` and target-typed values give an error | S | Prototype ([#72](https://github.com/ok3mad/roslyn/issues/72)). Decided: every member kind and lambdas; a value that is not a constant gives its type, then CS1736 as in C#; cycles through signatures are CS20028 |
-| P2 | Source 1: the overridden or implemented member gives the parameter and return types. Members are matched by name and parameter count before their types are known; more than one candidate is an error | M | Explicit interface implementations; a partial `infer` signature where some types are written |
+| P2 | Source 1: the overridden or implemented member gives the parameter and return types. Members are matched by name and parameter count before their types are known; more than one candidate is an error | M | Prototype ([#73](https://github.com/ok3mad/roslyn/issues/73)). Decided: explicit implementations copy from the interface they name; several interfaces with different signatures are CS20044; written types narrow the candidates |
 | P3 | `readonly infer x` | S | Whether `val x` is its shorthand on method parameters |
 | P4 | Source 4, first cut: the parameter passed directly as an argument to a call with exactly one candidate (method, constructor, delegate). Needs binding the body with a placeholder type | L | How the placeholder interacts with lambdas and local functions in the body |
 | P5 | Source 4 with overloads: every applicable candidate takes the same type at that position, including generic methods whose type arguments come from other arguments | L | |
@@ -466,9 +466,9 @@ with a thread-static set) and lambda return types (`UnboundLambda.InferReturnTyp
   the same method at once and compute the same type. A published type is read directly, also during inference,
   which is safe once nesting is allowed. Partial declarations and other types need nothing more, since inference is
   per symbol.
-- **R4, every member.** Lift the accessibility row. Overrides and explicit implementations copy the type of the
-  member they implement (P2), so `MethodChecks` must find that member before the custom-modifier copy that now
-  assumes a return type. Properties need the same lazy type on `SourcePropertySymbolBase`; operators on
+- **R4, every member.** Lift the accessibility row. Overrides and implementations copy the type of the member they
+  override or implement (P2, done): that member is found before the method checks, so the custom-modifier copy sees an
+  ordinary return type. Properties need the same lazy type on `SourcePropertySymbolBase`; operators on
   `SourceUserDefinedOperatorSymbolBase`. Edit and Continue treats a changed inferred type as a signature change.
 
 Tests: 16 `Infer_*` tests in `SharperTests.cs`: runtime output, every inferred type next to a C# twin, the errors,
@@ -698,6 +698,55 @@ two threads, caller information attributes, signature matching, nullable annotat
 metadata seen from a C# compilation, and concurrent inference. `readonly infer x = 1u` already works (P3 needs only
 its tests and the `val` decision).
 
+## Feature 9: inferred parameter type, step P2
+
+An override or an interface implementation copies its `infer` parameter and return types from the member it overrides or
+implements: `public infer Load(infer userId) => result;` in a class implementing `IProfiles` is
+`Task<ProfileResult> Load(int userId)`, on branch `sharper/infer-from-overridden-p2`
+([#73](https://github.com/ok3mad/roslyn/issues/73), feature page
+[inferred-parameter-type.md](../features/inferred-parameter-type.md#from-the-overridden-or-implemented-member-step-p2)).
+No syntax, bound node, public API or lowering.
+
+**Probe.** C# finds the overridden member (`OverriddenOrHiddenMembers`) and the implemented one
+(`FindImplementationForInterfaceMember`, `FindExplicitlyImplementedMember`) by comparing complete signatures, after
+`MethodChecks` has created the parameters. An `infer` parameter without a default value cannot be created without its
+type, so the member must be found earlier, from syntax and the symbols that exist before the signature. Reading a
+candidate's parameters completes the candidate's signature, which can bind its default values and so read the copying
+method again: the same lock-order and cycle problem as P1's default values.
+
+### The mechanism
+
+| Piece | What it does |
+| --- | --- |
+| `SharperInferredParameterType.GetOverriddenSignature` | For a method with an `infer` this source can fill (`override`, explicit implementation, or public in a type with interfaces), binds the written types, takes the P1 types of `infer` parameters with defaults, and matches candidates by name, arity, parameter count and `static`, narrowed by those types and the written ref kinds. Kept per method syntax by the compilation, published once |
+| The P1 stack, now of syntax nodes | A search and a default value in progress share the thread-static stack, so a cycle through both is found from either end; each member of the cycle gets its error (CS20045 for a search, CS20028 for a default value) when it is found |
+| `InferBeforeSignature` | Runs the search before the signature lock, after the default values |
+| `ParameterHelpers.MakeParameter`, `SourceParameterSymbol.Create` | Take the copied type, the ref kind (when none is written) and `params` |
+| `SourceOrdinaryMethodSymbol.MakeParametersAndBindReturnType` | Takes the copied return type instead of R1's inference, and reports the search's errors once |
+| `CSharpSemanticModel.GetSharperInferredReturnTypeMethod` | Also answers for a copied return type (`IsSharperReturnTypeFromOverriddenMember`) |
+
+### Decisions
+
+| Question | Decision | Why |
+| --- | --- | --- |
+| Which methods copy | `override` from base classes; explicit implementations from the interface they name; public methods from the interfaces of their type, when one has a member with the same name and parameter count | These are the methods C# matches against another member's signature. A public method with no such interface member has no source, so its `infer` keeps P1's and R1's rules (CS20027, CS20015) |
+| Explicit implementations (open point) | Supported: the named interface's members are the candidates | The interface is named, so the candidate set is as small as it gets |
+| Several interfaces (open point) | Members with the same signature (`I1.N(int)` and `I2.N(int)`) count once and one method implements both; different signatures are CS20044, which lists them | The issue's proposal; the method could only implement one of them, and guessing which would hide the other |
+| Written types | Narrow the candidates (types compared ignoring nullability, tuple names and `dynamic`, ref kinds exactly); `infer` with a default value narrows with its P1 type | A partial signature chooses an overload, which was the open point of the work breakdown. A written type with its own errors narrows nothing |
+| A virtual member and its overrides | One candidate, the most derived | They are one slot; counting each would make every override chain ambiguous |
+| What is copied | Types with nullability and tuple names, generic substitutions, method type parameters renamed; ref kinds and `params` for parameters that write none. Not custom modifiers (the method checks copy them for overrides, as for written types) and not the return's `ref` | The issue's list. A written `ref` on the return is part of the declaration's shape, as for R1 |
+| Default value and overridden member both present | The default value gives the type (P1), and narrows the candidates | No disagreement can arise from narrowing; a mismatch then is ordinary C# (CS0115) |
+| Return type limits | None of R1's limits (CS20015 for public members, CS20016 for no body) and none of R4's restrictions on public members | Nothing is inferred from a body: the type is copied from a signature that is already written somewhere |
+| Errors | CS20043 no candidate, CS20044 several, CS20045 cycle, on the method name, once; the `infer`s get error types | One error per method, which asks for the types; error types keep C#'s override and implementation errors quiet |
+| Properties, indexers, operators, events | Not yet | They have their own signature code; the search would move to their symbols with R4's properties |
+| Records | Overrides of synthesized members of a base record and of `object` copy like any other; a record's own declaration of a member it would synthesize overrides nothing and needs its types | That declaration is matched against the synthesized member by signature, which needs the types |
+
+Tests: 14 `InferOverridden_*` tests in `SharperTests_InferFromOverridden.cs`: runtime output next to C# twins (the
+issue's example, overrides, explicit implementations), the copied ref kinds, `params`, nullability, tuple names and
+generics, narrowing by written and P1 types, the errors, binding order from every member, cycles from every member
+and on several threads, records, nullable warnings, the semantic model, IOperation, metadata seen from a C#
+compilation, and concurrent searches. `Infer_NotSupportedYet` lost its override and implementation rows.
+
 ## Feature 10: immutable types, slice 1 (design)
 
 `[Immutable] sealed record Money(decimal Amount, string Currency);` (issue [#139](https://github.com/ok3mad/roslyn/issues/139),
@@ -851,7 +900,7 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 - [ ] `readonly` locals: decide `readonly` in `for` initializers, `foreach`, deconstruction and `out` (no modifier slot; a public syntax change). [#95](https://github.com/ok3mad/roslyn/issues/95)
 - [ ] `readonly` locals: IDE support (completion, refactorings that drop or break `readonly`). [#96](https://github.com/ok3mad/roslyn/issues/96)
 - [x] `readonly` parameters, the grid's remaining explicitly typed corner. [#97](https://github.com/ok3mad/roslyn/issues/97)
-- [ ] Inferred parameter type: steps P2 to P8 ([#73](https://github.com/ok3mad/roslyn/issues/73), [#74](https://github.com/ok3mad/roslyn/issues/74) and the rest of [#27](https://github.com/ok3mad/roslyn/issues/27)); the default value is bound twice, once to infer and once against the type.
+- [ ] Inferred parameter type: steps P3 to P8 ([#74](https://github.com/ok3mad/roslyn/issues/74) and the rest of [#27](https://github.com/ok3mad/roslyn/issues/27)); the default value is bound twice, once to infer and once against the type. P2 ([#73](https://github.com/ok3mad/roslyn/issues/73)): properties, indexers, operators and events of overrides and implementations do not copy yet.
 - [ ] Inferred return type: steps R4 and R5 ([#70](https://github.com/ok3mad/roslyn/issues/70), [#71](https://github.com/ok3mad/roslyn/issues/71)); a local function's nullable inference sees captured variables at their declared state; a local function that calls the inferred method around it makes a cycle even when the method never calls it.
 - [ ] Inferred return type: async iterators (`IAsyncEnumerable<T>`), and an inferred union when the returned values have no best common type, which waits for [#31](https://github.com/ok3mad/roslyn/issues/31).
 - [ ] `readonly` locals share the `val` follow-ups: silence CS20010 with CS20003 (#84), the "never reassigned" fixer can offer `readonly int` (#89), and the public API (#88) and Edit and Continue (#90) items cover them too.

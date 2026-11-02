@@ -2637,6 +2637,11 @@
         <target state="new">'{0}' is marked [Immutable], but it cannot be proven immutable: {1}.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperInferAmbiguousOverriddenMember">
+        <source>Cannot infer the types of '{0}', because it could override or implement more than one member: {1}. Write the types of the one it overrides or implements.</source>
+        <target state="new">Cannot infer the types of '{0}', because it could override or implement more than one member: {1}. Write the types of the one it overrides or implements.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperInferCycle">
         <source>Cannot infer the return type of '{0}', because it depends on itself: {1}. Write the return type of one of these methods.</source>
         <target state="new">Cannot infer the return type of '{0}', because it depends on itself: {1}. Write the return type of one of these methods.</target>
@@ -2657,6 +2662,11 @@
         <target state="new">'{0}' has no body to infer its return type from. Write the return type.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperInferNoOverriddenMember">
+        <source>Cannot infer the types of '{0}', because it overrides or implements no member '{0}' with {1} parameters that matches its written types. Write the types.</source>
+        <target state="new">Cannot infer the types of '{0}', because it overrides or implements no member '{0}' with {1} parameters that matches its written types. Write the types.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperInferNoType">
         <source>Cannot infer the return type of '{0}', because the value it returns ({1}) has no type. Write the return type.</source>
         <target state="new">Cannot infer the return type of '{0}', because the value it returns ({1}) has no type. Write the return type.</target>
@@ -2665,6 +2675,11 @@
       <trans-unit id="ERR_SharperInferNotSupportedYet">
         <source>An inferred return type ('infer') is not supported {0} yet. Write the return type.</source>
         <target state="new">An inferred return type ('infer') is not supported {0} yet. Write the return type.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperInferOverriddenMemberCycle">
+        <source>Cannot infer the types of '{0}' from the member it overrides or implements, because the signature of that member depends on '{0}' itself. Write the types.</source>
+        <target state="new">Cannot infer the types of '{0}' from the member it overrides or implements, because the signature of that member depends on '{0}' itself. Write the types.</target>
         <note />
       </trans-unit>
       <trans-unit id="ERR_SharperInferParameterCycle">
