@@ -159,6 +159,13 @@ namespace Microsoft.CodeAnalysis.CSharp
             {
                 return conversion;
             }
+
+            conversion = GetSharperTryExpressionConversion(sourceExpression, destination, ref useSiteInfo);
+            if (conversion.Exists)
+            {
+                return conversion;
+            }
+
             return GetConditionalExpressionConversion(sourceExpression, destination, ref useSiteInfo);
         }
 
@@ -1223,6 +1230,38 @@ namespace Microsoft.CodeAnalysis.CSharp
                 default:
                     return Conversion.NoConversion;
             }
+        }
+
+        /// <summary>
+        /// A Sharper try expression converts to a type when its body and each arm do, as a switch expression does.
+        /// </summary>
+        private Conversion GetSharperTryExpressionConversion(BoundExpression source, TypeSymbol destination, ref CompoundUseSiteInfo<AssemblySymbol> useSiteInfo)
+        {
+            if (source is not BoundUnconvertedTryExpression tryExpression)
+                return Conversion.NoConversion;
+
+            var innerConversions = ArrayBuilder<Conversion>.GetInstance(tryExpression.Arms.Length + 1);
+            var bodyConversion = this.ClassifyImplicitConversionFromExpression(tryExpression.Body, destination, ref useSiteInfo);
+            if (!bodyConversion.Exists)
+            {
+                innerConversions.Free();
+                return Conversion.NoConversion;
+            }
+
+            innerConversions.Add(bodyConversion);
+            foreach (var arm in tryExpression.Arms)
+            {
+                var armConversion = this.ClassifyImplicitConversionFromExpression(arm.Value, destination, ref useSiteInfo);
+                if (!armConversion.Exists)
+                {
+                    innerConversions.Free();
+                    return Conversion.NoConversion;
+                }
+
+                innerConversions.Add(armConversion);
+            }
+
+            return Conversion.MakeSharperTryExpression(innerConversions.ToImmutableAndFree());
         }
 
         private Conversion GetConditionalExpressionConversion(BoundExpression source, TypeSymbol destination, ref CompoundUseSiteInfo<AssemblySymbol> useSiteInfo)

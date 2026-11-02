@@ -132,8 +132,8 @@ statements of a block body.
   their body (parameter source 1 below).
 - **Ordering and cycles.** Return types are part of signatures, so binding one body can require binding another
   body first. A method that needs its own inferred return type, directly or through other methods, is an error and
-  must write its return type, as in F#. A recursive method with a non-recursive `return` to start from could be
-  allowed later.
+  must write its return type, as in F#. A recursive method with a non-recursive `return` to start from is no
+  exception (decided in step R3): inferring from the base case could widen the type with the recursive `return`s.
 - **Any member, without a nudge.** Public members infer like any other, with no warning, even though their
   signature then follows the body. Inferring a type is the author's choice about their API: whoever cares about a
   published API writes its types out, and most code (anything but a published library) does not need to care. The

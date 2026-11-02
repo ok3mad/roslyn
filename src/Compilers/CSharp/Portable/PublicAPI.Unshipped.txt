@@ -152,3 +152,27 @@ static Microsoft.CodeAnalysis.CSharp.SyntaxFactory.ParenthesizedType(Microsoft.C
 static Microsoft.CodeAnalysis.CSharp.SyntaxFactory.ParenthesizedType(Microsoft.CodeAnalysis.SyntaxToken openParenToken, Microsoft.CodeAnalysis.CSharp.Syntax.TypeSyntax! type, Microsoft.CodeAnalysis.SyntaxToken closeParenToken) -> Microsoft.CodeAnalysis.CSharp.Syntax.ParenthesizedTypeSyntax!
 virtual Microsoft.CodeAnalysis.CSharp.CSharpSyntaxVisitor.VisitParenthesizedType(Microsoft.CodeAnalysis.CSharp.Syntax.ParenthesizedTypeSyntax! node) -> void
 virtual Microsoft.CodeAnalysis.CSharp.CSharpSyntaxVisitor<TResult>.VisitParenthesizedType(Microsoft.CodeAnalysis.CSharp.Syntax.ParenthesizedTypeSyntax! node) -> TResult?
+Microsoft.CodeAnalysis.CSharp.Syntax.TryExpressionSyntax
+Microsoft.CodeAnalysis.CSharp.Syntax.TryExpressionSyntax.AddArms(params Microsoft.CodeAnalysis.CSharp.Syntax.SwitchExpressionArmSyntax![]! items) -> Microsoft.CodeAnalysis.CSharp.Syntax.TryExpressionSyntax!
+Microsoft.CodeAnalysis.CSharp.Syntax.TryExpressionSyntax.Arms.get -> Microsoft.CodeAnalysis.SeparatedSyntaxList<Microsoft.CodeAnalysis.CSharp.Syntax.SwitchExpressionArmSyntax!>
+Microsoft.CodeAnalysis.CSharp.Syntax.TryExpressionSyntax.CatchKeyword.get -> Microsoft.CodeAnalysis.SyntaxToken
+Microsoft.CodeAnalysis.CSharp.Syntax.TryExpressionSyntax.CloseBraceToken.get -> Microsoft.CodeAnalysis.SyntaxToken
+Microsoft.CodeAnalysis.CSharp.Syntax.TryExpressionSyntax.Expression.get -> Microsoft.CodeAnalysis.CSharp.Syntax.ExpressionSyntax!
+Microsoft.CodeAnalysis.CSharp.Syntax.TryExpressionSyntax.OpenBraceToken.get -> Microsoft.CodeAnalysis.SyntaxToken
+Microsoft.CodeAnalysis.CSharp.Syntax.TryExpressionSyntax.TryKeyword.get -> Microsoft.CodeAnalysis.SyntaxToken
+Microsoft.CodeAnalysis.CSharp.Syntax.TryExpressionSyntax.Update(Microsoft.CodeAnalysis.SyntaxToken tryKeyword, Microsoft.CodeAnalysis.CSharp.Syntax.ExpressionSyntax! expression, Microsoft.CodeAnalysis.SyntaxToken catchKeyword, Microsoft.CodeAnalysis.SyntaxToken openBraceToken, Microsoft.CodeAnalysis.SeparatedSyntaxList<Microsoft.CodeAnalysis.CSharp.Syntax.SwitchExpressionArmSyntax!> arms, Microsoft.CodeAnalysis.SyntaxToken closeBraceToken) -> Microsoft.CodeAnalysis.CSharp.Syntax.TryExpressionSyntax!
+Microsoft.CodeAnalysis.CSharp.Syntax.TryExpressionSyntax.WithArms(Microsoft.CodeAnalysis.SeparatedSyntaxList<Microsoft.CodeAnalysis.CSharp.Syntax.SwitchExpressionArmSyntax!> arms) -> Microsoft.CodeAnalysis.CSharp.Syntax.TryExpressionSyntax!
+Microsoft.CodeAnalysis.CSharp.Syntax.TryExpressionSyntax.WithCatchKeyword(Microsoft.CodeAnalysis.SyntaxToken catchKeyword) -> Microsoft.CodeAnalysis.CSharp.Syntax.TryExpressionSyntax!
+Microsoft.CodeAnalysis.CSharp.Syntax.TryExpressionSyntax.WithCloseBraceToken(Microsoft.CodeAnalysis.SyntaxToken closeBraceToken) -> Microsoft.CodeAnalysis.CSharp.Syntax.TryExpressionSyntax!
+Microsoft.CodeAnalysis.CSharp.Syntax.TryExpressionSyntax.WithExpression(Microsoft.CodeAnalysis.CSharp.Syntax.ExpressionSyntax! expression) -> Microsoft.CodeAnalysis.CSharp.Syntax.TryExpressionSyntax!
+Microsoft.CodeAnalysis.CSharp.Syntax.TryExpressionSyntax.WithOpenBraceToken(Microsoft.CodeAnalysis.SyntaxToken openBraceToken) -> Microsoft.CodeAnalysis.CSharp.Syntax.TryExpressionSyntax!
+Microsoft.CodeAnalysis.CSharp.Syntax.TryExpressionSyntax.WithTryKeyword(Microsoft.CodeAnalysis.SyntaxToken tryKeyword) -> Microsoft.CodeAnalysis.CSharp.Syntax.TryExpressionSyntax!
+Microsoft.CodeAnalysis.CSharp.SyntaxKind.TryExpression = 9903 -> Microsoft.CodeAnalysis.CSharp.SyntaxKind
+override Microsoft.CodeAnalysis.CSharp.CSharpSyntaxRewriter.VisitTryExpression(Microsoft.CodeAnalysis.CSharp.Syntax.TryExpressionSyntax! node) -> Microsoft.CodeAnalysis.SyntaxNode?
+override Microsoft.CodeAnalysis.CSharp.Syntax.TryExpressionSyntax.Accept(Microsoft.CodeAnalysis.CSharp.CSharpSyntaxVisitor! visitor) -> void
+override Microsoft.CodeAnalysis.CSharp.Syntax.TryExpressionSyntax.Accept<TResult>(Microsoft.CodeAnalysis.CSharp.CSharpSyntaxVisitor<TResult>! visitor) -> TResult?
+static Microsoft.CodeAnalysis.CSharp.SyntaxFactory.TryExpression(Microsoft.CodeAnalysis.CSharp.Syntax.ExpressionSyntax! expression) -> Microsoft.CodeAnalysis.CSharp.Syntax.TryExpressionSyntax!
+static Microsoft.CodeAnalysis.CSharp.SyntaxFactory.TryExpression(Microsoft.CodeAnalysis.CSharp.Syntax.ExpressionSyntax! expression, Microsoft.CodeAnalysis.SeparatedSyntaxList<Microsoft.CodeAnalysis.CSharp.Syntax.SwitchExpressionArmSyntax!> arms) -> Microsoft.CodeAnalysis.CSharp.Syntax.TryExpressionSyntax!
+static Microsoft.CodeAnalysis.CSharp.SyntaxFactory.TryExpression(Microsoft.CodeAnalysis.SyntaxToken tryKeyword, Microsoft.CodeAnalysis.CSharp.Syntax.ExpressionSyntax! expression, Microsoft.CodeAnalysis.SyntaxToken catchKeyword, Microsoft.CodeAnalysis.SyntaxToken openBraceToken, Microsoft.CodeAnalysis.SeparatedSyntaxList<Microsoft.CodeAnalysis.CSharp.Syntax.SwitchExpressionArmSyntax!> arms, Microsoft.CodeAnalysis.SyntaxToken closeBraceToken) -> Microsoft.CodeAnalysis.CSharp.Syntax.TryExpressionSyntax!
+virtual Microsoft.CodeAnalysis.CSharp.CSharpSyntaxVisitor.VisitTryExpression(Microsoft.CodeAnalysis.CSharp.Syntax.TryExpressionSyntax! node) -> void
+virtual Microsoft.CodeAnalysis.CSharp.CSharpSyntaxVisitor<TResult>.VisitTryExpression(Microsoft.CodeAnalysis.CSharp.Syntax.TryExpressionSyntax! node) -> TResult?

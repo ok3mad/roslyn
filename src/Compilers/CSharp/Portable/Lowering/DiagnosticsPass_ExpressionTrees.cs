@@ -236,6 +236,16 @@ namespace Microsoft.CodeAnalysis.CSharp
             return base.VisitConvertedSwitchExpression(node);
         }
 
+        public override BoundNode VisitConvertedTryExpression(BoundConvertedTryExpression node)
+        {
+            if (_inExpressionLambda)
+            {
+                Error(ErrorCode.ERR_SharperTryExpressionInExpressionTree, node);
+            }
+
+            return base.VisitConvertedTryExpression(node);
+        }
+
         public override BoundNode VisitDeconstructionAssignmentOperator(BoundDeconstructionAssignmentOperator node)
         {
             if (!node.HasAnyErrors)

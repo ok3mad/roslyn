@@ -42,6 +42,10 @@ namespace Microsoft.CodeAnalysis.CSharp
                     // Skip through target-typed conditionals
                     Debug.Assert(node.Operand is BoundConditionalOperator { WasTargetTyped: true });
                     return Visit(node.Operand)!;
+                case ConversionKind.SharperTryExpression:
+                    // Skip through target-typed try expressions
+                    Debug.Assert(node.Operand is BoundConvertedTryExpression { WasTargetTyped: true });
+                    return Visit(node.Operand)!;
                 case ConversionKind.ObjectCreation:
                     // Skip through target-typed new
                     Debug.Assert(node.Operand is not null);

@@ -14888,6 +14888,132 @@ internal sealed partial class SwitchExpressionArmSyntax : CSharpSyntaxNode
         => new SwitchExpressionArmSyntax(this.Kind, this.pattern, this.whenClause, this.equalsGreaterThanToken, this.expression, GetDiagnostics(), annotations);
 }
 
+/// <summary>Class which represents the syntax node for a Sharper try expression, such as try F() catch { IOException =&gt; 0 }.</summary>
+internal sealed partial class TryExpressionSyntax : ExpressionSyntax
+{
+    internal readonly SyntaxToken tryKeyword;
+    internal readonly ExpressionSyntax expression;
+    internal readonly SyntaxToken catchKeyword;
+    internal readonly SyntaxToken openBraceToken;
+    internal readonly GreenNode? arms;
+    internal readonly SyntaxToken closeBraceToken;
+
+    internal TryExpressionSyntax(SyntaxKind kind, SyntaxToken tryKeyword, ExpressionSyntax expression, SyntaxToken catchKeyword, SyntaxToken openBraceToken, GreenNode? arms, SyntaxToken closeBraceToken, DiagnosticInfo[]? diagnostics, SyntaxAnnotation[]? annotations)
+      : base(kind, diagnostics, annotations)
+    {
+        this.SlotCount = 6;
+        this.AdjustFlagsAndWidth(tryKeyword);
+        this.tryKeyword = tryKeyword;
+        this.AdjustFlagsAndWidth(expression);
+        this.expression = expression;
+        this.AdjustFlagsAndWidth(catchKeyword);
+        this.catchKeyword = catchKeyword;
+        this.AdjustFlagsAndWidth(openBraceToken);
+        this.openBraceToken = openBraceToken;
+        if (arms != null)
+        {
+            this.AdjustFlagsAndWidth(arms);
+            this.arms = arms;
+        }
+        this.AdjustFlagsAndWidth(closeBraceToken);
+        this.closeBraceToken = closeBraceToken;
+    }
+
+    internal TryExpressionSyntax(SyntaxKind kind, SyntaxToken tryKeyword, ExpressionSyntax expression, SyntaxToken catchKeyword, SyntaxToken openBraceToken, GreenNode? arms, SyntaxToken closeBraceToken, SyntaxFactoryContext context)
+      : base(kind)
+    {
+        this.SetFactoryContext(context);
+        this.SlotCount = 6;
+        this.AdjustFlagsAndWidth(tryKeyword);
+        this.tryKeyword = tryKeyword;
+        this.AdjustFlagsAndWidth(expression);
+        this.expression = expression;
+        this.AdjustFlagsAndWidth(catchKeyword);
+        this.catchKeyword = catchKeyword;
+        this.AdjustFlagsAndWidth(openBraceToken);
+        this.openBraceToken = openBraceToken;
+        if (arms != null)
+        {
+            this.AdjustFlagsAndWidth(arms);
+            this.arms = arms;
+        }
+        this.AdjustFlagsAndWidth(closeBraceToken);
+        this.closeBraceToken = closeBraceToken;
+    }
+
+    internal TryExpressionSyntax(SyntaxKind kind, SyntaxToken tryKeyword, ExpressionSyntax expression, SyntaxToken catchKeyword, SyntaxToken openBraceToken, GreenNode? arms, SyntaxToken closeBraceToken)
+      : base(kind)
+    {
+        this.SlotCount = 6;
+        this.AdjustFlagsAndWidth(tryKeyword);
+        this.tryKeyword = tryKeyword;
+        this.AdjustFlagsAndWidth(expression);
+        this.expression = expression;
+        this.AdjustFlagsAndWidth(catchKeyword);
+        this.catchKeyword = catchKeyword;
+        this.AdjustFlagsAndWidth(openBraceToken);
+        this.openBraceToken = openBraceToken;
+        if (arms != null)
+        {
+            this.AdjustFlagsAndWidth(arms);
+            this.arms = arms;
+        }
+        this.AdjustFlagsAndWidth(closeBraceToken);
+        this.closeBraceToken = closeBraceToken;
+    }
+
+    /// <summary>SyntaxToken representing the try keyword.</summary>
+    public SyntaxToken TryKeyword => this.tryKeyword;
+    /// <summary>ExpressionSyntax node representing the body, whose exceptions the arms catch.</summary>
+    public ExpressionSyntax Expression => this.expression;
+    /// <summary>SyntaxToken representing the catch keyword.</summary>
+    public SyntaxToken CatchKeyword => this.catchKeyword;
+    public SyntaxToken OpenBraceToken => this.openBraceToken;
+    /// <summary>The arms, which match the caught exception as the arms of a switch expression match its input.</summary>
+    public CoreSyntax.SeparatedSyntaxList<SwitchExpressionArmSyntax> Arms => new CoreSyntax.SeparatedSyntaxList<SwitchExpressionArmSyntax>(new CoreSyntax.SyntaxList<CSharpSyntaxNode>(this.arms));
+    public SyntaxToken CloseBraceToken => this.closeBraceToken;
+
+    internal override GreenNode? GetSlot(int index)
+        => index switch
+        {
+            0 => this.tryKeyword,
+            1 => this.expression,
+            2 => this.catchKeyword,
+            3 => this.openBraceToken,
+            4 => this.arms,
+            5 => this.closeBraceToken,
+            _ => null,
+        };
+
+    internal override SyntaxNode CreateRed(SyntaxNode? parent, int position) => new CSharp.Syntax.TryExpressionSyntax(this, parent, position);
+
+    public override void Accept(CSharpSyntaxVisitor visitor) => visitor.VisitTryExpression(this);
+    public override TResult Accept<TResult>(CSharpSyntaxVisitor<TResult> visitor) => visitor.VisitTryExpression(this);
+
+    public TryExpressionSyntax Update(SyntaxToken tryKeyword, ExpressionSyntax expression, SyntaxToken catchKeyword, SyntaxToken openBraceToken, CoreSyntax.SeparatedSyntaxList<SwitchExpressionArmSyntax> arms, SyntaxToken closeBraceToken)
+    {
+        if (tryKeyword != this.TryKeyword || expression != this.Expression || catchKeyword != this.CatchKeyword || openBraceToken != this.OpenBraceToken || arms != this.Arms || closeBraceToken != this.CloseBraceToken)
+        {
+            var newNode = SyntaxFactory.TryExpression(tryKeyword, expression, catchKeyword, openBraceToken, arms, closeBraceToken);
+            var diags = GetDiagnostics();
+            if (diags?.Length > 0)
+                newNode = newNode.WithDiagnosticsGreen(diags);
+            var annotations = GetAnnotations();
+            if (annotations?.Length > 0)
+                newNode = newNode.WithAnnotationsGreen(annotations);
+            return newNode;
+        }
+
+        return this;
+    }
+
+    internal override GreenNode SetDiagnostics(DiagnosticInfo[]? diagnostics)
+        => new TryExpressionSyntax(this.Kind, this.tryKeyword, this.expression, this.catchKeyword, this.openBraceToken, this.arms, this.closeBraceToken, diagnostics, GetAnnotations());
+
+    internal override GreenNode SetAnnotations(SyntaxAnnotation[]? annotations)
+        => new TryExpressionSyntax(this.Kind, this.tryKeyword, this.expression, this.catchKeyword, this.openBraceToken, this.arms, this.closeBraceToken, GetDiagnostics(), annotations);
+}
+
 internal sealed partial class TryStatementSyntax : StatementSyntax
 {
     internal readonly GreenNode? attributeLists;
@@ -27849,6 +27975,7 @@ internal partial class CSharpSyntaxVisitor<TResult>
     public virtual TResult VisitDefaultSwitchLabel(DefaultSwitchLabelSyntax node) => this.DefaultVisit(node);
     public virtual TResult VisitSwitchExpression(SwitchExpressionSyntax node) => this.DefaultVisit(node);
     public virtual TResult VisitSwitchExpressionArm(SwitchExpressionArmSyntax node) => this.DefaultVisit(node);
+    public virtual TResult VisitTryExpression(TryExpressionSyntax node) => this.DefaultVisit(node);
     public virtual TResult VisitTryStatement(TryStatementSyntax node) => this.DefaultVisit(node);
     public virtual TResult VisitCatchClause(CatchClauseSyntax node) => this.DefaultVisit(node);
     public virtual TResult VisitCatchDeclaration(CatchDeclarationSyntax node) => this.DefaultVisit(node);
@@ -28106,6 +28233,7 @@ internal partial class CSharpSyntaxVisitor
     public virtual void VisitDefaultSwitchLabel(DefaultSwitchLabelSyntax node) => this.DefaultVisit(node);
     public virtual void VisitSwitchExpression(SwitchExpressionSyntax node) => this.DefaultVisit(node);
     public virtual void VisitSwitchExpressionArm(SwitchExpressionArmSyntax node) => this.DefaultVisit(node);
+    public virtual void VisitTryExpression(TryExpressionSyntax node) => this.DefaultVisit(node);
     public virtual void VisitTryStatement(TryStatementSyntax node) => this.DefaultVisit(node);
     public virtual void VisitCatchClause(CatchClauseSyntax node) => this.DefaultVisit(node);
     public virtual void VisitCatchDeclaration(CatchDeclarationSyntax node) => this.DefaultVisit(node);
@@ -28662,6 +28790,9 @@ internal partial class CSharpSyntaxRewriter : CSharpSyntaxVisitor<CSharpSyntaxNo
 
     public override CSharpSyntaxNode VisitSwitchExpressionArm(SwitchExpressionArmSyntax node)
         => node.Update((PatternSyntax)Visit(node.Pattern), (WhenClauseSyntax)Visit(node.WhenClause), (SyntaxToken)Visit(node.EqualsGreaterThanToken), (ExpressionSyntax)Visit(node.Expression));
+
+    public override CSharpSyntaxNode VisitTryExpression(TryExpressionSyntax node)
+        => node.Update((SyntaxToken)Visit(node.TryKeyword), (ExpressionSyntax)Visit(node.Expression), (SyntaxToken)Visit(node.CatchKeyword), (SyntaxToken)Visit(node.OpenBraceToken), VisitList(node.Arms), (SyntaxToken)Visit(node.CloseBraceToken));
 
     public override CSharpSyntaxNode VisitTryStatement(TryStatementSyntax node)
         => node.Update(VisitList(node.AttributeLists), (SyntaxToken)Visit(node.TryKeyword), (BlockSyntax)Visit(node.Block), VisitList(node.Catches), (FinallyClauseSyntax)Visit(node.Finally));
@@ -32179,6 +32310,23 @@ internal partial class ContextAwareSyntax
 #endif
 
         return new SwitchExpressionArmSyntax(SyntaxKind.SwitchExpressionArm, pattern, whenClause, equalsGreaterThanToken, expression, this.context);
+    }
+
+    public TryExpressionSyntax TryExpression(SyntaxToken tryKeyword, ExpressionSyntax expression, SyntaxToken catchKeyword, SyntaxToken openBraceToken, CoreSyntax.SeparatedSyntaxList<SwitchExpressionArmSyntax> arms, SyntaxToken closeBraceToken)
+    {
+#if DEBUG
+        if (tryKeyword == null) throw new ArgumentNullException(nameof(tryKeyword));
+        if (tryKeyword.Kind != SyntaxKind.TryKeyword) throw new ArgumentException(nameof(tryKeyword));
+        if (expression == null) throw new ArgumentNullException(nameof(expression));
+        if (catchKeyword == null) throw new ArgumentNullException(nameof(catchKeyword));
+        if (catchKeyword.Kind != SyntaxKind.CatchKeyword) throw new ArgumentException(nameof(catchKeyword));
+        if (openBraceToken == null) throw new ArgumentNullException(nameof(openBraceToken));
+        if (openBraceToken.Kind != SyntaxKind.OpenBraceToken) throw new ArgumentException(nameof(openBraceToken));
+        if (closeBraceToken == null) throw new ArgumentNullException(nameof(closeBraceToken));
+        if (closeBraceToken.Kind != SyntaxKind.CloseBraceToken) throw new ArgumentException(nameof(closeBraceToken));
+#endif
+
+        return new TryExpressionSyntax(SyntaxKind.TryExpression, tryKeyword, expression, catchKeyword, openBraceToken, arms.Node, closeBraceToken, this.context);
     }
 
     public TryStatementSyntax TryStatement(CoreSyntax.SyntaxList<AttributeListSyntax> attributeLists, SyntaxToken tryKeyword, BlockSyntax block, CoreSyntax.SyntaxList<CatchClauseSyntax> catches, FinallyClauseSyntax? @finally)
@@ -37665,6 +37813,23 @@ internal static partial class SyntaxFactory
 #endif
 
         return new SwitchExpressionArmSyntax(SyntaxKind.SwitchExpressionArm, pattern, whenClause, equalsGreaterThanToken, expression);
+    }
+
+    public static TryExpressionSyntax TryExpression(SyntaxToken tryKeyword, ExpressionSyntax expression, SyntaxToken catchKeyword, SyntaxToken openBraceToken, CoreSyntax.SeparatedSyntaxList<SwitchExpressionArmSyntax> arms, SyntaxToken closeBraceToken)
+    {
+#if DEBUG
+        if (tryKeyword == null) throw new ArgumentNullException(nameof(tryKeyword));
+        if (tryKeyword.Kind != SyntaxKind.TryKeyword) throw new ArgumentException(nameof(tryKeyword));
+        if (expression == null) throw new ArgumentNullException(nameof(expression));
+        if (catchKeyword == null) throw new ArgumentNullException(nameof(catchKeyword));
+        if (catchKeyword.Kind != SyntaxKind.CatchKeyword) throw new ArgumentException(nameof(catchKeyword));
+        if (openBraceToken == null) throw new ArgumentNullException(nameof(openBraceToken));
+        if (openBraceToken.Kind != SyntaxKind.OpenBraceToken) throw new ArgumentException(nameof(openBraceToken));
+        if (closeBraceToken == null) throw new ArgumentNullException(nameof(closeBraceToken));
+        if (closeBraceToken.Kind != SyntaxKind.CloseBraceToken) throw new ArgumentException(nameof(closeBraceToken));
+#endif
+
+        return new TryExpressionSyntax(SyntaxKind.TryExpression, tryKeyword, expression, catchKeyword, openBraceToken, arms.Node, closeBraceToken);
     }
 
     public static TryStatementSyntax TryStatement(CoreSyntax.SyntaxList<AttributeListSyntax> attributeLists, SyntaxToken tryKeyword, BlockSyntax block, CoreSyntax.SyntaxList<CatchClauseSyntax> catches, FinallyClauseSyntax? @finally)

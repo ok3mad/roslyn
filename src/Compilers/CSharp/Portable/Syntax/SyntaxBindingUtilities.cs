@@ -24,6 +24,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Syntax
                     or TryStatementSyntax
                     or LockStatementSyntax
                     // Sharper: a spread `yield return ..xs` lowers to a foreach whose try/finally has the yield's syntax.
-                    or YieldStatementSyntax { RawKind: (int)SyntaxKind.YieldReturnStatement, Expression: RangeExpressionSyntax { LeftOperand: null, RightOperand: not null } };
+                    or YieldStatementSyntax { RawKind: (int)SyntaxKind.YieldReturnStatement, Expression: RangeExpressionSyntax { LeftOperand: null, RightOperand: not null } }
+                    // Sharper: a try expression lowers to a try statement with its syntax.
+                    or TryExpressionSyntax;
     }
 }

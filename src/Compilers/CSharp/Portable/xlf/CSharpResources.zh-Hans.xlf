@@ -2612,6 +2612,41 @@
         <target state="new">A function type cannot have more than {0} parameters, because no 'System.Func' or 'System.Action' delegate has more.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperImmutableBaseNotImmutable">
+        <source>'{0}' is marked [Immutable], but its base type '{1}' is not immutable.</source>
+        <target state="new">'{0}' is marked [Immutable], but its base type '{1}' is not immutable.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperImmutableDisproven">
+        <source>'{0}' is marked [Immutable], but it is mutable: {1}.</source>
+        <target state="new">'{0}' is marked [Immutable], but it is mutable: {1}.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperImmutableHierarchyViolated">
+        <source>'{0}' must be immutable, because '{1}' is marked [ImmutableHierarchy], but {2}.</source>
+        <target state="new">'{0}' must be immutable, because '{1}' is marked [ImmutableHierarchy], but {2}.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperImmutableHierarchyWithoutImmutable">
+        <source>'{0}' is marked [ImmutableHierarchy], so it must also be marked [Immutable].</source>
+        <target state="new">'{0}' is marked [ImmutableHierarchy], so it must also be marked [Immutable].</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperImmutableNotProven">
+        <source>'{0}' is marked [Immutable], but it cannot be proven immutable: {1}.</source>
+        <target state="new">'{0}' is marked [Immutable], but it cannot be proven immutable: {1}.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperInferAmbiguousOverriddenMember">
+        <source>Cannot infer the types of '{0}', because it could override or implement more than one member: {1}. Write the types of the one it overrides or implements.</source>
+        <target state="new">Cannot infer the types of '{0}', because it could override or implement more than one member: {1}. Write the types of the one it overrides or implements.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperInferCycle">
+        <source>Cannot infer the return type of '{0}', because it depends on itself: {1}. Write the return type of one of these methods.</source>
+        <target state="new">Cannot infer the return type of '{0}', because it depends on itself: {1}. Write the return type of one of these methods.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperInferIteratorYieldsNothing">
         <source>Cannot infer the return type of the iterator '{0}', because it has no 'yield return' to infer the element type from. Write the return type.</source>
         <target state="new">Cannot infer the return type of the iterator '{0}', because it has no 'yield return' to infer the element type from. Write the return type.</target>
@@ -2627,6 +2662,11 @@
         <target state="new">'{0}' has no body to infer its return type from. Write the return type.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperInferNoOverriddenMember">
+        <source>Cannot infer the types of '{0}', because it overrides or implements no member '{0}' with {1} parameters that matches its written types. Write the types.</source>
+        <target state="new">Cannot infer the types of '{0}', because it overrides or implements no member '{0}' with {1} parameters that matches its written types. Write the types.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperInferNoType">
         <source>Cannot infer the return type of '{0}', because the value it returns ({1}) has no type. Write the return type.</source>
         <target state="new">Cannot infer the return type of '{0}', because the value it returns ({1}) has no type. Write the return type.</target>
@@ -2635,6 +2675,11 @@
       <trans-unit id="ERR_SharperInferNotSupportedYet">
         <source>An inferred return type ('infer') is not supported {0} yet. Write the return type.</source>
         <target state="new">An inferred return type ('infer') is not supported {0} yet. Write the return type.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperInferOverriddenMemberCycle">
+        <source>Cannot infer the types of '{0}' from the member it overrides or implements, because the signature of that member depends on '{0}' itself. Write the types.</source>
+        <target state="new">Cannot infer the types of '{0}' from the member it overrides or implements, because the signature of that member depends on '{0}' itself. Write the types.</target>
         <note />
       </trans-unit>
       <trans-unit id="ERR_SharperInferParameterCycle">
@@ -2650,11 +2695,6 @@
       <trans-unit id="ERR_SharperInferParameterNoType">
         <source>Cannot infer the type of parameter '{0}', because its default value ({1}) has no type. Write the parameter type.</source>
         <target state="new">Cannot infer the type of parameter '{0}', because its default value ({1}) has no type. Write the parameter type.</target>
-        <note />
-      </trans-unit>
-      <trans-unit id="ERR_SharperInferUsesInferredMethod">
-        <source>Cannot infer the return type of '{0}', because its body uses '{1}', whose return type is inferred too. Write the return type of one of them.</source>
-        <target state="new">Cannot infer the return type of '{0}', because its body uses '{1}', whose return type is inferred too. Write the return type of one of them.</target>
         <note />
       </trans-unit>
       <trans-unit id="ERR_SharperInferUsesItself">
@@ -2687,6 +2727,16 @@
         <target state="new">'it' is ambiguous here: '{0}' takes a value or a function at this argument, and the outer 'it' fits both. Write the lambda, as in 'x =&gt; ...', or name the outer value.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperMisplacedUnobservableWrite">
+        <source>[UnobservableWrite] is only valid on a field that is not readonly, of a class marked [Immutable].</source>
+        <target state="new">[UnobservableWrite] is only valid on a field that is not readonly, of a class marked [Immutable].</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperPhantomTypeParameterInState">
+        <source>Type parameter '{0}' is marked [Phantom], but '{1}' uses it in the state of the type.</source>
+        <target state="new">Type parameter '{0}' is marked [Phantom], but '{1}' uses it in the state of the type.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperReadOnlyLocalWithNoInitializer">
         <source>A readonly local must be initialized in its declaration, because it cannot be assigned later.</source>
         <target state="new">A readonly local must be initialized in its declaration, because it cannot be assigned later.</target>
@@ -2702,6 +2752,21 @@
         <target state="new">A spread 'yield return ..' cannot enumerate '{0}' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperTryExpressionInCatchFilter">
+        <source>A try expression cannot be used in a 'when' clause, because a catch filter cannot contain a try block. Move it out of the filter.</source>
+        <target state="new">A try expression cannot be used in a 'when' clause, because a catch filter cannot contain a try block. Move it out of the filter.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperTryExpressionInExpressionTree">
+        <source>An expression tree cannot contain a try expression.</source>
+        <target state="new">An expression tree cannot contain a try expression.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperTryExpressionNoType">
+        <source>The try expression has no type, because its body and arms ({0}) have no best common type. Give it a target type, such as a declared union of these types.</source>
+        <target state="new">The try expression has no type, because its body and arms ({0}) have no best common type. Give it a target type, such as a declared union of these types.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperValDeconstructionDisallowsSpecificType">
         <source>Deconstruction 'val (...)' form disallows a specific type for 'val'. Use '@val' for the type.</source>
         <target state="new">Deconstruction 'val (...)' form disallows a specific type for 'val'. Use '@val' for the type.</target>
@@ -2715,6 +2780,11 @@
       <trans-unit id="ERR_SharperValRefReassignment">
         <source>Cannot ref-assign '{0}' because it is a ref val: it always refers to the same variable. Writes through '{0}' are allowed.</source>
         <target state="new">Cannot ref-assign '{0}' because it is a ref val: it always refers to the same variable. Writes through '{0}' are allowed.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperValSimpleLambdaNeedsParentheses">
+        <source>A 'val' lambda parameter needs parentheses. Write '(val {0}) =&gt; ...'.</source>
+        <target state="new">A 'val' lambda parameter needs parentheses. Write '(val {0}) =&gt; ...'.</target>
         <note />
       </trans-unit>
       <trans-unit id="ERR_SignatureMismatchInRecord">
@@ -3482,6 +3552,71 @@
         <target state="translated">指针</target>
         <note />
       </trans-unit>
+      <trans-unit id="IDS_SharperImmutableReasonBase">
+        <source>its base type '{0}' is not immutable</source>
+        <target state="new">its base type '{0}' is not immutable</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperImmutableReasonCapturedParameter">
+        <source>the parameter '{0}' is captured in a field that is not readonly</source>
+        <target state="new">the parameter '{0}' is captured in a field that is not readonly</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperImmutableReasonEvent">
+        <source>'{0}' is an event, which can be subscribed to</source>
+        <target state="new">'{0}' is an event, which can be subscribed to</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperImmutableReasonFieldNotReadOnly">
+        <source>'{0}' is not readonly</source>
+        <target state="new">'{0}' is not readonly</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperImmutableReasonNotClaimed">
+        <source>'{0}' is not marked [Immutable]</source>
+        <target state="new">'{0}' is not marked [Immutable]</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperImmutableReasonObserver">
+        <source>the observer '{0}' does more than read fields and pure observers: '{1}'</source>
+        <target state="new">the observer '{0}' does more than read fields and pure observers: '{1}'</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperImmutableReasonObserverIdentity">
+        <source>the observer '{0}' observes object identity: '{1}'</source>
+        <target state="new">the observer '{0}' observes object identity: '{1}'</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperImmutableReasonRefField">
+        <source>'{0}' is a ref field</source>
+        <target state="new">'{0}' is a ref field</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperImmutableReasonSetAccessor">
+        <source>'{0}' has a set accessor</source>
+        <target state="new">'{0}' has a set accessor</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperImmutableReasonTypeNotClaimed">
+        <source>'{0}' has type '{1}', which comes from another assembly and is not marked [Immutable]</source>
+        <target state="new">'{0}' has type '{1}', which comes from another assembly and is not marked [Immutable]</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperImmutableReasonTypeNotImmutable">
+        <source>'{0}' has type '{1}', which is not immutable</source>
+        <target state="new">'{0}' has type '{1}', which is not immutable</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperImmutableReasonTypeNotSealed">
+        <source>'{0}' has type '{1}', which is neither sealed nor marked [ImmutableHierarchy]</source>
+        <target state="new">'{0}' has type '{1}', which is neither sealed nor marked [ImmutableHierarchy]</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperImmutableReasonTypePhantom">
+        <source>'{0}' has type '{1}', which uses a [Phantom] type parameter</source>
+        <target state="new">'{0}' has type '{1}', which uses a [Phantom] type parameter</target>
+        <note />
+      </trans-unit>
       <trans-unit id="IDS_SharperInferOnAsyncIterator">
         <source>on an async iterator</source>
         <target state="new">on an async iterator</target>
@@ -3520,6 +3655,11 @@
       <trans-unit id="IDS_SharperInferOnRefReturn">
         <source>on a ref return</source>
         <target state="new">on a ref return</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperTryExpression">
+        <source>try expression</source>
+        <target state="new">try expression</target>
         <note />
       </trans-unit>
       <trans-unit id="IDS_VALLOCAL">
@@ -4282,6 +4422,16 @@
         <target state="new">'..' on a dynamic operand is a range, not a spread</target>
         <note />
       </trans-unit>
+      <trans-unit id="WRN_SharperImmutableHierarchyViolated">
+        <source>'{0}' must be immutable, because '{1}' is marked [ImmutableHierarchy], but {2}.</source>
+        <target state="new">'{0}' must be immutable, because '{1}' is marked [ImmutableHierarchy], but {2}.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WRN_SharperImmutableHierarchyViolated_Title">
+        <source>A type in an [ImmutableHierarchy] is not immutable.</source>
+        <target state="new">A type in an [ImmutableHierarchy] is not immutable.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="WRN_SharperReadOnlyLocalMemberCallOnCopy">
         <source>Call to non-readonly member '{0}' on readonly local '{1}' runs on a copy, so '{1}' is not changed.</source>
         <target state="new">Call to non-readonly member '{0}' on readonly local '{1}' runs on a copy, so '{1}' is not changed.</target>
@@ -4300,6 +4450,16 @@
       <trans-unit id="WRN_SharperReadOnlyParameterMemberCallOnCopy_Title">
         <source>Call to a non-readonly member on a readonly parameter runs on a copy</source>
         <target state="new">Call to a non-readonly member on a readonly parameter runs on a copy</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WRN_SharperTryExpressionAwaitableBody">
+        <source>The body of this try expression is a '{0}', so the arms catch only the exceptions thrown before the task is returned. Write 'try await ...' to catch the exceptions of the operation.</source>
+        <target state="new">The body of this try expression is a '{0}', so the arms catch only the exceptions thrown before the task is returned. Write 'try await ...' to catch the exceptions of the operation.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WRN_SharperTryExpressionAwaitableBody_Title">
+        <source>The body of a try expression is a task that is not awaited</source>
+        <target state="new">The body of a try expression is a task that is not awaited</target>
         <note />
       </trans-unit>
       <trans-unit id="WRN_SharperValMemberCallOnCopy">

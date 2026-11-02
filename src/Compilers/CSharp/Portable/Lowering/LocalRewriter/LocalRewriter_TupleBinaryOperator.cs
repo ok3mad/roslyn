@@ -238,6 +238,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                     case ConversionKind.SwitchExpression:        // a switch expression must have its arms converted
                     case ConversionKind.StackAllocToPointerType: // a stack alloc is not well-defined without an enclosing conversion
                     case ConversionKind.ConditionalExpression:   // a conditional expression must have its alternatives converted
+                    case ConversionKind.SharperTryExpression:    // a try expression must have its body and arms converted
                     case ConversionKind.StackAllocToSpanType:
                     case ConversionKind.ObjectCreation:
                         return true;

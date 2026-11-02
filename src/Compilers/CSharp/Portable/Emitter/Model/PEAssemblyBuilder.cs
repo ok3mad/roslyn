@@ -118,6 +118,12 @@ namespace Microsoft.CodeAnalysis.CSharp.Emit
             builder.AddIfNotNull(_lazyExtensionMarkerAttribute);
             builder.AddIfNotNull(_lazyRequiresUnsafeAttribute);
 
+            if (Compilation.SharperImmutabilityOpt?.GetSynthesizedAttributeTypes() is { } sharperAttributes)
+            {
+                builder.AddRange(sharperAttributes);
+                sharperAttributes.Free();
+            }
+
             return builder.ToImmutableAndFree();
         }
 
@@ -448,7 +454,13 @@ namespace Microsoft.CodeAnalysis.CSharp.Emit
                 needsAttributes |= EmbeddableAttributes.RequiresUnsafeAttribute;
             }
 
-            if (needsAttributes == 0)
+            if (Compilation.SharperImmutabilityOpt?.GetSynthesizedAttributeTypes() is { } sharperAttributes)
+            {
+                // Sharper: the synthesized immutability attributes are embedded, so they need EmbeddedAttribute.
+                sharperAttributes.Free();
+                EnsureAttributeUsageAttributeMembersAvailable(diagnostics);
+            }
+            else if (needsAttributes == 0)
             {
                 return;
             }

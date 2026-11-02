@@ -241,7 +241,57 @@ implementation plan, "Feature 3"):
    its own member's signature re-enters that member, which then completes its signature with an error type while the
    outer inference is still running. Another thread can now find that signature complete and infer the rest of the
    cycle without an error, so marking the cycle when the outer inference ends is too late: publish the error for every
-   parameter of the cycle at the moment it is found. Test cycles from each end, and on two threads at once.
+   parameter of the cycle at the moment it is found. Publishing them one by one is not enough either: a third thread can
+   complete a signature from the first published error and compute the next member without seeing the cycle. Decide
+   all of the cycle's results first (`CSharpCompilation.SharperInferenceCycleResults`), and let every publication prefer
+   a decided result (`SharperInferredParameterType.Publish`). Test cycles from each end, and on several threads at once.
+29. **A cycle found on a stack depends on where the search started.** With inference nested on a thread-static stack,
+   "a member on the stack is a cycle" misses a member that reaches the cycle through a member that already finished
+   and published its error, so whether it errs depends on the starting member and the thread. Find cycles as strongly
+   connected components (Tarjan's algorithm on the frames, `SharperInferredReturnType`): publish a member only with
+   its whole component, and decide all of a component's results before publishing any, so a thread whose search was
+   cut short by a published member adopts the decided results. Test every starting member and many threads, and
+   compare the diagnostics, not just their count.
+
+29. **A lowering that builds a try statement owes what `VisitTryStatement` does.** The try expression lowers to a
+   `BoundTryStatement` it makes itself, so the local rewriter's own try lowering never ran: an `await` in a catch block
+   must set `_sawAwaitInExceptionHandler` (save `_sawAwait`, visit the handler, merge), or `AsyncExceptionHandlerRewriter`
+   is skipped and codegen crashes in `ILBuilder.BlockedBranchDestinationSlow` on a branch into the handler. That
+   rewriter also took a catch block's syntax to be a `CatchClause` inside a `TryStatementSyntax`. Dump the lowered tree
+   (`BoundNode.DumpSource()` before codegen) when emit crashes; the shape shows which pass did not run. An expression
+   that lowers to a try block also inherits IL's limits: a catch filter cannot contain one, so report an error under
+   `BinderFlags.InCatchFilter` (CS20032), or codegen asserts.
+30. **The nullable walker refuses unregistered placeholders.** A decision DAG over a value that is not in the tree (the
+   caught exception) needs an input expression; a `BoundValuePlaceholder` trips `AssertPlaceholderAllowedWithoutRegistration`
+   in `LearnFromNonNullTest`. Give `LearnFromDecisionDag` a `BoundExpressionWithNullability` over it instead, which gets
+   a DAG temp slot like any expression without one.
+31. **Sub-parts with their own scope need two visitors.** `LocalBinderFactory` and `ExpressionVariableFinder` are syntax
+   walkers: without a `Visit<Node>` they descend into the arms, which then get no binders and put their pattern
+   variables in the enclosing statement's scope. Override both, as `VisitSwitchExpression` does.
+32. **A `NoneOperation`'s children must survive the control flow graph.** The CFG builder visits them as expressions:
+   switch arms cannot be visited outside a switch, and `ControlFlowGraphVerifier` requires an owning region for every
+   referenced local, so pattern variables cannot appear. Keep only children that are plain expressions (the try
+   expression keeps its body) and note what is missing.
+
+29. **An attribute that users write needs a name that binds.** `IsReadOnlyAttribute` and its kin are only emitted, so
+   the compiler synthesizes them at emit time. `[Immutable]` is written by users, so the binder must find it: when
+   lookup of an attribute name finds nothing in a Sharper file, `BindNonGenericSimpleNamespaceOrTypeOrAliasSymbol` binds
+   it to a compilation-level symbol (`SynthesizedEmbeddedSharperAttributeSymbol`, or the compilation's own declaration),
+   and `PEAssemblyBuilder.GetEmbeddedTypes` emits the ones binding created. `CreateEmbeddedAttributesIfNeeded` returns
+   early when no upstream embedded attribute is needed, so it must also know about these, or `[Embedded]` is missing.
+   Recognize such attributes by name (`IsTargetAttribute(namespace, name)`), so metadata and user-declared copies count.
+
+30. **A query over types with cycles must cache per component and report the same reason from any start.**
+   Immutability assumes the best inside a cycle, so a result computed under that assumption is only cached when the
+   cycle's root finishes (Tarjan's algorithm, `SharperImmutability.GetInfo`). Which member is reached first decides
+   which check fails first, so a reason computed on the way depends on the order, and on threads. Explain each failure
+   once every status is known (`SharperImmutability.Explain`), and test from each member and on several threads.
+
+31. **A declaration check that needs a body binds it itself.** `TryGetBodyBinder().BindMethodBody(syntax,
+   BindingDiagnosticBag.Discarded)` binds a getter outside the method compiler, as the `field` keyword's nullability
+   inference does. Skip bodies with errors (the method compiler reports them), and judge the bound tree with a
+   whitelist of node kinds, so a kind nobody reviewed fails safe. Run such checks from
+   `SourceMemberContainerTypeSymbol.AfterMembersChecks`, gated so that compilations without Sharper do nothing.
 
 ## Inferred Types
 
@@ -250,18 +300,24 @@ expression body (`BindToNaturalType`, `BindToInferredDelegateType`) and the lamb
 (`BoundLambda.InferSharperReturnType`: best common type, `void`, `Task` and `Task<T>`), with lambdas' nullable
 re-inference (`NullableWalker` with `returnTypesOpt`). The body is bound once to infer and again to compile; drop the
 diagnostics of the first binding unless they are the inference's own, and make sure the second binding reports
-whatever made the inference fail (an error type return must not end up with no diagnostic). The design and the plan
-for the later steps are in the implementation plan, "Feature 6".
+whatever made the inference fail (an error type return must not end up with no diagnostic). An inference that reads
+another inferred type infers it in a nested frame; cycles are components, not stack hits (trap 29). The design and the
+plan for the later steps are in the implementation plan, "Feature 6".
 
 Inference of a parameter type (`infer x = 3`, row 15) has one entry point, `ParameterHelpers.MakeParameter`, which
-every member kind uses (lambdas: `Binder.BindLambdaParameterType`). A new source for a parameter type (the overridden
-member, uses in the body) goes into `SharperInferredParameterType.GetType`, keeping its cache and its cycle stack;
-a source that binds something must run before the signature lock, as the default value does (trap 28). The design is
-in the implementation plan, "Feature 9".
+every member kind uses (lambdas: `Binder.BindLambdaParameterType`). A new source for a parameter type (uses in the
+body) goes into `SharperInferredParameterType`, keeping its cache and its cycle stack; a source that binds something
+or reads other members' signatures must run before the signature lock, as the default value does (trap 28). Step P2
+shows the shape: the overridden or implemented member is searched for once per method
+(`GetOverriddenSignature`, cached per method syntax), from `InferBeforeSignature`, on the same stack of syntax nodes
+as the default values, and its result fills both the parameters and the return type. C# matches overrides and
+implementations by complete signatures, which do not exist yet at that point, so such a search matches by name and
+parameter count and narrows with the types that are written. The design is in the implementation plan, "Feature 9".
 
 ## Testing
 
-- Tests live in `src/Compilers/CSharp/Test/Semantic/Semantics/SharperTests.cs`. Use
+- Tests live in `src/Compilers/CSharp/Test/Semantic/Semantics/SharperTests.cs`; `SharperTests` is partial, so a large
+  feature can take its own file (`SharperTests_TryExpression.cs`, `SharperTests_ImmutableTypes.cs`) and the `~SharperTests` filter still runs it. Use
   `TestOptions.Regular.WithExperimental(MessageID.IDS_FeatureSharper)` as parse options.
 - Compile against `TargetFramework.Net90`; the default test framework lacks types such as `System.Range`. Guard
   runtime output with `ExecutionConditionUtil.IsCoreClr ? "<output>" : null`.

@@ -11646,6 +11646,7 @@ done:
                 case SyntaxKind.ParenthesizedLambdaExpression:
                 case SyntaxKind.SimpleLambdaExpression:
                 case SyntaxKind.AnonymousMethodExpression:
+                case SyntaxKind.TryExpression:
                     return Precedence.Lambda;
                 case SyntaxKind.SimpleAssignmentExpression:
                 case SyntaxKind.AddAssignmentExpression:
@@ -11871,6 +11872,9 @@ done:
             // if (...
             // parse out a missing name node for the expression, and keep on going
             var tk = this.CurrentToken.Kind;
+            if (tk == SyntaxKind.TryKeyword && IsSharperTryExpressionStart())
+                return ParseSharperTryExpression(precedence);
+
             if (IsInvalidSubExpression(tk))
                 return this.AddError(this.CreateMissingIdentifierName(), ErrorCode.ERR_InvalidExprTerm, SyntaxFacts.GetText(tk));
 
@@ -11940,6 +11944,39 @@ done:
         }
 
 #nullable enable
+
+        /// <summary>
+        /// Whether a <c>try</c> in expression position starts a Sharper try expression. C# reports CS1525 for any
+        /// <c>try</c> there; <c>try {</c> keeps that error, because it is a try statement written where an expression
+        /// was expected, and no expression starts with a brace.
+        /// </summary>
+        private bool IsSharperTryExpressionStart()
+        {
+            Debug.Assert(this.CurrentToken.Kind == SyntaxKind.TryKeyword);
+            return this.PeekToken(1).Kind != SyntaxKind.OpenBraceToken && IsFeatureEnabled(MessageID.IDS_FeatureSharper);
+        }
+
+        /// <summary>
+        /// Parses a Sharper try expression, <c>try body catch { arms }</c>. The body runs up to <c>catch</c>, and the arms
+        /// are switch expression arms. Like a lambda, it has the lowest precedence, so nothing continues it: an operand of
+        /// a binary operator or a member access needs parentheses.
+        /// </summary>
+        private TryExpressionSyntax ParseSharperTryExpression(Precedence precedence)
+        {
+            var tryKeyword = this.EatToken(SyntaxKind.TryKeyword);
+            var result = _syntaxFactory.TryExpression(
+                tryKeyword,
+                this.ParseExpressionCore(),
+                this.EatToken(SyntaxKind.CatchKeyword),
+                this.EatToken(SyntaxKind.OpenBraceToken),
+                this.ParseSwitchExpressionArms(),
+                this.EatToken(SyntaxKind.CloseBraceToken));
+
+            // Parsed even at the wrong precedence for better recovery, as a throw expression is.
+            return precedence > Precedence.Lambda
+                ? this.AddError(result, ErrorCode.ERR_InvalidExprTerm, SyntaxFacts.GetText(SyntaxKind.TryKeyword))
+                : result;
+        }
 
         /// <summary>
         /// Takes in an initial unary expression or primary expression, and then consumes what follows as long as its
@@ -13577,6 +13614,12 @@ done:
                 return true;
             }
 
+            if (IsSharperValSimpleLambdaStart())
+            {
+                // `val a => ...`, which ParseLambdaExpression reports and recovers as `(val a) => ...`
+                return true;
+            }
+
             // Have checked all the static forms.  And have checked for the basic `a => a` form.  
             // At this point we have must be on 'async' or an explicit return type for this to still be a lambda.
             if (this.CurrentToken.ContextualKind == SyntaxKind.AsyncKeyword &&
@@ -13605,10 +13648,12 @@ done:
             //      async ();
 
             // 'async <identifier> => ...' looks like an async simple lambda
-            if (this.CurrentToken.Kind == SyntaxKind.IdentifierToken &&
-                this.PeekToken(1).Kind == SyntaxKind.EqualsGreaterThanToken)
+            if ((this.CurrentToken.Kind == SyntaxKind.IdentifierToken &&
+                 this.PeekToken(1).Kind == SyntaxKind.EqualsGreaterThanToken) ||
+                IsSharperValSimpleLambdaStart())
             {
                 // async a => ...
+                // async val a => ...
                 return true;
             }
 
@@ -13620,6 +13665,19 @@ done:
 
             // Check whether looks like implicitly or explicitly typed lambda
             return ScanParenthesizedLambda(precedence);
+        }
+
+        /// <summary>
+        /// True at <c>val x =&gt;</c> with Sharper on: a val lambda parameter without the parentheses that parameter
+        /// modifiers need in C#. Valid C# never has an identifier, an identifier and <c>=&gt;</c> where an expression
+        /// starts, so this changes no C# parse.
+        /// </summary>
+        private bool IsSharperValSimpleLambdaStart()
+        {
+            return IsSharperValIdentifier(this.CurrentToken) &&
+                this.PeekToken(1).Kind == SyntaxKind.IdentifierToken &&
+                this.PeekToken(2).Kind == SyntaxKind.EqualsGreaterThanToken &&
+                IsFeatureEnabled(MessageID.IDS_FeatureSharper);
         }
 
         private bool CanFollowSharperSequenceCast()
@@ -14373,6 +14431,26 @@ done:
 
                     return _syntaxFactory.ParenthesizedLambdaExpression(
                         attributes, modifiers, returnType, paramList, arrow, block, expression);
+                }
+                else if (IsSharperValSimpleLambdaStart())
+                {
+                    // Sharper: val x => ..., a val parameter without the parentheses it needs. Report one error and
+                    // recover as (val x) => ..., with missing parentheses, so that the body binds as it would there.
+                    var type = _syntaxFactory.IdentifierName(this.EatToken());
+                    var identifier = this.ParseIdentifierToken();
+                    var parameter = AddError(
+                        _syntaxFactory.Parameter(attributeLists: default, modifiers: default, type, identifier, @default: null),
+                        ErrorCode.ERR_SharperValSimpleLambdaNeedsParentheses,
+                        identifier.ValueText);
+                    var paramList = _syntaxFactory.ParameterList(
+                        SyntaxFactory.MissingToken(SyntaxKind.OpenParenToken),
+                        SyntaxFactory.SeparatedList(parameter),
+                        SyntaxFactory.MissingToken(SyntaxKind.CloseParenToken));
+                    var arrow = this.EatToken(SyntaxKind.EqualsGreaterThanToken);
+                    var (block, expression) = ParseLambdaBody();
+
+                    return _syntaxFactory.ParenthesizedLambdaExpression(
+                        attributes, modifiers, returnType: null, paramList, arrow, block, expression);
                 }
                 else
                 {

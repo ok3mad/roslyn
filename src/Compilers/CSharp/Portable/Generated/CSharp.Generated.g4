@@ -801,6 +801,7 @@ expression
   | stack_alloc_array_creation_expression
   | switch_expression
   | throw_expression
+  | try_expression
   | tuple_expression
   | type
   | type_of_expression
@@ -1162,6 +1163,10 @@ switch_expression_arm
 
 throw_expression
   : 'throw' expression
+  ;
+
+try_expression
+  : 'try' expression 'catch' '{' (switch_expression_arm (',' switch_expression_arm)* ','?)? '}'
   ;
 
 tuple_expression

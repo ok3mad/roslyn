@@ -67,8 +67,9 @@ Func<int, int> f = (val x) => { x = 0; return x; };   // error CS1656: Cannot as
   parameter is written through, and `x = ref y` is CS20006.
 - It follows C#'s rules for implicitly typed parameters: `(val a, b)` is fine, `(val a, int b)` is CS0748,
   `(val x = 1)` is CS9098, `(params val x)` is CS9272, and `var f = (val x) => x` has no natural type (CS8917).
-- The parentheses are required, as for C#'s modifiers: `val x => x` is a syntax error
-  ([#98](https://github.com/ok3mad/roslyn/issues/98) is a clearer message).
+- The parentheses are required, as for C#'s modifiers: `val x => x` is error CS20034, which suggests `(val x) => x`
+  ([#98](https://github.com/ok3mad/roslyn/issues/98)). The parser recovers as `(val x) => x`, so the body binds as
+  there and reports nothing more. Without Sharper, it is the C# syntax error.
 - Anonymous methods (`delegate (val x) { }`) and local functions take only explicitly typed parameters, so `val` is
   a type name there, as in C#.
 

@@ -5,6 +5,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Roslyn.Utilities;
 
@@ -29,7 +30,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
     /// thread that later finds that signature complete must not infer the rest of the cycle without the error. So the
     /// result does not depend on which member was asked for first, or on which thread.
     /// </remarks>
-    internal static class SharperInferredParameterType
+    internal static partial class SharperInferredParameterType
     {
         internal sealed class Result
         {
@@ -43,8 +44,12 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             }
         }
 
-        /// <summary>The parameters whose types are being inferred on this thread, innermost last.</summary>
-        [ThreadStatic] private static List<ParameterSyntax>? s_inProgress;
+        /// <summary>
+        /// The inferences in progress on this thread, innermost last: a <see cref="ParameterSyntax"/> for a type inferred
+        /// from a default value, a <see cref="MethodDeclarationSyntax"/> for types copied from the member that the method
+        /// overrides or implements (step P2).
+        /// </summary>
+        [ThreadStatic] private static List<SyntaxNode>? s_inProgress;
 
         /// <summary>
         /// Infers the types of the <c>infer</c> parameters in <paramref name="parameterList"/> that have a default value,
@@ -69,6 +74,9 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     }
                 }
             }
+
+            // Step P2: the types copied from the member that a method overrides or implements.
+            GetOverriddenSignature(owner);
         }
 
         /// <summary>
@@ -91,7 +99,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
             if (parameter.Default is null)
             {
-                // PROTOTYPE(sharper): step P2 takes the type from the overridden or implemented member.
+                // A parameter of a method that overrides or implements a member takes its type from there instead
+                // (GetOverriddenSignature, in ParameterHelpers.MakeParameter); this is a parameter with no source.
                 diagnostics.Add(ErrorCode.ERR_SharperInferParameterNoDefault, parameter.Type.Location, parameter.Identifier.ValueText);
                 return TypeWithAnnotations.Create(binder.CreateErrorType("infer"));
             }
@@ -109,16 +118,11 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 return result;
             }
 
-            var inProgress = s_inProgress ??= new List<ParameterSyntax>();
+            var inProgress = s_inProgress ??= new List<SyntaxNode>();
             int cycleStart = inProgress.IndexOf(parameter);
             if (cycleStart >= 0)
             {
-                for (int i = cycleStart; i < inProgress.Count; i++)
-                {
-                    ParameterSyntax inCycle = inProgress[i];
-                    results.GetValue(inCycle, _ => CreateCycleResult(inCycle, binder));
-                }
-
+                PublishCycle(binder.Compilation, inProgress, cycleStart);
                 return results.GetValue(parameter, _ => throw ExceptionUtilities.Unreachable());
             }
 
@@ -137,15 +141,69 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             }
 
             // A parameter found to be in a cycle while its default value was bound already has its result.
-            return results.GetValue(parameter, _ => result);
+            return Publish(results, binder.Compilation, parameter, result);
         }
 
-        private static Result CreateCycleResult(ParameterSyntax parameter, Binder binder)
+        /// <summary>
+        /// Gives every inference from <paramref name="cycleStart"/> to the top of the stack its cycle error, at once:
+        /// CS20028 for a parameter whose type comes from its default value, CS20045 for a method whose types come from
+        /// the member it overrides or implements.
+        /// </summary>
+        /// <remarks>
+        /// The results are decided for the whole cycle (<see cref="CSharpCompilation.SharperInferenceCycleResults"/>)
+        /// before any is published. Once one is published, another thread can complete a signature with it and compute a
+        /// member of the cycle without seeing the cycle (an override that copies the error type of its base's parameter);
+        /// such a thread then publishes the decided result instead of its own (<see cref="Publish"/>).
+        /// </remarks>
+        private static void PublishCycle(CSharpCompilation compilation, List<SyntaxNode> inProgress, int cycleStart)
+        {
+            var decided = compilation.SharperInferenceCycleResults;
+            for (int i = cycleStart; i < inProgress.Count; i++)
+            {
+                decided.GetValue(inProgress[i], node => node switch
+                {
+                    ParameterSyntax parameter => CreateCycleResult(parameter, compilation),
+                    MethodDeclarationSyntax method => OverriddenSignature.CreateCycle(method),
+                    _ => throw ExceptionUtilities.UnexpectedValue(node),
+                });
+            }
+
+            for (int i = cycleStart; i < inProgress.Count; i++)
+            {
+                switch (inProgress[i])
+                {
+                    case ParameterSyntax parameter:
+                        Publish(compilation.SharperInferredParameterTypes, compilation, parameter, (Result)decided.GetValue(parameter, _ => throw ExceptionUtilities.Unreachable()));
+                        break;
+                    case MethodDeclarationSyntax method:
+                        Publish(compilation.SharperOverriddenSignatures, compilation, method, (OverriddenSignature)decided.GetValue(method, _ => throw ExceptionUtilities.Unreachable()));
+                        break;
+                    default:
+                        throw ExceptionUtilities.UnexpectedValue(inProgress[i]);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Publishes <paramref name="result"/> for <paramref name="node"/> unless a result is published already, or a cycle
+        /// result was decided for it; returns the published result.
+        /// </summary>
+        private static TResult Publish<TNode, TResult>(ConditionalWeakTable<TNode, TResult> results, CSharpCompilation compilation, TNode node, TResult result)
+            where TNode : SyntaxNode
+            where TResult : class
+        {
+            return results.GetValue(node, _ => compilation.SharperInferenceCycleResults.TryGetValue(node, out object? decided) ? (TResult)decided : result);
+        }
+
+        private static Result CreateCycleResult(ParameterSyntax parameter, CSharpCompilation compilation)
         {
             var diagnostics = BindingDiagnosticBag.GetInstance(withDiagnostics: true, withDependencies: false);
             diagnostics.Add(ErrorCode.ERR_SharperInferParameterCycle, parameter.Type!.Location, parameter.Identifier.ValueText);
-            return new Result(TypeWithAnnotations.Create(binder.CreateErrorType("infer")), diagnostics.ToReadOnlyAndFree());
+            return new Result(CreateErrorType(compilation), diagnostics.ToReadOnlyAndFree());
         }
+
+        private static TypeWithAnnotations CreateErrorType(CSharpCompilation compilation)
+            => TypeWithAnnotations.Create(new ExtendedErrorTypeSymbol(compilation, "infer", arity: 0, errorInfo: null));
 
         /// <summary>
         /// The binder that the default value of a parameter of <paramref name="owner"/> is bound with, as

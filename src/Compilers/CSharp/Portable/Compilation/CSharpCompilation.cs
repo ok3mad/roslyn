@@ -1588,6 +1588,67 @@ namespace Microsoft.CodeAnalysis.CSharp
             }
         }
 
+        private System.Runtime.CompilerServices.ConditionalWeakTable<SyntaxNode, object>? _lazySharperInferenceCycleResults;
+
+        /// <summary>
+        /// Sharper: the results decided for the members of an inference cycle, before they are published in
+        /// <see cref="SharperInferredParameterTypes"/> and <see cref="SharperOverriddenSignatures"/>.
+        /// </summary>
+        internal System.Runtime.CompilerServices.ConditionalWeakTable<SyntaxNode, object> SharperInferenceCycleResults
+        {
+            get
+            {
+                if (_lazySharperInferenceCycleResults == null)
+                {
+                    Interlocked.CompareExchange(ref _lazySharperInferenceCycleResults, new System.Runtime.CompilerServices.ConditionalWeakTable<SyntaxNode, object>(), null);
+                }
+
+                return _lazySharperInferenceCycleResults;
+            }
+        }
+
+        private System.Runtime.CompilerServices.ConditionalWeakTable<MethodDeclarationSyntax, SharperInferredParameterType.OverriddenSignature>? _lazySharperOverriddenSignatures;
+
+        /// <summary>
+        /// Sharper: the types that methods copy from the member they override or implement, by method syntax (see
+        /// <see cref="SharperInferredParameterType.GetOverriddenSignature"/>).
+        /// </summary>
+        internal System.Runtime.CompilerServices.ConditionalWeakTable<MethodDeclarationSyntax, SharperInferredParameterType.OverriddenSignature> SharperOverriddenSignatures
+        {
+            get
+            {
+                if (_lazySharperOverriddenSignatures == null)
+                {
+                    Interlocked.CompareExchange(ref _lazySharperOverriddenSignatures, new System.Runtime.CompilerServices.ConditionalWeakTable<MethodDeclarationSyntax, SharperInferredParameterType.OverriddenSignature>(), null);
+                }
+
+                return _lazySharperOverriddenSignatures;
+            }
+        }
+
+        private SharperImmutability? _lazySharperImmutability;
+
+        /// <summary>
+        /// Sharper: immutable types and their attributes (see <see cref="Symbols.SharperImmutability"/>).
+        /// </summary>
+        internal SharperImmutability SharperImmutability
+        {
+            get
+            {
+                if (_lazySharperImmutability == null)
+                {
+                    Interlocked.CompareExchange(ref _lazySharperImmutability, new SharperImmutability(this), null);
+                }
+
+                return _lazySharperImmutability;
+            }
+        }
+
+        /// <summary>
+        /// Sharper: the immutability attributes that binding synthesized, if any were used.
+        /// </summary>
+        internal SharperImmutability? SharperImmutabilityOpt => _lazySharperImmutability;
+
         private ConcurrentDictionary<string, NamespaceSymbol>? _externAliasTargets;
 
         internal bool GetExternAliasTarget(string aliasName, out NamespaceSymbol @namespace)

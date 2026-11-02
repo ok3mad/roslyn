@@ -999,6 +999,14 @@ namespace Microsoft.CodeAnalysis.CSharp
                         ReportUseSiteDiagnosticForDynamic(diagnostics, node);
                     }
                 }
+                else if (result.Kind == LookupResultKind.Empty &&
+                    options.IsAttributeTypeLookup() &&
+                    SharperImmutability.TryGetAttributeKind(identifierValueText, node.Identifier.IsVerbatimIdentifier(), out var sharperAttribute) &&
+                    node.IsFeatureEnabled(MessageID.IDS_FeatureSharper))
+                {
+                    // Sharper: an immutability attribute that no type in scope declares is the embedded one.
+                    bindingResult = Compilation.SharperImmutability.GetAttributeType(sharperAttribute, diagnostics, node);
+                }
                 else
                 {
                     // nint/nuint is allowed to bind to an existing namespace.

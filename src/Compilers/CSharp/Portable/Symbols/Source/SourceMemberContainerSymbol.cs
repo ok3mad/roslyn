@@ -1963,6 +1963,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             CheckRecordMemberNames(diagnostics);
             CheckSpecialMemberErrors(diagnostics);
             CheckTypeParameterNameConflicts(diagnostics);
+            SharperImmutability.CheckDeclaration(this, diagnostics);
 
             bool unused = KnownCircularStruct;
 

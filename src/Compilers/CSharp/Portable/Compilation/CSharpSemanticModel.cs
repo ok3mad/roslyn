@@ -1072,6 +1072,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             return method.GetSymbol() switch
             {
                 SourceOrdinaryMethodSymbol { IsSharperInferredReturnType: true } or LocalFunctionSymbol { IsSharperInferredReturnType: true } => method,
+                SourceOrdinaryMethodSymbol { IsSharperReturnTypeFromOverriddenMember: true } => method,
                 _ => null,
             };
         }
@@ -2245,6 +2246,24 @@ namespace Microsoft.CodeAnalysis.CSharp
                     {
                         // There was an explicit cast on top of this
                         type = convertedSwitch.NaturalTypeOpt;
+                        (convertedType, convertedNullability) = (type, nullability);
+                        conversion = Conversion.Identity;
+                    }
+                }
+                else if (boundExpr is BoundConvertedTryExpression { WasTargetTyped: true } convertedTry)
+                {
+                    if (highestBoundExpr is BoundConversion { ConversionKind: ConversionKind.SharperTryExpression, Conversion: var convertedTryConversion })
+                    {
+                        // There was an implicit cast.
+                        type = convertedTry.NaturalTypeOpt;
+                        convertedType = convertedTry.Type;
+                        convertedNullability = convertedTry.TopLevelNullability;
+                        conversion = convertedTryConversion.IsValid ? convertedTryConversion : Conversion.NoConversion;
+                    }
+                    else
+                    {
+                        // There was an explicit cast on top of this
+                        type = convertedTry.NaturalTypeOpt;
                         (convertedType, convertedNullability) = (type, nullability);
                         conversion = Conversion.Identity;
                     }
