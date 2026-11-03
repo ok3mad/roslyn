@@ -281,9 +281,6 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (29,26): error CS20035: 'FreshCounted' is marked [Immutable], but it cannot be proven immutable: the observer 'FreshCounted.C' does more than read fields and pure observers: 'new Counted()'.
                 // [Immutable] sealed class FreshCounted { public Counted C => new Counted(); }
                 Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "FreshCounted").WithArguments("FreshCounted", "the observer 'FreshCounted.C' does more than read fields and pure observers: 'new Counted()'").WithLocation(29, 26),
-                // (30,26): error CS20035: 'Initialized' is marked [Immutable], but it cannot be proven immutable: the observer 'Initialized.M' does more than read fields and pure observers: 'new Money(1, "EUR") { Amount = 2 }'.
-                // [Immutable] sealed class Initialized { public Money M => new Money(1, "EUR") { Amount = 2 }; }
-                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "Initialized").WithArguments("Initialized", @"the observer 'Initialized.M' does more than read fields and pure observers: 'new Money(1, ""EUR"") { Amount = 2 }'").WithLocation(30, 26),
                 // (31,26): error CS20035: 'FromMetadata' is marked [Immutable], but it cannot be proven immutable: the observer 'FromMetadata.D' does more than read fields and pure observers: 'new DateOnly(2020, 1, 1)'.
                 // [Immutable] sealed class FromMetadata { public DateOnly D => new DateOnly(2020, 1, 1); }
                 Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "FromMetadata").WithArguments("FromMetadata", "the observer 'FromMetadata.D' does more than read fields and pure observers: 'new DateOnly(2020, 1, 1)'").WithLocation(31, 26));
@@ -292,6 +289,59 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             Assert.True(IsImmutable(comp, "Stamp", exact: false));
             Assert.True(IsImmutable(comp, "Rolled", exact: false));
             Assert.True(IsImmutable(comp, "Counted", exact: false));
+        }
+
+        [Fact]
+        public void Immutable_Observers_InitializersAndWith()
+        {
+            // Construction ends after the object initializer, so an object initializer and 'with' are pure when the
+            // setters they run are pure, and for 'with' the clone and its copy constructor. A synthesized copy constructor
+            // runs no initializers, so Rolled's random B does not make 'with' impure.
+            var source = """
+                #nullable enable
+                using System;
+                [Immutable] sealed record Money(decimal Amount, string Currency)
+                {
+                    public Money Zero => this with { Amount = 0 };
+                }
+                [Immutable] sealed class Doubled { private readonly int _x; public int X { get => _x; init => _x = value * 2; } }
+                [Immutable] sealed class FreshDoubled { public Doubled D => new Doubled { X = 1 }; }
+                [Immutable] sealed class Stamped { private readonly long _t; public long T { get => _t; init => _t = DateTime.Now.Ticks + value; } }
+                [Immutable] sealed class FreshStamped { public Stamped S => new Stamped { T = 1 }; }
+                [Immutable] sealed record Clock(long Ticks)
+                {
+                    private readonly long _at;
+                    public long At { get => _at; init => _at = DateTime.Now.Ticks + value; }
+                    public Clock Later => this with { At = 0 };
+                }
+                [Immutable] sealed record Copied(int A)
+                {
+                    private Copied(Copied other) { A = other.A; }
+                    public Copied Next => this with { A = A + 1 };
+                }
+                [Immutable] sealed record Counted(int A)
+                {
+                    private static int s_copies;
+                    private Counted(Counted other) { A = other.A; s_copies++; }
+                    public Counted Next => this with { A = A + 1 };
+                }
+                [Immutable] sealed record Rolled(int A) { public int B { get; } = Random.Shared.Next(); public Rolled Next => this with { A = 2 }; }
+                [Immutable] sealed class FreshObject { public object M => new Money(1, "EUR") with { Amount = 2 }; }
+                """;
+            var comp = CreateImmutableCompilation(source);
+            comp.VerifyDiagnostics(
+                // (10,26): error CS20035: 'FreshStamped' is marked [Immutable], but it cannot be proven immutable: the observer 'FreshStamped.S' does more than read fields and pure observers: 'T = 1'.
+                // [Immutable] sealed class FreshStamped { public Stamped S => new Stamped { T = 1 }; }
+                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "FreshStamped").WithArguments("FreshStamped", "the observer 'FreshStamped.S' does more than read fields and pure observers: 'T = 1'").WithLocation(10, 26),
+                // (11,27): error CS20035: 'Clock' is marked [Immutable], but it cannot be proven immutable: the observer 'Clock.Later' does more than read fields and pure observers: 'At = 0'.
+                // [Immutable] sealed record Clock(long Ticks)
+                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "Clock").WithArguments("Clock", "the observer 'Clock.Later' does more than read fields and pure observers: 'At = 0'").WithLocation(11, 27),
+                // (22,27): error CS20035: 'Counted' is marked [Immutable], but it cannot be proven immutable: the observer 'Counted.Next' does more than read fields and pure observers: 'this with { A = A + 1 }'.
+                // [Immutable] sealed record Counted(int A)
+                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "Counted").WithArguments("Counted", "the observer 'Counted.Next' does more than read fields and pure observers: 'this with { A = A + 1 }'").WithLocation(22, 27),
+                // (29,26): error CS20035: 'FreshObject' is marked [Immutable], but it cannot be proven immutable: the observer 'FreshObject.M' does more than read fields and pure observers: 'new Money(1, "EUR") with { Amount = 2 }'.
+                // [Immutable] sealed class FreshObject { public object M => new Money(1, "EUR") with { Amount = 2 }; }
+                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "FreshObject").WithArguments("FreshObject", @"the observer 'FreshObject.M' does more than read fields and pure observers: 'new Money(1, ""EUR"") with { Amount = 2 }'").WithLocation(29, 26));
         }
 
         [Fact]

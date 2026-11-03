@@ -898,7 +898,10 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             /// </summary>
             private readonly bool _isMember;
 
-            /// <summary>The constructors being checked, outermost first; the last one is this walker's when it checks a constructor.</summary>
+            /// <summary>
+            /// The constructors and setters being checked, outermost first; the last one is this walker's when it checks
+            /// one of them.
+            /// </summary>
             private readonly ArrayBuilder<MethodSymbol>? _constructorsInProgress;
 
             /// <summary>Boxing conversions that a string concatenation of a <c>char</c> needs.</summary>
@@ -925,6 +928,12 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             }
 
             private bool IsConstructor => _observer is { MethodKind: MethodKind.Constructor };
+
+            /// <summary>
+            /// A constructor, or a setter run by an object initializer (<see cref="IsPureSetter"/>): both write the
+            /// fields of a new object, which is still being constructed.
+            /// </summary>
+            private bool WritesOwnThis => _observer is { MethodKind: MethodKind.Constructor or MethodKind.PropertySet };
 
             public override BoundNode? Visit(BoundNode? node)
             {
@@ -1077,6 +1086,22 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
                     case BoundObjectCreationExpression creation:
                         return _allowsCreation && IsPureCreation(creation);
+
+                    case BoundWithExpression withExpression:
+                        return IsPureWith(withExpression);
+
+                    case BoundObjectInitializerExpression:
+                    case BoundObjectOrCollectionValuePlaceholder:
+                        // Only reached from a pure creation or 'with': the setters are checked by the assignments, and the
+                        // placeholder is the new object.
+                        return true;
+
+                    case BoundAssignmentOperator { Left: BoundObjectInitializerMember member } initializerAssignment:
+                        // A nested initializer, 'P = { X = 1 }', runs P's getter and writes to an existing object.
+                        return initializerAssignment.Right is not BoundObjectInitializerExpressionBase && IsPureInitializerMember(member);
+
+                    case BoundObjectInitializerMember member:
+                        return IsPureInitializerMember(member);
 
                     case BoundRecursivePattern recursive:
                         return recursive.DeconstructMethod is null;
@@ -1244,11 +1269,11 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     BoundDiscardExpression => true,
                     // Not through a ref parameter: that writes the caller's state.
                     BoundParameter { ParameterSymbol: var parameter } => parameter.ContainingSymbol == (object)_observer && parameter.RefKind is RefKind.None or RefKind.Out,
-                    BoundFieldAccess { ReceiverOpt: BoundThisReference } fieldAccess when IsConstructor && IsOwnMember(fieldAccess.FieldSymbol) => true,
+                    BoundFieldAccess { ReceiverOpt: BoundThisReference } fieldAccess when WritesOwnThis && IsOwnMember(fieldAccess.FieldSymbol) => true,
                     // A field of a struct the member holds in its own state.
                     BoundFieldAccess { FieldSymbol.IsStatic: false, ReceiverOpt: { Type.IsValueType: true } receiver } when _isMember && receiver is not BoundThisReference && IsWritableLocalState(receiver) => true,
                     BoundFieldAccess fieldAccess => HasAttribute(fieldAccess.FieldSymbol.OriginalDefinition, SharperImmutabilityAttribute.UnobservableWrite),
-                    BoundPropertyAccess { ReceiverOpt: BoundThisReference, PropertySymbol: var property } when IsConstructor && IsOwnMember(property) =>
+                    BoundPropertyAccess { ReceiverOpt: BoundThisReference, PropertySymbol: var property } when WritesOwnThis && IsOwnMember(property) =>
                         property.OriginalDefinition is SourcePropertySymbolBase { HasAutoPropertySet: true } or SourcePropertySymbolBase { SetMethod: null, HasAutoPropertyGet: true },
                     _ => false,
                 };
@@ -1366,8 +1391,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
             /// <summary>
             /// A new value of a statically immutable type, made by a pure constructor, is equivalent to the one made by
-            /// the previous access. <c>System.HashCode</c> is attested. An object initializer runs setters and is not
-            /// covered yet.
+            /// the previous access. <c>System.HashCode</c> is attested. Construction ends after the object initializer,
+            /// whose setters are checked where they are assigned (<see cref="IsPureInitializerMember"/>).
             /// </summary>
             private bool IsPureCreation(BoundObjectCreationExpression creation)
             {
@@ -1379,13 +1404,11 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 if (_isMember)
                 {
                     // Any type: equivalence is judged by contents, so a fresh object is as good as the last one.
-                    return creation.InitializerExpressionOpt is null &&
-                        IsPureConstructor(creation.Constructor) &&
+                    return IsPureConstructor(creation.Constructor) &&
                         AreOutArgumentsLocal(creation.Arguments, creation.ArgumentRefKindsOpt);
                 }
 
-                return creation.InitializerExpressionOpt is null &&
-                    _owner.CheckType(creation.Type, exact: false, _definition, _localOnly) == TypeFailure.None &&
+                return _owner.CheckType(creation.Type, exact: false, _definition, _localOnly) == TypeFailure.None &&
                     IsPureConstructor(creation.Constructor);
             }
 
@@ -1468,7 +1491,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                         return false;
                     }
 
-                    if (!callsThis && walker.Impure is null && constructor.ContainingType is SourceMemberContainerTypeSymbol type)
+                    // A synthesized copy constructor copies the fields; it runs no initializers.
+                    if (!callsThis && constructor is not SynthesizedRecordCopyCtor && walker.Impure is null && constructor.ContainingType is SourceMemberContainerTypeSymbol type)
                     {
                         var initializers = Binder.BindFieldInitializers(_owner._compilation, scriptInitializerOpt: null, type.InstanceInitializers, BindingDiagnosticBag.Discarded, out _);
                         foreach (var initializer in initializers.Where(static initializer => !initializer.HasErrors))
@@ -1477,6 +1501,127 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                         }
                     }
 
+                    return walker.Impure is null;
+                }
+                finally
+                {
+                    inProgress.RemoveAt(inProgress.Count - 1);
+                    if (_constructorsInProgress is null)
+                    {
+                        inProgress.Free();
+                    }
+                }
+            }
+
+            /// <summary>
+            /// <c>with</c> is part of construction: pure when the clone is, under the rules of <see cref="IsPureCreation"/>,
+            /// and the setters of its initializer are checked where they are assigned. A struct or an anonymous type is
+            /// copied without a clone. A record's synthesized <c>&lt;Clone&gt;$</c> runs its copy constructor, so it is pure
+            /// unless that is not; a clone that dispatches virtually may run a derived record's.
+            /// </summary>
+            private bool IsPureWith(BoundWithExpression withExpression)
+            {
+                if (withExpression.CloneMethod is not { } clone)
+                {
+                    return true;
+                }
+
+                if (!_allowsCreation ||
+                    (!_isMember && _owner.CheckType(withExpression.Type, exact: false, _definition, _localOnly) != TypeFailure.None))
+                {
+                    return false;
+                }
+
+                clone = clone.OriginalDefinition;
+                if (IsAssumedPure(clone))
+                {
+                    return true;
+                }
+
+                if (clone is not SynthesizedRecordClone || IsVirtualDispatch(clone))
+                {
+                    return false;
+                }
+
+                var useSiteInfo = CompoundUseSiteInfo<AssemblySymbol>.Discarded;
+                return SynthesizedRecordCopyCtor.FindCopyConstructor(clone.ContainingType, clone.ContainingType, ref useSiteInfo) is { } copyConstructor &&
+                    IsPureConstructor(copyConstructor);
+            }
+
+            /// <summary>
+            /// A member set by an object initializer of a new object: a field, or a property whose setter is pure. An
+            /// indexer or a dynamic member is not covered.
+            /// </summary>
+            private bool IsPureInitializerMember(BoundObjectInitializerMember member)
+                => member.MemberSymbol switch
+                {
+                    FieldSymbol { IsStatic: false } => true,
+                    PropertySymbol { IsStatic: false, IsIndexer: false } property => IsPureSetter(property),
+                    _ => false,
+                };
+
+            /// <summary>
+            /// A setter run by an object initializer is pure when it writes only the fields of the new object and
+            /// otherwise follows the observer rules, as a constructor does (<see cref="IsPureConstructor"/>). An
+            /// auto-property's setter writes its field. A pure member does not infer: other setters need [AssumePure], as do
+            /// setters from other assemblies.
+            /// </summary>
+            private bool IsPureSetter(PropertySymbol property)
+            {
+                property = property.OriginalDefinition;
+                if (property.SetMethod is not { } setter)
+                {
+                    return false;
+                }
+
+                if (IsAssumedPure(setter))
+                {
+                    return true;
+                }
+
+                if (IsVirtualDispatch(setter))
+                {
+                    return false;
+                }
+
+                if (property is SourcePropertySymbolBase { HasAutoPropertySet: true })
+                {
+                    return true;
+                }
+
+                if (_isMember || !_owner.IsInThisCompilation(property.ContainingType))
+                {
+                    return false;
+                }
+
+                if (_constructorsInProgress?.Contains(setter) is true)
+                {
+                    // Assume the best inside a cycle; the outer check decides.
+                    return true;
+                }
+
+                if (setter is not SourceMemberMethodSymbol sourceSetter || sourceSetter.TryGetBodyBinder() is not { } binder)
+                {
+                    return false;
+                }
+
+                var body = binder.BindMethodBody(sourceSetter.SyntaxNode, BindingDiagnosticBag.Discarded);
+                if (body is null)
+                {
+                    return false;
+                }
+
+                if (body.HasErrors)
+                {
+                    return true;
+                }
+
+                var inProgress = _constructorsInProgress ?? ArrayBuilder<MethodSymbol>.GetInstance();
+                inProgress.Add(setter);
+                try
+                {
+                    var walker = new PurityWalker(_owner, setter, setter.ContainingType, _localOnly, allowsCreation: true, inProgress, isMember: false);
+                    walker.Visit(body);
                     return walker.Impure is null;
                 }
                 finally
