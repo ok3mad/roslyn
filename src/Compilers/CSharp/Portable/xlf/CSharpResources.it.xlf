@@ -2707,6 +2707,11 @@
         <target state="new">Cannot use 'await' in an implicit 'it' lambda. Write the lambda, as in 'async x =&gt; ...'.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperItClaimedByInnerCall">
+        <source>'it' here belongs to '{0}', so this argument is a value, not a lambda. Name the parameter, as in 'x =&gt; ...'.</source>
+        <target state="new">'it' here belongs to '{0}', so this argument is a value, not a lambda. Name the parameter, as in 'x =&gt; ...'.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperItDeclaration">
         <source>Cannot declare '{0}' in an implicit 'it' lambda. Write the lambda, as in 'x =&gt; ...'.</source>
         <target state="new">Cannot declare '{0}' in an implicit 'it' lambda. Write the lambda, as in 'x =&gt; ...'.</target>
@@ -3650,6 +3655,11 @@
       <trans-unit id="IDS_SharperImmutableReasonTypePhantom">
         <source>'{0}' has type '{1}', which uses a [Phantom] type parameter</source>
         <target state="new">'{0}' has type '{1}', which uses a [Phantom] type parameter</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperImplicitItParameter">
+        <source>parameter of an implicit lambda</source>
+        <target state="new">parameter of an implicit lambda</target>
         <note />
       </trans-unit>
       <trans-unit id="IDS_SharperInferAllMembersRuledOut">

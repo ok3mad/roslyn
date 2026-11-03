@@ -44,6 +44,9 @@ The decisions are in the brainstorm's [Decided](../planning/brainstorm.md#decide
   the arguments go to, so `new Box(it + 1)` picks the constructor that takes a function, while `new Box(1)` keeps the
   one that takes a value. A target-typed `new(...)` decides once its type is known. Attributes take no delegates, and
   collection expression elements and array indices are not delegate arguments, so `it` there is CS20019.
+- **An inner call can take `it` away.** In `xs.Select(F(xs.Count(it > 1)))` the `it` is `Count`'s, so `Select` gets
+  a value. When that value does not fit, CS20054 at the argument names the inner call (or constructor or indexer), next to the C# error
+  (here CS0411): name the parameter, as in `xs.Select(x => F(xs.Count(y => y > x)))`.
 - **Arguments and pipe stages only.** `var f = it * 2;`, a `return` and LINQ query clauses have no `it` (CS20019). A
   [pipe](pipe.md) stage is the outermost slot: in `x |> F(it, xs.Where(it > 0))` the inner `it` is the implicit
   lambda's, which makes the stage CS20020, and the pipe's `it` is an outer `it` for CS20021. A pipe inside an implicit
@@ -60,8 +63,6 @@ The decisions are in the brainstorm's [Decided](../planning/brainstorm.md#decide
 - Edit and Continue does not see implicit lambdas, because the IDE's matcher finds lambdas by their syntax
   ([#124](https://github.com/ok3mad/roslyn/issues/124)).
 - `F(Make(it), out var v)`: a declaration anywhere in the arguments turns the lambda off ([#125](https://github.com/ok3mad/roslyn/issues/125)).
-- When an inner call claims `it`, the outer call reports a plain C# error such as CS0411 that does not mention `it`,
-  and a write to `it` says "'val variable'" ([#126](https://github.com/ok3mad/roslyn/issues/126)).
 - Each call with a free `it` scans its arguments' syntax, and failed trials bind again at each nesting level
   ([#127](https://github.com/ok3mad/roslyn/issues/127)).
 - No IDE support yet: Quick Info, hints, and the "name the parameter" fixer ([#128](https://github.com/ok3mad/roslyn/issues/128)).
@@ -84,6 +85,8 @@ parser change:
    in scope.
 4. Otherwise the call binds again with the arguments as values, so that their `it` belongs further out. If both bind,
    CS20021. If neither does, the lambda trial is reported when its lambdas use `it`, and the value trial otherwise.
+   When the lambda trial bound without errors but a lambda used no `it` of its own, the value trial's errors get
+   CS20054, which names the inner call that took the `it`.
 
 A target-typed `new(...)` has no constructors until it is converted, so it binds its free-`it` arguments as unbound
 implicit lambdas and runs the trials in `ConvertObjectCreationExpression`, rebinding only those arguments. Without a
@@ -93,13 +96,14 @@ The lambda body binds in an `ExecutableCodeBinder` rooted at the argument expres
 body gets its own scope. After binding, the body checks CS20020 (`SharperItUseFinder`) and CS20022.
 
 `LambdaSymbol.IsSharperImplicitIt` and `LambdaParameterSymbol.IsSharperImplicitIt` mark the lambda and its `it`. The
-parameter reuses the `val` lambda parameter flag for read-only. Lowering, closures and expression trees need no
+parameter reuses the `val` lambda parameter flag for read-only; a write to it (CS1656, CS1657) gives the cause
+"parameter of an implicit lambda" (`IDS_SharperImplicitItParameter`). Lowering, closures and expression trees need no
 change; three assertions that expect lambda syntax accept an argument expression in a Sharper file
 (`LambdaUtilities.IsSharperImplicitItLambdaBody`).
 
 ## Follow-ups
 
-Each item under [Not supported yet](#not-supported-yet) has an issue, [#123](https://github.com/ok3mad/roslyn/issues/123) to [#128](https://github.com/ok3mad/roslyn/issues/128), and the code
+Each item under [Not supported yet](#not-supported-yet) has an issue, [#123](https://github.com/ok3mad/roslyn/issues/123) to [#128](https://github.com/ok3mad/roslyn/issues/128) apart from the done [#126](https://github.com/ok3mad/roslyn/issues/126), and the code
 marks them with `PROTOTYPE(sharper)` comments. Pipe stages are on the [pipe](pipe.md) page.
 
 ## Code
