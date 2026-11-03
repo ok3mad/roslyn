@@ -5,6 +5,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
@@ -27,6 +28,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         UnobservableWrite,
         AssumePure,
         Phantom,
+        Pure,
     }
 
     /// <summary>
@@ -35,7 +37,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
     /// and checks the declarations that claim it (<see cref="CheckDeclaration"/>). One instance per compilation, which
     /// caches the result for each type definition.
     /// </summary>
-    internal sealed class SharperImmutability
+    internal sealed partial class SharperImmutability
     {
         internal const string AttributeNamespace = "Sharper";
 
@@ -46,6 +48,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             ("UnobservableWriteAttribute", AttributeTargets.Field),
             ("AssumePureAttribute", AttributeTargets.Property | AttributeTargets.Method),
             ("PhantomAttribute", AttributeTargets.GenericParameter),
+            ("PureAttribute", AttributeTargets.Method | AttributeTargets.Constructor | AttributeTargets.Property),
         ];
 
         private readonly CSharpCompilation _compilation;
@@ -777,7 +780,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             // An observer whose result is statically immutable may create one: equivalent results suffice. Otherwise two
             // callers sharing one memoized result would alias a mutable object, so nothing may be allocated.
             bool allowsCreation = CheckType(observer.ReturnType, exact: false, definition, localOnly) == TypeFailure.None;
-            var walker = new PurityWalker(this, observer, definition, localOnly, allowsCreation, constructorsInProgress: null);
+            var walker = new PurityWalker(this, observer, definition, localOnly, allowsCreation, constructorsInProgress: null, isMember: false);
             if (observer is { Name: WellKnownMemberNames.ObjectEquals, ParameterCount: 1 })
             {
                 walker.Skipped = FindReferenceEqualsFastPath(body, observer.Parameters[0]);
@@ -884,9 +887,16 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         {
             private readonly SharperImmutability _owner;
             private readonly MethodSymbol _observer;
-            private readonly NamedTypeSymbol _definition;
+            private readonly NamedTypeSymbol? _definition;
             private readonly bool _localOnly;
             private readonly bool _allowsCreation;
+
+            /// <summary>
+            /// Checks a <c>[Pure]</c> member (<see cref="CheckPureBody"/>) rather than an observer of an immutable type:
+            /// reads through any argument, calls only <c>[Pure]</c> and attested members, allocates any type with a pure
+            /// constructor, and allows statements that observers do not need.
+            /// </summary>
+            private readonly bool _isMember;
 
             /// <summary>The constructors being checked, outermost first; the last one is this walker's when it checks a constructor.</summary>
             private readonly ArrayBuilder<MethodSymbol>? _constructorsInProgress;
@@ -894,11 +904,16 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             /// <summary>Boxing conversions that a string concatenation of a <c>char</c> needs.</summary>
             private HashSet<BoundNode>? _allowedConversions;
 
+            /// <summary>The part of an allowed node that is not pure, such as an <c>out</c> argument of a call.</summary>
+            private BoundNode? _impurePart;
+
             internal BoundNode? Impure;
             internal bool ImpureIsIdentity;
+            internal bool ImpureIsWrite;
+            internal bool ImpureIsCulture;
             internal BoundStatement? Skipped;
 
-            internal PurityWalker(SharperImmutability owner, MethodSymbol observer, NamedTypeSymbol definition, bool localOnly, bool allowsCreation, ArrayBuilder<MethodSymbol>? constructorsInProgress)
+            internal PurityWalker(SharperImmutability owner, MethodSymbol observer, NamedTypeSymbol? definition, bool localOnly, bool allowsCreation, ArrayBuilder<MethodSymbol>? constructorsInProgress, bool isMember)
             {
                 _owner = owner;
                 _observer = observer;
@@ -906,6 +921,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 _localOnly = localOnly;
                 _allowsCreation = allowsCreation;
                 _constructorsInProgress = constructorsInProgress;
+                _isMember = isMember;
             }
 
             private bool IsConstructor => _observer is { MethodKind: MethodKind.Constructor };
@@ -919,11 +935,23 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
                 if (!IsAllowed(node))
                 {
-                    Impure = node;
+                    Impure = _impurePart ?? node;
                     return null;
                 }
 
                 return base.Visit(node);
+            }
+
+            public override BoundNode? VisitLocalFunctionStatement(BoundLocalFunctionStatement node)
+            {
+                // Only a [Pure] local function may be called, and it is checked on its own.
+                return null;
+            }
+
+            public override BoundNode? VisitNameOfOperator(BoundNameOfOperator node)
+            {
+                // A constant: the argument is not evaluated.
+                return null;
             }
 
             public override BoundNode? VisitInterpolatedString(BoundInterpolatedString node)
@@ -947,6 +975,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     {
                         // Other holes format with the current culture.
                         Impure = hole;
+                        ImpureIsCulture = true;
                         return null;
                     }
 
@@ -1016,6 +1045,32 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                         // The constructor writes the fields of its own 'this'.
                         return IsConstructor;
 
+                    case BoundWhileStatement:
+                    case BoundDoStatement:
+                    case BoundForStatement:
+                    case BoundBreakStatement:
+                    case BoundContinueStatement:
+                    case BoundGotoStatement:
+                    case BoundLabelStatement:
+                    case BoundLabeledStatement:
+                    case BoundTryStatement:
+                    case BoundCatchBlock:
+                    case BoundSwitchStatement:
+                    case BoundSwitchLabel:
+                    case BoundLocalFunctionStatement:
+                    case BoundNameOfOperator:
+                    case BoundArrayAccess:
+                    case BoundArrayCreation:
+                    case BoundArrayInitialization:
+                        // Statements that observers do not need, reading an element, and allocating an array.
+                        return _isMember;
+
+                    case BoundForEachStatement forEach:
+                        // Only over arrays and strings, which need no enumerator calls.
+                        return _isMember &&
+                            forEach is { EnumeratorInfoOpt.IsAsync: false, DeconstructionOpt: null } &&
+                            StripConversions(forEach.Expression).Type is ArrayTypeSymbol { IsSZArray: true } or { SpecialType: SpecialType.System_String };
+
                     case BoundInterpolatedString:
                         // Visited by VisitInterpolatedString: the holes must be strings or chars.
                         return _allowsCreation;
@@ -1050,7 +1105,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                             return ObservesIdentity();
                         }
 
-                        return IsPureCall(call.Method, call.ReceiverOpt);
+                        return IsPureCall(call.Method, call.ReceiverOpt) && AreOutArgumentsLocal(call.Arguments, call.ArgumentRefKindsOpt);
 
                     case BoundBinaryOperator binary:
                         return IsPureBinaryOperator(binary);
@@ -1064,8 +1119,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                             return conversion.Conversion.Method is { } conversionMethod && IsPureOperator(conversionMethod);
                         }
 
-                        // Boxing creates an object, and a method group conversion a delegate.
-                        return !conversion.Conversion.IsBoxing && !conversion.Conversion.IsMethodGroup && !conversion.Conversion.IsAnonymousFunction;
+                        // Boxing creates an object (a member may allocate), and a method group conversion a delegate.
+                        return (_isMember || !conversion.Conversion.IsBoxing) && !conversion.Conversion.IsMethodGroup && !conversion.Conversion.IsAnonymousFunction;
 
                     case BoundAssignmentOperator assignment:
                         return IsWritableLocalState(assignment.Left);
@@ -1073,6 +1128,11 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     case BoundCompoundAssignmentOperator compound:
                         return IsWritableLocalState(compound.Left) &&
                             (compound.Operator.Method is not { } compoundMethod || IsPureOperator(compoundMethod));
+
+                    case BoundDeconstructionAssignmentOperator deconstruction:
+                        // A swap such as (a, b) = (b, a + b): into the member's own state, without Deconstruct methods or
+                        // user-defined conversions.
+                        return _isMember && AreWritableLocalStates(deconstruction.Left) && IsBuiltInDeconstruction(deconstruction.Right.Conversion);
 
                     case BoundNullCoalescingAssignmentOperator nullCoalescingAssignment:
                         return IsWritableLocalState(nullCoalescingAssignment.LeftOperand);
@@ -1100,8 +1160,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     // String concatenation creates an equivalent string; an operand that is neither a string nor a char
                     // formats with the current culture.
                     (BinaryOperatorKind.Addition, BinaryOperatorKind.String) => _allowsCreation,
-                    (BinaryOperatorKind.Addition, BinaryOperatorKind.StringAndObject) => _allowsCreation && AllowConcatenatedObject(binary.Right),
-                    (BinaryOperatorKind.Addition, BinaryOperatorKind.ObjectAndString) => _allowsCreation && AllowConcatenatedObject(binary.Left),
+                    (BinaryOperatorKind.Addition, BinaryOperatorKind.StringAndObject) => _allowsCreation && (AllowConcatenatedObject(binary.Right) || FormatsWithCulture()),
+                    (BinaryOperatorKind.Addition, BinaryOperatorKind.ObjectAndString) => _allowsCreation && (AllowConcatenatedObject(binary.Left) || FormatsWithCulture()),
                     // Delegate combination creates an object that is not immutable.
                     (BinaryOperatorKind.Addition, _) when !binary.Type.IsValueType => false,
                     // Reference equality observes identity; a comparison with null does not.
@@ -1115,6 +1175,35 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             {
                 ImpureIsIdentity = true;
                 return false;
+            }
+
+            private bool FormatsWithCulture()
+            {
+                ImpureIsCulture = true;
+                return false;
+            }
+
+            /// <summary>
+            /// An <c>out</c> argument is written by the callee, so in a pure member it must be the member's own state.
+            /// </summary>
+            private bool AreOutArgumentsLocal(ImmutableArray<BoundExpression> arguments, ImmutableArray<RefKind> refKinds)
+            {
+                if (!_isMember || refKinds.IsDefault)
+                {
+                    return true;
+                }
+
+                for (int i = 0; i < arguments.Length; i++)
+                {
+                    if (refKinds[i] == RefKind.Out && !IsWritableLocalState(arguments[i]))
+                    {
+                        _impurePart = arguments[i];
+                        ImpureIsWrite = true;
+                        return false;
+                    }
+                }
+
+                return true;
             }
 
             private bool AllowConcatenatedObject(BoundExpression operand)
@@ -1133,9 +1222,14 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 return IsStringOrChar(StripConversions(operand).Type);
             }
 
-            private static bool IsReadableField(FieldSymbol field)
-                // Statics outside the object are held fixed, but only readonly ones are known to be.
-                => !field.IsStatic || field.IsReadOnly || field.IsConst;
+            /// <summary>
+            /// Statics outside the object are held fixed for an observer, but only readonly ones are known to be. A pure
+            /// member reads only those whose value cannot change: a static readonly field of a mutable type is a global
+            /// variable in disguise.
+            /// </summary>
+            private bool IsReadableField(FieldSymbol field)
+                => !field.IsStatic || field.IsConst ||
+                   (field.IsReadOnly && (!_isMember || _owner.IsImmutable(field.Type, exact: false)));
 
             /// <summary>
             /// Locals and the observer's own parameters; a field only with [UnobservableWrite]. A constructor also
@@ -1145,16 +1239,28 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             {
                 return target switch
                 {
-                    BoundLocal => true,
+                    // Not through a ref local; a pure member writes only its own locals, not captured ones.
+                    BoundLocal { LocalSymbol: var local } => local.RefKind == RefKind.None && (!_isMember || local.ContainingSymbol is not MethodSymbol || local.ContainingSymbol == (object)_observer),
                     BoundDiscardExpression => true,
-                    BoundParameter parameter => parameter.ParameterSymbol.ContainingSymbol == (object)_observer,
+                    // Not through a ref parameter: that writes the caller's state.
+                    BoundParameter { ParameterSymbol: var parameter } => parameter.ContainingSymbol == (object)_observer && parameter.RefKind is RefKind.None or RefKind.Out,
                     BoundFieldAccess { ReceiverOpt: BoundThisReference } fieldAccess when IsConstructor && IsOwnMember(fieldAccess.FieldSymbol) => true,
+                    // A field of a struct the member holds in its own state.
+                    BoundFieldAccess { FieldSymbol.IsStatic: false, ReceiverOpt: { Type.IsValueType: true } receiver } when _isMember && receiver is not BoundThisReference && IsWritableLocalState(receiver) => true,
                     BoundFieldAccess fieldAccess => HasAttribute(fieldAccess.FieldSymbol.OriginalDefinition, SharperImmutabilityAttribute.UnobservableWrite),
                     BoundPropertyAccess { ReceiverOpt: BoundThisReference, PropertySymbol: var property } when IsConstructor && IsOwnMember(property) =>
                         property.OriginalDefinition is SourcePropertySymbolBase { HasAutoPropertySet: true } or SourcePropertySymbolBase { SetMethod: null, HasAutoPropertyGet: true },
                     _ => false,
                 };
             }
+
+            private bool AreWritableLocalStates(BoundTupleExpression tuple)
+                => tuple.Arguments.All(argument => argument is BoundTupleExpression nested ? AreWritableLocalStates(nested) : IsWritableLocalState(argument));
+
+            private static bool IsBuiltInDeconstruction(Conversion conversion)
+                => !conversion.IsUserDefined &&
+                   conversion.DeconstructionInfo.IsDefault &&
+                   (conversion.UnderlyingConversions.IsDefault || conversion.UnderlyingConversions.All(IsBuiltInDeconstruction));
 
             private bool IsOwnMember(Symbol member)
                 => member.ContainingType.OriginalDefinition == (object)_observer.ContainingType.OriginalDefinition;
@@ -1167,6 +1273,11 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     return true;
                 }
 
+                if (_isMember && property.GetMethod is { } getMethod && (IsPureCallee(getMethod) || IsAttestedGetter(property) || IsReadableAutoProperty(property)))
+                {
+                    return true;
+                }
+
                 if (property.IsStatic)
                 {
                     return false;
@@ -1174,6 +1285,23 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
                 return IsPureObserverOf(property.ContainingType, property.IsVirtual || property.IsAbstract || (property.IsOverride && !property.IsSealed), receiver);
             }
+
+            /// <summary>
+            /// A non-virtual auto-property reads its field. A static one only when it cannot change: get-only, of an
+            /// immutable type.
+            /// </summary>
+            private bool IsReadableAutoProperty(PropertySymbol property)
+                => property.OriginalDefinition is SourcePropertySymbolBase { HasAutoPropertyGet: true } source &&
+                   !IsVirtualDispatch(property.GetMethod!) &&
+                   (!property.IsStatic || (source.SetMethod is null && _owner.IsImmutable(property.Type, exact: false)));
+
+            /// <summary>A <c>[Pure]</c> member, called without virtual dispatch.</summary>
+            private static bool IsPureCallee(MethodSymbol method)
+                => IsDeclaredPure(method) && !IsVirtualDispatch(method);
+
+            private static bool IsVirtualDispatch(MethodSymbol method)
+                => (method.IsVirtual || method.IsAbstract || (method.IsOverride && !method.IsSealed)) &&
+                   !method.ContainingType.IsSealed && !method.ContainingType.IsValueType;
 
             private bool IsPureCall(MethodSymbol method, BoundExpression? receiver)
             {
@@ -1193,6 +1321,11 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     return IsConstructor && IsPureConstructor(method);
                 }
 
+                if (_isMember && (IsPureCallee(method) || IsAttestedMethod(method)))
+                {
+                    return true;
+                }
+
                 if (method.IsStatic || !IsObserverMethod(method))
                 {
                     return false;
@@ -1208,8 +1341,9 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             /// </summary>
             private bool IsPureObserverOf(NamedTypeSymbol containingType, bool isVirtual, BoundExpression? receiver)
             {
-                if (receiver is BoundThisReference or BoundBaseReference)
+                if (!_isMember && receiver is BoundThisReference or BoundBaseReference)
                 {
+                    // A pure member's own type need not be immutable, so its observers are not checked.
                     return true;
                 }
 
@@ -1242,6 +1376,14 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     return creation.InitializerExpressionOpt is null;
                 }
 
+                if (_isMember)
+                {
+                    // Any type: equivalence is judged by contents, so a fresh object is as good as the last one.
+                    return creation.InitializerExpressionOpt is null &&
+                        IsPureConstructor(creation.Constructor) &&
+                        AreOutArgumentsLocal(creation.Arguments, creation.ArgumentRefKindsOpt);
+                }
+
                 return creation.InitializerExpressionOpt is null &&
                     _owner.CheckType(creation.Type, exact: false, _definition, _localOnly) == TypeFailure.None &&
                     IsPureConstructor(creation.Constructor);
@@ -1262,6 +1404,20 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     return true;
                 }
 
+                if (_isMember)
+                {
+                    if (IsDeclaredPure(constructor) || IsAttestedConstructor(constructor))
+                    {
+                        return true;
+                    }
+
+                    // No inference: only the constructors the compiler writes are checked here.
+                    if (!constructor.IsImplicitlyDeclared && constructor is not SynthesizedPrimaryConstructor)
+                    {
+                        return false;
+                    }
+                }
+
                 if (_constructorsInProgress?.Contains(constructor) is true)
                 {
                     // Assume the best inside a cycle; the outer check decides.
@@ -1277,7 +1433,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 inProgress.Add(constructor);
                 try
                 {
-                    var walker = new PurityWalker(_owner, constructor, constructor.ContainingType, _localOnly, allowsCreation: true, inProgress);
+                    var walker = new PurityWalker(_owner, constructor, _isMember ? null : constructor.ContainingType, _localOnly, allowsCreation: true, inProgress, _isMember);
                     bool callsThis;
                     if (constructor is SourceMemberMethodSymbol sourceConstructor && sourceConstructor.TryGetBodyBinder() is { } binder)
                     {
@@ -1451,6 +1607,11 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     (field.IsStatic || field.IsReadOnly || field.IsConst || !isImmutable || type.TypeKind != TypeKind.Class))
                 {
                     diagnostics.Add(ErrorCode.ERR_SharperMisplacedUnobservableWrite, field.GetFirstLocation());
+                }
+
+                if (member is MethodSymbol or PropertySymbol && HasAttribute(member, SharperImmutabilityAttribute.Pure))
+                {
+                    CheckPureDeclaration(member, diagnostics);
                 }
             }
 

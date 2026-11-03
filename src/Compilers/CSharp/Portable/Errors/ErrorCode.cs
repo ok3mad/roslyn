@@ -2560,6 +2560,10 @@ namespace Microsoft.CodeAnalysis.CSharp
         ERR_SharperInferNoOverriddenMember = SharperErrorCodes.Base + 43,
         ERR_SharperInferAmbiguousOverriddenMember = SharperErrorCodes.Base + 44,
         ERR_SharperInferOverriddenMemberCycle = SharperErrorCodes.Base + 45,
+        ERR_SharperPureNotPure = SharperErrorCodes.Base + 46,
+        ERR_SharperPureStructMemberNotReadOnly = SharperErrorCodes.Base + 47,
+        ERR_SharperPureVirtual = SharperErrorCodes.Base + 48,
+        WRN_SharperPureOutArgumentNotFresh = SharperErrorCodes.Base + 49,
 
         // Note: you will need to do the following after adding errors:
         //  1) Update ErrorFacts.IsBuildOnlyDiagnostic (src/Compilers/CSharp/Portable/Errors/ErrorFacts.cs)
