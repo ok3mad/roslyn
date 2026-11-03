@@ -670,6 +670,15 @@ namespace Microsoft.CodeAnalysis.CSharp
                 return null;
             }
 
+            public override BoundNode? VisitSharperPipe(BoundSharperPipe node)
+            {
+                var locals = node.Locals.Insert(0, node.Local);
+                AddAll(locals);
+                base.VisitSharperPipe(node);
+                RemoveAll(locals);
+                return null;
+            }
+
             public override BoundNode? VisitSwitchExpressionArm(BoundSwitchExpressionArm node)
             {
                 AddAll(node.Locals);

@@ -1614,6 +1614,19 @@
     <Field Name="WasTargetTyped" Type="bool" />
   </Node>
 
+  <!--
+  Sharper's pipe, x |> stage (#25). Left is evaluated once into Local, the stage's read-only 'it'. A stage that uses 'it'
+  is an expression that reads Local; a bare stage is an invocation whose argument reads Local. Locals are the variables
+  declared in the stage, which is its own scope. Lowered to a spill sequence.
+  -->
+  <Node Name="BoundSharperPipe" Base="BoundExpression" DoesNotSurvive="LocalRewriting">
+    <Field Name="Local" Type="LocalSymbol"/>
+    <Field Name="Left" Type="BoundExpression" Null="disallow"/>
+    <Field Name="Locals" Type="ImmutableArray&lt;LocalSymbol&gt;"/>
+    <Field Name="Stage" Type="BoundExpression" Null="disallow"/>
+    <Field Name="IsBareStage" Type="bool"/>
+  </Node>
+
   <Node Name="BoundDecisionDag" Base="BoundNode">
     <Field Name="RootNode" Type="BoundDecisionDagNode" Null="disallow"/>
     <Field Name="SuitableForLowering" Type="bool"/>

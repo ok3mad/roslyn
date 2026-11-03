@@ -470,6 +470,9 @@ public partial class CSharpSyntaxVisitor<TResult>
     /// <summary>Called when the visitor visits a TryExpressionSyntax node.</summary>
     public virtual TResult? VisitTryExpression(TryExpressionSyntax node) => this.DefaultVisit(node);
 
+    /// <summary>Called when the visitor visits a PipeExpressionSyntax node.</summary>
+    public virtual TResult? VisitPipeExpression(PipeExpressionSyntax node) => this.DefaultVisit(node);
+
     /// <summary>Called when the visitor visits a TryStatementSyntax node.</summary>
     public virtual TResult? VisitTryStatement(TryStatementSyntax node) => this.DefaultVisit(node);
 
@@ -1236,6 +1239,9 @@ public partial class CSharpSyntaxVisitor
     /// <summary>Called when the visitor visits a TryExpressionSyntax node.</summary>
     public virtual void VisitTryExpression(TryExpressionSyntax node) => this.DefaultVisit(node);
 
+    /// <summary>Called when the visitor visits a PipeExpressionSyntax node.</summary>
+    public virtual void VisitPipeExpression(PipeExpressionSyntax node) => this.DefaultVisit(node);
+
     /// <summary>Called when the visitor visits a TryStatementSyntax node.</summary>
     public virtual void VisitTryStatement(TryStatementSyntax node) => this.DefaultVisit(node);
 
@@ -2001,6 +2007,9 @@ public partial class CSharpSyntaxRewriter : CSharpSyntaxVisitor<SyntaxNode?>
 
     public override SyntaxNode? VisitTryExpression(TryExpressionSyntax node)
         => node.Update(VisitToken(node.TryKeyword), (ExpressionSyntax?)Visit(node.Expression) ?? throw new ArgumentNullException("expression"), VisitToken(node.CatchKeyword), VisitToken(node.OpenBraceToken), VisitList(node.Arms), VisitToken(node.CloseBraceToken));
+
+    public override SyntaxNode? VisitPipeExpression(PipeExpressionSyntax node)
+        => node.Update((ExpressionSyntax?)Visit(node.Left) ?? throw new ArgumentNullException("left"), VisitToken(node.OperatorToken), (ExpressionSyntax?)Visit(node.Stage) ?? throw new ArgumentNullException("stage"));
 
     public override SyntaxNode? VisitTryStatement(TryStatementSyntax node)
         => node.Update(VisitList(node.AttributeLists), VisitToken(node.TryKeyword), (BlockSyntax?)Visit(node.Block) ?? throw new ArgumentNullException("block"), VisitList(node.Catches), (FinallyClauseSyntax?)Visit(node.Finally));
@@ -4823,6 +4832,19 @@ public static partial class SyntaxFactory
     /// <summary>Creates a new TryExpressionSyntax instance.</summary>
     public static TryExpressionSyntax TryExpression(ExpressionSyntax expression)
         => SyntaxFactory.TryExpression(SyntaxFactory.Token(SyntaxKind.TryKeyword), expression, SyntaxFactory.Token(SyntaxKind.CatchKeyword), SyntaxFactory.Token(SyntaxKind.OpenBraceToken), default, SyntaxFactory.Token(SyntaxKind.CloseBraceToken));
+
+    /// <summary>Creates a new PipeExpressionSyntax instance.</summary>
+    public static PipeExpressionSyntax PipeExpression(ExpressionSyntax left, SyntaxToken operatorToken, ExpressionSyntax stage)
+    {
+        if (left == null) throw new ArgumentNullException(nameof(left));
+        if (operatorToken.Kind() != SyntaxKind.BarGreaterThanToken) throw new ArgumentException(nameof(operatorToken));
+        if (stage == null) throw new ArgumentNullException(nameof(stage));
+        return (PipeExpressionSyntax)Syntax.InternalSyntax.SyntaxFactory.PipeExpression((Syntax.InternalSyntax.ExpressionSyntax)left.Green, (Syntax.InternalSyntax.SyntaxToken)operatorToken.Node!, (Syntax.InternalSyntax.ExpressionSyntax)stage.Green).CreateRed();
+    }
+
+    /// <summary>Creates a new PipeExpressionSyntax instance.</summary>
+    public static PipeExpressionSyntax PipeExpression(ExpressionSyntax left, ExpressionSyntax stage)
+        => SyntaxFactory.PipeExpression(left, SyntaxFactory.Token(SyntaxKind.BarGreaterThanToken), stage);
 
     /// <summary>Creates a new TryStatementSyntax instance.</summary>
     public static TryStatementSyntax TryStatement(SyntaxList<AttributeListSyntax> attributeLists, SyntaxToken tryKeyword, BlockSyntax block, SyntaxList<CatchClauseSyntax> catches, FinallyClauseSyntax? @finally)

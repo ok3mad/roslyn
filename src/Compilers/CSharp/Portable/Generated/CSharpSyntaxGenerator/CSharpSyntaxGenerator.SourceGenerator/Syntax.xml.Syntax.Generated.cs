@@ -9331,6 +9331,68 @@ public sealed partial class TryExpressionSyntax : ExpressionSyntax
     public TryExpressionSyntax AddArms(params SwitchExpressionArmSyntax[] items) => WithArms(this.Arms.AddRange(items));
 }
 
+/// <summary>Class which represents the syntax node for a Sharper pipe expression, such as raw |&gt; Parse.</summary>
+/// <remarks>
+/// <para>This node is associated with the following syntax kinds:</para>
+/// <list type="bullet">
+/// <item><description><see cref="SyntaxKind.PipeExpression"/></description></item>
+/// </list>
+/// </remarks>
+public sealed partial class PipeExpressionSyntax : ExpressionSyntax
+{
+    private ExpressionSyntax? left;
+    private ExpressionSyntax? stage;
+
+    internal PipeExpressionSyntax(InternalSyntax.CSharpSyntaxNode green, SyntaxNode? parent, int position)
+      : base(green, parent, position)
+    {
+    }
+
+    /// <summary>ExpressionSyntax node representing the value passed to the stage.</summary>
+    public ExpressionSyntax Left => GetRedAtZero(ref this.left)!;
+
+    /// <summary>SyntaxToken representing the pipe operator, |&gt;.</summary>
+    public SyntaxToken OperatorToken => new SyntaxToken(this, ((InternalSyntax.PipeExpressionSyntax)this.Green).operatorToken, GetChildPosition(1), GetChildIndex(1));
+
+    /// <summary>ExpressionSyntax node representing the stage: an expression that uses 'it', or a function, such as a method group.</summary>
+    public ExpressionSyntax Stage => GetRed(ref this.stage, 2)!;
+
+    internal override SyntaxNode? GetNodeSlot(int index)
+        => index switch
+        {
+            0 => GetRedAtZero(ref this.left)!,
+            2 => GetRed(ref this.stage, 2)!,
+            _ => null,
+        };
+
+    internal override SyntaxNode? GetCachedSlot(int index)
+        => index switch
+        {
+            0 => this.left,
+            2 => this.stage,
+            _ => null,
+        };
+
+    public override void Accept(CSharpSyntaxVisitor visitor) => visitor.VisitPipeExpression(this);
+    public override TResult? Accept<TResult>(CSharpSyntaxVisitor<TResult> visitor) where TResult : default => visitor.VisitPipeExpression(this);
+
+    public PipeExpressionSyntax Update(ExpressionSyntax left, SyntaxToken operatorToken, ExpressionSyntax stage)
+    {
+        if (left != this.Left || operatorToken != this.OperatorToken || stage != this.Stage)
+        {
+            var newNode = SyntaxFactory.PipeExpression(left, operatorToken, stage);
+            var annotations = GetAnnotations();
+            return annotations?.Length > 0 ? newNode.WithAnnotations(annotations) : newNode;
+        }
+
+        return this;
+    }
+
+    public PipeExpressionSyntax WithLeft(ExpressionSyntax left) => Update(left, this.OperatorToken, this.Stage);
+    public PipeExpressionSyntax WithOperatorToken(SyntaxToken operatorToken) => Update(this.Left, operatorToken, this.Stage);
+    public PipeExpressionSyntax WithStage(ExpressionSyntax stage) => Update(this.Left, this.OperatorToken, stage);
+}
+
 /// <remarks>
 /// <para>This node is associated with the following syntax kinds:</para>
 /// <list type="bullet">

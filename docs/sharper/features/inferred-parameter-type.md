@@ -1,6 +1,6 @@
 # Inferred parameter type (`infer`)
 
-**Status:** Prototype of steps P1 and P2 (merged into `main`) and P3 (on branch `sharper/readonly-infer-p3`). Requires
+**Status:** Prototype of steps P1 to P3, merged into `main`. Requires
 `/features:sharper`. Issues: [#72](https://github.com/ok3mad/roslyn/issues/72) (P1),
 [#73](https://github.com/ok3mad/roslyn/issues/73) (P2), [#74](https://github.com/ok3mad/roslyn/issues/74) (P3), under
 [#27](https://github.com/ok3mad/roslyn/issues/27).
