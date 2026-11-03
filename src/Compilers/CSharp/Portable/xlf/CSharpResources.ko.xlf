@@ -2757,6 +2757,21 @@
         <target state="new">The stage after '|&gt;' must be a function, such as a method group or a delegate, or an expression that uses 'it', but it is {0}.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperPureNotPure">
+        <source>'{0}' is marked [Pure], but it is not pure: {1}.</source>
+        <target state="new">'{0}' is marked [Pure], but it is not pure: {1}.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperPureStructMemberNotReadOnly">
+        <source>'{0}' is marked [Pure], so it must be readonly: declare it 'readonly', or make the struct 'readonly'.</source>
+        <target state="new">'{0}' is marked [Pure], so it must be readonly: declare it 'readonly', or make the struct 'readonly'.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperPureVirtual">
+        <source>'{0}' cannot be marked [Pure] yet: [Pure] is not supported on virtual, abstract and override members.</source>
+        <target state="new">'{0}' cannot be marked [Pure] yet: [Pure] is not supported on virtual, abstract and override members.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperReadOnlyLocalWithNoInitializer">
         <source>A readonly local must be initialized in its declaration, because it cannot be assigned later.</source>
         <target state="new">A readonly local must be initialized in its declaration, because it cannot be assigned later.</target>
@@ -3677,6 +3692,36 @@
         <target state="new">'{0}' (it returns '{1}')</target>
         <note />
       </trans-unit>
+      <trans-unit id="IDS_SharperPureReasonCall">
+        <source>'{0}' calls '{1}', which is not known to be pure</source>
+        <target state="new">'{0}' calls '{1}', which is not known to be pure</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperPureReasonCulture">
+        <source>'{0}' formats with the current culture</source>
+        <target state="new">'{0}' formats with the current culture</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperPureReasonIdentity">
+        <source>'{0}' observes object identity</source>
+        <target state="new">'{0}' observes object identity</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperPureReasonOther">
+        <source>'{0}' is not allowed in a pure member</source>
+        <target state="new">'{0}' is not allowed in a pure member</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperPureReasonStatic">
+        <source>'{0}' reads static state that can change</source>
+        <target state="new">'{0}' reads static state that can change</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperPureReasonWrite">
+        <source>'{0}' writes state outside the member</source>
+        <target state="new">'{0}' writes state outside the member</target>
+        <note />
+      </trans-unit>
       <trans-unit id="IDS_SharperTryExpression">
         <source>try expression</source>
         <target state="new">try expression</target>
@@ -4450,6 +4495,16 @@
       <trans-unit id="WRN_SharperImmutableHierarchyViolated_Title">
         <source>A type in an [ImmutableHierarchy] is not immutable.</source>
         <target state="new">A type in an [ImmutableHierarchy] is not immutable.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WRN_SharperPureOutArgumentNotFresh">
+        <source>The out argument '{1}' of the [Pure] member '{0}' is not a fresh local, so '{0}' may observe its own write through another argument.</source>
+        <target state="new">The out argument '{1}' of the [Pure] member '{0}' is not a fresh local, so '{0}' may observe its own write through another argument.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WRN_SharperPureOutArgumentNotFresh_Title">
+        <source>The out argument of a [Pure] member is not a fresh local</source>
+        <target state="new">The out argument of a [Pure] member is not a fresh local</target>
         <note />
       </trans-unit>
       <trans-unit id="WRN_SharperReadOnlyLocalMemberCallOnCopy">

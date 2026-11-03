@@ -352,6 +352,7 @@
                 case ErrorCode.WRN_SharperReadOnlyParameterMemberCallOnCopy:
                 case ErrorCode.WRN_SharperTryExpressionAwaitableBody:
                 case ErrorCode.WRN_SharperImmutableHierarchyViolated:
+                case ErrorCode.WRN_SharperPureOutArgumentNotFresh:
                     return true;
                 default:
                     return false;

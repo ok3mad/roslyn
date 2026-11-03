@@ -2564,6 +2564,10 @@ namespace Microsoft.CodeAnalysis.CSharp
         ERR_SharperPipeStageItNotUsed = SharperErrorCodes.Base + 47,
         ERR_SharperPipeStageNotFunction = SharperErrorCodes.Base + 48,
         ERR_SharperPipeInExpressionTree = SharperErrorCodes.Base + 49,
+        ERR_SharperPureNotPure = SharperErrorCodes.Base + 50,
+        ERR_SharperPureStructMemberNotReadOnly = SharperErrorCodes.Base + 51,
+        ERR_SharperPureVirtual = SharperErrorCodes.Base + 52,
+        WRN_SharperPureOutArgumentNotFresh = SharperErrorCodes.Base + 53,
 
         // Note: you will need to do the following after adding errors:
         //  1) Update ErrorFacts.IsBuildOnlyDiagnostic (src/Compilers/CSharp/Portable/Errors/ErrorFacts.cs)

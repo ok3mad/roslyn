@@ -577,6 +577,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 case ErrorCode.WRN_SharperReadOnlyParameterMemberCallOnCopy:
                 case ErrorCode.WRN_SharperTryExpressionAwaitableBody:
                 case ErrorCode.WRN_SharperImmutableHierarchyViolated:
+                case ErrorCode.WRN_SharperPureOutArgumentNotFresh:
                     return 1;
                 default:
                     return 0;
@@ -2658,6 +2659,10 @@ namespace Microsoft.CodeAnalysis.CSharp
                 or ErrorCode.ERR_SharperPipeStageItNotUsed
                 or ErrorCode.ERR_SharperPipeStageNotFunction
                 or ErrorCode.ERR_SharperPipeInExpressionTree
+                or ErrorCode.ERR_SharperPureNotPure
+                or ErrorCode.ERR_SharperPureStructMemberNotReadOnly
+                or ErrorCode.ERR_SharperPureVirtual
+                or ErrorCode.WRN_SharperPureOutArgumentNotFresh
                     => false,
             };
 #pragma warning restore CS8524 // The switch expression does not handle some values of its input type (it is not exhaustive) involving an unnamed enum value.
