@@ -343,7 +343,11 @@ namespace Microsoft.CodeAnalysis.CSharp
         IDS_SharperPureReasonIdentity = MessageBase + 12895,
         IDS_SharperPureReasonCulture = MessageBase + 12896,
         IDS_SharperPureReasonOther = MessageBase + 12897,
-        IDS_SharperImplicitItParameter = MessageBase + 12898,
+        IDS_SharperInferNoMemberWithParameterCount = MessageBase + 12898,
+        IDS_SharperInferAllMembersRuledOut = MessageBase + 12899,
+        IDS_SharperInferRuledOutByParameter = MessageBase + 12900,
+        IDS_SharperInferRuledOutByReturnType = MessageBase + 12901,
+        IDS_SharperImplicitItParameter = MessageBase + 12902,
     }
 
     // Message IDs may refer to strings that need to be localized.

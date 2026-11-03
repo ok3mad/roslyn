@@ -400,7 +400,21 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             Debug.Assert(binder.InParameterDefaultValue);
             Debug.Assert(binder.ContainingMemberOrLambda == ContainingSymbol);
 
-            parameterEqualsValue = binder.BindParameterDefaultValue(defaultSyntax, this, diagnostics, out var valueBeforeConversion);
+            BoundExpression valueBeforeConversion;
+            if (parameterSyntax.Type is { IsInfer: true } && Type.IsErrorType() && parameterSyntax.IsFeatureEnabled(MessageID.IDS_FeatureSharper))
+            {
+                // Sharper: the inference of the type failed and reported why; arguments converted to the error types of
+                // a cycle's members report nothing more.
+                var valueDiagnostics = BindingDiagnosticBag.GetInstance(withDiagnostics: true, withDependencies: diagnostics.AccumulatesDependencies);
+                parameterEqualsValue = binder.BindParameterDefaultValue(defaultSyntax, this, valueDiagnostics, out valueBeforeConversion);
+                SharperInferredParameterType.AddDefaultValueDiagnostics(diagnostics, valueDiagnostics);
+                valueDiagnostics.Free();
+            }
+            else
+            {
+                parameterEqualsValue = binder.BindParameterDefaultValue(defaultSyntax, this, diagnostics, out valueBeforeConversion);
+            }
+
             if (valueBeforeConversion.HasErrors)
             {
                 return ConstantValue.Bad;
