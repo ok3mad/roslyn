@@ -8785,6 +8785,49 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         }
 
         [Fact]
+        public void InferParameter_Cycle_ArgumentConversions()
+        {
+            // A cycle's default value calls a member of the cycle, whose parameter is an error type. Converting the
+            // argument to it reports nothing after CS20028; the default value's own errors are still reported.
+            var source = """
+                class C
+                {
+                    static int A(infer x = A(1)) => 0;
+                    static int B(infer x = B(Missing)) => 0;
+                    static int D(infer x = D(K("s"))) => 0;
+                    static int K(int i) => i;
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics(
+                // (3,18): error CS20028: Cannot infer the type of parameter 'x', because its default value depends on the type of 'x' itself. Write the parameter type.
+                //     static int A(infer x = A(1)) => 0;
+                Diagnostic(ErrorCode.ERR_SharperInferParameterCycle, "infer").WithArguments("x").WithLocation(3, 18),
+                // (4,18): error CS20028: Cannot infer the type of parameter 'x', because its default value depends on the type of 'x' itself. Write the parameter type.
+                //     static int B(infer x = B(Missing)) => 0;
+                Diagnostic(ErrorCode.ERR_SharperInferParameterCycle, "infer").WithArguments("x").WithLocation(4, 18),
+                // (4,30): error CS0103: The name 'Missing' does not exist in the current context
+                //     static int B(infer x = B(Missing)) => 0;
+                Diagnostic(ErrorCode.ERR_NameNotInContext, "Missing").WithArguments("Missing").WithLocation(4, 30),
+                // (5,18): error CS20028: Cannot infer the type of parameter 'x', because its default value depends on the type of 'x' itself. Write the parameter type.
+                //     static int D(infer x = D(K("s"))) => 0;
+                Diagnostic(ErrorCode.ERR_SharperInferParameterCycle, "infer").WithArguments("x").WithLocation(5, 18),
+                // (5,32): error CS1503: Argument 1: cannot convert from 'string' to 'int'
+                //     static int D(infer x = D(K("s"))) => 0;
+                Diagnostic(ErrorCode.ERR_BadArgType, @"""s""").WithArguments("1", "string", "int").WithLocation(5, 32));
+
+            // With the flag off, 'infer' is a type that does not exist, and C# reports the conversion to it.
+            comp = CreateCompilation("class C { static int A(infer x = A(1)) => 0; }", targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics(
+                // (1,24): error CS0246: The type or namespace name 'infer' could not be found (are you missing a using directive or an assembly reference?)
+                // class C { static int A(infer x = A(1)) => 0; }
+                Diagnostic(ErrorCode.ERR_SingleTypeNameNotFound, "infer").WithArguments("infer").WithLocation(1, 24),
+                // (1,36): error CS1503: Argument 1: cannot convert from 'int' to 'infer'
+                // class C { static int A(infer x = A(1)) => 0; }
+                Diagnostic(ErrorCode.ERR_BadArgType, "1").WithArguments("1", "int", "infer").WithLocation(1, 36));
+        }
+
+        [Fact]
         public void InferParameter_Cycle_Concurrent()
         {
             // Members in a cycle are inferred outside of their locks, so two threads that start from either end neither
