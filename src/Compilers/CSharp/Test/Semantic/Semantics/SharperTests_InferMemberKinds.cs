@@ -109,7 +109,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             Assert.Equal("S S.op_Addition(S a, S b)", comp.GetMember("S.op_Addition").ToTestDisplayString());
             Assert.Equal("System.Int32 C.this[System.String key].get", comp.GetMember<PropertySymbol>("C.this[]").GetMethod.ToTestDisplayString());
             Assert.Equal("void C.Changed.add", comp.GetMember<EventSymbol>("C.Changed").AddMethod.ToTestDisplayString());
-            Assert.Equal("System.EventHandler", comp.GetMember<EventSymbol>("C.Changed").AddMethod.Parameters[0].Type.ToTestDisplayString());
+            Assert.Equal("System.EventHandler", comp.GetMember<EventSymbol>("C.Changed").AddMethod!.Parameters[0].Type.ToTestDisplayString());
             Assert.Same(comp.GetMember("B.Name"), comp.GetMember<PropertySymbol>("C.Name").OverriddenProperty);
             Assert.Same(comp.GetMember("B.Changed"), comp.GetMember<EventSymbol>("C.Changed").OverriddenEvent);
         }
@@ -206,7 +206,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             Assert.Equal("void modreq(System.Runtime.CompilerServices.IsExternalInit) Thing.Name.init", comp.GetMember<PropertySymbol>("Thing.Name").SetMethod.ToTestDisplayString());
             Assert.Equal("System.Int64 value", comp.GetMember<PropertySymbol>("Thing.Size").SetMethod.Parameters[0].ToTestDisplayString());
             Assert.Equal("System.String Thing.<Name>k__BackingField", comp.GetMember<FieldSymbol>("Thing.<Name>k__BackingField").ToTestDisplayString());
-            Assert.Equal("System.Action<System.String> value", comp.GetMember<EventSymbol>("Thing.Renamed").RemoveMethod.Parameters[0].ToTestDisplayString());
+            Assert.Equal("System.Action<System.String> value", comp.GetMember<EventSymbol>("Thing.Renamed").RemoveMethod!.Parameters[0].ToTestDisplayString());
         }
 
         [Fact]
