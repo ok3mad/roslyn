@@ -359,18 +359,18 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (22,27): error CS20044: Cannot infer the types of 'this', because it could override or implement more than one member: 'B.this[int]', 'B.this[string]'. Write the types of the one it overrides or implements.
                 //     public override infer this[infer i] => 0;
                 Diagnostic(ErrorCode.ERR_SharperInferAmbiguousOverriddenMember, "this").WithArguments("this", "'B.this[int]', 'B.this[string]'").WithLocation(22, 27),
-                // (23,27): error CS20043: Cannot infer the types of 'this', because it overrides or implements no member 'this' with 2 parameters that matches its written types. Write the types.
+                // (23,27): error CS20043: Cannot infer the types of 'this' from the member it overrides or implements, because it could override or implement no member 'this' with the same number of parameters. Write the types.
                 //     public override infer this[infer a, infer b] => 0;
-                Diagnostic(ErrorCode.ERR_SharperInferNoOverriddenMember, "this").WithArguments("this", "2").WithLocation(23, 27),
-                // (24,27): error CS20043: Cannot infer the types of 'NotVirtual', because it overrides or implements no member 'NotVirtual' with 0 parameters that matches its written types. Write the types.
+                Diagnostic(ErrorCode.ERR_SharperInferNoOverriddenMember, "this").WithArguments("this", "it could override or implement no member 'this' with the same number of parameters").WithLocation(23, 27),
+                // (24,27): error CS20043: Cannot infer the types of 'NotVirtual' from the member it overrides or implements, because it could override or implement no member 'NotVirtual' with the same number of parameters. Write the types.
                 //     public override infer NotVirtual => "";
-                Diagnostic(ErrorCode.ERR_SharperInferNoOverriddenMember, "NotVirtual").WithArguments("NotVirtual", "0").WithLocation(24, 27),
+                Diagnostic(ErrorCode.ERR_SharperInferNoOverriddenMember, "NotVirtual").WithArguments("NotVirtual", "it could override or implement no member 'NotVirtual' with the same number of parameters").WithLocation(24, 27),
                 // (24,27): error CS0506: 'C.NotVirtual': cannot override inherited member 'B.NotVirtual' because it is not marked virtual, abstract, or override
                 //     public override infer NotVirtual => "";
                 Diagnostic(ErrorCode.ERR_CantOverrideNonVirtual, "NotVirtual").WithArguments("C.NotVirtual", "B.NotVirtual").WithLocation(24, 27),
-                // (25,33): error CS20043: Cannot infer the types of 'Changed2', because it overrides or implements no member 'Changed2' with 0 parameters that matches its written types. Write the types.
+                // (25,33): error CS20043: Cannot infer the types of 'Changed2' from the member it overrides or implements, because it could override or implement no member 'Changed2' with the same number of parameters. Write the types.
                 //     public override event infer Changed2;
-                Diagnostic(ErrorCode.ERR_SharperInferNoOverriddenMember, "Changed2").WithArguments("Changed2", "0").WithLocation(25, 33),
+                Diagnostic(ErrorCode.ERR_SharperInferNoOverriddenMember, "Changed2").WithArguments("Changed2", "it could override or implement no member 'Changed2' with the same number of parameters").WithLocation(25, 33),
                 // (25,33): error CS0115: 'C.Changed2': no suitable method found to override
                 //     public override event infer Changed2;
                 Diagnostic(ErrorCode.ERR_OverrideNotExpected, "Changed2").WithArguments("C.Changed2").WithLocation(25, 33),
@@ -386,6 +386,40 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (32,41): error CS20027: Cannot infer the type of parameter 'b', because it has no default value. Write the parameter type.
                 //     public static infer operator -(S a, infer b) => a;
                 Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("b").WithLocation(32, 41));
+        }
+
+        [Fact]
+        public void InferMemberKinds_Errors_RuledOut()
+        {
+            // CS20043 names the members the written types rule out, as for methods: by a parameter, or by the type.
+            var source = """
+                abstract class B
+                {
+                    public abstract int this[long i, string s] { get; }
+                }
+
+                interface I { string this[int i] { get; } }
+
+                class C : B, I
+                {
+                    public override infer this[int i, infer s] => 0;
+                    public long this[infer i] => 0;
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics(
+                // (8,7): error CS0534: 'C' does not implement inherited abstract member 'B.this[long, string].get'
+                // class C : B, I
+                Diagnostic(ErrorCode.ERR_UnimplementedAbstractMethod, "C").WithArguments("C", "B.this[long, string].get").WithLocation(8, 7),
+                // (8,14): error CS0535: 'C' does not implement interface member 'I.this[int]'
+                // class C : B, I
+                Diagnostic(ErrorCode.ERR_UnimplementedInterfaceMember, "I").WithArguments("C", "I.this[int]").WithLocation(8, 14),
+                // (10,27): error CS20043: Cannot infer the types of 'this' from the member it overrides or implements, because its written types rule out every member 'this' with the same number of parameters: 'B.this[long, string]' (it takes 'long' for 'i'). Write the types.
+                //     public override infer this[int i, infer s] => 0;
+                Diagnostic(ErrorCode.ERR_SharperInferNoOverriddenMember, "this").WithArguments("this", "its written types rule out every member 'this' with the same number of parameters: 'B.this[long, string]' (it takes 'long' for 'i')").WithLocation(10, 27),
+                // (11,17): error CS20043: Cannot infer the types of 'this' from the member it overrides or implements, because its written types rule out every member 'this' with the same number of parameters: 'I.this[int]' (it returns 'string'). Write the types.
+                //     public long this[infer i] => 0;
+                Diagnostic(ErrorCode.ERR_SharperInferNoOverriddenMember, "this").WithArguments("this", "its written types rule out every member 'this' with the same number of parameters: 'I.this[int]' (it returns 'string')").WithLocation(11, 17));
         }
 
         [Fact]
@@ -622,12 +656,6 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                     // (3,36): error CS20028: Cannot infer the type of parameter 'j', because its default value depends on the type of 'j' itself. Write the parameter type.
                     //     public virtual int this[int i, infer j = new D()[1, 2]] => 0;
                     Diagnostic(ErrorCode.ERR_SharperInferParameterCycle, "infer").WithArguments("j").WithLocation(3, 36),
-                    // (3,54): error CS1503: Argument 1: cannot convert from 'int' to 'infer'
-                    //     public virtual int this[int i, infer j = new D()[1, 2]] => 0;
-                    Diagnostic(ErrorCode.ERR_BadArgType, "1").WithArguments("1", "int", "infer").WithLocation(3, 54),
-                    // (3,57): error CS1503: Argument 2: cannot convert from 'int' to 'infer'
-                    //     public virtual int this[int i, infer j = new D()[1, 2]] => 0;
-                    Diagnostic(ErrorCode.ERR_BadArgType, "2").WithArguments("2", "int", "infer").WithLocation(3, 57),
                     // (8,25): error CS20045: Cannot infer the types of 'this' from the member it overrides or implements, because the signature of that member depends on 'this' itself. Write the types.
                     //     public override int this[infer i, infer j] => 0;
                     Diagnostic(ErrorCode.ERR_SharperInferOverriddenMemberCycle, "this").WithArguments("this").WithLocation(8, 25));

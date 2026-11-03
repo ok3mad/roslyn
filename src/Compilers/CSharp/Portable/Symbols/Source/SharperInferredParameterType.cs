@@ -5,6 +5,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Roslyn.Utilities;
@@ -103,6 +104,31 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             Result result = GetOrInfer(owner, parameter, binder);
             diagnostics.AddRange(result.Diagnostics, allowMismatchInDependencyAccumulation: true);
             return result.Type;
+        }
+
+        /// <summary>
+        /// Adds the diagnostics of the default value of an <c>infer</c> parameter whose inference failed and reported why,
+        /// except the conversion errors of arguments to methods and indexers with error-typed parameters. In a cycle, the
+        /// default value calls (or indexes) a member of the cycle, whose parameters are error types; converting the
+        /// arguments to them would report CS1503 after the cycle error.
+        /// </summary>
+        internal static void AddDefaultValueDiagnostics(BindingDiagnosticBag diagnostics, BindingDiagnosticBag valueDiagnostics)
+        {
+            diagnostics.AddDependencies(valueDiagnostics);
+            if (valueDiagnostics.DiagnosticBag is { } bag)
+            {
+                foreach (Diagnostic diagnostic in bag.AsEnumerable())
+                {
+                    if (!isConversionToErrorType(diagnostic))
+                    {
+                        diagnostics.Add(diagnostic);
+                    }
+                }
+            }
+
+            static bool isConversionToErrorType(Diagnostic diagnostic)
+                => diagnostic is DiagnosticWithInfo { Info: DiagnosticInfoWithSymbols { Code: (int)ErrorCode.ERR_BadArgType } info } &&
+                    info.Symbols.Any(static s => s is MethodSymbol or PropertySymbol && s.GetParameters().Any(static p => p.Type.IsErrorType()));
         }
 
         private static Result GetOrInfer(Symbol owner, ParameterSyntax parameter, Binder binder)

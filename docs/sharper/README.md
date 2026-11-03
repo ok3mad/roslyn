@@ -179,7 +179,7 @@ in `#pragma warning`, `/nowarn` and `.editorconfig`.
 | CS20040 | Error | '{0}' is marked [ImmutableHierarchy], so it must also be marked [Immutable]. |
 | CS20041 | Error | [UnobservableWrite] is only valid on a field that is not readonly, of a class marked [Immutable]. |
 | CS20042 | Error | Type parameter '{0}' is marked [Phantom], but '{1}' uses it in the state of the type. |
-| CS20043 | Error | Cannot infer the types of '{0}', because it overrides or implements no member '{0}' with {1} parameters that matches its written types. Write the types. |
+| CS20043 | Error | Cannot infer the types of '{0}' from the member it overrides or implements, because {1}. Write the types. ({1} names the members the written types ruled out, and what ruled each out) |
 | CS20044 | Error | Cannot infer the types of '{0}', because it could override or implement more than one member: {1}. Write the types of the one it overrides or implements. |
 | CS20045 | Error | Cannot infer the types of '{0}' from the member it overrides or implements, because the signature of that member depends on '{0}' itself. Write the types. |
 | CS20046 | Error | The left side of '\|>' must be a value with a type, but it is {0}. |
@@ -190,6 +190,7 @@ in `#pragma warning`, `/nowarn` and `.editorconfig`.
 | CS20051 | Error | '{0}' is marked [Pure], so it must be readonly: declare it 'readonly', or make the struct 'readonly'. |
 | CS20052 | Error | '{0}' cannot be marked [Pure] yet: [Pure] is not supported on virtual, abstract and override members. |
 | CS20053 | Warning | The out argument '{1}' of the [Pure] member '{0}' is not a fresh local, so '{0}' may observe its own write through another argument. |
+| CS20054 | Error | 'it' here belongs to '{0}', so this argument is a value, not a lambda. Name the parameter, as in 'x => ...'. |
 
 ## Where the code is
 

@@ -2,10 +2,12 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for more information.
 
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Linq;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.PooledObjects;
@@ -202,18 +204,27 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             }
 
             var matches = ArrayBuilder<CopiedSignature>.GetInstance();
+            var ruledOut = ArrayBuilder<(CopiedSignature Copied, int Position)>.GetInstance();
             foreach (Symbol candidate in candidates)
             {
                 var copied = CopiedSignature.Create(candidate, declaration.Owner);
-                if (written.Accepts(copied) && !matches.Any(static (match, copied) => match.HasSameSignature(copied), copied))
+                if (written.GetRuledOutPosition(copied) is int position)
+                {
+                    if (!ruledOut.Any(static (other, copied) => other.Copied.HasSameSignature(copied), copied))
+                    {
+                        ruledOut.Add((copied, position));
+                    }
+                }
+                else if (!matches.Any(static (match, copied) => match.HasSameSignature(copied), copied))
                 {
                     matches.Add(copied);
                 }
             }
 
             candidates.Free();
-            OverriddenSignature result = Decide(declaration, written, matches);
+            OverriddenSignature result = Decide(declaration, written, matches, ruledOut);
             matches.Free();
+            ruledOut.Free();
             return result;
         }
 
@@ -302,7 +313,12 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             internal readonly string Name;
 
             internal readonly SeparatedSyntaxList<ParameterSyntax> Parameters;
+
+            /// <summary>The return, property or event type, without <c>scoped</c> and <c>ref</c>.</summary>
             internal readonly TypeSyntax TypeSyntax;
+
+            /// <summary>The type as written, with <c>ref</c>: where a written return type that rules out a member is.</summary>
+            internal readonly TypeSyntax WrittenTypeSyntax;
             internal readonly bool IsExplicitImplementation;
             internal readonly TypeSymbol? ExplicitInterfaceType;
             private readonly int _arity;
@@ -314,6 +330,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 Name = name;
                 Parameters = parameters;
                 TypeSyntax = typeSyntax.SkipScoped(out _).SkipRef();
+                WrittenTypeSyntax = typeSyntax;
                 IsExplicitImplementation = explicitInterfaceSpecifier is not null;
                 ExplicitInterfaceType = explicitInterfaceType;
                 _arity = arity;
@@ -404,8 +421,15 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             }
         }
 
-        /// <summary>The single match, or CS20043 for none and CS20044 for several.</summary>
-        private static OverriddenSignature Decide(MemberDeclaration declaration, WrittenSignature written, ArrayBuilder<CopiedSignature> matches)
+        /// <summary>
+        /// The single match, or CS20043 for none and CS20044 for several. CS20043 names each candidate that the written
+        /// signature ruled out, with the written part that ruled it out, which is also an additional location.
+        /// </summary>
+        private static OverriddenSignature Decide(
+            MemberDeclaration declaration,
+            WrittenSignature written,
+            ArrayBuilder<CopiedSignature> matches,
+            ArrayBuilder<(CopiedSignature Copied, int Position)> ruledOut)
         {
             var (location, name) = MemberDeclaration.GetNameForDiagnostics(declaration.Syntax);
             if (matches.Count == 1)
@@ -418,7 +442,22 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             var diagnostics = BindingDiagnosticBag.GetInstance(withDiagnostics: true, withDependencies: false);
             if (matches.Count == 0)
             {
-                diagnostics.Add(ErrorCode.ERR_SharperInferNoOverriddenMember, location, name, declaration.Parameters.Count);
+                if (ruledOut.Count == 0)
+                {
+                    var reason = new MessageFragment(MessageID.IDS_SharperInferNoMemberWithParameterCount, [name]);
+                    diagnostics.Add(ErrorCode.ERR_SharperInferNoOverriddenMember, location, name, reason);
+                }
+                else
+                {
+                    var members = ruledOut.SelectAsArray(static (r, declaration) => describeRuledOut(r.Copied, r.Position, declaration), declaration);
+                    var reason = new MessageFragment(MessageID.IDS_SharperInferAllMembersRuledOut, [name, new MessageFragmentList(members)]);
+                    var info = new CSDiagnosticInfo(
+                        ErrorCode.ERR_SharperInferNoOverriddenMember,
+                        args: [name, reason],
+                        symbols: ruledOut.SelectAsArray(static r => (Symbol)r.Copied.Member),
+                        additionalLocations: ruledOut.Select(r => getWrittenLocation(r.Position, declaration)).Distinct().ToImmutableArray());
+                    diagnostics.Add(info, location);
+                }
             }
             else
             {
@@ -427,6 +466,45 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             }
 
             return OverriddenSignature.CreateError(diagnostics.ToReadOnlyAndFree());
+
+            // "'B.M(long, string)' (it takes 'long' for 'a')" or "'B.M()' (it returns 'int')".
+            static MessageFragment describeRuledOut(CopiedSignature copied, int position, MemberDeclaration declaration)
+            {
+                string member = copied.Member.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat);
+                if (position == copied.ParameterTypes.Length)
+                {
+                    return new MessageFragment(MessageID.IDS_SharperInferRuledOutByReturnType, [member, copied.ReturnType.Type.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat)]);
+                }
+
+                RefKind refKind = copied.Member.GetParameters()[position].RefKind;
+                string type = copied.ParameterTypes[position].Type.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat);
+                return new MessageFragment(
+                    MessageID.IDS_SharperInferRuledOutByParameter,
+                    [member, refKind == RefKind.None ? type : refKind.ToParameterDisplayString() + " " + type, declaration.Parameters[position].Identifier.ValueText]);
+            }
+
+            static Location getWrittenLocation(int position, MemberDeclaration declaration)
+                => position == declaration.Parameters.Count
+                    ? declaration.WrittenTypeSyntax.GetLocation()
+                    : declaration.Parameters[position].GetLocation();
+        }
+
+        /// <summary>A part of a message, from a resource and formatted in the culture of the message.</summary>
+        private sealed class MessageFragment(MessageID id, object[] arguments) : IFormattable
+        {
+            public override string ToString() => ToString(null, null);
+
+            public string ToString(string? format, IFormatProvider? formatProvider)
+                => string.Format(formatProvider, ErrorFacts.GetMessage(id, formatProvider as CultureInfo), arguments);
+        }
+
+        /// <summary>Message fragments separated by commas.</summary>
+        private sealed class MessageFragmentList(ImmutableArray<MessageFragment> fragments) : IFormattable
+        {
+            public override string ToString() => ToString(null, null);
+
+            public string ToString(string? format, IFormatProvider? formatProvider)
+                => string.Join(", ", fragments.Select(f => f.ToString(format, formatProvider)));
         }
 
         /// <summary>
@@ -496,26 +574,27 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             }
 
             /// <summary>
-            /// Whether the member's signature fits what is written: the same ref kinds where they are written, and the
+            /// Null when the member's signature fits what is written: the same ref kinds where they are written, and the
             /// same types (ignoring nullability, tuple names and <c>dynamic</c>) where they are written. A written type
-            /// with errors of its own fits anything; its errors are reported with the signature.
+            /// with errors of its own fits anything; its errors are reported with the signature. Otherwise the first
+            /// parameter that does not fit, or the parameter count for the return type.
             /// </summary>
-            internal bool Accepts(CopiedSignature copied)
+            internal int? GetRuledOutPosition(CopiedSignature copied)
             {
                 for (int i = 0; i < _parameterTypes.Length; i++)
                 {
                     if (_refKinds[i] is { } refKind && refKind != copied.Member.GetParameters()[i].RefKind)
                     {
-                        return false;
+                        return i;
                     }
 
                     if (!fits(_parameterTypes[i], copied.ParameterTypes[i]))
                     {
-                        return false;
+                        return i;
                     }
                 }
 
-                return fits(_returnType, copied.ReturnType);
+                return fits(_returnType, copied.ReturnType) ? null : _parameterTypes.Length;
 
                 static bool fits(TypeWithAnnotations written, TypeWithAnnotations copied)
                     => !written.HasType || written.Type.IsErrorType() || written.Type.Equals(copied.Type, TypeCompareKind.AllIgnoreOptions);

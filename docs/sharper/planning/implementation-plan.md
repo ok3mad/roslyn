@@ -581,6 +581,10 @@ implementation taught.
   could not tell success from failure (`HasAnyErrors` asserts). Trials use their own bags with diagnostics.
 - **"Does it use `it`?" is a bound question.** `xs.Select(Make(ys.First(it.X)))` binds as a lambda whose `it` is
   unused, because the inner call claims it. The lambda trial counts only when each lambda reads its parameter.
+- **Name the inner call only when nothing else went wrong.** CS20054 is added when the value trial fails and the lambda
+  trial had no errors apart from a lambda without its own `it`. The value trial's C# errors stay: they can be
+  independent mistakes (a wrong argument count), and telling them from consequences would mean guessing. An inner
+  call that already reported makes the outer lambda trial fail, so the error appears once, at the innermost level.
 
 ## Feature 8: `try` expression, slice 1 (design)
 
@@ -741,7 +745,7 @@ indexers inside `EnsureSignature`, under another.
 | Cycles | CS20028 on every parameter of the cycle, published when the cycle is found | Publishing at the end was not enough: a member whose signature completes inside the cycle let another thread infer the rest of the cycle without the error (found by `InferParameter_Cycle_Concurrent`) |
 | `ref`, `out`, `params`, `this` | No special rule: without a default value CS20027, with one the C# error for the default value | The C# twin reports the same, and the type is still known |
 
-Tests: 17 `InferParameter_*` tests in `SharperTests.cs`: runtime output for every member kind and lambdas next to C#
+Tests: 18 `InferParameter_*` tests in `SharperTests.cs`: runtime output for every member kind and lambdas next to C#
 twins, the inferred types against written ones (also the default values), the errors, cycles in every order and on
 two threads, caller information attributes, signature matching, nullable annotations, the semantic model, IOperation,
 metadata seen from a C# compilation, and concurrent inference. `readonly infer x = 1u` already works (P3 needs only
@@ -751,8 +755,8 @@ its tests and the `val` decision).
 
 An override or an interface implementation copies its `infer` parameter and return types from the member it overrides or
 implements: `public infer Load(infer userId) => result;` in a class implementing `IProfiles` is
-`Task<ProfileResult> Load(int userId)`, on branch `sharper/infer-from-overridden-p2`
-([#73](https://github.com/ok3mad/roslyn/issues/73), feature page
+`Task<ProfileResult> Load(int userId)`, merged into `main` from `sharper/infer-from-overridden-p2` in
+[#161](https://github.com/ok3mad/roslyn/pull/161) ([#73](https://github.com/ok3mad/roslyn/issues/73), feature page
 [inferred-parameter-type.md](../features/inferred-parameter-type.md#from-the-overridden-or-implemented-member-step-p2)).
 No syntax, bound node, public API or lowering.
 
@@ -786,15 +790,23 @@ method again: the same lock-order and cycle problem as P1's default values.
 | What is copied | Types with nullability and tuple names, generic substitutions, method type parameters renamed; ref kinds and `params` for parameters that write none. Not custom modifiers (the method checks copy them for overrides, as for written types) and not the return's `ref` | The issue's list. A written `ref` on the return is part of the declaration's shape, as for R1 |
 | Default value and overridden member both present | The default value gives the type (P1), and narrows the candidates | No disagreement can arise from narrowing; a mismatch then is ordinary C# (CS0115) |
 | Return type limits | None of R1's limits (CS20015 for public members, CS20016 for no body) and none of R4's restrictions on public members | Nothing is inferred from a body: the type is copied from a signature that is already written somewhere |
-| Errors | CS20043 no candidate, CS20044 several, CS20045 cycle, on the method name, once; the `infer`s get error types | One error per method, which asks for the types; error types keep C#'s override and implementation errors quiet |
+| Errors | CS20043 no candidate, CS20044 several, CS20045 cycle, on the method name, once; the `infer`s get error types. CS20043 names each candidate that the written types ruled out and the written part that ruled it out, which is also an additional location ([#167](https://github.com/ok3mad/roslyn/issues/167)) | One error per method, which asks for the types; error types keep C#'s override and implementation errors quiet |
 | Properties, indexers, operators, events | Not yet | They have their own signature code; the search would move to their symbols with R4's properties |
 | Records | Overrides of synthesized members of a base record and of `object` copy like any other; a record's own declaration of a member it would synthesize overrides nothing and needs its types | That declaration is matched against the synthesized member by signature, which needs the types |
 
-Tests: 14 `InferOverridden_*` tests in `SharperTests_InferFromOverridden.cs`: runtime output next to C# twins (the
+Tests: 15 `InferOverridden_*` tests in `SharperTests_InferFromOverridden.cs`: runtime output next to C# twins (the
 issue's example, overrides, explicit implementations), the copied ref kinds, `params`, nullability, tuple names and
 generics, narrowing by written and P1 types, the errors, binding order from every member, cycles from every member
 and on several threads, records, nullable warnings, the semantic model, IOperation, metadata seen from a C#
 compilation, and concurrent searches. `Infer_NotSupportedYet` lost its override and implementation rows.
+
+Follow-ups:
+
+- Properties, indexers, operators and events of overrides and implementations: [#166](https://github.com/ok3mad/roslyn/issues/166).
+- Clearer errors when no member matches, and no CS1503 after a cycle: [#167](https://github.com/ok3mad/roslyn/issues/167)
+  (done: `InferOverridden_Errors_RuledOut`, `InferParameter_Cycle_ArgumentConversions`).
+- A deterministic test for the cycle publication race: [#168](https://github.com/ok3mad/roslyn/issues/168).
+- Edit and Continue when the overridden or implemented member's signature changes: [#169](https://github.com/ok3mad/roslyn/issues/169).
 
 ## Feature 9: inferred parameter type, step P3
 
@@ -1059,7 +1071,7 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 - [ ] Implicit `it`: `LookupSymbols` and speculative binding inside an implicit lambda, which the semantic model finds by lambda syntax. [#123](https://github.com/ok3mad/roslyn/issues/123)
 - [ ] Implicit `it`: Edit and Continue, whose lambda matching also works on syntax. [#124](https://github.com/ok3mad/roslyn/issues/124)
 - [ ] Implicit `it`: variables declared next to or inside an implicit lambda, such as `F(Make(it), out var v)`. [#125](https://github.com/ok3mad/roslyn/issues/125)
-- [ ] Implicit `it`: an error that names the inner call when it claims `it` (today CS0411 at the outer call), and a cause string for writes to `it`. [#126](https://github.com/ok3mad/roslyn/issues/126)
+- [x] Implicit `it`: an error that names the inner call when it claims `it` (today CS0411 at the outer call), and a cause string for writes to `it`. [#126](https://github.com/ok3mad/roslyn/issues/126)
 - [ ] Implicit `it`: the cost of the two trials and of the per-call syntax scan. [#127](https://github.com/ok3mad/roslyn/issues/127)
 - [ ] Implicit `it`: IDE support (Quick Info, hints) and the "name the parameter" fixer. [#128](https://github.com/ok3mad/roslyn/issues/128)
 - [ ] Pipe: an IOperation shape, and the stage in the control flow graph. [#155](https://github.com/ok3mad/roslyn/issues/155)
@@ -1085,7 +1097,7 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 - [ ] `readonly` locals: decide `readonly` in `for` initializers, `foreach`, deconstruction and `out` (no modifier slot; a public syntax change). [#95](https://github.com/ok3mad/roslyn/issues/95)
 - [ ] `readonly` locals: IDE support (completion, refactorings that drop or break `readonly`). [#96](https://github.com/ok3mad/roslyn/issues/96)
 - [x] `readonly` parameters, the grid's remaining explicitly typed corner. [#97](https://github.com/ok3mad/roslyn/issues/97)
-- [ ] Inferred parameter type: steps P4 to P8 (the rest of [#27](https://github.com/ok3mad/roslyn/issues/27)); P3's open point, `val x` as the shorthand of `readonly infer x` on method parameters, is [#178](https://github.com/ok3mad/roslyn/issues/178); the default value is bound twice, once to infer and once against the type. P2 ([#73](https://github.com/ok3mad/roslyn/issues/73)): properties, indexers, operators and events of overrides and implementations do not copy yet.
+- [ ] Inferred parameter type: steps P4 to P8 (the rest of [#27](https://github.com/ok3mad/roslyn/issues/27)); P3's open point, `val x` as the shorthand of `readonly infer x` on method parameters, is [#178](https://github.com/ok3mad/roslyn/issues/178); the default value is bound twice, once to infer and once against the type. P2 ([#73](https://github.com/ok3mad/roslyn/issues/73)): properties, indexers, operators and events of overrides and implementations do not copy yet ([#166](https://github.com/ok3mad/roslyn/issues/166)); a deterministic test for the cycle publication race ([#168](https://github.com/ok3mad/roslyn/issues/168)); Edit and Continue when the copied member's signature changes ([#169](https://github.com/ok3mad/roslyn/issues/169)).
 - [ ] Inferred return type: step R5 ([#71](https://github.com/ok3mad/roslyn/issues/71)); a local function's nullable inference sees captured variables at their declared state; a local function that calls the inferred method around it makes a cycle even when the method never calls it.
 - [ ] Inferred return type after R4 ([#70](https://github.com/ok3mad/roslyn/issues/70)): properties and indexers, together with [#166](https://github.com/ok3mad/roslyn/issues/166) (P2 for properties, indexers, operators and events, including explicit implementations of operators); `ref` returns; the anonymous union exception for visible members, with unions ([#31](https://github.com/ok3mad/roslyn/issues/31)).
 - [ ] Inferred return type: `Infer_Cycle_Concurrent` fails about once in 2,000 iterations, on `main` too: under threads, the cycle that CS20033 names for one member of a three-member cycle can differ from the single-threaded one (seen while validating R4).

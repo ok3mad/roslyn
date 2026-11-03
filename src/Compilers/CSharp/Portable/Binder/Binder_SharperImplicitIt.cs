@@ -1,4 +1,4 @@
-// Licensed to the .NET Foundation under one or more agreements.
+﻿// Licensed to the .NET Foundation under one or more agreements.
 // The .NET Foundation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for more information.
 
@@ -230,8 +230,9 @@ namespace Microsoft.CodeAnalysis.CSharp
             var lambdaDiagnostics = BindingDiagnosticBag.GetInstance(withDiagnostics: true, withDependencies: diagnostics.AccumulatesDependencies);
             BindArgumentsAndNames(node.ArgumentList, lambdaDiagnostics, analyzedArguments, allowArglist: true, sharperImplicitItArguments: implicitItArguments);
             BoundExpression lambdaResult = BindInvocationExpression(node, node.Expression, methodName, boundExpression, analyzedArguments, lambdaDiagnostics, acceptOnlyMethods: false);
-            bool lambdasUseIt = AllSharperImplicitItLambdasUseIt(lambdaResult, node.ArgumentList, implicitItArguments.Count);
+            bool lambdasUseIt = AllSharperImplicitItLambdasUseIt(lambdaResult, node.ArgumentList, implicitItArguments.Count, out BoundLambda? lambdaWithoutIt);
             bool lambdaOk = lambdasUseIt && !lambdaDiagnostics.HasAnyErrors();
+            bool lambdaFailedOnlyForIt = !lambdasUseIt && !lambdaDiagnostics.HasAnyErrors();
             implicitItArguments.Free();
 
             if (lambdaOk && !IsSharperOuterItInScope(node))
@@ -267,8 +268,39 @@ namespace Microsoft.CodeAnalysis.CSharp
             }
 
             lambdaDiagnostics.Free();
+            if (!valueOk && lambdaFailedOnlyForIt && lambdaWithoutIt is not null)
+            {
+                ReportSharperItClaimedByInnerCall(lambdaWithoutIt, diagnostics);
+            }
+
             diagnostics.AddRangeAndFree(valueDiagnostics);
             return valueResult;
+        }
+
+        /// <summary>
+        /// The value trial failed, and the lambda trial bound but its lambda used no <c>it</c> of its own: every <c>it</c>
+        /// in it went to an inner call, as in <c>xs.Select(F(xs.Count(it &gt; 1)))</c>. Name the inner call at the outer
+        /// argument, next to the C# errors of the value trial. When the lambda trial had errors of its own (such as an
+        /// inner call that reported this error already), they are the mistake to fix, and nothing is added.
+        /// </summary>
+        private static void ReportSharperItClaimedByInnerCall(BoundLambda lambda, BindingDiagnosticBag diagnostics)
+        {
+            var (_, innerLambda) = SharperItUseFinder.Find(lambda.Body, lambda.Symbol.Parameters[0]);
+            if (innerLambda?.Syntax.Parent is ArgumentSyntax { Parent: ArgumentListSyntax { Parent: InvocationExpressionSyntax innerCall } })
+            {
+                diagnostics.Add(ErrorCode.ERR_SharperItClaimedByInnerCall, lambda.Syntax.Location, getCallName(innerCall.Expression));
+            }
+
+            static string getCallName(ExpressionSyntax expression)
+            {
+                return expression switch
+                {
+                    MemberAccessExpressionSyntax memberAccess => memberAccess.Name.Identifier.ValueText,
+                    MemberBindingExpressionSyntax memberBinding => memberBinding.Name.Identifier.ValueText,
+                    SimpleNameSyntax name => name.Identifier.ValueText,
+                    _ => expression.ToString(),
+                };
+            }
         }
 
         /// <summary>
@@ -416,12 +448,14 @@ namespace Microsoft.CodeAnalysis.CSharp
 
         /// <summary>
         /// Whether every argument bound as an implicit <c>it</c> lambda became a lambda that uses its <c>it</c>. A
-        /// lambda whose <c>it</c> is used only by inner implicit lambdas is a value: <c>Make(ys.First(it.X))</c>.
+        /// lambda whose <c>it</c> is used only by inner implicit lambdas is a value: <c>Make(ys.First(it.X))</c>; the
+        /// first such lambda is returned for the error if the value does not bind either.
         /// </summary>
-        private static bool AllSharperImplicitItLambdasUseIt(BoundExpression result, ArgumentListSyntax argumentList, int expected)
+        private static bool AllSharperImplicitItLambdasUseIt(BoundExpression result, ArgumentListSyntax argumentList, int expected, out BoundLambda? lambdaWithoutIt)
         {
             var finder = new SharperImplicitItLambdaFinder(argumentList, expected);
             finder.Visit(result);
+            lambdaWithoutIt = finder.FirstWithoutIt;
             return finder.AllUseIt && finder.Found == finder.Expected;
         }
 
@@ -432,6 +466,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             public int Expected { get; }
             public int Found { get; private set; }
             public bool AllUseIt { get; private set; } = true;
+            public BoundLambda? FirstWithoutIt { get; private set; }
 
             public SharperImplicitItLambdaFinder(ArgumentListSyntax argumentList, int expected)
             {
@@ -444,7 +479,11 @@ namespace Microsoft.CodeAnalysis.CSharp
                 if (node.Symbol is LambdaSymbol { IsSharperImplicitIt: true } && node.Syntax.Parent is ArgumentSyntax argument && argument.Parent == _argumentList)
                 {
                     Found++;
-                    AllUseIt &= SharperItUseFinder.Uses(node.Body, node.Symbol.Parameters[0]);
+                    if (!SharperItUseFinder.Uses(node.Body, node.Symbol.Parameters[0]))
+                    {
+                        AllUseIt = false;
+                        FirstWithoutIt ??= node;
+                    }
                 }
 
                 // Lambdas in the body belong to other calls.

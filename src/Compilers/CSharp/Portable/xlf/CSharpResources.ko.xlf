@@ -2668,8 +2668,8 @@
         <note />
       </trans-unit>
       <trans-unit id="ERR_SharperInferNoOverriddenMember">
-        <source>Cannot infer the types of '{0}', because it overrides or implements no member '{0}' with {1} parameters that matches its written types. Write the types.</source>
-        <target state="new">Cannot infer the types of '{0}', because it overrides or implements no member '{0}' with {1} parameters that matches its written types. Write the types.</target>
+        <source>Cannot infer the types of '{0}' from the member it overrides or implements, because {1}. Write the types.</source>
+        <target state="new">Cannot infer the types of '{0}' from the member it overrides or implements, because {1}. Write the types.</target>
         <note />
       </trans-unit>
       <trans-unit id="ERR_SharperInferNoType">
@@ -2710,6 +2710,11 @@
       <trans-unit id="ERR_SharperItAwait">
         <source>Cannot use 'await' in an implicit 'it' lambda. Write the lambda, as in 'async x =&gt; ...'.</source>
         <target state="new">Cannot use 'await' in an implicit 'it' lambda. Write the lambda, as in 'async x =&gt; ...'.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperItClaimedByInnerCall">
+        <source>'it' here belongs to '{0}', so this argument is a value, not a lambda. Name the parameter, as in 'x =&gt; ...'.</source>
+        <target state="new">'it' here belongs to '{0}', so this argument is a value, not a lambda. Name the parameter, as in 'x =&gt; ...'.</target>
         <note />
       </trans-unit>
       <trans-unit id="ERR_SharperItDeclaration">
@@ -3657,6 +3662,21 @@
         <target state="new">'{0}' has type '{1}', which uses a [Phantom] type parameter</target>
         <note />
       </trans-unit>
+      <trans-unit id="IDS_SharperImplicitItParameter">
+        <source>parameter of an implicit lambda</source>
+        <target state="new">parameter of an implicit lambda</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperInferAllMembersRuledOut">
+        <source>its written types rule out every member '{0}' with the same number of parameters: {1}</source>
+        <target state="new">its written types rule out every member '{0}' with the same number of parameters: {1}</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperInferNoMemberWithParameterCount">
+        <source>it could override or implement no member '{0}' with the same number of parameters</source>
+        <target state="new">it could override or implement no member '{0}' with the same number of parameters</target>
+        <note />
+      </trans-unit>
       <trans-unit id="IDS_SharperInferOnAsyncIterator">
         <source>on an async iterator</source>
         <target state="new">on an async iterator</target>
@@ -3675,6 +3695,16 @@
       <trans-unit id="IDS_SharperInferOnRefReturn">
         <source>on a ref return</source>
         <target state="new">on a ref return</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperInferRuledOutByParameter">
+        <source>'{0}' (it takes '{1}' for '{2}')</source>
+        <target state="new">'{0}' (it takes '{1}' for '{2}')</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperInferRuledOutByReturnType">
+        <source>'{0}' (it returns '{1}')</source>
+        <target state="new">'{0}' (it returns '{1}')</target>
         <note />
       </trans-unit>
       <trans-unit id="IDS_SharperPureReasonCall">
