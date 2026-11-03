@@ -124,19 +124,21 @@ Each of these reports CS20015 ("not supported ... yet") or CS20016, instead of C
 | --- | --- | --- |
 | Async iterators (`async` with `yield return`) | CS20015 | Later: lambdas cannot be iterators, so there is no lambda rule to follow |
 | `ref` returns | CS20015 | Later: the lambda rule that the inference follows has no `ref` returns |
-| Properties and indexers | CS20015 | Later, with [#166](https://github.com/ok3mad/roslyn/issues/166) (decided in R4) |
-| Explicit implementations of operators | CS20015 | [#166](https://github.com/ok3mad/roslyn/issues/166), which copies them as P2 copies methods |
+| Properties and indexers that override or implement nothing | CS20015 | Later: inferring from the getter is R4's open point ([#70](https://github.com/ok3mad/roslyn/issues/70)) |
 | Members with no body (`abstract`, `extern`, interface members without a default, partial definitions without an implementation) | CS20016, permanent | |
 
 An `override`, an explicit interface implementation, and a public method that implements an interface member copy an
 `infer` return type from that member instead, with none of these limits: nothing is inferred from their body (step P2,
 see [inferred parameter type](inferred-parameter-type.md#from-the-overridden-or-implemented-member-step-p2)).
 
-Properties and indexers wait for a separate step (decided in R4): their `infer` type has two sources, the getter's
-body and, for overrides and implementations, the member they override ([#166](https://github.com/ok3mad/roslyn/issues/166),
-which properties share with indexers, operators and events), and a property's type is read by its accessors, its
-backing field and object initializers, which need the lazy type on `SourcePropertySymbolBase` first. Doing both
-sources together decides once which one wins.
+Properties and indexers have two possible sources for an `infer` type: the member they override or implement, and the
+getter's body. Overrides and implementations copy from the member, as methods do
+([#166](https://github.com/ok3mad/roslyn/issues/166), with indexers, operators and events; see
+[inferred parameter type](inferred-parameter-type.md#from-the-overridden-or-implemented-member-step-p2)), and never
+infer from the getter. Any other property or indexer keeps CS20015: inferring from the getter needs a lazy type on
+`SourcePropertySymbolBase`, which its accessors, its backing field and object initializers read, and waits for R4's
+open point. An explicit implementation of an operator, and a public operator that implements an interface operator,
+copy their types too.
 
 Elsewhere (fields, locals, delegate return types, type arguments) `infer` is an ordinary type name. A parameter type
 `infer` takes the type of the default value ([inferred parameter type](inferred-parameter-type.md), step P1).
@@ -201,8 +203,6 @@ The design for the later steps, and why, is in the implementation plan:
   `SourceOrdinaryMethodSymbol.InferredReturnType.CheckInferredType`).
 - A conversion operator in a cycle with itself also reports CS0029 where its body converts, since its error type
   converts to nothing.
-- An explicit implementation of an operator with `infer` reports CS20015 and C#'s errors for the error type that takes
-  its place (CS0535, CS9334), until [#166](https://github.com/ok3mad/roslyn/issues/166).
 - Async iterators, which would return `IAsyncEnumerable<T>`.
 - CS20018 and CS20033 are reported on `infer`, not on the use in the body, because the use is found through the
   symbol, which has no syntax.

@@ -688,7 +688,7 @@ old type would break.
 | A body-inferred type on an override (the issue's check) | Never happens: an override, an explicit implementation and a public method that implements an interface member copy their type (P2), and their body converts to it as to a written type (`override infer V() => "d"` over `int V()` is CS0029). When P2 finds no member, its error stands (CS20043) | Inferring from the body and then comparing with the base would make the body choose between an override and an error; the base already says the type. A method that infers because its own type has no interface member of that name, and that a derived type uses as an implementation, is checked as a written one (CS0738) |
 | Partial methods | The implementation infers from its body; a definition with `infer` takes the implementation's type; written on one part and inferred on the other is compared as usual (CS8817) | The definition has nothing else to infer from, and callers bind to it |
 | Operators and conversion operators | Infer from their body; the signature checks (CS0215, CS0216, CS0448, ...) apply to the inferred type after inference | As for methods. A conversion operator is read by every lookup of its type's user-defined conversions, so one whose body converts from its own type uses itself (CS20018) |
-| Explicit implementations of operators | CS20015 until [#166](https://github.com/ok3mad/roslyn/issues/166) | Their method checks match the implemented operator by return type, under the lock; copying, as P2 does for methods, is #166's |
+| Explicit implementations of operators | CS20015 until [#166](https://github.com/ok3mad/roslyn/issues/166), which copies their types (done) | Their method checks match the implemented operator by return type, under the lock; copying, as P2 does for methods, is #166's |
 | Extension block members | Infer, operators included | The implementation methods read the member's return type lazily (`RewrittenMethodSymbol`), so nothing else was needed |
 | Members without a body | CS20016, permanent | Nothing to infer from |
 | `ref` returns | CS20015, later | The lambda rule the inference follows infers no `ref` returns |
@@ -791,7 +791,7 @@ method again: the same lock-order and cycle problem as P1's default values.
 | Default value and overridden member both present | The default value gives the type (P1), and narrows the candidates | No disagreement can arise from narrowing; a mismatch then is ordinary C# (CS0115) |
 | Return type limits | None of R1's limits (CS20015 for public members, CS20016 for no body) and none of R4's restrictions on public members | Nothing is inferred from a body: the type is copied from a signature that is already written somewhere |
 | Errors | CS20043 no candidate, CS20044 several, CS20045 cycle, on the method name, once; the `infer`s get error types. CS20043 names each candidate that the written types ruled out and the written part that ruled it out, which is also an additional location ([#167](https://github.com/ok3mad/roslyn/issues/167)) | One error per method, which asks for the types; error types keep C#'s override and implementation errors quiet |
-| Properties, indexers, operators, events | Not yet | They have their own signature code; the search would move to their symbols with R4's properties |
+| Properties, indexers, operators, events | Done in [#166](https://github.com/ok3mad/roslyn/issues/166), below | They have their own signature code; the search runs on their symbols, before their own locks |
 | Records | Overrides of synthesized members of a base record and of `object` copy like any other; a record's own declaration of a member it would synthesize overrides nothing and needs its types | That declaration is matched against the synthesized member by signature, which needs the types |
 
 Tests: 15 `InferOverridden_*` tests in `SharperTests_InferFromOverridden.cs`: runtime output next to C# twins (the
@@ -802,11 +802,57 @@ compilation, and concurrent searches. `Infer_NotSupportedYet` lost its override 
 
 Follow-ups:
 
-- Properties, indexers, operators and events of overrides and implementations: [#166](https://github.com/ok3mad/roslyn/issues/166).
+- Properties, indexers, operators and events of overrides and implementations: [#166](https://github.com/ok3mad/roslyn/issues/166)
+  (done, below).
 - Clearer errors when no member matches, and no CS1503 after a cycle: [#167](https://github.com/ok3mad/roslyn/issues/167)
   (done: `InferOverridden_Errors_RuledOut`, `InferParameter_Cycle_ArgumentConversions`).
 - A deterministic test for the cycle publication race: [#168](https://github.com/ok3mad/roslyn/issues/168).
 - Edit and Continue when the overridden or implemented member's signature changes: [#169](https://github.com/ok3mad/roslyn/issues/169).
+
+### Every member kind ([#166](https://github.com/ok3mad/roslyn/issues/166))
+
+Properties, indexers, operators, conversion operators and events copy their `infer` types as methods do, on branch
+`sharper/infer-p2-member-kinds`: `public override infer Name => "c";` is a `string` property, `public override infer
+this[infer key] => 0;` an `int this[string key]`, `public static infer operator +(infer a, infer b)` implementing
+`IAdd<S>`'s static abstract operator an `S operator +(S, S)`, and `public override event infer Changed;` an
+`EventHandler` event. No syntax, bound node, public API or lowering.
+
+**Probe.** The parameters of every member kind already go through `ParameterHelpers.MakeParameter` with the member as
+owner, so once the search accepted any member, indexer and operator parameters were copied with no change there. Each
+kind binds its type in its own place: properties and indexers in `ComputeType` under `EnsureSignature`'s lock, which
+already ran `InferBeforeSignature` for indexers' default values; operators in their method checks, like methods; and
+events in their constructor, before they are members of their type.
+
+| Piece | What it does |
+| --- | --- |
+| `MemberDeclaration` (in `SharperInferredParameterType_OverriddenMember.cs`) | One description per member kind: the cache key (the declaration, or a field-like event's declarator), the candidates' name (`this[]` for indexers, `op_Addition` for operators), kind check, parameters, type syntax, explicit interface, and where errors go. The search, the written signature, the copied signature and the errors (with #183's ruled-out explanation) use only it |
+| `GetOverriddenSignature` | Accepts any member; the cache, cycle stack and decided cycle results are keyed by `CSharpSyntaxNode` |
+| `InferBeforeSignature` | Runs the search for properties too, which have no parameter list |
+| `SourcePropertySymbol.ComputeType` | Takes the copied type and reports the search's errors; otherwise R4's CS20015 |
+| `SourceUserDefinedOperatorSymbolBase.MakeParametersAndBindReturnType` | Takes the copied return type before R4's inference; explicit implementations no longer report CS20015 |
+| `SourceEventSymbol.BindEventType` | Searches from the constructor: base types' and interfaces' members are complete there, and the written types bind with the containing type's binder, so the event is never looked up |
+| `CSharpSemanticModel.GetSharperInferredPropertyOrEventType` | `GetTypeInfo` and `GetSymbolInfo` on a property's, indexer's or event's `infer` |
+| `SharperInferredParameterType.AddDefaultValueDiagnostics` | Also drops CS1503 for an indexer of a cycle, as #183 does for methods |
+
+### Decisions
+
+| Question | Decision | Why |
+| --- | --- | --- |
+| Matching | By kind (an ordinary method, an operator, a conversion, a property, an indexer, an event), name and parameter count, narrowed by the written types, as for methods | The same rule as methods; an operator's name is its kind, so `+` matches `+` and `checked -` matches `checked -` |
+| Public operators | Copy from an interface operator of their type with the same kind and parameter count, implicitly as for public methods; otherwise R4's inference from the body | Operators are always public, so this is the same rule as for public methods |
+| Accessors | Follow the copied type: `get`, `set`, `init`, `add`, `remove`, auto-property and field-like event backing fields | They read the member's type, which is set before anything reads it |
+| A property or indexer with nothing to copy | R4's CS20015 stays | Inferring from the getter is R4's open point ([#70](https://github.com/ok3mad/roslyn/issues/70)); a property's type is read by its accessors and backing field before a lazy type exists |
+| An event with nothing to copy | CS20055, new | An event has no body to infer from, so CS20015's "not yet" would be wrong |
+| Events searched in their constructor | Accepted | Events bind their type there in C#, and already find the overridden event there; the search reads only other types |
+| Messages | P2's messages name the member as written: `this` for an indexer, `operator +`, `implicit operator`. A ruled-out property or indexer says "it returns" its type | One message set for every kind |
+
+Tests: 12 `InferMemberKinds_*` tests in `SharperTests_InferMemberKinds.cs`: the issue's examples next to C# twins with
+runtime output, accessors of every kind with expression and block bodies, explicit implementations, operators
+(binary, unary, checked, equality, explicit conversion, overloads narrowed by written types), narrowing indexer
+overloads by written types, P1 types and ref kinds, the errors (CS20043 with ruled-out members, CS20044), members
+with nothing to copy (CS20015, CS20055, and CS0246 with the flag off), generics, nullability and tuple names, the
+semantic model, metadata seen from a C# compilation, an indexer cycle from either end, and concurrent reads.
+`InferMember_Operators_Errors` lost its CS20015 row for an explicit operator implementation, which now copies.
 
 ## Feature 9: inferred parameter type, step P3
 
@@ -1097,9 +1143,9 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 - [ ] `readonly` locals: decide `readonly` in `for` initializers, `foreach`, deconstruction and `out` (no modifier slot; a public syntax change). [#95](https://github.com/ok3mad/roslyn/issues/95)
 - [ ] `readonly` locals: IDE support (completion, refactorings that drop or break `readonly`). [#96](https://github.com/ok3mad/roslyn/issues/96)
 - [x] `readonly` parameters, the grid's remaining explicitly typed corner. [#97](https://github.com/ok3mad/roslyn/issues/97)
-- [ ] Inferred parameter type: steps P4 to P8 (the rest of [#27](https://github.com/ok3mad/roslyn/issues/27)); P3's open point, `val x` as the shorthand of `readonly infer x` on method parameters, is [#178](https://github.com/ok3mad/roslyn/issues/178); the default value is bound twice, once to infer and once against the type. P2 ([#73](https://github.com/ok3mad/roslyn/issues/73)): properties, indexers, operators and events of overrides and implementations do not copy yet ([#166](https://github.com/ok3mad/roslyn/issues/166)); a deterministic test for the cycle publication race ([#168](https://github.com/ok3mad/roslyn/issues/168)); Edit and Continue when the copied member's signature changes ([#169](https://github.com/ok3mad/roslyn/issues/169)).
+- [ ] Inferred parameter type: steps P4 to P8 (the rest of [#27](https://github.com/ok3mad/roslyn/issues/27)); P3's open point, `val x` as the shorthand of `readonly infer x` on method parameters, is [#178](https://github.com/ok3mad/roslyn/issues/178); the default value is bound twice, once to infer and once against the type. P2 ([#73](https://github.com/ok3mad/roslyn/issues/73)): a deterministic test for the cycle publication race ([#168](https://github.com/ok3mad/roslyn/issues/168)); Edit and Continue when the copied member's signature changes ([#169](https://github.com/ok3mad/roslyn/issues/169)).
 - [ ] Inferred return type: step R5 ([#71](https://github.com/ok3mad/roslyn/issues/71)); a local function's nullable inference sees captured variables at their declared state; a local function that calls the inferred method around it makes a cycle even when the method never calls it.
-- [ ] Inferred return type after R4 ([#70](https://github.com/ok3mad/roslyn/issues/70)): properties and indexers, together with [#166](https://github.com/ok3mad/roslyn/issues/166) (P2 for properties, indexers, operators and events, including explicit implementations of operators); `ref` returns; the anonymous union exception for visible members, with unions ([#31](https://github.com/ok3mad/roslyn/issues/31)).
+- [ ] Inferred return type after R4 ([#70](https://github.com/ok3mad/roslyn/issues/70)): properties and indexers that override or implement nothing, from their getter (overrides and implementations copy since [#166](https://github.com/ok3mad/roslyn/issues/166)); `ref` returns; the anonymous union exception for visible members, with unions ([#31](https://github.com/ok3mad/roslyn/issues/31)).
 - [ ] Inferred return type: `Infer_Cycle_Concurrent` fails about once in 2,000 iterations, on `main` too: under threads, the cycle that CS20033 names for one member of a three-member cycle can differ from the single-threaded one (seen while validating R4).
 - [ ] Inferred return type: async iterators (`IAsyncEnumerable<T>`), and an inferred union when the returned values have no best common type, which waits for [#31](https://github.com/ok3mad/roslyn/issues/31).
 - [ ] `readonly` locals share the `val` follow-ups: silence CS20010 with CS20003 (#84), the "never reassigned" fixer can offer `readonly int` (#89), and the public API (#88) and Edit and Continue (#90) items cover them too.

@@ -351,9 +351,11 @@ Inference of a parameter type (`infer x = 3`, row 15) has one entry point, `Para
 every member kind uses (lambdas: `Binder.BindLambdaParameterType`). A new source for a parameter type (uses in the
 body) goes into `SharperInferredParameterType`, keeping its cache and its cycle stack; a source that binds something
 or reads other members' signatures must run before the signature lock, as the default value does (trap 28). Step P2
-shows the shape: the overridden or implemented member is searched for once per method
-(`GetOverriddenSignature`, cached per method syntax), from `InferBeforeSignature`, on the same stack of syntax nodes
-as the default values, and its result fills both the parameters and the return type. C# matches overrides and
+shows the shape: the overridden or implemented member is searched for once per member
+(`GetOverriddenSignature`, cached per member syntax), from `InferBeforeSignature` (an event, which binds its type in
+its constructor, from there), on the same stack of syntax nodes as the default values, and its result fills both the
+parameters and the return, property or event type. Each member kind is described once (`MemberDeclaration`: key,
+candidates' name and kind, parameters, type syntax); a new kind adds a case there, not a second search. C# matches overrides and
 implementations by complete signatures, which do not exist yet at that point, so such a search matches by name and
 parameter count and narrows with the types that are written. The design is in the implementation plan, "Feature 9".
 
