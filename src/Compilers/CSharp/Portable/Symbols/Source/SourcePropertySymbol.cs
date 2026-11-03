@@ -574,7 +574,27 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             Debug.Assert(typeSyntax is not ScopedTypeSyntax);
 
             typeSyntax = typeSyntax.SkipScoped(out _).SkipRef();
-            var type = binder.BindTypeReportingSharperInferNotSupportedYet(typeSyntax, MessageID.IDS_SharperInferOnPropertyOrIndexer, diagnostics);
+            var type = binder.BindTypeOrSharperInferKeyword(typeSyntax, diagnostics, out bool isInfer);
+
+            // Sharper, step P2: the 'infer' types of a property or an indexer that overrides or implements one are copied
+            // from it, the indexer's parameter types in MakeParameter. The errors of that search are reported once, here.
+            var overridden = SharperInferredParameterType.GetOverriddenSignature(this);
+            if (overridden.IsApplicable)
+            {
+                diagnostics.AddRange(overridden.Diagnostics, allowMismatchInDependencyAccumulation: true);
+            }
+
+            if (isInfer && overridden.IsApplicable)
+            {
+                type = overridden.GetReturnType(DeclaringCompilation);
+            }
+            else if (isInfer)
+            {
+                // PROTOTYPE(sharper): a property or indexer that overrides or implements nothing could infer its type
+                // from its getter (R4's open point, #70).
+                diagnostics.Add(ErrorCode.ERR_SharperInferNotSupportedYet, typeSyntax.Location, MessageID.IDS_SharperInferOnPropertyOrIndexer.Localize());
+                type = TypeWithAnnotations.Create(binder.CreateErrorType("infer"));
+            }
             CompoundUseSiteInfo<AssemblySymbol> useSiteInfo = binder.GetNewCompoundUseSiteInfo(diagnostics);
 
             if (GetExplicitInterfaceSpecifier() is null && !this.IsNoMoreVisibleThan(type, ref useSiteInfo))

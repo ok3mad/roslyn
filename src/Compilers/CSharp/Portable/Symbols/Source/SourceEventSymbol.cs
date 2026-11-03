@@ -858,7 +858,25 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             // Prevent constraint checking.
             binder = binder.WithAdditionalFlagsAndContainingMemberOrLambda(BinderFlags.SuppressConstraintChecks | BinderFlags.SuppressUnsafeDiagnostics, this);
 
-            return binder.BindType(typeSyntax, diagnostics);
+            TypeWithAnnotations type = binder.BindTypeOrSharperInferKeyword(typeSyntax, diagnostics, out bool isInfer);
+            if (isInfer)
+            {
+                // Sharper, step P2: the 'infer' type of an event that overrides or implements one is copied from it. The
+                // search runs here, in the constructor, which is where an event binds its type.
+                var overridden = SharperInferredParameterType.GetOverriddenSignature(this);
+                if (overridden.IsApplicable)
+                {
+                    diagnostics.AddRange(overridden.Diagnostics, allowMismatchInDependencyAccumulation: true);
+                    type = overridden.GetReturnType(DeclaringCompilation);
+                }
+                else
+                {
+                    diagnostics.Add(ErrorCode.ERR_SharperInferEventNoOverriddenMember, typeSyntax.Location, this);
+                    type = TypeWithAnnotations.Create(binder.CreateErrorType("infer"));
+                }
+            }
+
+            return type;
         }
 
         internal override void AfterAddingTypeMembersChecks(ConversionsBase conversions, BindingDiagnosticBag diagnostics)

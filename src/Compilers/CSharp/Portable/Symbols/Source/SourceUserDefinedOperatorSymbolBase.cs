@@ -342,7 +342,22 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             }
 
             returnType = signatureBinder.BindTypeOrSharperInferKeyword(returnTypeSyntax, diagnostics, out bool isInfer);
-            if (isInfer)
+
+            // Sharper, step P2: the 'infer' types of an operator that implements an interface operator are copied from it.
+            // The errors of that search are reported once, here.
+            var overridden = SharperInferredParameterType.GetOverriddenSignature(this);
+            if (overridden.IsApplicable)
+            {
+                diagnostics.AddRange(overridden.Diagnostics, allowMismatchInDependencyAccumulation: true);
+            }
+
+            if (isInfer && overridden.IsApplicable)
+            {
+                // Nothing is inferred from the body, so the limits of an inferred return type do not apply.
+                returnType = overridden.GetReturnType(DeclaringCompilation);
+                IsSharperReturnTypeFromOverriddenMemberForMethodChecks = true;
+            }
+            else if (isInfer)
             {
                 // Sharper: the return type is inferred from the body, after the method checks (see SharperInferredReturnType).
                 var body = (CSharpSyntaxNode)declarationSyntax.Body ?? declarationSyntax.ExpressionBody;
@@ -383,7 +398,9 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
         /// <summary>
         /// Sharper, step R4: an operator or a conversion operator with a body can infer its return type. One with no body
-        /// never can; an explicit implementation waits for the copy from the implemented member.
+        /// never can. An explicit implementation copies its type from the implemented operator (step P2); one that names
+        /// no interface with such an operator cannot infer from its body, since its method checks match the implemented
+        /// member by return type.
         /// </summary>
         private bool CheckSharperInferredReturnTypeSupported(TypeSyntax inferSyntax, bool hasBody, BindingDiagnosticBag diagnostics)
         {
@@ -395,8 +412,6 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             }
             else if (_explicitInterfaceType is not null)
             {
-                // PROTOTYPE(sharper): copy the return type from the implemented operator, as step P2 does for methods (#166).
-                // Inferring it from the body would read it in the method checks, which match the implemented member.
                 notSupportedYet = MessageID.IDS_SharperInferOnExplicitImplementation;
             }
             else
@@ -558,6 +573,9 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
 #nullable enable
         protected sealed override TypeSymbol? ExplicitInterfaceType => _explicitInterfaceType;
+
+        /// <summary>The interface an explicit implementation names, which Sharper's step P2 reads before the method checks.</summary>
+        internal TypeSymbol? SharperExplicitInterfaceType => _explicitInterfaceType;
 #nullable disable
 
         private void CheckValueParameters(BindingDiagnosticBag diagnostics)

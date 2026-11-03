@@ -395,16 +395,10 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 Diagnostic(ErrorCode.ERR_OperatorNeedsMatch, "false").WithArguments("T.operator false(T)", "true").WithLocation(17, 33),
                 // (18,32): error CS0448: The return type for ++ or -- operator must match the parameter type or be derived from the parameter type
                 //     public static int operator ++(T s) => 1;
-                Diagnostic(ErrorCode.ERR_BadIncDecRetType, "++").WithLocation(18, 32),
-                // (22,19): error CS0535: 'U' does not implement interface member 'IOp<U>.operator +(U, U)'
-                // public struct U : IOp<U>
-                Diagnostic(ErrorCode.ERR_UnimplementedInterfaceMember, "IOp<U>").WithArguments("U", "IOp<U>.operator +(U, U)").WithLocation(22, 19),
-                // (24,12): error CS20015: An inferred return type ('infer') is not supported on an explicit interface implementation yet. Write the return type.
-                //     static infer IOp<U>.operator +(U a, U b) => a;
-                Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on an explicit interface implementation").WithLocation(24, 12),
-                // (24,34): error CS9334: 'U.operator +(U, U)': return type must be 'U' to match implemented member 'IOp<U>.operator +(U, U)'
-                //     static infer IOp<U>.operator +(U a, U b) => a;
-                Diagnostic(ErrorCode.ERR_ExplicitInterfaceMemberReturnTypeMismatch, "+").WithArguments("U.operator +(U, U)", "U", "IOp<U>.operator +(U, U)").WithLocation(24, 34));
+                Diagnostic(ErrorCode.ERR_BadIncDecRetType, "++").WithLocation(18, 32));
+
+            // An explicit implementation copies its 'infer' types from the implemented operator (step P2, #166).
+            Assert.Equal("U U.IOp<U>.op_Addition(U a, U b)", CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).GetMember("U.IOp<U>.op_Addition").ToTestDisplayString());
         }
 
         [Fact]

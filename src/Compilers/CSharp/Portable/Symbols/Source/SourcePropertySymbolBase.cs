@@ -55,6 +55,9 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         private readonly SourcePropertyAccessorSymbol? _setMethod;
 #nullable disable
         private readonly TypeSymbol _explicitInterfaceType;
+
+        /// <summary>The interface an explicit implementation names, which Sharper's step P2 reads before the signature.</summary>
+        internal TypeSymbol SharperExplicitInterfaceType => _explicitInterfaceType;
         private ImmutableArray<PropertySymbol> _lazyExplicitInterfaceImplementations;
         private readonly Flags _propertyFlags;
         private readonly RefKind _refKind;

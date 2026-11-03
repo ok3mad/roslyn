@@ -574,6 +574,10 @@ namespace Microsoft.CodeAnalysis.CSharp
             {
                 return GetSymbolInfoFromSymbolOrNone(inferredParameter.Type);
             }
+            else if (GetSharperInferredPropertyOrEventType(expression, cancellationToken) is { } inferredMemberType)
+            {
+                return GetSymbolInfoFromSymbolOrNone(inferredMemberType.Type.GetPublicSymbol());
+            }
             else if (expression is DeclarationExpressionSyntax declaration)
             {
                 if (declaration.Designation.Kind() != SyntaxKind.SingleVariableDesignation)
@@ -1034,6 +1038,12 @@ namespace Microsoft.CodeAnalysis.CSharp
                 var nullabilityInfo = inferredParameter.NullableAnnotation.ToNullabilityInfo(parameterType);
                 return new CSharpTypeInfo(parameterType, parameterType, nullabilityInfo, nullabilityInfo, Conversion.Identity);
             }
+            else if (GetSharperInferredPropertyOrEventType(expression, cancellationToken) is { } inferredMemberType)
+            {
+                var memberType = inferredMemberType.Type;
+                var nullabilityInfo = inferredMemberType.NullableAnnotation.ToNullabilityInfo(memberType);
+                return new CSharpTypeInfo(memberType, memberType, nullabilityInfo, nullabilityInfo, Conversion.Identity);
+            }
 
             return GetTypeInfoWorker(expression, cancellationToken);
         }
@@ -1074,9 +1084,46 @@ namespace Microsoft.CodeAnalysis.CSharp
             return method.GetSymbol() switch
             {
                 SourceOrdinaryMethodOrUserDefinedOperatorSymbol { IsSharperInferredReturnType: true } or LocalFunctionSymbol { IsSharperInferredReturnType: true } => method,
-                SourceOrdinaryMethodSymbol { IsSharperReturnTypeFromOverriddenMember: true } => method,
+                SourceOrdinaryMethodOrUserDefinedOperatorSymbol { IsSharperReturnTypeFromOverriddenMember: true } => method,
                 _ => null,
             };
+        }
+
+        /// <summary>
+        /// If <paramref name="expression"/> is the Sharper <c>infer</c> type of a property, an indexer or an event, copied
+        /// from the member it overrides or implements (step P2), returns that type. Like <c>var</c>, the <c>infer</c>
+        /// stands for the type.
+        /// </summary>
+        private TypeWithAnnotations? GetSharperInferredPropertyOrEventType(ExpressionSyntax expression, CancellationToken cancellationToken)
+        {
+            if (expression is not TypeSyntax { IsInfer: true } inferSyntax)
+            {
+                return null;
+            }
+
+            Symbol member = inferSyntax.Parent switch
+            {
+                BasePropertyDeclarationSyntax property when property.Type == inferSyntax
+                    => GetDeclaredSymbol((MemberDeclarationSyntax)property, cancellationToken).GetSymbol<Symbol>(),
+                VariableDeclarationSyntax { Parent: EventFieldDeclarationSyntax, Variables: [var first, ..] } declaration when declaration.Type == inferSyntax
+                    => GetDeclaredSymbol(first, cancellationToken).GetSymbol<Symbol>(),
+                _ => null,
+            };
+
+            if (member is null)
+            {
+                return null;
+            }
+
+            // Like 'var', 'infer' is the keyword only where no type named 'infer' is in scope.
+            Binder binder = GetEnclosingBinder(GetAdjustedNodePosition(inferSyntax));
+            if (binder is null)
+            {
+                return null;
+            }
+
+            binder.BindTypeOrSharperInferKeyword(inferSyntax, BindingDiagnosticBag.Discarded, out bool isInfer);
+            return isInfer ? member.GetTypeOrReturnType() : null;
         }
 
         /// <summary>

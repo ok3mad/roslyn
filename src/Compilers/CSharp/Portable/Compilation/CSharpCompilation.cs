@@ -1607,19 +1607,19 @@ namespace Microsoft.CodeAnalysis.CSharp
             }
         }
 
-        private System.Runtime.CompilerServices.ConditionalWeakTable<MethodDeclarationSyntax, SharperInferredParameterType.OverriddenSignature>? _lazySharperOverriddenSignatures;
+        private System.Runtime.CompilerServices.ConditionalWeakTable<CSharpSyntaxNode, SharperInferredParameterType.OverriddenSignature>? _lazySharperOverriddenSignatures;
 
         /// <summary>
-        /// Sharper: the types that methods copy from the member they override or implement, by method syntax (see
+        /// Sharper: the types that members copy from the member they override or implement, by member syntax (see
         /// <see cref="SharperInferredParameterType.GetOverriddenSignature"/>).
         /// </summary>
-        internal System.Runtime.CompilerServices.ConditionalWeakTable<MethodDeclarationSyntax, SharperInferredParameterType.OverriddenSignature> SharperOverriddenSignatures
+        internal System.Runtime.CompilerServices.ConditionalWeakTable<CSharpSyntaxNode, SharperInferredParameterType.OverriddenSignature> SharperOverriddenSignatures
         {
             get
             {
                 if (_lazySharperOverriddenSignatures == null)
                 {
-                    Interlocked.CompareExchange(ref _lazySharperOverriddenSignatures, new System.Runtime.CompilerServices.ConditionalWeakTable<MethodDeclarationSyntax, SharperInferredParameterType.OverriddenSignature>(), null);
+                    Interlocked.CompareExchange(ref _lazySharperOverriddenSignatures, new System.Runtime.CompilerServices.ConditionalWeakTable<CSharpSyntaxNode, SharperInferredParameterType.OverriddenSignature>(), null);
                 }
 
                 return _lazySharperOverriddenSignatures;

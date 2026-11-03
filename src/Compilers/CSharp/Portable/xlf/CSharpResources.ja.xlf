@@ -2647,6 +2647,11 @@
         <target state="new">Cannot infer the return type of '{0}', because it depends on itself: {1}. Write the return type of one of these methods.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperInferEventNoOverriddenMember">
+        <source>Cannot infer the type of event '{0}', because it overrides or implements no event. Write the type.</source>
+        <target state="new">Cannot infer the type of event '{0}', because it overrides or implements no event. Write the type.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperInferIteratorYieldsNothing">
         <source>Cannot infer the return type of the iterator '{0}', because it has no 'yield return' to infer the element type from. Write the return type.</source>
         <target state="new">Cannot infer the return type of the iterator '{0}', because it has no 'yield return' to infer the element type from. Write the return type.</target>

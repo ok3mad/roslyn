@@ -2663,6 +2663,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 or ErrorCode.ERR_SharperPureStructMemberNotReadOnly
                 or ErrorCode.ERR_SharperPureVirtual
                 or ErrorCode.WRN_SharperPureOutArgumentNotFresh
+                or ErrorCode.ERR_SharperInferEventNoOverriddenMember
                     => false,
             };
 #pragma warning restore CS8524 // The switch expression does not handle some values of its input type (it is not exhaustive) involving an unnamed enum value.

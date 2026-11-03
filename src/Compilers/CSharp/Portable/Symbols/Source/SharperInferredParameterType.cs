@@ -46,8 +46,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
         /// <summary>
         /// The inferences in progress on this thread, innermost last: a <see cref="ParameterSyntax"/> for a type inferred
-        /// from a default value, a <see cref="MethodDeclarationSyntax"/> for types copied from the member that the method
-        /// overrides or implements (step P2).
+        /// from a default value, a member declaration (or the declarator of a field-like event) for types copied from the
+        /// member that it overrides or implements (step P2).
         /// </summary>
         [ThreadStatic] private static List<SyntaxNode>? s_inProgress;
 
@@ -57,12 +57,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         /// </summary>
         internal static void InferBeforeSignature(Symbol owner, BaseParameterListSyntax? parameterList)
         {
-            if (parameterList is null)
-            {
-                return;
-            }
-
-            foreach (var parameter in parameterList.Parameters)
+            foreach (var parameter in parameterList?.Parameters ?? default)
             {
                 if (parameter is ParameterSyntax { Type.IsInfer: true, Default: { } } concreteParameter)
                 {
@@ -75,7 +70,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 }
             }
 
-            // Step P2: the types copied from the member that a method overrides or implements.
+            // Step P2: the types copied from the member that a method, property, indexer or operator overrides or implements.
             GetOverriddenSignature(owner);
         }
 
@@ -163,7 +158,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 decided.GetValue(inProgress[i], node => node switch
                 {
                     ParameterSyntax parameter => CreateCycleResult(parameter, compilation),
-                    MethodDeclarationSyntax method => OverriddenSignature.CreateCycle(method),
+                    CSharpSyntaxNode member => OverriddenSignature.CreateCycle(member),
                     _ => throw ExceptionUtilities.UnexpectedValue(node),
                 });
             }
@@ -175,8 +170,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     case ParameterSyntax parameter:
                         Publish(compilation.SharperInferredParameterTypes, compilation, parameter, (Result)decided.GetValue(parameter, _ => throw ExceptionUtilities.Unreachable()));
                         break;
-                    case MethodDeclarationSyntax method:
-                        Publish(compilation.SharperOverriddenSignatures, compilation, method, (OverriddenSignature)decided.GetValue(method, _ => throw ExceptionUtilities.Unreachable()));
+                    case CSharpSyntaxNode member:
+                        Publish(compilation.SharperOverriddenSignatures, compilation, member, (OverriddenSignature)decided.GetValue(member, _ => throw ExceptionUtilities.Unreachable()));
                         break;
                     default:
                         throw ExceptionUtilities.UnexpectedValue(inProgress[i]);
