@@ -402,6 +402,24 @@
   <data name="IDS_SharperImmutableReasonObserverIdentity" xml:space="preserve">
     <value>the observer '{0}' observes object identity: '{1}'</value>
   </data>
+  <data name="IDS_SharperPureReasonWrite" xml:space="preserve">
+    <value>'{0}' writes state outside the member</value>
+  </data>
+  <data name="IDS_SharperPureReasonCall" xml:space="preserve">
+    <value>'{0}' calls '{1}', which is not known to be pure</value>
+  </data>
+  <data name="IDS_SharperPureReasonStatic" xml:space="preserve">
+    <value>'{0}' reads static state that can change</value>
+  </data>
+  <data name="IDS_SharperPureReasonIdentity" xml:space="preserve">
+    <value>'{0}' observes object identity</value>
+  </data>
+  <data name="IDS_SharperPureReasonCulture" xml:space="preserve">
+    <value>'{0}' formats with the current culture</value>
+  </data>
+  <data name="IDS_SharperPureReasonOther" xml:space="preserve">
+    <value>'{0}' is not allowed in a pure member</value>
+  </data>
   <data name="IDS_SharperImmutableReasonEvent" xml:space="preserve">
     <value>'{0}' is an event, which can be subscribed to</value>
   </data>
@@ -8463,6 +8481,21 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
   </data>
   <data name="ERR_SharperPipeStageNotFunction" xml:space="preserve">
     <value>The stage after '|&gt;' must be a function, such as a method group or a delegate, or an expression that uses 'it', but it is {0}.</value>
+  </data>
+  <data name="ERR_SharperPureNotPure" xml:space="preserve">
+    <value>'{0}' is marked [Pure], but it is not pure: {1}.</value>
+  </data>
+  <data name="ERR_SharperPureStructMemberNotReadOnly" xml:space="preserve">
+    <value>'{0}' is marked [Pure], so it must be readonly: declare it 'readonly', or make the struct 'readonly'.</value>
+  </data>
+  <data name="ERR_SharperPureVirtual" xml:space="preserve">
+    <value>'{0}' cannot be marked [Pure] yet: [Pure] is not supported on virtual, abstract and override members.</value>
+  </data>
+  <data name="WRN_SharperPureOutArgumentNotFresh" xml:space="preserve">
+    <value>The out argument '{1}' of the [Pure] member '{0}' is not a fresh local, so '{0}' may observe its own write through another argument.</value>
+  </data>
+  <data name="WRN_SharperPureOutArgumentNotFresh_Title" xml:space="preserve">
+    <value>The out argument of a [Pure] member is not a fresh local</value>
   </data>
   <data name="WRN_RedundantPattern" xml:space="preserve">
     <value>The pattern is redundant.</value>

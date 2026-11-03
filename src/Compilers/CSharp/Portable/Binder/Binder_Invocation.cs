@@ -1392,6 +1392,11 @@ namespace Microsoft.CodeAnalysis.CSharp
                 }
             }
 
+            if (!gotError && node.IsFeatureEnabled(MessageID.IDS_FeatureSharper))
+            {
+                SharperImmutability.ReportPureOutArguments(method, args, argRefKinds, ContainingMemberOrLambda, diagnostics);
+            }
+
             return new BoundCall(node, receiver, initialBindingReceiverIsSubjectToCloning: ReceiverIsSubjectToCloning(receiver, method), method, args, argNames, argRefKinds, isDelegateCall: isDelegateCall,
                         expanded: expanded, invokedAsExtensionMethod: invokedAsExtensionMethod,
                         argsToParamsOpt: argsToParams, defaultArguments, resultKind: LookupResultKind.Viable, type: returnType, hasErrors: gotError);
