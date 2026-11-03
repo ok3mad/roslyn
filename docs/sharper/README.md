@@ -99,6 +99,7 @@ Not done yet:
 | [Inferred return type](features/inferred-return-type.md) | `public static infer Greeting(int id) => $"Hello, {id}!";` returns `string`. Steps R1 to R3: expression and block bodies of private methods and local functions, iterators and `async`, inferred methods that use each other, and cycles. Step R4: every accessibility, `virtual`, partial methods, extension block members, operators and conversion operators, and Edit and Continue. | Prototype of steps R1 to R4, merged into `main` | [#67](https://github.com/ok3mad/roslyn/issues/67), [#68](https://github.com/ok3mad/roslyn/issues/68), [#69](https://github.com/ok3mad/roslyn/issues/69), [#70](https://github.com/ok3mad/roslyn/issues/70), under [#22](https://github.com/ok3mad/roslyn/issues/22) |
 | [Inferred parameter type](features/inferred-parameter-type.md) | `void Fetch(string url, infer retries = 3)` gives `retries` the type of its default value, `int`. Step P1: default values, on every member kind and lambdas. Step P2: `public infer Load(infer userId)` implementing `IProfiles.Load` copies `Task<ProfileResult> Load(int userId)` from the member it overrides or implements. Step P3: `readonly infer x` cannot be reassigned. | Prototype of steps P1 to P3, merged into `main` | [#72](https://github.com/ok3mad/roslyn/issues/72), [#73](https://github.com/ok3mad/roslyn/issues/73), [#74](https://github.com/ok3mad/roslyn/issues/74), under [#27](https://github.com/ok3mad/roslyn/issues/27) |
 | [Immutable types](features/immutable-types.md) | `[Immutable] sealed record Money(decimal Amount, string Currency);` is checked to be deeply immutable; `[ImmutableHierarchy]` extends the claim to every subclass. Slice 1: the check, the attributes and their diagnostics. | Prototype of slice 1, on `sharper/immutable-types-slice1` | [#139](https://github.com/ok3mad/roslyn/issues/139), designed in [#92](https://github.com/ok3mad/roslyn/issues/92) |
+| [Purity](features/purity.md) | `[Pure] static int Fib(int i) => ...;` is checked to have no effect outside its own frame; its result depends only on the contents of its arguments. Slice 1, first part: declared `[Pure]` on non-virtual members, the attested BCL members, and the `out` warning. | Prototype of the first part of slice 1, on `sharper/purity-slice1` | [#173](https://github.com/ok3mad/roslyn/issues/173), [#177](https://github.com/ok3mad/roslyn/issues/177), under [#36](https://github.com/ok3mad/roslyn/issues/36) |
 | [Implicit `it`](features/implicit-it.md) | `xs.Select(it.Name)` is `xs.Select(x => x.Name)`: an argument that uses `it` is a lambda, if the innermost parameter around it takes a one-parameter function. | Prototype, merged into `main` | [#24](https://github.com/ok3mad/roslyn/issues/24) |
 | [Pipe `\|>`](features/pipe.md) | `raw \|> ParseOrder \|> Resolve(it, accounts)` is `Resolve(ParseOrder(raw), accounts)`: a stage that uses `it` is an expression, any other stage is a function applied to the value. No lifting yet. | Prototype, on `sharper/pipe` | [#25](https://github.com/ok3mad/roslyn/issues/25) |
 | [`try` expression](features/try-expression.md) | `try int.Parse(s) catch { FormatException => -1 }` turns exceptions into values with switch arms; an unmatched exception propagates untouched. Slice 1: a declared union or the best common type as the result. | Prototype of slice 1, on `sharper/try-expression-slice1` | [#28](https://github.com/ok3mad/roslyn/issues/28) |
@@ -125,7 +126,7 @@ git grep -n "PROTOTYPE(sharper)"
   `sharper/readonly-locals`, `sharper/infer-return-r1`, `sharper/infer-return-r2`, `sharper/infer-return-r3`,
   `sharper/infer-parameter-p1`, `sharper/try-expression-slice1`, `sharper/implicit-it`, `sharper/readonly-parameters`,
   `sharper/immutable-types-slice1`, `sharper/infer-from-overridden-p2`, `sharper/infer-return-r4`, `sharper/pipe` and
-  `sharper/readonly-infer-p3` are merged.
+  `sharper/readonly-infer-p3` are merged. `sharper/purity-slice1` is in progress.
 
 ## Diagnostics
 
@@ -185,7 +186,11 @@ in `#pragma warning`, `/nowarn` and `.editorconfig`.
 | CS20047 | Error | This stage does not use the value piped into it: its 'it' belongs to an inner lambda, the argument of '{0}'. Name that lambda's parameter, as in 'x => ...', or use the piped 'it' outside it. |
 | CS20048 | Error | The stage after '\|>' must be a function, such as a method group or a delegate, or an expression that uses 'it', but it is {0}. |
 | CS20049 | Error | An expression tree cannot contain a pipe '\|>'. |
-| CS20050 | Error | 'it' here belongs to '{0}', so this argument is a value, not a lambda. Name the parameter, as in 'x => ...'. |
+| CS20050 | Error | '{0}' is marked [Pure], but it is not pure: {1}. |
+| CS20051 | Error | '{0}' is marked [Pure], so it must be readonly: declare it 'readonly', or make the struct 'readonly'. |
+| CS20052 | Error | '{0}' cannot be marked [Pure] yet: [Pure] is not supported on virtual, abstract and override members. |
+| CS20053 | Warning | The out argument '{1}' of the [Pure] member '{0}' is not a fresh local, so '{0}' may observe its own write through another argument. |
+| CS20054 | Error | 'it' here belongs to '{0}', so this argument is a value, not a lambda. Name the parameter, as in 'x => ...'. |
 
 ## Where the code is
 
@@ -193,11 +198,11 @@ in `#pragma warning`, `/nowarn` and `.editorconfig`.
 | --- | --- |
 | Feature flag | `src/Compilers/CSharp/Portable/Errors/MessageID.cs` (`IDS_FeatureSharper`), `src/Compilers/Core/Portable/CommandLine/Feature.cs` (`Feature.Sharper`) |
 | Parser | `src/Compilers/CSharp/Portable/Parser/LanguageParser.cs` (search for `IDS_FeatureSharper`) |
-| Binding | `src/Compilers/CSharp/Portable/Binder/` (search for `IDS_FeatureSharper`); short type forms such as `T[..]` in `Binder_SharperTypes.cs`; inferred return types in `Binder_SharperInferredReturnType.cs` and `Symbols/Source/SharperInferredReturnType.cs`; inferred parameter types in `Binder_SharperInferredParameterType.cs` and `Symbols/Source/SharperInferredParameterType.cs`, and the types copied from an overridden or implemented member in `Symbols/Source/SharperInferredParameterType_OverriddenMember.cs`; implicit `it` in `Binder_SharperImplicitIt.cs`; the pipe in `Binder_SharperPipe.cs`; immutable types in `Symbols/SharperImmutability.cs`; the `try` expression in `Binder_SharperTryExpression.cs` |
+| Binding | `src/Compilers/CSharp/Portable/Binder/` (search for `IDS_FeatureSharper`); short type forms such as `T[..]` in `Binder_SharperTypes.cs`; inferred return types in `Binder_SharperInferredReturnType.cs` and `Symbols/Source/SharperInferredReturnType.cs`; inferred parameter types in `Binder_SharperInferredParameterType.cs` and `Symbols/Source/SharperInferredParameterType.cs`, and the types copied from an overridden or implemented member in `Symbols/Source/SharperInferredParameterType_OverriddenMember.cs`; implicit `it` in `Binder_SharperImplicitIt.cs`; the pipe in `Binder_SharperPipe.cs`; immutable types in `Symbols/SharperImmutability.cs`, and purity in `Symbols/SharperImmutability_Pure.cs`; the `try` expression in `Binder_SharperTryExpression.cs` |
 | Syntax nodes | `src/Compilers/CSharp/Portable/Syntax/Syntax.xml` (`FunctionTypeSyntax`, `TaskTypeSyntax`, `ParenthesizedTypeSyntax`, `TryExpressionSyntax`, `PipeExpressionSyntax`); Sharper kinds in `SyntaxKind.cs` count up from 9900, and the pipe token `BarGreaterThanToken` takes 8231, the top of the free punctuation gap |
 | Bound nodes | `src/Compilers/CSharp/Portable/BoundTree/BoundNodes.xml` |
 | Lowering | `src/Compilers/CSharp/Portable/Lowering/LocalRewriter/` |
-| Tests | `src/Compilers/CSharp/Test/Semantic/Semantics/SharperTests.cs` and the other files of the partial class `SharperTests`, such as `SharperTests_TryExpression.cs`, `SharperTests_ImmutableTypes.cs`, `SharperTests_InferFromOverridden.cs` and `SharperTests_Pipe.cs` |
+| Tests | `src/Compilers/CSharp/Test/Semantic/Semantics/SharperTests.cs` and the other files of the partial class `SharperTests`, such as `SharperTests_TryExpression.cs`, `SharperTests_ImmutableTypes.cs`, `SharperTests_Purity.cs`, `SharperTests_InferFromOverridden.cs` and `SharperTests_Pipe.cs` |
 
 ## Building and testing
 

@@ -1143,6 +1143,16 @@ namespace Microsoft.CodeAnalysis.CSharp
                 if (body != null)
                 {
                     DiagnosticsPass.IssueDiagnostics(_compilation, body, diagsForCurrentMethod, methodSymbol);
+
+                    // Sharper: [Pure] members and local functions.
+                    if (!diagsForCurrentMethod.HasAnyErrors())
+                    {
+                        SharperImmutability.CheckPureBodies(
+                            methodSymbol,
+                            body,
+                            methodSymbol.IncludeFieldInitializersInBody() ? processedInitializers.BoundInitializers : default,
+                            diagsForCurrentMethod);
+                    }
                 }
 
                 BoundBlock flowAnalyzedBody = null;

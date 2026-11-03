@@ -581,7 +581,7 @@ implementation taught.
   could not tell success from failure (`HasAnyErrors` asserts). Trials use their own bags with diagnostics.
 - **"Does it use `it`?" is a bound question.** `xs.Select(Make(ys.First(it.X)))` binds as a lambda whose `it` is
   unused, because the inner call claims it. The lambda trial counts only when each lambda reads its parameter.
-- **Name the inner call only when nothing else went wrong.** CS20050 is added when the value trial fails and the lambda
+- **Name the inner call only when nothing else went wrong.** CS20054 is added when the value trial fails and the lambda
   trial had no errors apart from a lambda without its own `it`. The value trial's C# errors stay: they can be
   independent mistakes (a wrong argument count), and telling them from consequences would mean guessing. An inner
   call that already reported makes the outer lambda trial fail, so the error appears once, at the innermost level.
@@ -870,7 +870,7 @@ as a prototype (see [Implementation of slice 1](#implementation-of-slice-1) and 
 | Run-time guard | Later, with optimizations ([#140](https://github.com/ok3mad/roslyn/issues/140)): where memoization, hoisting or laziness relies on immutability that is not static, check that `x.GetType()` carries `[Immutable]`, cached per `Type` in an emitted helper, else take the unoptimized path | A mutable subclass then costs a missed optimization, never a wrong result |
 | Views | Read-only views protect the producer ("you cannot change this"), immutability protects the consumer ("nobody can change this"). Views are never immutable and belong with effects | An `IReadOnlyList<T>` that is a `List<T>` can be cast back |
 | Lazy `T[..]` | A collection expression may be made lazy only if every spread source is total and immutable, or created inside the expression | `List<T>` converts to `T[..]` silently |
-| Weak and strong purity | A function touching only its arguments is weakly pure; with every parameter immutable it is strongly pure, and only strongly pure calls may be memoized, hoisted or made lazy. Purity holds within one process: `string.GetHashCode` is randomized per process, which is part of the outside held fixed. Compile-time evaluation needs results that are the same across runs, which is settled with `total` | #36 can start with weak purity, which needs no immutability |
+| One notion of purity (revised in #173) | A pure member's result depends only on the contents of what it reads through its arguments, `this` included, judged by equivalence, not identity. There is no weak/strong split on the member: a call whose arguments are immutable has inputs that cannot change between calls, which is what memoizing, hoisting or making a call lazy needs, and that is checked at the call. Purity holds within one process: `string.GetHashCode` is randomized per process, which is part of the outside held fixed. Compile-time evaluation needs results that are the same across runs, which is settled with `total` | Pure code observes neither identity nor aliasing, so contents are all it can depend on; purity needs no immutable types ([purity](../features/purity.md)) |
 | Spelling | Attributes first, embedded like `IsReadOnlyAttribute`; a keyword later. All names are placeholders | No parser change, no break. `readonly class` would clash with the shallow `readonly struct` |
 
 ### Plan

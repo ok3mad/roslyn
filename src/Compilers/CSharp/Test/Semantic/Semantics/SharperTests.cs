@@ -9138,22 +9138,22 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (23,12): error CS0411: The type arguments for method 'Enumerable.Select<TSource, TResult>(IEnumerable<TSource>, Func<TSource, int, TResult>)' cannot be inferred from the usage. Try specifying the type arguments explicitly.
                 //         xs.Select(F(xs.Count(it > 1)));
                 Diagnostic(ErrorCode.ERR_CantInferMethTypeArgs, "Select").WithArguments("System.Linq.Enumerable.Select<TSource, TResult>(System.Collections.Generic.IEnumerable<TSource>, System.Func<TSource, int, TResult>)").WithLocation(23, 12),
-                // (23,19): error CS20050: 'it' here belongs to 'Count', so this argument is a value, not a lambda. Name the parameter, as in 'x => ...'.
+                // (23,19): error CS20054: 'it' here belongs to 'Count', so this argument is a value, not a lambda. Name the parameter, as in 'x => ...'.
                 //         xs.Select(F(xs.Count(it > 1)));
                 Diagnostic(ErrorCode.ERR_SharperItClaimedByInnerCall, "F(xs.Count(it > 1))").WithArguments("Count").WithLocation(23, 19),
                 // (24,12): error CS0411: The type arguments for method 'Enumerable.Select<TSource, TResult>(IEnumerable<TSource>, Func<TSource, int, TResult>)' cannot be inferred from the usage. Try specifying the type arguments explicitly.
                 //         xs.Select(F(G(xs.Count(it > 1))));
                 Diagnostic(ErrorCode.ERR_CantInferMethTypeArgs, "Select").WithArguments("System.Linq.Enumerable.Select<TSource, TResult>(System.Collections.Generic.IEnumerable<TSource>, System.Func<TSource, int, TResult>)").WithLocation(24, 12),
-                // (24,19): error CS20050: 'it' here belongs to 'Count', so this argument is a value, not a lambda. Name the parameter, as in 'x => ...'.
+                // (24,19): error CS20054: 'it' here belongs to 'Count', so this argument is a value, not a lambda. Name the parameter, as in 'x => ...'.
                 //         xs.Select(F(G(xs.Count(it > 1))));
                 Diagnostic(ErrorCode.ERR_SharperItClaimedByInnerCall, "F(G(xs.Count(it > 1)))").WithArguments("Count").WithLocation(24, 19),
-                // (25,30): error CS20050: 'it' here belongs to 'Any', so this argument is a value, not a lambda. Name the parameter, as in 'x => ...'.
+                // (25,30): error CS20054: 'it' here belongs to 'Any', so this argument is a value, not a lambda. Name the parameter, as in 'x => ...'.
                 //         xs.Select(F(xs.Count(xs.Any(it > 1))));
                 Diagnostic(ErrorCode.ERR_SharperItClaimedByInnerCall, "xs.Any(it > 1)").WithArguments("Any").WithLocation(25, 30),
                 // (25,30): error CS1503: Argument 2: cannot convert from 'bool' to 'System.Func<int, bool>'
                 //         xs.Select(F(xs.Count(xs.Any(it > 1))));
                 Diagnostic(ErrorCode.ERR_BadArgType, "xs.Any(it > 1)").WithArguments("2", "bool", "System.Func<int, bool>").WithLocation(25, 30),
-                // (26,31): error CS20050: 'it' here belongs to 'Count', so this argument is a value, not a lambda. Name the parameter, as in 'x => ...'.
+                // (26,31): error CS20054: 'it' here belongs to 'Count', so this argument is a value, not a lambda. Name the parameter, as in 'x => ...'.
                 //         Retry(times: 2, when: F(xs.Count(it > 1)) > 0);
                 Diagnostic(ErrorCode.ERR_SharperItClaimedByInnerCall, "F(xs.Count(it > 1)) > 0").WithArguments("Count").WithLocation(26, 31),
                 // (26,31): error CS1503: Argument 2: cannot convert from 'bool' to 'System.Func<int, bool>'

@@ -36,7 +36,7 @@ The decisions are in the brainstorm's [Decided](../planning/brainstorm.md#decide
   readings bind), it is CS20021, so an overload added to a library can never move `it` silently. Without an outer
   `it`, the function is used: `users.FirstOrDefault(it.IsAdmin)` is the predicate.
 - **An inner call can take `it` away.** In `xs.Select(F(xs.Count(it > 1)))` the `it` is `Count`'s, so `Select` gets
-  a value. When that value does not fit, CS20050 at the argument names the inner call, next to the C# error
+  a value. When that value does not fit, CS20054 at the argument names the inner call, next to the C# error
   (here CS0411): name the parameter, as in `xs.Select(x => F(xs.Count(y => y > x)))`.
 - **Arguments and pipe stages only.** `var f = it * 2;`, a `return` and LINQ query clauses have no `it` (CS20019). A
   [pipe](pipe.md) stage is the outermost slot: in `x |> F(it, xs.Where(it > 0))` the inner `it` is the implicit
@@ -77,7 +77,7 @@ The binder decides at each call (`Binder_SharperImplicitIt.cs`), with no parser 
 4. Otherwise the call binds again with the arguments as values, so that their `it` belongs further out. If both bind,
    CS20021. If neither does, the lambda trial is reported when its lambdas use `it`, and the value trial otherwise.
    When the lambda trial bound without errors but a lambda used no `it` of its own, the value trial's errors get
-   CS20050, which names the inner call that took the `it`.
+   CS20054, which names the inner call that took the `it`.
 
 The lambda body binds in an `ExecutableCodeBinder` rooted at the argument expression, as a query clause's does, so the
 body gets its own scope. After binding, the body checks CS20020 (`SharperItUseFinder`) and CS20022.
