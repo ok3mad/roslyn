@@ -84,8 +84,11 @@ be reassigned. Uses in the body (P4 to P6) are the next steps of the
   candidates: `override infer M(int a, infer b)` copies from `M(int, string)`, not from `M(long, string)`. A virtual
   member and its overrides count once, as one signature; so do interface members with the same signature.
 - **Errors.** No candidate left is CS20043; more than one (overloads with the same parameter count, or two interfaces
-  whose members differ) is CS20044, which lists them. Both ask for the types. An `infer` that the error leaves without
-  a type is an error type, so the members it would override or implement report nothing more about it.
+  whose members differ) is CS20044, which lists them. Both ask for the types. When the written types rule out every
+  member with the name and parameter count, CS20043 names each one and what ruled it out, and points at the written
+  part (an additional location): `override string M(int a, infer b)` over `M(long, string)` reports
+  "'B.M(long, string)' (it takes 'long' for 'a')". An `infer` that the error leaves without a type is an error type,
+  so the members it would override or implement report nothing more about it.
 - **Not an override or implementation.** A method that is not `override`, not an explicit implementation, and not
   public, or a public method whose type's interfaces have no member with its name and parameter count, has no such
   source: an `infer` parameter needs a default value (CS20027), and an `infer` return type is inferred from the body as
@@ -93,7 +96,8 @@ be reassigned. Uses in the body (P4 to P6) are the next steps of the
 - **Binding order and cycles.** A member whose own types are `infer` (from a default value, or copied from its own
   base) is completed first, whichever member is used first. A member whose signature depends on the method that copies
   from it (`virtual int M(infer x = new D().M(1))` in the base of `D`, which declares `override int M(infer x)`) is a
-  cycle: CS20045 on the copying method and CS20028 on the default value, whichever is used first.
+  cycle: CS20045 on the copying method and CS20028 on the default value, whichever is used first. The default value's
+  call to a member of the cycle reports no conversion error (CS1503) for its arguments, whose parameters have no type.
 - **Records.** An override of a member that a base record synthesizes (`protected override infer PrintMembers(infer
   builder)`) or of `object`'s members (`public override infer ToString()`) copies like any other. A record's own
   declaration of a member it would otherwise synthesize (`virtual bool Equals(R? other)`) overrides nothing, so its
@@ -170,10 +174,13 @@ No syntax, bound node or lowering is added: `infer` parses as a type name, and t
   the order of binding. Every such member has a call as its default value, which reports CS1736 once the type is
   written.
 - Properties, indexers, operators and events of overrides and implementations do not copy their types yet; they need
-  the same search on their own symbols (R4's open point for properties).
+  the same search on their own symbols (R4's open point for properties): [#166](https://github.com/ok3mad/roslyn/issues/166).
 - A copied type is checked like a written one only after it is copied; a member that is not found because the written
-  types do not match is CS20043, not the C# error for the mismatch (CS0115, CS0535).
-- A cycle with a default value also reports the conversion of that value's arguments to the error type (CS1503).
+  types do not match is CS20043, not the C# error for the mismatch (CS0115, CS0535). CS20043 names the members that
+  were ruled out ([#167](https://github.com/ok3mad/roslyn/issues/167)).
+- The race in publishing a cycle's results has no deterministic test: [#168](https://github.com/ok3mad/roslyn/issues/168).
+- Edit and Continue does not see a signature change that comes from the overridden or implemented member:
+  [#169](https://github.com/ok3mad/roslyn/issues/169).
 - The IDE does not know `infer` yet (R5, [#71](https://github.com/ok3mad/roslyn/issues/71)).
 
 ## Code

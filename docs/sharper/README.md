@@ -178,7 +178,7 @@ in `#pragma warning`, `/nowarn` and `.editorconfig`.
 | CS20040 | Error | '{0}' is marked [ImmutableHierarchy], so it must also be marked [Immutable]. |
 | CS20041 | Error | [UnobservableWrite] is only valid on a field that is not readonly, of a class marked [Immutable]. |
 | CS20042 | Error | Type parameter '{0}' is marked [Phantom], but '{1}' uses it in the state of the type. |
-| CS20043 | Error | Cannot infer the types of '{0}', because it overrides or implements no member '{0}' with {1} parameters that matches its written types. Write the types. |
+| CS20043 | Error | Cannot infer the types of '{0}' from the member it overrides or implements, because {1}. Write the types. ({1} names the members the written types ruled out, and what ruled each out) |
 | CS20044 | Error | Cannot infer the types of '{0}', because it could override or implement more than one member: {1}. Write the types of the one it overrides or implements. |
 | CS20045 | Error | Cannot infer the types of '{0}' from the member it overrides or implements, because the signature of that member depends on '{0}' itself. Write the types. |
 | CS20046 | Error | The left side of '\|>' must be a value with a type, but it is {0}. |

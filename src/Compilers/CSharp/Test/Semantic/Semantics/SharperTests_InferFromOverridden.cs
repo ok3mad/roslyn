@@ -275,15 +275,15 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (12,26): error CS20044: Cannot infer the types of 'Overloads', because it could override or implement more than one member: 'B.Overloads(int)', 'B.Overloads(string)'. Write the types of the one it overrides or implements.
                 //     public override void Overloads(infer a) { }
                 Diagnostic(ErrorCode.ERR_SharperInferAmbiguousOverriddenMember, "Overloads").WithArguments("Overloads", "'B.Overloads(int)', 'B.Overloads(string)'").WithLocation(12, 26),
-                // (13,27): error CS20043: Cannot infer the types of 'Count', because it overrides or implements no member 'Count' with 2 parameters that matches its written types. Write the types.
+                // (13,27): error CS20043: Cannot infer the types of 'Count' from the member it overrides or implements, because it could override or implement no member 'Count' with the same number of parameters. Write the types.
                 //     public override infer Count(infer a, infer b) => 0;
-                Diagnostic(ErrorCode.ERR_SharperInferNoOverriddenMember, "Count").WithArguments("Count", "2").WithLocation(13, 27),
-                // (14,26): error CS20043: Cannot infer the types of 'NotVirtual', because it overrides or implements no member 'NotVirtual' with 1 parameters that matches its written types. Write the types.
+                Diagnostic(ErrorCode.ERR_SharperInferNoOverriddenMember, "Count").WithArguments("Count", "it could override or implement no member 'Count' with the same number of parameters").WithLocation(13, 27),
+                // (14,26): error CS20043: Cannot infer the types of 'NotVirtual' from the member it overrides or implements, because it could override or implement no member 'NotVirtual' with the same number of parameters. Write the types.
                 //     public override void NotVirtual(infer a) { }
-                Diagnostic(ErrorCode.ERR_SharperInferNoOverriddenMember, "NotVirtual").WithArguments("NotVirtual", "1").WithLocation(14, 26),
-                // (15,27): error CS20043: Cannot infer the types of 'Missing', because it overrides or implements no member 'Missing' with 0 parameters that matches its written types. Write the types.
+                Diagnostic(ErrorCode.ERR_SharperInferNoOverriddenMember, "NotVirtual").WithArguments("NotVirtual", "it could override or implement no member 'NotVirtual' with the same number of parameters").WithLocation(14, 26),
+                // (15,27): error CS20043: Cannot infer the types of 'Missing' from the member it overrides or implements, because it could override or implement no member 'Missing' with the same number of parameters. Write the types.
                 //     public override infer Missing() => 0;
-                Diagnostic(ErrorCode.ERR_SharperInferNoOverriddenMember, "Missing").WithArguments("Missing", "0").WithLocation(15, 27),
+                Diagnostic(ErrorCode.ERR_SharperInferNoOverriddenMember, "Missing").WithArguments("Missing", "it could override or implement no member 'Missing' with the same number of parameters").WithLocation(15, 27),
                 // (15,27): error CS0115: 'C.Missing()': no suitable method found to override
                 //     public override infer Missing() => 0;
                 Diagnostic(ErrorCode.ERR_OverrideNotExpected, "Missing").WithArguments("C.Missing()").WithLocation(15, 27),
@@ -305,12 +305,71 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (27,28): error CS20027: Cannot infer the type of parameter 'a', because it has no default value. Write the parameter type.
                 //     public infer Unrelated(infer a) => 0;
                 Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("a").WithLocation(27, 28),
-                // (28,14): error CS20043: Cannot infer the types of 'Missing', because it overrides or implements no member 'Missing' with 1 parameters that matches its written types. Write the types.
+                // (28,14): error CS20043: Cannot infer the types of 'Missing' from the member it overrides or implements, because it could override or implement no member 'Missing' with the same number of parameters. Write the types.
                 //     infer I1.Missing(infer a) => 0;
-                Diagnostic(ErrorCode.ERR_SharperInferNoOverriddenMember, "Missing").WithArguments("Missing", "1").WithLocation(28, 14),
+                Diagnostic(ErrorCode.ERR_SharperInferNoOverriddenMember, "Missing").WithArguments("Missing", "it could override or implement no member 'Missing' with the same number of parameters").WithLocation(28, 14),
                 // (28,14): error CS0539: 'D.Missing(infer)' in explicit interface declaration is not found among members of the interface that can be implemented
                 //     infer I1.Missing(infer a) => 0;
                 Diagnostic(ErrorCode.ERR_InterfaceMemberNotFound, "Missing").WithArguments("D.Missing(infer)").WithLocation(28, 14));
+        }
+
+        [Fact]
+        public void InferOverridden_Errors_RuledOut()
+        {
+            // When the written types rule out every member with the name and parameter count, CS20043 names each one
+            // with the written part that ruled it out, which is also an additional location. A virtual member and its
+            // override count once.
+            var source = """
+                abstract class A
+                {
+                    public abstract string M(long a, string b);
+                }
+
+                abstract class B : A
+                {
+                    public override string M(long a, string b) => "";
+                    public virtual void M(int a, string b) { }
+                    public virtual int R(int a) => 0;
+                }
+
+                class C : B
+                {
+                    public override string M(int a, infer b) => "";
+                    public override string R(infer a) => "";
+                }
+
+                interface I { void N(in int a); }
+
+                class D : I
+                {
+                    void I.N(ref infer a) { }
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics(
+                // (15,28): error CS20043: Cannot infer the types of 'M' from the member it overrides or implements, because its written types rule out every member 'M' with the same number of parameters: 'B.M(long, string)' (it takes 'long' for 'a'), 'B.M(int, string)' (it returns 'void'). Write the types.
+                //     public override string M(int a, infer b) => "";
+                Diagnostic(ErrorCode.ERR_SharperInferNoOverriddenMember, "M").WithArguments("M", "its written types rule out every member 'M' with the same number of parameters: 'B.M(long, string)' (it takes 'long' for 'a'), 'B.M(int, string)' (it returns 'void')").WithLocation(15, 28),
+                // (16,28): error CS20043: Cannot infer the types of 'R' from the member it overrides or implements, because its written types rule out every member 'R' with the same number of parameters: 'B.R(int)' (it returns 'int'). Write the types.
+                //     public override string R(infer a) => "";
+                Diagnostic(ErrorCode.ERR_SharperInferNoOverriddenMember, "R").WithArguments("R", "its written types rule out every member 'R' with the same number of parameters: 'B.R(int)' (it returns 'int')").WithLocation(16, 28),
+                // (21,11): error CS0535: 'D' does not implement interface member 'I.N(in int)'
+                // class D : I
+                Diagnostic(ErrorCode.ERR_UnimplementedInterfaceMember, "I").WithArguments("D", "I.N(in int)").WithLocation(21, 11),
+                // (23,12): error CS20043: Cannot infer the types of 'N' from the member it overrides or implements, because its written types rule out every member 'N' with the same number of parameters: 'I.N(in int)' (it takes 'in int' for 'a'). Write the types.
+                //     void I.N(ref infer a) { }
+                Diagnostic(ErrorCode.ERR_SharperInferNoOverriddenMember, "N").WithArguments("N", "its written types rule out every member 'N' with the same number of parameters: 'I.N(in int)' (it takes 'in int' for 'a')").WithLocation(23, 12),
+                // (23,12): error CS0539: 'D.N(ref infer)' in explicit interface declaration is not found among members of the interface that can be implemented
+                //     void I.N(ref infer a) { }
+                Diagnostic(ErrorCode.ERR_InterfaceMemberNotFound, "N").WithArguments("D.N(ref infer)").WithLocation(23, 12));
+
+            var diagnostics = comp.GetDiagnostics().Where(d => d.Code == (int)ErrorCode.ERR_SharperInferNoOverriddenMember).OrderBy(d => d.Location.SourceSpan.Start).ToArray();
+            var tree = comp.SyntaxTrees[0];
+            Assert.Equal(
+                new[] { "int a", "string" },
+                diagnostics[0].AdditionalLocations.Select(l => tree.GetText().ToString(l.SourceSpan)));
+            Assert.Equal(new[] { "string" }, diagnostics[1].AdditionalLocations.Select(l => tree.GetText().ToString(l.SourceSpan)));
+            Assert.Equal(new[] { "ref infer a" }, diagnostics[2].AdditionalLocations.Select(l => tree.GetText().ToString(l.SourceSpan)));
         }
 
         [Fact]
@@ -382,9 +441,6 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                     // (3,26): error CS20028: Cannot infer the type of parameter 'x', because its default value depends on the type of 'x' itself. Write the parameter type.
                     //     public virtual int M(infer x = new D().M(1)) => 0;
                     Diagnostic(ErrorCode.ERR_SharperInferParameterCycle, "infer").WithArguments("x").WithLocation(3, 26),
-                    // (3,46): error CS1503: Argument 1: cannot convert from 'int' to 'infer'
-                    //     public virtual int M(infer x = new D().M(1)) => 0;
-                    Diagnostic(ErrorCode.ERR_BadArgType, "1").WithArguments("1", "int", "infer").WithLocation(3, 46),
                     // (4,36): error CS1736: Default parameter value for 'x' must be a compile-time constant
                     //     public virtual int N(infer x = D.K()) => 0;
                     Diagnostic(ErrorCode.ERR_DefaultValueMustBeConstant, "D.K()").WithArguments("x").WithLocation(4, 36),

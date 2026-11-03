@@ -402,6 +402,18 @@
   <data name="IDS_SharperImmutableReasonObserverIdentity" xml:space="preserve">
     <value>the observer '{0}' observes object identity: '{1}'</value>
   </data>
+  <data name="IDS_SharperInferNoMemberWithParameterCount" xml:space="preserve">
+    <value>it could override or implement no member '{0}' with the same number of parameters</value>
+  </data>
+  <data name="IDS_SharperInferAllMembersRuledOut" xml:space="preserve">
+    <value>its written types rule out every member '{0}' with the same number of parameters: {1}</value>
+  </data>
+  <data name="IDS_SharperInferRuledOutByParameter" xml:space="preserve">
+    <value>'{0}' (it takes '{1}' for '{2}')</value>
+  </data>
+  <data name="IDS_SharperInferRuledOutByReturnType" xml:space="preserve">
+    <value>'{0}' (it returns '{1}')</value>
+  </data>
   <data name="IDS_SharperImmutableReasonEvent" xml:space="preserve">
     <value>'{0}' is an event, which can be subscribed to</value>
   </data>
@@ -8444,7 +8456,7 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
     <value>Type parameter '{0}' is marked [Phantom], but '{1}' uses it in the state of the type.</value>
   </data>
   <data name="ERR_SharperInferNoOverriddenMember" xml:space="preserve">
-    <value>Cannot infer the types of '{0}', because it overrides or implements no member '{0}' with {1} parameters that matches its written types. Write the types.</value>
+    <value>Cannot infer the types of '{0}' from the member it overrides or implements, because {1}. Write the types.</value>
   </data>
   <data name="ERR_SharperInferAmbiguousOverriddenMember" xml:space="preserve">
     <value>Cannot infer the types of '{0}', because it could override or implement more than one member: {1}. Write the types of the one it overrides or implements.</value>
