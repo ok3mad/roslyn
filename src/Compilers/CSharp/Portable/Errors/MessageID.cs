@@ -347,6 +347,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         IDS_SharperInferAllMembersRuledOut = MessageBase + 12899,
         IDS_SharperInferRuledOutByParameter = MessageBase + 12900,
         IDS_SharperInferRuledOutByReturnType = MessageBase + 12901,
+        IDS_SharperImplicitItParameter = MessageBase + 12902,
     }
 
     // Message IDs may refer to strings that need to be localized.

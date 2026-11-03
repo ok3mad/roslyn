@@ -345,6 +345,9 @@
   <data name="IDS_VALLOCAL" xml:space="preserve">
     <value>val variable</value>
   </data>
+  <data name="IDS_SharperImplicitItParameter" xml:space="preserve">
+    <value>parameter of an implicit lambda</value>
+  </data>
   <data name="IDS_READONLYLOCAL" xml:space="preserve">
     <value>readonly local</value>
   </data>
@@ -8487,6 +8490,9 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
   </data>
   <data name="ERR_SharperPipeStageItNotUsed" xml:space="preserve">
     <value>This stage does not use the value piped into it: its 'it' belongs to an inner lambda, the argument of '{0}'. Name that lambda's parameter, as in 'x =&gt; ...', or use the piped 'it' outside it.</value>
+  </data>
+  <data name="ERR_SharperItClaimedByInnerCall" xml:space="preserve">
+    <value>'it' here belongs to '{0}', so this argument is a value, not a lambda. Name the parameter, as in 'x =&gt; ...'.</value>
   </data>
   <data name="ERR_SharperPipeInExpressionTree" xml:space="preserve">
     <value>An expression tree cannot contain a pipe '|&gt;'.</value>

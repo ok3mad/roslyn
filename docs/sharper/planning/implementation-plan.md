@@ -581,6 +581,10 @@ implementation taught.
   could not tell success from failure (`HasAnyErrors` asserts). Trials use their own bags with diagnostics.
 - **"Does it use `it`?" is a bound question.** `xs.Select(Make(ys.First(it.X)))` binds as a lambda whose `it` is
   unused, because the inner call claims it. The lambda trial counts only when each lambda reads its parameter.
+- **Name the inner call only when nothing else went wrong.** CS20054 is added when the value trial fails and the lambda
+  trial had no errors apart from a lambda without its own `it`. The value trial's C# errors stay: they can be
+  independent mistakes (a wrong argument count), and telling them from consequences would mean guessing. An inner
+  call that already reported makes the outer lambda trial fail, so the error appears once, at the innermost level.
 
 ## Feature 8: `try` expression, slice 1 (design)
 
@@ -1067,7 +1071,7 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 - [ ] Implicit `it`: `LookupSymbols` and speculative binding inside an implicit lambda, which the semantic model finds by lambda syntax. [#123](https://github.com/ok3mad/roslyn/issues/123)
 - [ ] Implicit `it`: Edit and Continue, whose lambda matching also works on syntax. [#124](https://github.com/ok3mad/roslyn/issues/124)
 - [ ] Implicit `it`: variables declared next to or inside an implicit lambda, such as `F(Make(it), out var v)`. [#125](https://github.com/ok3mad/roslyn/issues/125)
-- [ ] Implicit `it`: an error that names the inner call when it claims `it` (today CS0411 at the outer call), and a cause string for writes to `it`. [#126](https://github.com/ok3mad/roslyn/issues/126)
+- [x] Implicit `it`: an error that names the inner call when it claims `it` (today CS0411 at the outer call), and a cause string for writes to `it`. [#126](https://github.com/ok3mad/roslyn/issues/126)
 - [ ] Implicit `it`: the cost of the two trials and of the per-call syntax scan. [#127](https://github.com/ok3mad/roslyn/issues/127)
 - [ ] Implicit `it`: IDE support (Quick Info, hints) and the "name the parameter" fixer. [#128](https://github.com/ok3mad/roslyn/issues/128)
 - [ ] Pipe: an IOperation shape, and the stage in the control flow graph. [#155](https://github.com/ok3mad/roslyn/issues/155)

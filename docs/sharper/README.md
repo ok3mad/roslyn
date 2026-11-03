@@ -190,6 +190,7 @@ in `#pragma warning`, `/nowarn` and `.editorconfig`.
 | CS20051 | Error | '{0}' is marked [Pure], so it must be readonly: declare it 'readonly', or make the struct 'readonly'. |
 | CS20052 | Error | '{0}' cannot be marked [Pure] yet: [Pure] is not supported on virtual, abstract and override members. |
 | CS20053 | Warning | The out argument '{1}' of the [Pure] member '{0}' is not a fresh local, so '{0}' may observe its own write through another argument. |
+| CS20054 | Error | 'it' here belongs to '{0}', so this argument is a value, not a lambda. Name the parameter, as in 'x => ...'. |
 
 ## Where the code is
 
