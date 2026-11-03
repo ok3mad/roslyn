@@ -19,6 +19,9 @@ Sharper is not a fork of the language specification, a replacement for C#, or a 
   (converting C# to Sharper).
 - [Implementation plan](planning/implementation-plan.md): how features get built inside Roslyn. It has the map of
   compiler areas touched, known traps, decisions, the syntax roadmap with its suggested order, and follow-ups.
+- [Upgrade analyzers and fixers](planning/upgrade-analyzers.md): a proposal for IDE analyzers and code fixes that find
+  C# code with a better Sharper equivalent (`val`, `T[..]`, `T~`, function types, `yield return ..xs`, `it`, `try`
+  expressions, `infer`, `readonly` parameters) and rewrite it, in the order to build them.
 
 ## Design rules
 
