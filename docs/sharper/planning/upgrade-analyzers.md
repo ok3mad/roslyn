@@ -429,6 +429,7 @@ Not upgrades, but the same infrastructure, and cheap next to it:
 | CS20014, CS20024, CS20026, CS20027 (nothing to infer) | Write the type (the type the error message lists, or the best guess). |
 | CS20019 (`it` with no lambda) | Turn the enclosing argument into `x => ...` where one call is close. |
 | CS20004, CS20005 (`val` refers to a type) | Escape it as `@val`. |
+| CS20035, CS20050 ("observes object identity" from `x.Equals(y)` or `x.GetHashCode()` on an `[Immutable]` class that does not override them) | Make the class a record, so that it gets value equality. Offered only when the class can become one (its base is `object` or a record); it is not an upgrade, since `==` and `ToString` change too ([#174](https://github.com/ok3mad/roslyn/issues/174)). |
 
 ## Rollout
 

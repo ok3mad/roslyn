@@ -74,7 +74,7 @@ A type is immutable for its exact instances when:
   is impure: `ReferenceEquals`, `==` and `!=` on references without a user-defined operator (a comparison with `null`,
   `is null`, `?.` and `??` are fine), and `Equals(object)` and `GetHashCode()` that run `object`'s implementation,
   decided by whether the receiver's type overrides them. Not overriding them is not an error; only such calls are
-  impure. A hand-written `Equals` may start with `if (ReferenceEquals(this, other)) return true;` (or
+  impure ([#174](https://github.com/ok3mad/roslyn/issues/174)). A hand-written `Equals` may start with `if (ReferenceEquals(this, other)) return true;` (or
   `(object)this == other`), since identical values are equivalent. Anything else, such as `DateTime.Now`, boxing, a
   lambda or a write to a field, is reported with the expression, unless the observer is `[AssumePure]`. Records'
   generated members and auto-property getters are pure. Ordinary methods are not observers and may be impure.
