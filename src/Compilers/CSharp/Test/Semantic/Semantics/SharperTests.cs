@@ -9077,6 +9077,9 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                     class Order { public List<Line> Lines = new(); public int Total; }
                     class Line { public int Qty; }
                     static int F(int x) => x;
+                    static int G(int x) => x;
+                    static void H(ref int x) { }
+                    static int Retry(System.Func<int, bool> when, int times = 1) => times;
 
                     void M(int[] xs, List<Order> orders)
                     {
@@ -9089,6 +9092,12 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                         var q = from x in xs where F(it) > 0 select x;
                         orders.Select(it.Lines.Select(it.Qty).Sum());
                         xs.Select(F(xs.Count(it > 1)));
+                        xs.Select(F(G(xs.Count(it > 1))));
+                        xs.Select(F(xs.Count(xs.Any(it > 1))));
+                        Retry(times: 2, when: F(xs.Count(it > 1)) > 0);
+                        xs.Select(it + F(xs.Count(it > 1)));
+                        xs.Select(H(ref it));
+                        xs.Select(xs.Count(it > 1), 2);
                     }
                 }
                 """;
@@ -9099,36 +9108,66 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (7,29): warning CS0649: Field 'C.Line.Qty' is never assigned to, and will always have its default value 0
                 //     class Line { public int Qty; }
                 Diagnostic(ErrorCode.WRN_UnassignedInternalField, "Qty").WithArguments("C.Line.Qty", "0").WithLocation(7, 29),
-                // (12,17): error CS20019: 'it' has no lambda here. 'it' is the parameter of an argument that takes a function with one parameter, such as 'xs.Select(it.Name)'.
+                // (15,17): error CS20019: 'it' has no lambda here. 'it' is the parameter of an argument that takes a function with one parameter, such as 'xs.Select(it.Name)'.
                 //         var f = it * 2;
-                Diagnostic(ErrorCode.ERR_SharperItNoLambda, "it").WithLocation(12, 17),
-                // (13,11): error CS20019: 'it' has no lambda here. 'it' is the parameter of an argument that takes a function with one parameter, such as 'xs.Select(it.Name)'.
+                Diagnostic(ErrorCode.ERR_SharperItNoLambda, "it").WithLocation(15, 17),
+                // (16,11): error CS20019: 'it' has no lambda here. 'it' is the parameter of an argument that takes a function with one parameter, such as 'xs.Select(it.Name)'.
                 //         F(it);
-                Diagnostic(ErrorCode.ERR_SharperItNoLambda, "it").WithLocation(13, 11),
-                // (14,35): error CS20020: 'it' has two meanings here: the parameter of an outer lambda and of this inner one. Name one of them, as in 'x => ...'.
+                Diagnostic(ErrorCode.ERR_SharperItNoLambda, "it").WithLocation(16, 11),
+                // (17,35): error CS20020: 'it' has two meanings here: the parameter of an outer lambda and of this inner one. Name one of them, as in 'x => ...'.
                 //         orders.Where(it.Lines.Any(it.Qty > 5));
-                Diagnostic(ErrorCode.ERR_SharperItTwoMeanings, "it").WithLocation(14, 35),
-                // (15,9): error CS20019: 'it' has no lambda here. 'it' is the parameter of an argument that takes a function with one parameter, such as 'xs.Select(it.Name)'.
+                Diagnostic(ErrorCode.ERR_SharperItTwoMeanings, "it").WithLocation(17, 35),
+                // (18,9): error CS20019: 'it' has no lambda here. 'it' is the parameter of an argument that takes a function with one parameter, such as 'xs.Select(it.Name)'.
                 //         it = 1;
-                Diagnostic(ErrorCode.ERR_SharperItNoLambda, "it").WithLocation(15, 9),
-                // (16,19): error CS1656: Cannot assign to 'it' because it is a 'val variable'
+                Diagnostic(ErrorCode.ERR_SharperItNoLambda, "it").WithLocation(18, 9),
+                // (19,19): error CS1656: Cannot assign to 'it' because it is a 'parameter of an implicit lambda'
                 //         xs.Select(it++);
-                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "it").WithArguments("it", "val variable").WithLocation(16, 19),
-                // (17,32): error CS20019: 'it' has no lambda here. 'it' is the parameter of an argument that takes a function with one parameter, such as 'xs.Select(it.Name)'.
+                Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "it").WithArguments("it", "parameter of an implicit lambda").WithLocation(19, 19),
+                // (20,32): error CS20019: 'it' has no lambda here. 'it' is the parameter of an argument that takes a function with one parameter, such as 'xs.Select(it.Name)'.
                 //         xs.Select(int.TryParse(it.ToString(), out var v) ? v : 0);
-                Diagnostic(ErrorCode.ERR_SharperItNoLambda, "it").WithLocation(17, 32),
-                // (17,55): error CS20022: Cannot declare 'v' in an implicit 'it' lambda. Write the lambda, as in 'x => ...'.
+                Diagnostic(ErrorCode.ERR_SharperItNoLambda, "it").WithLocation(20, 32),
+                // (20,55): error CS20022: Cannot declare 'v' in an implicit 'it' lambda. Write the lambda, as in 'x => ...'.
                 //         xs.Select(int.TryParse(it.ToString(), out var v) ? v : 0);
-                Diagnostic(ErrorCode.ERR_SharperItDeclaration, "v").WithArguments("v").WithLocation(17, 55),
-                // (18,38): error CS20019: 'it' has no lambda here. 'it' is the parameter of an argument that takes a function with one parameter, such as 'xs.Select(it.Name)'.
+                Diagnostic(ErrorCode.ERR_SharperItDeclaration, "v").WithArguments("v").WithLocation(20, 55),
+                // (21,38): error CS20019: 'it' has no lambda here. 'it' is the parameter of an argument that takes a function with one parameter, such as 'xs.Select(it.Name)'.
                 //         var q = from x in xs where F(it) > 0 select x;
-                Diagnostic(ErrorCode.ERR_SharperItNoLambda, "it").WithLocation(18, 38),
-                // (19,39): error CS20020: 'it' has two meanings here: the parameter of an outer lambda and of this inner one. Name one of them, as in 'x => ...'.
+                Diagnostic(ErrorCode.ERR_SharperItNoLambda, "it").WithLocation(21, 38),
+                // (22,39): error CS20020: 'it' has two meanings here: the parameter of an outer lambda and of this inner one. Name one of them, as in 'x => ...'.
                 //         orders.Select(it.Lines.Select(it.Qty).Sum());
-                Diagnostic(ErrorCode.ERR_SharperItTwoMeanings, "it").WithLocation(19, 39),
-                // (20,12): error CS0411: The type arguments for method 'Enumerable.Select<TSource, TResult>(IEnumerable<TSource>, Func<TSource, int, TResult>)' cannot be inferred from the usage. Try specifying the type arguments explicitly.
+                Diagnostic(ErrorCode.ERR_SharperItTwoMeanings, "it").WithLocation(22, 39),
+                // (23,12): error CS0411: The type arguments for method 'Enumerable.Select<TSource, TResult>(IEnumerable<TSource>, Func<TSource, int, TResult>)' cannot be inferred from the usage. Try specifying the type arguments explicitly.
                 //         xs.Select(F(xs.Count(it > 1)));
-                Diagnostic(ErrorCode.ERR_CantInferMethTypeArgs, "Select").WithArguments("System.Linq.Enumerable.Select<TSource, TResult>(System.Collections.Generic.IEnumerable<TSource>, System.Func<TSource, int, TResult>)").WithLocation(20, 12));
+                Diagnostic(ErrorCode.ERR_CantInferMethTypeArgs, "Select").WithArguments("System.Linq.Enumerable.Select<TSource, TResult>(System.Collections.Generic.IEnumerable<TSource>, System.Func<TSource, int, TResult>)").WithLocation(23, 12),
+                // (23,19): error CS20050: 'it' here belongs to 'Count', so this argument is a value, not a lambda. Name the parameter, as in 'x => ...'.
+                //         xs.Select(F(xs.Count(it > 1)));
+                Diagnostic(ErrorCode.ERR_SharperItClaimedByInnerCall, "F(xs.Count(it > 1))").WithArguments("Count").WithLocation(23, 19),
+                // (24,12): error CS0411: The type arguments for method 'Enumerable.Select<TSource, TResult>(IEnumerable<TSource>, Func<TSource, int, TResult>)' cannot be inferred from the usage. Try specifying the type arguments explicitly.
+                //         xs.Select(F(G(xs.Count(it > 1))));
+                Diagnostic(ErrorCode.ERR_CantInferMethTypeArgs, "Select").WithArguments("System.Linq.Enumerable.Select<TSource, TResult>(System.Collections.Generic.IEnumerable<TSource>, System.Func<TSource, int, TResult>)").WithLocation(24, 12),
+                // (24,19): error CS20050: 'it' here belongs to 'Count', so this argument is a value, not a lambda. Name the parameter, as in 'x => ...'.
+                //         xs.Select(F(G(xs.Count(it > 1))));
+                Diagnostic(ErrorCode.ERR_SharperItClaimedByInnerCall, "F(G(xs.Count(it > 1)))").WithArguments("Count").WithLocation(24, 19),
+                // (25,30): error CS20050: 'it' here belongs to 'Any', so this argument is a value, not a lambda. Name the parameter, as in 'x => ...'.
+                //         xs.Select(F(xs.Count(xs.Any(it > 1))));
+                Diagnostic(ErrorCode.ERR_SharperItClaimedByInnerCall, "xs.Any(it > 1)").WithArguments("Any").WithLocation(25, 30),
+                // (25,30): error CS1503: Argument 2: cannot convert from 'bool' to 'System.Func<int, bool>'
+                //         xs.Select(F(xs.Count(xs.Any(it > 1))));
+                Diagnostic(ErrorCode.ERR_BadArgType, "xs.Any(it > 1)").WithArguments("2", "bool", "System.Func<int, bool>").WithLocation(25, 30),
+                // (26,31): error CS20050: 'it' here belongs to 'Count', so this argument is a value, not a lambda. Name the parameter, as in 'x => ...'.
+                //         Retry(times: 2, when: F(xs.Count(it > 1)) > 0);
+                Diagnostic(ErrorCode.ERR_SharperItClaimedByInnerCall, "F(xs.Count(it > 1)) > 0").WithArguments("Count").WithLocation(26, 31),
+                // (26,31): error CS1503: Argument 2: cannot convert from 'bool' to 'System.Func<int, bool>'
+                //         Retry(times: 2, when: F(xs.Count(it > 1)) > 0);
+                Diagnostic(ErrorCode.ERR_BadArgType, "F(xs.Count(it > 1)) > 0").WithArguments("2", "bool", "System.Func<int, bool>").WithLocation(26, 31),
+                // (27,35): error CS20020: 'it' has two meanings here: the parameter of an outer lambda and of this inner one. Name one of them, as in 'x => ...'.
+                //         xs.Select(it + F(xs.Count(it > 1)));
+                Diagnostic(ErrorCode.ERR_SharperItTwoMeanings, "it").WithLocation(27, 35),
+                // (28,25): error CS1657: Cannot use 'it' as a ref or out value because it is a 'parameter of an implicit lambda'
+                //         xs.Select(H(ref it));
+                Diagnostic(ErrorCode.ERR_RefReadonlyLocalCause, "it").WithArguments("it", "parameter of an implicit lambda").WithLocation(28, 25),
+                // (29,12): error CS1501: No overload for method 'Select' takes 2 arguments
+                //         xs.Select(xs.Count(it > 1), 2);
+                Diagnostic(ErrorCode.ERR_BadArgCount, "Select").WithArguments("Select", "2").WithLocation(29, 12));
         }
 
         [Fact]

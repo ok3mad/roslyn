@@ -337,6 +337,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         IDS_SharperImmutableReasonObserver = MessageBase + 12889,
         IDS_SharperImmutableReasonEvent = MessageBase + 12890,
         IDS_SharperImmutableReasonObserverIdentity = MessageBase + 12891,
+        IDS_SharperImplicitItParameter = MessageBase + 12892,
     }
 
     // Message IDs may refer to strings that need to be localized.

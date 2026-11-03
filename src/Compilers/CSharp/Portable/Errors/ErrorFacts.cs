@@ -2658,6 +2658,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 or ErrorCode.ERR_SharperPipeStageItNotUsed
                 or ErrorCode.ERR_SharperPipeStageNotFunction
                 or ErrorCode.ERR_SharperPipeInExpressionTree
+                or ErrorCode.ERR_SharperItClaimedByInnerCall
                     => false,
             };
 #pragma warning restore CS8524 // The switch expression does not handle some values of its input type (it is not exhaustive) involving an unnamed enum value.

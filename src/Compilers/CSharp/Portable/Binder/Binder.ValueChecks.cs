@@ -1398,7 +1398,8 @@ namespace Microsoft.CodeAnalysis.CSharp
             {
                 if (parameterSymbol.RefKind == RefKind.None && RequiresAssignableVariable(valueKind))
                 {
-                    ReportReadonlyVariableError(node, parameterSymbol.Name, MessageID.IDS_VALLOCAL, valueKind, checkingReceiver, diagnostics);
+                    MessageID cause = parameterSymbol is LambdaParameterSymbol { IsSharperImplicitIt: true } ? MessageID.IDS_SharperImplicitItParameter : MessageID.IDS_VALLOCAL;
+                    ReportReadonlyVariableError(node, parameterSymbol.Name, cause, valueKind, checkingReceiver, diagnostics);
                     return false;
                 }
                 else if (parameterSymbol.RefKind != RefKind.None && RequiresRefAssignableVariable(valueKind))

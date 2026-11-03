@@ -185,6 +185,7 @@ in `#pragma warning`, `/nowarn` and `.editorconfig`.
 | CS20047 | Error | This stage does not use the value piped into it: its 'it' belongs to an inner lambda, the argument of '{0}'. Name that lambda's parameter, as in 'x => ...', or use the piped 'it' outside it. |
 | CS20048 | Error | The stage after '\|>' must be a function, such as a method group or a delegate, or an expression that uses 'it', but it is {0}. |
 | CS20049 | Error | An expression tree cannot contain a pipe '\|>'. |
+| CS20050 | Error | 'it' here belongs to '{0}', so this argument is a value, not a lambda. Name the parameter, as in 'x => ...'. |
 
 ## Where the code is
 
