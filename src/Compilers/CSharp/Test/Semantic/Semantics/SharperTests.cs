@@ -9475,6 +9475,11 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                     public string this[Func<int, int> key] => "f" + key(1);
                     public string this[int i] => "i" + i;
                 }
+                class Sink
+                {
+                    public string Last;
+                    public string this[Func<int, int> key] { get => Last; set => Last = value + key(1); }
+                }
                 class B { public int R; public B(Func<int, int> f) => R = f(2); }
                 class D1 : B { public D1() : base(it * 10) { } }
                 class D1Twin : B { public D1Twin() : base(x => x * 10) { } }
@@ -9524,6 +9529,8 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                         Console.Write(maybe?[x => x * 3]);
                         Console.Write(Use(new(it.Active), user));
                         Console.Write(Use(new(u => u.Active), user));
+                        Console.Write(new Sink { [it + 4] = "s" }.Last);
+                        Console.Write(new Sink { [x => x + 4] = "s" }.Last);
                         Console.Write(";");
                         CSharpWins(handlers);
                     }
@@ -9542,7 +9549,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             var verifier = CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90,
-                expectedOutput: ExecutionConditionUtil.IsCoreClr ? "TrueTrue;TrueTrue;22;function2function2value1function5;f2f2i5;20206666;f3f3TrueTrue;value4i4value3" : null);
+                expectedOutput: ExecutionConditionUtil.IsCoreClr ? "TrueTrue;TrueTrue;22;function2function2value1function5;f2f2i5;20206666;f3f3TrueTrues5s5;value4i4value3" : null);
             verifier.VerifyDiagnostics();
         }
 
