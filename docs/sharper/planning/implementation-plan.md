@@ -190,7 +190,7 @@ Parameter types (#15):
 | --- | --- | --- | --- |
 | P1 | `infer` as a parameter type, with source 2: the default value's type. `null`, `default` and target-typed values give an error | S | Prototype ([#72](https://github.com/ok3mad/roslyn/issues/72)). Decided: every member kind and lambdas; a value that is not a constant gives its type, then CS1736 as in C#; cycles through signatures are CS20028 |
 | P2 | Source 1: the overridden or implemented member gives the parameter and return types. Members are matched by name and parameter count before their types are known; more than one candidate is an error | M | Prototype ([#73](https://github.com/ok3mad/roslyn/issues/73)). Decided: explicit implementations copy from the interface they name; several interfaces with different signatures are CS20044; written types narrow the candidates |
-| P3 | `readonly infer x` | S | Whether `val x` is its shorthand on method parameters |
+| P3 | `readonly infer x` | S | Prototype ([#74](https://github.com/ok3mad/roslyn/issues/74)). Decided: `readonly` combines with P1 and P2 with no new code; whether `val x` is its shorthand on method parameters is [#178](https://github.com/ok3mad/roslyn/issues/178), not built |
 | P4 | Source 4, first cut: the parameter passed directly as an argument to a call with exactly one candidate (method, constructor, delegate). Needs binding the body with a placeholder type | L | How the placeholder interacts with lambdas and local functions in the body |
 | P5 | Source 4 with overloads: every applicable candidate takes the same type at that position, including generic methods whose type arguments come from other arguments | L | |
 | P6 | Source 4, other pinning uses: assignment to a typed local, field or property, `return x` from a method with a written return type, `ref` and `out` arguments. Several uses must agree, and the error names each one | M | |
@@ -796,6 +796,32 @@ generics, narrowing by written and P1 types, the errors, binding order from ever
 and on several threads, records, nullable warnings, the semantic model, IOperation, metadata seen from a C#
 compilation, and concurrent searches. `Infer_NotSupportedYet` lost its override and implementation rows.
 
+## Feature 9: inferred parameter type, step P3
+
+`readonly infer x` is a parameter whose type is inferred (P1 or P2) and that cannot be reassigned:
+`void Fetch(readonly infer timeout = TimeSpan.FromSeconds(5)) { timeout = default; }` reports CS1656 (and CS1736 for
+the default value, as its C# twin does), on branch `sharper/readonly-infer-p3`
+([#74](https://github.com/ok3mad/roslyn/issues/74), feature page
+[inferred-parameter-type.md](../features/inferred-parameter-type.md#readonly-infer-step-p3)). No compiler change.
+
+**Probe.** The two mechanisms do not meet: `readonly` is read from the parameter's modifiers
+(`ParameterHelpers.IsSharperReadOnly`, carried by `SourceComplexParameterSymbolBase.IsSharperReadOnly` and checked in
+`CheckParameterValueKind` and `IsSharperValValue`), and the type comes from the `infer` branch of `MakeParameter`. P2's
+search reads ref kinds with `GetModifiers`, which ignores a leading `readonly`, so `readonly infer r` copies `ref` from
+`M(ref int r)` and is then a `readonly ref` parameter. Every probe gave the diagnostics of the twin with the type written
+out, so the step is tests and docs.
+
+| Question | Decision | Why |
+| --- | --- | --- |
+| Sources | Both on `main`: default values (P1) and the overridden or implemented member (P2); the body sources (P4 to P6) will combine the same way | `readonly` is a rule about the body and plays no part in the signature, so it cannot affect a source |
+| Copied ref kinds | `readonly infer r` over `ref int r` is `readonly ref int r`: writes through the ref allowed, ref reassignment CS1656 | The same reading as a written `readonly ref` |
+| `val x` on method parameters (open point) | Not built; [#178](https://github.com/ok3mad/roslyn/issues/178) (`follow-up`, `needs-decision`) | It fits the grid, but on a method parameter it works only where a source exists; a decision, not glue code |
+
+Diagnostics: none new. Tests: 7 `ReadonlyInfer_*` tests in `SharperTests_ReadonlyInfer.cs`: runtime output next to the
+written twins (methods, local functions, constructors, primary constructors, lambdas, overrides and implementations),
+writes in every member kind, the copied and written ref kinds, struct copies (CS20013) from both sources, and the
+flag off.
+
 ## Feature 10: immutable types, slice 1 (design)
 
 `[Immutable] sealed record Money(decimal Amount, string Currency);` (issue [#139](https://github.com/ok3mad/roslyn/issues/139),
@@ -1016,7 +1042,7 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 - [ ] `readonly` locals: decide `readonly` in `for` initializers, `foreach`, deconstruction and `out` (no modifier slot; a public syntax change). [#95](https://github.com/ok3mad/roslyn/issues/95)
 - [ ] `readonly` locals: IDE support (completion, refactorings that drop or break `readonly`). [#96](https://github.com/ok3mad/roslyn/issues/96)
 - [x] `readonly` parameters, the grid's remaining explicitly typed corner. [#97](https://github.com/ok3mad/roslyn/issues/97)
-- [ ] Inferred parameter type: steps P3 to P8 ([#74](https://github.com/ok3mad/roslyn/issues/74) and the rest of [#27](https://github.com/ok3mad/roslyn/issues/27)); the default value is bound twice, once to infer and once against the type. P2 ([#73](https://github.com/ok3mad/roslyn/issues/73)): properties, indexers, operators and events of overrides and implementations do not copy yet.
+- [ ] Inferred parameter type: steps P4 to P8 (the rest of [#27](https://github.com/ok3mad/roslyn/issues/27)); P3's open point, `val x` as the shorthand of `readonly infer x` on method parameters, is [#178](https://github.com/ok3mad/roslyn/issues/178); the default value is bound twice, once to infer and once against the type. P2 ([#73](https://github.com/ok3mad/roslyn/issues/73)): properties, indexers, operators and events of overrides and implementations do not copy yet.
 - [ ] Inferred return type: step R5 ([#71](https://github.com/ok3mad/roslyn/issues/71)); a local function's nullable inference sees captured variables at their declared state; a local function that calls the inferred method around it makes a cycle even when the method never calls it.
 - [ ] Inferred return type after R4 ([#70](https://github.com/ok3mad/roslyn/issues/70)): properties and indexers, together with [#166](https://github.com/ok3mad/roslyn/issues/166) (P2 for properties, indexers, operators and events, including explicit implementations of operators); `ref` returns; the anonymous union exception for visible members, with unions ([#31](https://github.com/ok3mad/roslyn/issues/31)).
 - [ ] Inferred return type: `Infer_Cycle_Concurrent` fails about once in 2,000 iterations, on `main` too: under threads, the cycle that CS20033 names for one member of a three-member cycle can differ from the single-threaded one (seen while validating R4).

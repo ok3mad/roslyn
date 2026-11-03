@@ -21,7 +21,8 @@ It completes the [mutability grid](../planning/brainstorm.md#binding-mutability)
 
 It works on the parameters of methods, local functions, lambdas, anonymous methods, constructors, primary
 constructors (also of records), indexers, operators and delegates, and on `params` and extension method `this`
-parameters (`readonly this int x`).
+parameters (`readonly this int x`). With an [inferred type](inferred-parameter-type.md#readonly-infer-step-p3),
+`readonly infer x = 3` is a `readonly int x = 3`.
 
 ## Rules
 

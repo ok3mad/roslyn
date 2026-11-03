@@ -1,8 +1,9 @@
 # Inferred parameter type (`infer`)
 
-**Status:** Prototype of steps P1 (merged into `main`) and P2 (on branch `sharper/infer-from-overridden-p2`). Requires
+**Status:** Prototype of steps P1 and P2 (merged into `main`) and P3 (on branch `sharper/readonly-infer-p3`). Requires
 `/features:sharper`. Issues: [#72](https://github.com/ok3mad/roslyn/issues/72) (P1),
-[#73](https://github.com/ok3mad/roslyn/issues/73) (P2), under [#27](https://github.com/ok3mad/roslyn/issues/27).
+[#73](https://github.com/ok3mad/roslyn/issues/73) (P2), [#74](https://github.com/ok3mad/roslyn/issues/74) (P3), under
+[#27](https://github.com/ok3mad/roslyn/issues/27).
 
 ## Summary
 
@@ -28,7 +29,8 @@ class FakeProfiles(ProfileResult result) : IProfiles
 The parameter is an ordinary parameter with that type: callers, overload resolution, the semantic model, IOperation and
 metadata all see `int retries = 3`. Step P1 takes the type from the default value (source 2 of the
 [brainstorm](../planning/brainstorm.md#inferred-parameter-types)), step P2 from the overridden or implemented member
-(source 1). `readonly infer` (P3) and uses in the body (P4 to P6) are the next steps of the
+(source 1). Step P3 combines both with [`readonly`](readonly-parameters.md): `readonly infer x` is inferred and cannot
+be reassigned. Uses in the body (P4 to P6) are the next steps of the
 [work breakdown](../planning/implementation-plan.md#type-inference-work-breakdown).
 
 ## Rules
@@ -97,6 +99,35 @@ metadata all see `int retries = 3`. Step P1 takes the type from the default valu
   declaration of a member it would otherwise synthesize (`virtual bool Equals(R? other)`) overrides nothing, so its
   types are written.
 
+## `readonly infer` (step P3)
+
+`readonly` before `infer` makes the parameter a [`readonly` parameter](readonly-parameters.md) whose type is inferred,
+from either source:
+
+```csharp
+void Fetch(readonly infer retries = 3) { retries = 0; }   // error CS1656: Cannot assign to 'retries' because it is a 'readonly parameter'
+
+class Square(double side) : Shape
+{
+    public override infer Area(readonly infer scale) => side * side * scale;   // double Area(readonly double scale)
+}
+```
+
+- **The rules of both.** The type is inferred as without `readonly`, and the parameter follows the `readonly` parameter
+  rules, with the same diagnostics as its twin with the type written out: writes are CS1656, CS1657 and CS1654, also
+  from lambdas and local functions, and a non-readonly member of a struct runs on a copy and warns (CS20013).
+- **Every member.** Methods, local functions, constructors, primary constructors and lambdas with a default value (P1),
+  and overrides and implementations (P2).
+- **`ref`, `in` and `out`.** A ref kind copied from the overridden member (P2) reads like a written one:
+  `readonly infer r` over `ref int r` is `readonly ref int r`, which forbids ref reassignment and allows writes through
+  the ref. With a default value, `readonly in infer i = 1` works, and `ref` and `out` keep CS1741 as in C#.
+- **Flag off.** `readonly` keeps C#'s CS9190 and `infer` is a type name (CS0246).
+- **No `val` shorthand.** `val x` is not accepted on method parameters; whether it should be is
+  [#178](https://github.com/ok3mad/roslyn/issues/178).
+
+Nothing is added for it: `readonly` is read from the parameter syntax (`ParameterHelpers.IsSharperReadOnly`), the type
+from the `infer` branch of `MakeParameter`, and the two never meet.
+
 ## How it works
 
 No syntax, bound node or lowering is added: `infer` parses as a type name, and the binder decides.
@@ -153,4 +184,5 @@ branch of `ParameterHelpers.MakeParameter`, `Binder.BindLambdaParameterType`, th
 `CSharpSemanticModel.GetSharperInferredParameter`. Step P2: `Symbols/Source/SharperInferredParameterType_OverriddenMember.cs`,
 the `GetOverriddenSignature` calls in `ParameterHelpers` and `SourceOrdinaryMethodSymbol.MakeParametersAndBindReturnType`,
 and `SourceOrdinaryMethodSymbol.IsSharperReturnTypeFromOverriddenMember` for the semantic model. Tests: `InferParameter_*`
-in `SharperTests.cs`, and `InferOverridden_*` in `SharperTests_InferFromOverridden.cs`.
+in `SharperTests.cs`, `InferOverridden_*` in `SharperTests_InferFromOverridden.cs`, and step P3's `ReadonlyInfer_*` in
+`SharperTests_ReadonlyInfer.cs`.
