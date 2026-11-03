@@ -11,6 +11,9 @@ parameter called `it`:
 xs.Select(it.Name)                                // xs.Select(x => x.Name)
 xs.Select(Process(it, a))                         // xs.Select(x => Process(x, a))
 Retry(load, times: 3, when: it is Unavailable)    // when: r => r is Unavailable
+new Filter(it.Active)                             // new Filter(u => u.Active)
+handlers[Key(it)]                                 // handlers[x => Key(x)], with an indexer that takes a function
+class Admin(int level) : User(it.Level > level);  // : User(u => u.Level > level)
 ```
 
 The argument becomes an ordinary lambda `it => argument`: type inference, overload resolution, nullable analysis,
@@ -35,6 +38,12 @@ The decisions are in the brainstorm's [Decided](../planning/brainstorm.md#decide
 - **Value or function.** When an outer `it` exists and the method takes a value or a function at that argument (both
   readings bind), it is CS20021, so an overload added to a library can never move `it` silently. Without an outer
   `it`, the function is used: `users.FirstOrDefault(it.IsAdmin)` is the predicate.
+- **Every argument list, except attributes.** Calls, object creation (`new C(...)` and target-typed `new(...)`),
+  indexers (`a[...]`, `a?[...]`, `[...]` in an object initializer), constructor initializers (`: base(...)`,
+  `: this(...)`) and a primary constructor's base arguments. The candidates are the methods, constructors or indexers
+  the arguments go to, so `new Box(it + 1)` picks the constructor that takes a function, while `new Box(1)` keeps the
+  one that takes a value. A target-typed `new(...)` decides once its type is known. Attributes take no delegates, and
+  collection expression elements and array indices are not delegate arguments, so `it` there is CS20019.
 - **Arguments and pipe stages only.** `var f = it * 2;`, a `return` and LINQ query clauses have no `it` (CS20019). A
   [pipe](pipe.md) stage is the outermost slot: in `x |> F(it, xs.Where(it > 0))` the inner `it` is the implicit
   lambda's, which makes the stage CS20020, and the pipe's `it` is an outer `it` for CS20021. A pipe inside an implicit
@@ -45,8 +54,6 @@ The decisions are in the brainstorm's [Decided](../planning/brainstorm.md#decide
 
 ## Not supported yet
 
-- Calls only: method calls, extension methods and delegate invocations. Object creation (`new C(it.X)`), indexers,
-  constructor initializers and attributes report CS20019 for now ([#122](https://github.com/ok3mad/roslyn/issues/122)).
 - The semantic model finds the lambda (`GetSymbolInfo` and `GetTypeInfo` on `it`, `GetOperation`), but
   `LookupSymbols` inside an implicit lambda does not list `it`, and speculative binding inside one sees the outer
   scope ([#123](https://github.com/ok3mad/roslyn/issues/123)).
@@ -61,13 +68,15 @@ The decisions are in the brainstorm's [Decided](../planning/brainstorm.md#decide
 
 ## How it works
 
-The binder decides at each call (`Binder_SharperImplicitIt.cs`), with no parser change:
+The binder decides at each argument list (`Binder_SharperImplicitIt.cs`, `BindSharperImplicitItArguments`), with no
+parser change:
 
 1. `HasSharperImplicitItArgument` looks for an argument with a free `it`: one that C# lookup does not find, or finds
    only as the parameter of an outer implicit lambda. `it` declared inside the argument and member names (`x.it`,
    `it:`) do not count.
 2. `SharperCandidateTakesFunction` keeps only the arguments where some candidate, instance or extension, has a
-   one-parameter delegate at that position. Without this filter every call with an `it` would bind twice, and a failed
+   one-parameter delegate at that position; for constructors and indexers, `SharperCandidatesTakeFunction` checks the
+   type's instance constructors or the receiver's indexers. Without this filter every call with an `it` would bind twice, and a failed
    call binds its lambdas again for error recovery, which multiplied with the nesting depth.
 3. The call binds with those arguments as implicit lambdas (`SharperImplicitItUnboundLambdaState`, modeled on query
    clauses' `QueryUnboundLambdaState`: an `UnboundLambda` whose syntax is the argument expression). It wins when it
@@ -75,6 +84,10 @@ The binder decides at each call (`Binder_SharperImplicitIt.cs`), with no parser 
    in scope.
 4. Otherwise the call binds again with the arguments as values, so that their `it` belongs further out. If both bind,
    CS20021. If neither does, the lambda trial is reported when its lambdas use `it`, and the value trial otherwise.
+
+A target-typed `new(...)` has no constructors until it is converted, so it binds its free-`it` arguments as unbound
+implicit lambdas and runs the trials in `ConvertObjectCreationExpression`, rebinding only those arguments. Without a
+target type, error recovery binds them as values, which reports CS20019 instead of CS8754.
 
 The lambda body binds in an `ExecutableCodeBinder` rooted at the argument expression, as a query clause's does, so the
 body gets its own scope. After binding, the body checks CS20020 (`SharperItUseFinder`) and CS20022.
@@ -86,14 +99,14 @@ change; three assertions that expect lambda syntax accept an argument expression
 
 ## Follow-ups
 
-Each item under [Not supported yet](#not-supported-yet) has an issue, [#122](https://github.com/ok3mad/roslyn/issues/122) to [#128](https://github.com/ok3mad/roslyn/issues/128), and the code
+Each item under [Not supported yet](#not-supported-yet) has an issue, [#123](https://github.com/ok3mad/roslyn/issues/123) to [#128](https://github.com/ok3mad/roslyn/issues/128), and the code
 marks them with `PROTOTYPE(sharper)` comments. Pipe stages are on the [pipe](pipe.md) page.
 
 ## Code
 
 | What | Where |
 | --- | --- |
-| Binder | `src/Compilers/CSharp/Portable/Binder/Binder_SharperImplicitIt.cs`; the call in `Binder_Invocation.cs` (`bindArgumentsAndInvocation`); argument binding in `Binder_Expressions.cs` (`BindArgumentAndName`); CS20019 in `BindIdentifier`; CS20023 in `Binder_Await.cs` |
+| Binder | `src/Compilers/CSharp/Portable/Binder/Binder_SharperImplicitIt.cs`; the call in `Binder_Invocation.cs` (`bindArgumentsAndInvocation`); in `Binder_Expressions.cs`, `BindClassCreationExpression`, `BindElementAccess` and `BindConstructorInitializerCore`, and for target-typed `new(...)` `BindImplicitObjectCreationExpression` and `ConvertObjectCreationExpression` (`Binder_Conversions.cs`); argument binding in `Binder_Expressions.cs` (`BindArgumentAndName`); CS20019 in `BindIdentifier`; CS20023 in `Binder_Await.cs` |
 | Symbols | `LambdaSymbol.IsSharperImplicitIt`, `LambdaParameterSymbol.IsSharperImplicitIt`, `UnboundLambdaState.IsSharperImplicitIt` |
 | Assertions | `LambdaUtilities.IsSharperImplicitItLambdaBody`, used by `BoundLambda`, `ClosureConversion.GetLambdaId` and `SynthesizedClosureEnvironment` |
 | Tests | `SharperTests.ImplicitIt_*` |
