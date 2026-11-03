@@ -246,6 +246,17 @@ namespace Microsoft.CodeAnalysis.CSharp
             return base.VisitConvertedTryExpression(node);
         }
 
+        public override BoundNode VisitSharperPipe(BoundSharperPipe node)
+        {
+            if (_inExpressionLambda)
+            {
+                // The stage's 'it' is a variable, which an expression tree cannot declare.
+                Error(ErrorCode.ERR_SharperPipeInExpressionTree, node);
+            }
+
+            return base.VisitSharperPipe(node);
+        }
+
         public override BoundNode VisitDeconstructionAssignmentOperator(BoundDeconstructionAssignmentOperator node)
         {
             if (!node.HasAnyErrors)

@@ -11617,6 +11617,9 @@ done:
             Assignment = Expression,
             Lambda = Assignment, // "The => operator has the same precedence as assignment (=) and is right-associative."
             Conditional,
+            // Sharper's pipe, 'x |> stage': left-associative, looser than '??' and every binary operator, tighter than
+            // '?:', lambdas and assignment.
+            SharperPipe,
             Coalescing,
             ConditionalOr,
             ConditionalAnd,
@@ -11662,6 +11665,8 @@ done:
                 case SyntaxKind.UnsignedRightShiftAssignmentExpression:
                 case SyntaxKind.CoalesceAssignmentExpression:
                     return Precedence.Assignment;
+                case SyntaxKind.PipeExpression:
+                    return Precedence.SharperPipe;
                 case SyntaxKind.CoalesceExpression:
                 case SyntaxKind.ThrowExpression:
                     return Precedence.Coalescing;
@@ -12068,6 +12073,9 @@ done:
                 if (operatorExpressionKind == SyntaxKind.WithExpression)
                     return ParseWithExpression(leftOperand, operatorToken);
 
+                if (operatorExpressionKind == SyntaxKind.PipeExpression)
+                    return _syntaxFactory.PipeExpression(leftOperand, operatorToken, this.ParseSubExpression(newPrecedence));
+
                 if (operatorExpressionKind == SyntaxKind.RangeExpression)
                 {
                     return _syntaxFactory.RangeExpression(
@@ -12227,6 +12235,9 @@ done:
                 }
             }
 
+            if (IsAtSharperPipeToken())
+                return (SyntaxKind.BarGreaterThanToken, SyntaxKind.PipeExpression);
+
             if (IsExpectedBinaryOperator(token1Kind))
                 return (token1Kind, SyntaxFacts.GetBinaryExpression(token1Kind));
 
@@ -12250,6 +12261,14 @@ done:
 
             if (operatorTokenKind is SyntaxKind.DotDotToken)
                 return EatDotDotToken();
+
+            if (operatorTokenKind is SyntaxKind.BarGreaterThanToken)
+            {
+                // Sharper's |>, from the two tokens | and >.
+                var bar = EatToken();
+                var greaterThan = EatToken();
+                return SyntaxFactory.Token(bar.GetLeadingTrivia(), SyntaxKind.BarGreaterThanToken, greaterThan.GetTrailingTrivia());
+            }
 
             if (operatorTokenKind is SyntaxKind.GreaterThanGreaterThanToken or SyntaxKind.GreaterThanGreaterThanEqualsToken)
             {
@@ -12307,6 +12326,19 @@ done:
 
             return _syntaxFactory.AssignmentExpression(
                 operatorExpressionKind, leftOperand, operatorToken, rhs);
+        }
+
+        /// <summary>
+        /// Whether the parser is at Sharper's pipe <c>|&gt;</c>: a <c>|</c> directly followed by a <c>&gt;</c>, which the lexer
+        /// returns as two tokens, as it does for <c>&gt;&gt;</c>. In C# no expression starts with <c>&gt;</c>, so <c>a |&gt; b</c>
+        /// is always an error there.
+        /// </summary>
+        private bool IsAtSharperPipeToken()
+        {
+            return this.CurrentToken.Kind == SyntaxKind.BarToken &&
+                this.PeekToken(1) is { Kind: SyntaxKind.GreaterThanToken } greaterThan &&
+                NoTriviaBetween(this.CurrentToken, greaterThan) &&
+                IsFeatureEnabled(MessageID.IDS_FeatureSharper);
         }
 
         /// <summary>Check if we're currently at a .. sequence that can then be parsed out as a <see cref="SyntaxKind.DotDotToken"/>.</summary>

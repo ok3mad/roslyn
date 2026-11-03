@@ -3681,6 +3681,12 @@ namespace Microsoft.CodeAnalysis.CSharp
 
         private static bool IsValidStatementExpression(SyntaxNode syntax, BoundExpression expression)
         {
+            if (expression is BoundSharperPipe pipe)
+            {
+                // A Sharper pipe is a statement when its stage is a call: a bare stage, or a stage that would be a statement.
+                return !pipe.IsSuppressed && (pipe.IsBareStage || IsValidStatementExpression(pipe.Stage.Syntax, pipe.Stage));
+            }
+
             bool syntacticallyValid = SyntaxFacts.IsStatementExpression(syntax);
             if (!syntacticallyValid)
             {

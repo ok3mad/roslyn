@@ -24,7 +24,7 @@ namespace Microsoft.CodeAnalysis.CSharp
     /// </summary>
     internal partial class Binder
     {
-        private const string SharperItName = "it";
+        internal const string SharperItName = "it";
 
         /// <summary>
         /// Whether the node is the identifier <c>it</c>. <c>@it</c> is not: it keeps the C# meaning.
@@ -61,14 +61,27 @@ namespace Microsoft.CodeAnalysis.CSharp
             var expression = argument.Expression;
             if (argument.RefKindKeyword.Kind() != SyntaxKind.None ||
                 expression is DeclarationExpressionSyntax ||
-                IsSharperItIdentifier(expression) ||
-                !expression.IsFeatureEnabled(MessageID.IDS_FeatureSharper))
+                IsSharperItIdentifier(expression))
+            {
+                return null;
+            }
+
+            return FindSharperFreeIt(expression);
+        }
+
+        /// <summary>
+        /// Finds the first free <c>it</c> of an expression (see the argument overload), outside the stages of pipes
+        /// (<c>x |&gt; stage</c>), which own every <c>it</c> they contain.
+        /// </summary>
+        private IdentifierNameSyntax? FindSharperFreeIt(ExpressionSyntax expression)
+        {
+            if (!expression.IsFeatureEnabled(MessageID.IDS_FeatureSharper))
             {
                 return null;
             }
 
             IdentifierNameSyntax? first = null;
-            foreach (var node in expression.DescendantNodesAndSelf(descendIntoChildren: static n => n is not QueryExpressionSyntax && !declaresItParameter(n)))
+            foreach (var node in expression.DescendantNodesAndSelf(descendIntoChildren: n => n is not QueryExpressionSyntax && !declaresItParameter(n) && (n == expression || !isPipeStage(n))))
             {
                 if (node is SingleVariableDesignationSyntax { Identifier.ValueText: SharperItName })
                 {
@@ -92,6 +105,11 @@ namespace Microsoft.CodeAnalysis.CSharp
                     AnonymousMethodExpressionSyntax { ParameterList: { } parameterList } => hasItParameter(parameterList),
                     _ => false,
                 };
+            }
+
+            static bool isPipeStage(SyntaxNode node)
+            {
+                return node.Parent is PipeExpressionSyntax pipe && pipe.Stage == node;
             }
 
             static bool hasItParameter(ParameterListSyntax parameterList)
@@ -125,8 +143,15 @@ namespace Microsoft.CodeAnalysis.CSharp
         private bool IsSharperItFree(IdentifierNameSyntax it)
         {
             var symbol = LookupSharperIt(it);
-            return symbol is null or LambdaParameterSymbol { IsSharperImplicitIt: true };
+            return symbol is null || IsSharperImplicitItSymbol(symbol);
         }
+
+        /// <summary>
+        /// Whether the symbol is an <c>it</c> that Sharper declared: the parameter of an implicit lambda, or the value of a
+        /// pipe stage.
+        /// </summary>
+        private static bool IsSharperImplicitItSymbol(Symbol? symbol)
+            => symbol is LambdaParameterSymbol { IsSharperImplicitIt: true } or SharperPipeItLocalSymbol;
 
         /// <summary>
         /// Looks up <c>it</c> as C# would: null when nothing named <c>it</c> is in scope.
@@ -247,15 +272,15 @@ namespace Microsoft.CodeAnalysis.CSharp
         }
 
         /// <summary>
-        /// Finds a variable declared in the arguments, outside explicit lambdas (which get new locals each time they
-        /// bind), preferring one inside an argument with a free <c>it</c>.
+        /// Finds a variable declared in the arguments, outside explicit lambdas and pipe stages (which get new locals each
+        /// time they bind), preferring one inside an argument with a free <c>it</c>.
         /// </summary>
         private (SingleVariableDesignationSyntax designation, ArgumentSyntax? argument)? FindSharperDeclaration(ArgumentListSyntax argumentList)
         {
             (SingleVariableDesignationSyntax designation, ArgumentSyntax? argument)? result = null;
             foreach (var argument in argumentList.Arguments)
             {
-                foreach (var node in argument.DescendantNodes(descendIntoChildren: static n => n is not AnonymousFunctionExpressionSyntax and not QueryExpressionSyntax))
+                foreach (var node in argument.DescendantNodes(descendIntoChildren: static n => n is not AnonymousFunctionExpressionSyntax and not QueryExpressionSyntax && !(n.Parent is PipeExpressionSyntax pipe && pipe.Stage == n)))
                 {
                     if (node is SingleVariableDesignationSyntax designation)
                     {
@@ -386,7 +411,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         private bool IsSharperOuterItInScope(InvocationExpressionSyntax node)
         {
             return FindSharperFirstFreeIt(node.ArgumentList) is { } it &&
-                LookupSharperIt(it) is LambdaParameterSymbol { IsSharperImplicitIt: true };
+                IsSharperImplicitItSymbol(LookupSharperIt(it));
         }
 
         /// <summary>
@@ -439,37 +464,48 @@ namespace Microsoft.CodeAnalysis.CSharp
         }
 
         /// <summary>
-        /// Finds whether a bound body reads a parameter, and the first implicit <c>it</c> lambda in it, through
-        /// explicit lambdas too.
+        /// Finds whether a bound body reads an <c>it</c> (an implicit lambda's parameter or a pipe's value), and the first
+        /// implicit <c>it</c> lambda in it, through explicit lambdas too. An inner pipe stage's <c>it</c> is not another
+        /// meaning to report: a stage owns every <c>it</c> it contains, which the syntax shows without any signature.
         /// </summary>
         private sealed class SharperItUseFinder : BoundTreeWalkerWithStackGuardWithoutRecursionOnTheLeftOfBinaryOperator
         {
-            private readonly ParameterSymbol _parameter;
+            private readonly Symbol _it;
             private bool _uses;
             private BoundLambda? _firstImplicitLambda;
 
-            private SharperItUseFinder(ParameterSymbol parameter)
+            private SharperItUseFinder(Symbol it)
             {
-                _parameter = parameter;
+                _it = it;
             }
 
-            public static bool Uses(BoundNode body, ParameterSymbol parameter)
+            public static bool Uses(BoundNode body, Symbol it)
             {
-                var finder = new SharperItUseFinder(parameter);
+                var finder = new SharperItUseFinder(it);
                 finder.Visit(body);
                 return finder._uses;
             }
 
-            public static (bool uses, BoundLambda? firstImplicitLambda) Find(BoundNode body, ParameterSymbol parameter)
+            public static (bool uses, BoundLambda? firstImplicitLambda) Find(BoundNode body, Symbol it)
             {
-                var finder = new SharperItUseFinder(parameter);
+                var finder = new SharperItUseFinder(it);
                 finder.Visit(body);
                 return (finder._uses, finder._firstImplicitLambda);
             }
 
             public override BoundNode? VisitParameter(BoundParameter node)
             {
-                if (Symbol.Equals(node.ParameterSymbol, _parameter, TypeCompareKind.ConsiderEverything))
+                if (Symbol.Equals(node.ParameterSymbol, _it, TypeCompareKind.ConsiderEverything))
+                {
+                    _uses = true;
+                }
+
+                return null;
+            }
+
+            public override BoundNode? VisitLocal(BoundLocal node)
+            {
+                if (Symbol.Equals(node.LocalSymbol, _it, TypeCompareKind.ConsiderEverything))
                 {
                     _uses = true;
                 }
