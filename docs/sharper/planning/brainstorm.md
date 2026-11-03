@@ -118,7 +118,7 @@ finds the type: `static infer Hello(int id) => ...`, `infer Fetch(infer url, inf
   and with the flag off it is an unknown type (CS0246).
 - **Combines with `readonly`:** `readonly infer x` is a parameter whose type is inferred and that cannot be
   reassigned. Whether `val x` should be accepted as its shorthand on method parameters, as it is on lambda
-  parameters, is open.
+  parameters, is open ([#178](https://github.com/ok3mad/roslyn/issues/178)).
 
 ### Inferred return type
 
