@@ -30,7 +30,7 @@ class Counter
     private int _count;
     [Pure] public int Next() => _count + 1;
     [Pure] public int Bump() => _count++;
-    // error CS20046: 'Counter.Bump()' is marked [Pure], but it is not pure: '_count++' writes state outside the member.
+    // error CS20050: 'Counter.Bump()' is marked [Pure], but it is not pure: '_count++' writes state outside the member.
 }
 ```
 
@@ -68,7 +68,7 @@ A `[Pure]` member's body may:
   `nameof`, string concatenation and interpolation of strings and characters, and tuple swaps such as
   `(a, b) = (b, a + b)`.
 
-It reports the first expression that does anything else (CS20046), with the reason:
+It reports the first expression that does anything else (CS20050), with the reason:
 
 - a write to a field, an array element, a static, a `ref` parameter or local, or a captured local;
 - a call of a member that is not known to be pure, including virtual calls, delegate invocations and constructors
@@ -97,9 +97,9 @@ array; and the constructors of exceptions.
 
 - `[Pure]` goes on methods, accessors, operators, constructors (`[method: Pure]` for a primary constructor) and local
   functions. On a property it means the get accessor.
-- An instance member of a struct must be `readonly`, or the struct `readonly` (CS20047). The existing errors then cover
+- An instance member of a struct must be `readonly`, or the struct `readonly` (CS20051). The existing errors then cover
   writes to `this`, and other assemblies see `[IsReadOnly]`. Auto-property getters already are.
-- Virtual, abstract and override members cannot be `[Pure]` yet (CS20048): every override would have to be pure too.
+- Virtual, abstract and override members cannot be `[Pure]` yet (CS20052): every override would have to be pure too.
 - Only Sharper files are checked. In a C# file the name `Pure` does not bind (CS0246). A `[Pure]` that binds to another
   type, such as `System.Diagnostics.Contracts.PureAttribute` through a `using`, is not this attribute and is not
   checked.
@@ -113,7 +113,7 @@ the member observe its own write through another argument:
 [Pure] static int F(Box b, out int r) { r = 1; return b.X; }
 
 F(box, out box.X);
-// warning CS20049: The out argument 'box.X' of the [Pure] member 'F(Box, out int)' is not a fresh local, so 'F(Box, out int)' may observe its own write through another argument.
+// warning CS20053: The out argument 'box.X' of the [Pure] member 'F(Box, out int)' is not a fresh local, so 'F(Box, out int)' may observe its own write through another argument.
 ```
 
 Fresh are discards, `out var`, non-`ref` locals, by-value parameters, and the `out` parameters of a `[Pure]` caller
@@ -131,10 +131,10 @@ Purity is never inferred, so only what is declared crosses assemblies.
 
 | Code | Severity | When |
 | --- | --- | --- |
-| CS20046 | Error | A `[Pure]` member is not pure, with the first expression that is not and why. |
-| CS20047 | Error | A `[Pure]` instance member of a struct is not `readonly`. |
-| CS20048 | Error | `[Pure]` on a virtual, abstract or override member. |
-| CS20049 | Warning | An `out` argument of a `[Pure]` member is not a fresh local. |
+| CS20050 | Error | A `[Pure]` member is not pure, with the first expression that is not and why. |
+| CS20051 | Error | A `[Pure]` instance member of a struct is not `readonly`. |
+| CS20052 | Error | `[Pure]` on a virtual, abstract or override member. |
+| CS20053 | Warning | An `out` argument of a `[Pure]` member is not a fresh local. |
 
 ## Not covered
 

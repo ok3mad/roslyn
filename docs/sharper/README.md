@@ -19,6 +19,9 @@ Sharper is not a fork of the language specification, a replacement for C#, or a 
   (converting C# to Sharper).
 - [Implementation plan](planning/implementation-plan.md): how features get built inside Roslyn. It has the map of
   compiler areas touched, known traps, decisions, the syntax roadmap with its suggested order, and follow-ups.
+- [Upgrade analyzers and fixers](planning/upgrade-analyzers.md): a proposal for IDE analyzers and code fixes that find
+  C# code with a better Sharper equivalent (`val`, `T[..]`, `T~`, function types, `yield return ..xs`, `it`, `try`
+  expressions, `infer`, `readonly` parameters) and rewrite it, in the order to build them.
 
 ## Design rules
 
@@ -93,11 +96,12 @@ Not done yet:
 | [`readonly` parameters](features/readonly-parameters.md) | `void F(readonly int x)` declares a parameter that cannot be reassigned; it is not part of the signature. | Prototype | [#23](https://github.com/ok3mad/roslyn/issues/23), [#97](https://github.com/ok3mad/roslyn/issues/97) |
 | [Sequence type](features/sequence-type.md) | `T[..]` is `IEnumerable<T>` in every type position. | Prototype, merged into `main` | [#19](https://github.com/ok3mad/roslyn/issues/19) |
 | [Task type](features/task-type.md) | `T~` is `Task<T>`, and `void~` is `Task`. | Prototype, merged into `main` | [#20](https://github.com/ok3mad/roslyn/issues/20) |
-| [Inferred return type](features/inferred-return-type.md) | `public static infer Greeting(int id) => $"Hello, {id}!";` returns `string`. Steps R1 to R3: expression and block bodies of private methods and local functions, iterators and `async`, inferred methods that use each other, and cycles. Step R4: every accessibility, `virtual`, partial methods, extension block members, operators and conversion operators, and Edit and Continue. | Prototype of steps R1 to R3, merged into `main`; step R4 on `sharper/infer-return-r4` | [#67](https://github.com/ok3mad/roslyn/issues/67), [#68](https://github.com/ok3mad/roslyn/issues/68), [#69](https://github.com/ok3mad/roslyn/issues/69), [#70](https://github.com/ok3mad/roslyn/issues/70), under [#22](https://github.com/ok3mad/roslyn/issues/22) |
-| [Inferred parameter type](features/inferred-parameter-type.md) | `void Fetch(string url, infer retries = 3)` gives `retries` the type of its default value, `int`. Step P1: default values, on every member kind and lambdas. Step P2: `public infer Load(infer userId)` implementing `IProfiles.Load` copies `Task<ProfileResult> Load(int userId)` from the member it overrides or implements. | Prototype of step P1, merged into `main`; step P2 on `sharper/infer-from-overridden-p2` | [#72](https://github.com/ok3mad/roslyn/issues/72), [#73](https://github.com/ok3mad/roslyn/issues/73), under [#27](https://github.com/ok3mad/roslyn/issues/27) |
+| [Inferred return type](features/inferred-return-type.md) | `public static infer Greeting(int id) => $"Hello, {id}!";` returns `string`. Steps R1 to R3: expression and block bodies of private methods and local functions, iterators and `async`, inferred methods that use each other, and cycles. Step R4: every accessibility, `virtual`, partial methods, extension block members, operators and conversion operators, and Edit and Continue. | Prototype of steps R1 to R4, merged into `main` | [#67](https://github.com/ok3mad/roslyn/issues/67), [#68](https://github.com/ok3mad/roslyn/issues/68), [#69](https://github.com/ok3mad/roslyn/issues/69), [#70](https://github.com/ok3mad/roslyn/issues/70), under [#22](https://github.com/ok3mad/roslyn/issues/22) |
+| [Inferred parameter type](features/inferred-parameter-type.md) | `void Fetch(string url, infer retries = 3)` gives `retries` the type of its default value, `int`. Step P1: default values, on every member kind and lambdas. Step P2: `public infer Load(infer userId)` implementing `IProfiles.Load` copies `Task<ProfileResult> Load(int userId)` from the member it overrides or implements. Step P3: `readonly infer x` cannot be reassigned. | Prototype of steps P1 to P3, merged into `main` | [#72](https://github.com/ok3mad/roslyn/issues/72), [#73](https://github.com/ok3mad/roslyn/issues/73), [#74](https://github.com/ok3mad/roslyn/issues/74), under [#27](https://github.com/ok3mad/roslyn/issues/27) |
 | [Immutable types](features/immutable-types.md) | `[Immutable] sealed record Money(decimal Amount, string Currency);` is checked to be deeply immutable; `[ImmutableHierarchy]` extends the claim to every subclass. Slice 1: the check, the attributes and their diagnostics. | Prototype of slice 1, on `sharper/immutable-types-slice1` | [#139](https://github.com/ok3mad/roslyn/issues/139), designed in [#92](https://github.com/ok3mad/roslyn/issues/92) |
 | [Purity](features/purity.md) | `[Pure] static int Fib(int i) => ...;` is checked to have no effect outside its own frame; its result depends only on the contents of its arguments. Slice 1, first part: declared `[Pure]` on non-virtual members, the attested BCL members, and the `out` warning. | Prototype of the first part of slice 1, on `sharper/purity-slice1` | [#173](https://github.com/ok3mad/roslyn/issues/173), [#177](https://github.com/ok3mad/roslyn/issues/177), under [#36](https://github.com/ok3mad/roslyn/issues/36) |
 | [Implicit `it`](features/implicit-it.md) | `xs.Select(it.Name)` is `xs.Select(x => x.Name)`: an argument that uses `it` is a lambda, if the innermost parameter around it takes a one-parameter function. | Prototype, merged into `main` | [#24](https://github.com/ok3mad/roslyn/issues/24) |
+| [Pipe `\|>`](features/pipe.md) | `raw \|> ParseOrder \|> Resolve(it, accounts)` is `Resolve(ParseOrder(raw), accounts)`: a stage that uses `it` is an expression, any other stage is a function applied to the value. No lifting yet. | Prototype, on `sharper/pipe` | [#25](https://github.com/ok3mad/roslyn/issues/25) |
 | [`try` expression](features/try-expression.md) | `try int.Parse(s) catch { FormatException => -1 }` turns exceptions into values with switch arms; an unmatched exception propagates untouched. Slice 1: a declared union or the best common type as the result. | Prototype of slice 1, on `sharper/try-expression-slice1` | [#28](https://github.com/ok3mad/roslyn/issues/28) |
 
 Every planned feature has an issue, one per row of the
@@ -120,9 +124,9 @@ git grep -n "PROTOTYPE(sharper)"
 - `sharper/<feature>` branches hold features in progress; `sharper/gating`, `sharper/val`,
   `sharper/val-designations`, `sharper/val-patterns`, `sharper/function-types`, `sharper/task-type`, `sharper/val-lambda-parameters` and
   `sharper/readonly-locals`, `sharper/infer-return-r1`, `sharper/infer-return-r2`, `sharper/infer-return-r3`,
-  `sharper/infer-parameter-p1`, `sharper/try-expression-slice1` and `sharper/implicit-it` are merged.
-  `sharper/readonly-parameters`, `sharper/immutable-types-slice1`, `sharper/infer-from-overridden-p2`,
-  `sharper/infer-return-r4` and `sharper/purity-slice1` are in progress.
+  `sharper/infer-parameter-p1`, `sharper/try-expression-slice1`, `sharper/implicit-it`, `sharper/readonly-parameters`,
+  `sharper/immutable-types-slice1`, `sharper/infer-from-overridden-p2`, `sharper/infer-return-r4`, `sharper/pipe` and
+  `sharper/readonly-infer-p3` are merged. `sharper/purity-slice1` is in progress.
 
 ## Diagnostics
 
@@ -178,10 +182,14 @@ in `#pragma warning`, `/nowarn` and `.editorconfig`.
 | CS20043 | Error | Cannot infer the types of '{0}', because it overrides or implements no member '{0}' with {1} parameters that matches its written types. Write the types. |
 | CS20044 | Error | Cannot infer the types of '{0}', because it could override or implement more than one member: {1}. Write the types of the one it overrides or implements. |
 | CS20045 | Error | Cannot infer the types of '{0}' from the member it overrides or implements, because the signature of that member depends on '{0}' itself. Write the types. |
-| CS20046 | Error | '{0}' is marked [Pure], but it is not pure: {1}. |
-| CS20047 | Error | '{0}' is marked [Pure], so it must be readonly: declare it 'readonly', or make the struct 'readonly'. |
-| CS20048 | Error | '{0}' cannot be marked [Pure] yet: [Pure] is not supported on virtual, abstract and override members. |
-| CS20049 | Warning | The out argument '{1}' of the [Pure] member '{0}' is not a fresh local, so '{0}' may observe its own write through another argument. |
+| CS20046 | Error | The left side of '\|>' must be a value with a type, but it is {0}. |
+| CS20047 | Error | This stage does not use the value piped into it: its 'it' belongs to an inner lambda, the argument of '{0}'. Name that lambda's parameter, as in 'x => ...', or use the piped 'it' outside it. |
+| CS20048 | Error | The stage after '\|>' must be a function, such as a method group or a delegate, or an expression that uses 'it', but it is {0}. |
+| CS20049 | Error | An expression tree cannot contain a pipe '\|>'. |
+| CS20050 | Error | '{0}' is marked [Pure], but it is not pure: {1}. |
+| CS20051 | Error | '{0}' is marked [Pure], so it must be readonly: declare it 'readonly', or make the struct 'readonly'. |
+| CS20052 | Error | '{0}' cannot be marked [Pure] yet: [Pure] is not supported on virtual, abstract and override members. |
+| CS20053 | Warning | The out argument '{1}' of the [Pure] member '{0}' is not a fresh local, so '{0}' may observe its own write through another argument. |
 
 ## Where the code is
 
@@ -189,11 +197,11 @@ in `#pragma warning`, `/nowarn` and `.editorconfig`.
 | --- | --- |
 | Feature flag | `src/Compilers/CSharp/Portable/Errors/MessageID.cs` (`IDS_FeatureSharper`), `src/Compilers/Core/Portable/CommandLine/Feature.cs` (`Feature.Sharper`) |
 | Parser | `src/Compilers/CSharp/Portable/Parser/LanguageParser.cs` (search for `IDS_FeatureSharper`) |
-| Binding | `src/Compilers/CSharp/Portable/Binder/` (search for `IDS_FeatureSharper`); short type forms such as `T[..]` in `Binder_SharperTypes.cs`; inferred return types in `Binder_SharperInferredReturnType.cs` and `Symbols/Source/SharperInferredReturnType.cs`; inferred parameter types in `Binder_SharperInferredParameterType.cs` and `Symbols/Source/SharperInferredParameterType.cs`, and the types copied from an overridden or implemented member in `Symbols/Source/SharperInferredParameterType_OverriddenMember.cs`; implicit `it` in `Binder_SharperImplicitIt.cs`; immutable types in `Symbols/SharperImmutability.cs`, and purity in `Symbols/SharperImmutability_Pure.cs`; the `try` expression in `Binder_SharperTryExpression.cs` |
-| Syntax nodes | `src/Compilers/CSharp/Portable/Syntax/Syntax.xml` (`FunctionTypeSyntax`, `TaskTypeSyntax`, `ParenthesizedTypeSyntax`, `TryExpressionSyntax`); Sharper kinds in `SyntaxKind.cs` count up from 9900 |
+| Binding | `src/Compilers/CSharp/Portable/Binder/` (search for `IDS_FeatureSharper`); short type forms such as `T[..]` in `Binder_SharperTypes.cs`; inferred return types in `Binder_SharperInferredReturnType.cs` and `Symbols/Source/SharperInferredReturnType.cs`; inferred parameter types in `Binder_SharperInferredParameterType.cs` and `Symbols/Source/SharperInferredParameterType.cs`, and the types copied from an overridden or implemented member in `Symbols/Source/SharperInferredParameterType_OverriddenMember.cs`; implicit `it` in `Binder_SharperImplicitIt.cs`; the pipe in `Binder_SharperPipe.cs`; immutable types in `Symbols/SharperImmutability.cs`, and purity in `Symbols/SharperImmutability_Pure.cs`; the `try` expression in `Binder_SharperTryExpression.cs` |
+| Syntax nodes | `src/Compilers/CSharp/Portable/Syntax/Syntax.xml` (`FunctionTypeSyntax`, `TaskTypeSyntax`, `ParenthesizedTypeSyntax`, `TryExpressionSyntax`, `PipeExpressionSyntax`); Sharper kinds in `SyntaxKind.cs` count up from 9900, and the pipe token `BarGreaterThanToken` takes 8231, the top of the free punctuation gap |
 | Bound nodes | `src/Compilers/CSharp/Portable/BoundTree/BoundNodes.xml` |
 | Lowering | `src/Compilers/CSharp/Portable/Lowering/LocalRewriter/` |
-| Tests | `src/Compilers/CSharp/Test/Semantic/Semantics/SharperTests.cs` and the other files of the partial class `SharperTests`, such as `SharperTests_TryExpression.cs`, `SharperTests_ImmutableTypes.cs`, `SharperTests_Purity.cs` and `SharperTests_InferFromOverridden.cs` |
+| Tests | `src/Compilers/CSharp/Test/Semantic/Semantics/SharperTests.cs` and the other files of the partial class `SharperTests`, such as `SharperTests_TryExpression.cs`, `SharperTests_ImmutableTypes.cs`, `SharperTests_Purity.cs`, `SharperTests_InferFromOverridden.cs` and `SharperTests_Pipe.cs` |
 
 ## Building and testing
 

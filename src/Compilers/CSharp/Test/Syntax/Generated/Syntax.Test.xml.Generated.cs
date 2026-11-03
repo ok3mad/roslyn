@@ -463,6 +463,9 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         private static Syntax.InternalSyntax.TryExpressionSyntax GenerateTryExpression()
             => InternalSyntaxFactory.TryExpression(InternalSyntaxFactory.Token(SyntaxKind.TryKeyword), GenerateIdentifierName(), InternalSyntaxFactory.Token(SyntaxKind.CatchKeyword), InternalSyntaxFactory.Token(SyntaxKind.OpenBraceToken), new Microsoft.CodeAnalysis.Syntax.InternalSyntax.SeparatedSyntaxList<Syntax.InternalSyntax.SwitchExpressionArmSyntax>(), InternalSyntaxFactory.Token(SyntaxKind.CloseBraceToken));
 
+        private static Syntax.InternalSyntax.PipeExpressionSyntax GeneratePipeExpression()
+            => InternalSyntaxFactory.PipeExpression(GenerateIdentifierName(), InternalSyntaxFactory.Token(SyntaxKind.BarGreaterThanToken), GenerateIdentifierName());
+
         private static Syntax.InternalSyntax.TryStatementSyntax GenerateTryStatement()
             => InternalSyntaxFactory.TryStatement(new Microsoft.CodeAnalysis.Syntax.InternalSyntax.SyntaxList<Syntax.InternalSyntax.AttributeListSyntax>(), InternalSyntaxFactory.Token(SyntaxKind.TryKeyword), GenerateBlock(), new Microsoft.CodeAnalysis.Syntax.InternalSyntax.SyntaxList<Syntax.InternalSyntax.CatchClauseSyntax>(), null);
 
@@ -2624,6 +2627,18 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             Assert.Equal(SyntaxKind.OpenBraceToken, node.OpenBraceToken.Kind);
             Assert.Equal(default, node.Arms);
             Assert.Equal(SyntaxKind.CloseBraceToken, node.CloseBraceToken.Kind);
+
+            AttachAndCheckDiagnostics(node);
+        }
+
+        [Fact]
+        public void TestPipeExpressionFactoryAndProperties()
+        {
+            var node = GeneratePipeExpression();
+
+            Assert.NotNull(node.Left);
+            Assert.Equal(SyntaxKind.BarGreaterThanToken, node.OperatorToken.Kind);
+            Assert.NotNull(node.Stage);
 
             AttachAndCheckDiagnostics(node);
         }
@@ -7980,6 +7995,32 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         }
 
         [Fact]
+        public void TestPipeExpressionTokenDeleteRewriter()
+        {
+            var oldNode = GeneratePipeExpression();
+            var rewriter = new TokenDeleteRewriter();
+            var newNode = rewriter.Visit(oldNode);
+
+            if(!oldNode.IsMissing)
+            {
+                Assert.NotEqual(oldNode, newNode);
+            }
+
+            Assert.NotNull(newNode);
+            Assert.True(newNode.IsMissing, "No tokens => missing");
+        }
+
+        [Fact]
+        public void TestPipeExpressionIdentityRewriter()
+        {
+            var oldNode = GeneratePipeExpression();
+            var rewriter = new IdentityRewriter();
+            var newNode = rewriter.Visit(oldNode);
+
+            Assert.Same(oldNode, newNode);
+        }
+
+        [Fact]
         public void TestTryStatementTokenDeleteRewriter()
         {
             var oldNode = GenerateTryStatement();
@@ -11115,6 +11156,9 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         private static TryExpressionSyntax GenerateTryExpression()
             => SyntaxFactory.TryExpression(SyntaxFactory.Token(SyntaxKind.TryKeyword), GenerateIdentifierName(), SyntaxFactory.Token(SyntaxKind.CatchKeyword), SyntaxFactory.Token(SyntaxKind.OpenBraceToken), new SeparatedSyntaxList<SwitchExpressionArmSyntax>(), SyntaxFactory.Token(SyntaxKind.CloseBraceToken));
 
+        private static PipeExpressionSyntax GeneratePipeExpression()
+            => SyntaxFactory.PipeExpression(GenerateIdentifierName(), SyntaxFactory.Token(SyntaxKind.BarGreaterThanToken), GenerateIdentifierName());
+
         private static TryStatementSyntax GenerateTryStatement()
             => SyntaxFactory.TryStatement(new SyntaxList<AttributeListSyntax>(), SyntaxFactory.Token(SyntaxKind.TryKeyword), GenerateBlock(), new SyntaxList<CatchClauseSyntax>(), default(FinallyClauseSyntax));
 
@@ -13277,6 +13321,18 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             Assert.Equal(default, node.Arms);
             Assert.Equal(SyntaxKind.CloseBraceToken, node.CloseBraceToken.Kind());
             var newNode = node.WithTryKeyword(node.TryKeyword).WithExpression(node.Expression).WithCatchKeyword(node.CatchKeyword).WithOpenBraceToken(node.OpenBraceToken).WithArms(node.Arms).WithCloseBraceToken(node.CloseBraceToken);
+            Assert.Equal(node, newNode);
+        }
+
+        [Fact]
+        public void TestPipeExpressionFactoryAndProperties()
+        {
+            var node = GeneratePipeExpression();
+
+            Assert.NotNull(node.Left);
+            Assert.Equal(SyntaxKind.BarGreaterThanToken, node.OperatorToken.Kind());
+            Assert.NotNull(node.Stage);
+            var newNode = node.WithLeft(node.Left).WithOperatorToken(node.OperatorToken).WithStage(node.Stage);
             Assert.Equal(node, newNode);
         }
 
@@ -18625,6 +18681,32 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         public void TestTryExpressionIdentityRewriter()
         {
             var oldNode = GenerateTryExpression();
+            var rewriter = new IdentityRewriter();
+            var newNode = rewriter.Visit(oldNode);
+
+            Assert.Same(oldNode, newNode);
+        }
+
+        [Fact]
+        public void TestPipeExpressionTokenDeleteRewriter()
+        {
+            var oldNode = GeneratePipeExpression();
+            var rewriter = new TokenDeleteRewriter();
+            var newNode = rewriter.Visit(oldNode);
+
+            if(!oldNode.IsMissing)
+            {
+                Assert.NotEqual(oldNode, newNode);
+            }
+
+            Assert.NotNull(newNode);
+            Assert.True(newNode.IsMissing, "No tokens => missing");
+        }
+
+        [Fact]
+        public void TestPipeExpressionIdentityRewriter()
+        {
+            var oldNode = GeneratePipeExpression();
             var rewriter = new IdentityRewriter();
             var newNode = rewriter.Visit(oldNode);
 

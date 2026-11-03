@@ -77,6 +77,12 @@ namespace Microsoft.CodeAnalysis.CSharp
             // Each arm has its own scope, as in a switch expression.
         }
 
+        public override void VisitPipeExpression(PipeExpressionSyntax node)
+        {
+            Visit(node.Left);
+            // A Sharper pipe stage is its own scope (SharperPipeStageBinder).
+        }
+
         public override void VisitSwitchExpressionArm(SwitchExpressionArmSyntax node)
         {
             SyntaxNode previousNodeToBind = _nodeToBind;

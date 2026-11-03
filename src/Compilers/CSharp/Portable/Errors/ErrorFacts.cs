@@ -2655,6 +2655,10 @@ namespace Microsoft.CodeAnalysis.CSharp
                 or ErrorCode.ERR_SharperInferNoOverriddenMember
                 or ErrorCode.ERR_SharperInferAmbiguousOverriddenMember
                 or ErrorCode.ERR_SharperInferOverriddenMemberCycle
+                or ErrorCode.ERR_SharperPipeNoValue
+                or ErrorCode.ERR_SharperPipeStageItNotUsed
+                or ErrorCode.ERR_SharperPipeStageNotFunction
+                or ErrorCode.ERR_SharperPipeInExpressionTree
                 or ErrorCode.ERR_SharperPureNotPure
                 or ErrorCode.ERR_SharperPureStructMemberNotReadOnly
                 or ErrorCode.ERR_SharperPureVirtual

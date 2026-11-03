@@ -3454,7 +3454,12 @@ namespace Microsoft.CodeAnalysis.CSharp
             Debug.Assert(kind != BindValueKind.RValue);
 
             MessageID cause;
-            if (local is SourceLocalSymbol { IsVal: true })
+            if (local is SharperPipeItLocalSymbol)
+            {
+                // A pipe stage's 'it' is read-only, like an implicit lambda's.
+                cause = MessageID.IDS_VALLOCAL;
+            }
+            else if (local is SourceLocalSymbol { IsVal: true })
             {
                 // A val local declared in a foreach or using names val, the reason the user wrote.
                 if (kind == BindValueKind.RefAssignable)
@@ -4802,6 +4807,10 @@ namespace Microsoft.CodeAnalysis.CSharp
                     var tryExpr = (BoundTryExpression)expr;
                     return GetValEscape(tryExpr.Arms.SelectAsArray(a => a.Value).Insert(0, tryExpr.Body));
 
+                case BoundKind.SharperPipe:
+                    // The stage reads the pipe's 'it', whose scopes RefSafetyAnalysis took from the left side.
+                    return GetValEscape(((BoundSharperPipe)expr).Stage);
+
                 default:
                     // in error situations some unexpected nodes could make here
                     // returning '_localScopeDepth' seems safer than throwing.
@@ -5622,6 +5631,12 @@ namespace Microsoft.CodeAnalysis.CSharp
                         }
 
                         return true;
+                    }
+
+                case BoundKind.SharperPipe:
+                    {
+                        var stage = ((BoundSharperPipe)expr).Stage;
+                        return CheckValEscape(stage.Syntax, stage, escapeTo, checkingReceiver: false, diagnostics: diagnostics);
                     }
 
                 default:

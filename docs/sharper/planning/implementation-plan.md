@@ -76,7 +76,7 @@ Each trap was probed before deciding how to handle it.
 | `->` as a lambda arrow | No: `->` is only the arrow of function types; lambdas keep `=>`. | `x -> F(x)` is already a pointer member access, parsed the same in and out of unsafe code (`ParsePostFixExpression`); a lambda meaning could only win after binding fails. |
 | What a function type lowers to | Always `Func` or `Action`; `ref`/`out`/`in` parameters and more than 16 parameters are errors for now (#56). | The lambda's natural type synthesizes an anonymous delegate there, but that type is internal to one compilation, so it cannot appear in public signatures, where function types mostly go. |
 | Implicit `it` scope | The innermost argument around `it` whose parameter, in the chosen overload, is a one-parameter delegate; a pipe stage is the outermost slot. Decided in the binder: the argument is bound as an implicit lambda first, and as a value only when no candidate takes a one-parameter delegate there. | Greeter's `() => profiles.Load(it.Id)` needs a type-directed rule: Scala's syntactic `_` rule would make `Load(x => x.Id)`. Converting a lambda to a parameter that is not a delegate fails without binding its body, so the fallback costs one more overload resolution, not a second binding. |
-| Nested `it` | An error: one meaning of `it` per implicit lambda or pipe stage. An outer `it` plus a value and a function overload at the same argument is an error too. | Telling two `it`s apart needs every signature in between, and adding a function in between, or an overload in a library, would move the boundary silently. Allowing it later breaks nothing; banning it later would. |
+| Nested `it` | An error: one meaning of `it` per implicit lambda or pipe stage. An outer `it` plus a value and a function overload at the same argument is an error too. An inner pipe stage is not a second meaning: it owns every `it` in it, which the syntax shows (Feature 12). | Telling two `it`s apart needs every signature in between, and adding a function in between, or an overload in a library, would move the boundary silently. Allowing it later breaks nothing; banning it later would. |
 | Where `ValKeyword` is a keyword | Only on tokens the parser makes, with Sharper on, for a val pattern. `GetContextualKeywordKind("val")` is `None`, and `GetContextualKeywordKinds()` does not list `ValKeyword`; `IsContextualKeyword(ValKeyword)` (and so `IsKeywordKind`) stays true. | Callers of the text-based and list members (Razor's tokenizer and escaping, and through `GetKeywordKinds()` the IDE's doc-comment `langword` completion) apply them to all code, so they must answer as upstream ([#109](https://github.com/ok3mad/roslyn/issues/109), design rule 2). The kind-based check only sees tokens that already are keywords: with Sharper off none exists, and the incremental parser (`Blender.Reader.IsFabricatedToken`) needs it so it re-parses a `ValKeyword` token instead of reusing it where `val` is an identifier. The upstream test of the list's range (`SyntaxTests.TestRangeBasedGetKindsMethodsReturnExpectedResults`) stops below `ValKeyword`. |
 | New syntax nodes | Allowed when no existing node can hold the tokens; numbered from `SyntaxKind` 9900 up. | `(A) -> R` fits no existing node. A high range keeps upstream merges from reusing the values, as CS20000 does for diagnostics. |
 
@@ -124,7 +124,7 @@ The brainstorm proposes 26 pieces of syntax (#28, discard arguments, is still to
 | # | Syntax | Example | Lowers to | Parser change | Size | Certainty | Main risk or open point | Issue |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 12 | Implicit `it` | `xs.Select(Process(it, a))`, `when: it is X` | lambda `x => ...` | none | L | Prototype | Decided: the innermost argument whose parameter is a one-parameter delegate becomes the lambda; one meaning of `it` per lambda or stage; an outer `it` plus value and function overloads is an error; an existing `it` keeps its C# meaning (see [Decided](brainstorm.md#decided)). Calls only so far; `LookupSymbols` and Edit and Continue do not see the lambda yet. See the [feature page](../features/implicit-it.md) | [#24](https://github.com/ok3mad/roslyn/issues/24) |
-| 13 | Pipe, without lifting | `x \|> F`, `x \|> F(it, y)` | nested call | yes (new `\|>` token) | M | Med–High | A bare stage versus a stage that uses `it` | [#25](https://github.com/ok3mad/roslyn/issues/25) |
+| 13 | Pipe, without lifting | `x \|> F`, `x \|> F(it, y)` | nested call (a spill sequence with one local) | yes (`\|>` merged from `\|` and `>`, a new token kind and node) | M | Prototype | Decided: a stage with a free `it` is an expression, any other stage a function applied to the value; left-associative between `??` and `?:`; the left side first; a stage is its own scope. See [Feature 12](#feature-12-pipe-without-lifting) and the [feature page](../features/pipe.md) | [#25](https://github.com/ok3mad/roslyn/issues/25) |
 | 16 | `try` expression | `try await F(url) catch { HttpRequestException { ... } => ..., }` | try/catch with the arms in a catch filter, with spilling | yes (`try` in expression position) | L (low end) | Med; slice 1 prototype | Slice 1: target-typed to a declared C# 15 union, or the best common type of the body and arms; anonymous union results wait for #19. Unmatched exceptions propagate untouched through the filter; no `finally`; an awaitable body must be awaited. See [Feature 8](#feature-8-try-expression-slice-1-design) | [#28](https://github.com/ok3mad/roslyn/issues/28) |
 | 17 | Lambda to single-method interface | `Render(user, id => new Profile())` | generated sealed class | none | M | Med | Only where C# reports an error today; the class needs a readable name for stack traces | [#29](https://github.com/ok3mad/roslyn/issues/29) |
 | 18 | Interface initializer | `new IProfiles { Load = id => ... }`, `_ = Unexpected` | generated class | none (binder only) | M | Med | Builds on #17 | [#30](https://github.com/ok3mad/roslyn/issues/30) |
@@ -190,7 +190,7 @@ Parameter types (#15):
 | --- | --- | --- | --- |
 | P1 | `infer` as a parameter type, with source 2: the default value's type. `null`, `default` and target-typed values give an error | S | Prototype ([#72](https://github.com/ok3mad/roslyn/issues/72)). Decided: every member kind and lambdas; a value that is not a constant gives its type, then CS1736 as in C#; cycles through signatures are CS20028 |
 | P2 | Source 1: the overridden or implemented member gives the parameter and return types. Members are matched by name and parameter count before their types are known; more than one candidate is an error | M | Prototype ([#73](https://github.com/ok3mad/roslyn/issues/73)). Decided: explicit implementations copy from the interface they name; several interfaces with different signatures are CS20044; written types narrow the candidates |
-| P3 | `readonly infer x` | S | Whether `val x` is its shorthand on method parameters |
+| P3 | `readonly infer x` | S | Prototype ([#74](https://github.com/ok3mad/roslyn/issues/74)). Decided: `readonly` combines with P1 and P2 with no new code; whether `val x` is its shorthand on method parameters is [#178](https://github.com/ok3mad/roslyn/issues/178), not built |
 | P4 | Source 4, first cut: the parameter passed directly as an argument to a call with exactly one candidate (method, constructor, delegate). Needs binding the body with a placeholder type | L | How the placeholder interacts with lambdas and local functions in the body |
 | P5 | Source 4 with overloads: every applicable candidate takes the same type at that position, including generic methods whose type arguments come from other arguments | L | |
 | P6 | Source 4, other pinning uses: assignment to a typed local, field or property, `return x` from a method with a written return type, `ref` and `out` arguments. Several uses must agree, and the error names each one | M | |
@@ -796,6 +796,32 @@ generics, narrowing by written and P1 types, the errors, binding order from ever
 and on several threads, records, nullable warnings, the semantic model, IOperation, metadata seen from a C#
 compilation, and concurrent searches. `Infer_NotSupportedYet` lost its override and implementation rows.
 
+## Feature 9: inferred parameter type, step P3
+
+`readonly infer x` is a parameter whose type is inferred (P1 or P2) and that cannot be reassigned:
+`void Fetch(readonly infer timeout = TimeSpan.FromSeconds(5)) { timeout = default; }` reports CS1656 (and CS1736 for
+the default value, as its C# twin does), on branch `sharper/readonly-infer-p3`
+([#74](https://github.com/ok3mad/roslyn/issues/74), feature page
+[inferred-parameter-type.md](../features/inferred-parameter-type.md#readonly-infer-step-p3)). No compiler change.
+
+**Probe.** The two mechanisms do not meet: `readonly` is read from the parameter's modifiers
+(`ParameterHelpers.IsSharperReadOnly`, carried by `SourceComplexParameterSymbolBase.IsSharperReadOnly` and checked in
+`CheckParameterValueKind` and `IsSharperValValue`), and the type comes from the `infer` branch of `MakeParameter`. P2's
+search reads ref kinds with `GetModifiers`, which ignores a leading `readonly`, so `readonly infer r` copies `ref` from
+`M(ref int r)` and is then a `readonly ref` parameter. Every probe gave the diagnostics of the twin with the type written
+out, so the step is tests and docs.
+
+| Question | Decision | Why |
+| --- | --- | --- |
+| Sources | Both on `main`: default values (P1) and the overridden or implemented member (P2); the body sources (P4 to P6) will combine the same way | `readonly` is a rule about the body and plays no part in the signature, so it cannot affect a source |
+| Copied ref kinds | `readonly infer r` over `ref int r` is `readonly ref int r`: writes through the ref allowed, ref reassignment CS1656 | The same reading as a written `readonly ref` |
+| `val x` on method parameters (open point) | Not built; [#178](https://github.com/ok3mad/roslyn/issues/178) (`follow-up`, `needs-decision`) | It fits the grid, but on a method parameter it works only where a source exists; a decision, not glue code |
+
+Diagnostics: none new. Tests: 7 `ReadonlyInfer_*` tests in `SharperTests_ReadonlyInfer.cs`: runtime output next to the
+written twins (methods, local functions, constructors, primary constructors, lambdas, overrides and implementations),
+writes in every member kind, the copied and written ref kinds, struct copies (CS20013) from both sources, and the
+flag off.
+
 ## Feature 10: immutable types, slice 1 (design)
 
 `[Immutable] sealed record Money(decimal Amount, string Currency);` (issue [#139](https://github.com/ok3mad/roslyn/issues/139),
@@ -960,6 +986,44 @@ tests and `assume` (slice 3).
 **Size:** L, about 3.5k lines with tests. The parser and the guard are S; most of the work is binding, the call-site
 rules and return inference.
 
+## Feature 12: pipe, without lifting
+
+`raw |> ParseOrder |> Resolve(it, accounts)` is `Resolve(ParseOrder(raw), accounts)` (issue
+[#25](https://github.com/ok3mad/roslyn/issues/25)). The rules are on the [feature page](../features/pipe.md); this
+section keeps the decisions and what the implementation taught. Lifting over `Task`, sequences and unions is row 20
+([#32](https://github.com/ok3mad/roslyn/issues/32)); until then a type mismatch is an ordinary error.
+
+### Decisions
+
+| Question | Decision | Why |
+| --- | --- | --- |
+| Token | `\|>`: a `\|` directly followed by `>`, merged by the parser behind the flag (`IsAtSharperPipeToken`), as `>>` is. A new kind, `BarGreaterThanToken` = 8231, the top of the free punctuation gap (upstream fills it from the bottom), so `SyntaxFacts.GetText` and `IsPunctuation` work | No C# expression starts with `>`, so `a \|> b` is CS1525 in C#: no valid code changes. A lexer token would apply with the flag off too (trap 13). `x \|> F<int> \|> G` stays generic, because `\|` is in the list of tokens after which `F<int>` is a type argument list; `a \| > b` with a space is not a pipe |
+| Precedence | Left-associative, a level of its own between `?:` (looser) and `??` (tighter), so looser than every binary operator | F# puts `\|>` with the comparisons, above `&&` and `\|\|`; the TC39 (Hack) proposal puts it with `=>` and assignment, below `?:` and `??`. A Sharper stage is often an expression with `it`, so a loose pipe lets `x \|> it > 3 && it < 9` be one stage without parentheses, as in TC39. Below `??`: `s ?? "default" \|> Parse` reads left to right as data flow, and the other reading, `s ?? Parse("default")`, would type-check and silently differ, while `x \|> F ?? d` is only an error (`F ?? d` on a method group). Above `?:`: `x \|> IsValid ? a : b` tests the result, and the branches of `?:` take a pipe (`c ? a : b \|> F`). Lambdas and assignment take a whole pipe: `y = x \|> F`, `x => x \|> F` |
+| Bare stage | A method group, a delegate value or an expression of delegate type, invoked with the value as its only argument through the ordinary invocation binder: overloads, type inference, extension methods, `dynamic`. Bound as a method group conversion would be (not "invoked"), because lookup's mode must match `SyntaxFacts.IsInvoked`, which primary constructor captures rely on. Anything else is CS20045 | The stage is a function; C# already knows how to call one. CS20045 catches the common slip `x \|> y.Length` for `x \|> it.Length` |
+| Stage with `it` | A stage with a free `it` (the implicit lambda's test: C# finds no `it`, or only an outer implicit one) binds as an expression in a scope that declares `it` as a read-only local holding the value. Not a lambda | So `await` works in a stage, nothing is allocated, and `it` is an ordinary variable for closures, the debugger and flow analysis |
+| `it` scoping | A stage is the outermost slot: an argument inside it that takes a one-parameter function claims an `it` first (innermost wins, Feature 7). A stage left without an `it` of its own is CS20047. A stage that uses its `it` and contains an implicit lambda is CS20020, and CS20021 takes the stage's `it` as the outer one. An inner pipe stage is not a second meaning: `xs.Select(it.Id \|> it * 10)` | The implicit lambda rules exist because only signatures tell lambdas apart; a stage's extent is syntax, so nesting pipes needs no signature to read |
+| Evaluation order | The left side once, before anything in the stage, including a bare stage's receiver or delegate expression | Reading order. `x \|> o.M` as the plain call `o.M(x)` would evaluate `o` first |
+| Scope of declarations | A stage is its own scope, like a lambda body: `out var` and pattern variables in it end with it | The stage binds when its `it` has a type, under its own binder map; the enclosing statement's scope cannot hold variables bound later. `x \|> (TryParse(it, out var n) ? n : 0)` needs the parentheses, since `?:` is looser |
+| `await` | Allowed in a stage (`id \|> await Load(it)`, `x \|> F \|> await it`); `await x \|> F` awaits `x` | `await` is a unary operator, tighter than any binary one |
+| Lowering | A spill sequence: `it = x;` before the enclosing statement and the stage in place, as a switch expression lowers. No new runtime type; in optimized builds a local read once stays on the stack, which leaves the nested call | `it` and the stage's variables are user variables (the debugger shows them, closures capture them), and codegen keeps those out of an expression's sequence: it records a sequence's locals as expression temps and frees them, which named locals cannot be. Closure conversion has no field name for a captured lowering temp |
+| IOperation | `OperationKind.None` with the left side as its only child ([#155](https://github.com/ok3mad/roslyn/issues/155)) | The control flow graph has no region for the stage's `it` |
+| Expression trees | CS20049 | The stage's `it` is a variable |
+
+### What it taught
+
+- **A scope whose types come from binding needs its own binder map.** The stage's `it` has the type of the left side,
+  so its binder is made when the pipe binds (`SharperPipeStageBinder`), and the member's map must leave the stage out:
+  `LocalBinderFactory` and `ExpressionVariableFinder` both get `VisitPipeExpression` (trap 31). An
+  `ExecutableCodeBinder` would build the map too, but it clears the catch, filter and finally flags; a
+  `LocalScopeBinder` that builds the map keeps them. Each binding of a pipe makes its own binder and local, as each
+  binding of a lambda does, so trial binding (implicit `it`) is safe.
+- **Debug checks list the nodes that declare locals.** `BoundNode.LocalsScanner` (undeclared local) and
+  `RefSafetyAnalysis.VisitLocal` (no escape scope) assert on a local that no known node declares; both need the new
+  node, and ref safety needs `GetValEscape` and `CheckValEscape` cases for it.
+- **A new syntax for a `BoundCall` meets the interceptor check.** `BoundExpression.InterceptableNameSyntax` asserts on
+  call syntax it does not know; a bare stage's call is not interceptable for now ([#158](https://github.com/ok3mad/roslyn/issues/158)).
+- **User variables cannot live in an expression's sequence.** See Lowering above; a spill sequence is the precedent.
+
 ## Follow-ups
 
 Sharper diagnostics were renumbered from `SharperErrorCodes.Base` (20000): CS9402, CS9403 and CS9404 became CS20001, CS20002 and CS20003, and this document uses the new numbers throughout.
@@ -998,6 +1062,11 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 - [ ] Implicit `it`: an error that names the inner call when it claims `it` (today CS0411 at the outer call), and a cause string for writes to `it`. [#126](https://github.com/ok3mad/roslyn/issues/126)
 - [ ] Implicit `it`: the cost of the two trials and of the per-call syntax scan. [#127](https://github.com/ok3mad/roslyn/issues/127)
 - [ ] Implicit `it`: IDE support (Quick Info, hints) and the "name the parameter" fixer. [#128](https://github.com/ok3mad/roslyn/issues/128)
+- [ ] Pipe: an IOperation shape, and the stage in the control flow graph. [#155](https://github.com/ok3mad/roslyn/issues/155)
+- [ ] Pipe: `LookupSymbols` and speculative binding inside a stage. [#156](https://github.com/ok3mad/roslyn/issues/156)
+- [ ] Pipe: target-typed stages, and a bare lambda stage. [#157](https://github.com/ok3mad/roslyn/issues/157)
+- [ ] Pipe: sequence points, Edit and Continue and interceptors. [#158](https://github.com/ok3mad/roslyn/issues/158)
+- [ ] Pipe: IDE support. [#159](https://github.com/ok3mad/roslyn/issues/159)
 - [x] `try` expression: test a target-typed switch and `?:` into a C# 15 union before slice 1's binding. [#137](https://github.com/ok3mad/roslyn/issues/137)
 - [ ] `try` expression: a warning on a catch-all arm. [#135](https://github.com/ok3mad/roslyn/issues/135)
 - [ ] `try` expression: lift a task body instead of warning, after lifting (#32). [#136](https://github.com/ok3mad/roslyn/issues/136)
@@ -1016,13 +1085,13 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 - [ ] `readonly` locals: decide `readonly` in `for` initializers, `foreach`, deconstruction and `out` (no modifier slot; a public syntax change). [#95](https://github.com/ok3mad/roslyn/issues/95)
 - [ ] `readonly` locals: IDE support (completion, refactorings that drop or break `readonly`). [#96](https://github.com/ok3mad/roslyn/issues/96)
 - [x] `readonly` parameters, the grid's remaining explicitly typed corner. [#97](https://github.com/ok3mad/roslyn/issues/97)
-- [ ] Inferred parameter type: steps P3 to P8 ([#74](https://github.com/ok3mad/roslyn/issues/74) and the rest of [#27](https://github.com/ok3mad/roslyn/issues/27)); the default value is bound twice, once to infer and once against the type. P2 ([#73](https://github.com/ok3mad/roslyn/issues/73)): properties, indexers, operators and events of overrides and implementations do not copy yet.
+- [ ] Inferred parameter type: steps P4 to P8 (the rest of [#27](https://github.com/ok3mad/roslyn/issues/27)); P3's open point, `val x` as the shorthand of `readonly infer x` on method parameters, is [#178](https://github.com/ok3mad/roslyn/issues/178); the default value is bound twice, once to infer and once against the type. P2 ([#73](https://github.com/ok3mad/roslyn/issues/73)): properties, indexers, operators and events of overrides and implementations do not copy yet.
 - [ ] Inferred return type: step R5 ([#71](https://github.com/ok3mad/roslyn/issues/71)); a local function's nullable inference sees captured variables at their declared state; a local function that calls the inferred method around it makes a cycle even when the method never calls it.
 - [ ] Inferred return type after R4 ([#70](https://github.com/ok3mad/roslyn/issues/70)): properties and indexers, together with [#166](https://github.com/ok3mad/roslyn/issues/166) (P2 for properties, indexers, operators and events, including explicit implementations of operators); `ref` returns; the anonymous union exception for visible members, with unions ([#31](https://github.com/ok3mad/roslyn/issues/31)).
 - [ ] Inferred return type: `Infer_Cycle_Concurrent` fails about once in 2,000 iterations, on `main` too: under threads, the cycle that CS20033 names for one member of a three-member cycle can differ from the single-threaded one (seen while validating R4).
 - [ ] Inferred return type: async iterators (`IAsyncEnumerable<T>`), and an inferred union when the returned values have no best common type, which waits for [#31](https://github.com/ok3mad/roslyn/issues/31).
 - [ ] `readonly` locals share the `val` follow-ups: silence CS20010 with CS20003 (#84), the "never reassigned" fixer can offer `readonly int` (#89), and the public API (#88) and Edit and Continue (#90) items cover them too.
-- [x] Run the upstream parser tests with Sharper on ([#63](https://github.com/ok3mad/roslyn/issues/63)): `ROSLYN_TEST_SHARPER=1` adds the feature to the test parse options (`TestOptions`, `CSharpTestSource.Parse`, the `ParsingTests` helpers). Tests that call `SyntaxFactory` without options are not covered. Last run (net10.0, Debug, `main` with `val`, `readonly` locals and parameters, `T[..]`, function types, also parenthesized and in patterns, and `T~`), with no valid C# parsing differently:
-  - Syntax project: 37 of 10,834 fail, all expected. 32 parse invalid C# with `readonly` on a local or a parameter, which Sharper accepts, so CS0106, CS9229 or CS8328 is gone (`DeclarationScopeParsingTests` 22, `RefReadonlyTests` 6, including `InverseReadOnlyRefShouldBeIllegal` and `RefReadonlyWithScoped_03` for `readonly ref int p`, `StatementParsingTests.TestUsingVar*` 2, `TopLevelStatementsParsingTests.UsingLocalDeclaration_06`, `DeclarationParsingTests.DefiniteStatementAfterGenericType_ReadOnlyKeyword`). 3 parse a contextual modifier before a destructor at C# 15, `partial ~C()` and `safe ~C()`, where `partial~` is now a task type (`SafeModifierParsingTests.Destructor_Before`, `Destructor_ExternSafe_Before`, `ModifierParserRecoveryTests.PartialBeforeDestructor`); both are errors either way. 2 assert that the options have no features (`LocalFunctionParsingTests.DiagnosticsWithoutExperimental`, `NodesWithExperimental`).
+- [x] Run the upstream parser tests with Sharper on ([#63](https://github.com/ok3mad/roslyn/issues/63)): `ROSLYN_TEST_SHARPER=1` adds the feature to the test parse options (`TestOptions`, `CSharpTestSource.Parse`, the `ParsingTests` helpers). Tests that call `SyntaxFactory` without options are not covered. Last run (net10.0, Debug, `main` with `val`, `readonly` locals and parameters, `T[..]`, function types, also parenthesized and in patterns, and `T~`; the Syntax project again on `sharper/pipe` with `|>`, with the same 37 failures), with no valid C# parsing differently:
+  - Syntax project: 37 of 10,844 fail, all expected. 32 parse invalid C# with `readonly` on a local or a parameter, which Sharper accepts, so CS0106, CS9229 or CS8328 is gone (`DeclarationScopeParsingTests` 22, `RefReadonlyTests` 6, including `InverseReadOnlyRefShouldBeIllegal` and `RefReadonlyWithScoped_03` for `readonly ref int p`, `StatementParsingTests.TestUsingVar*` 2, `TopLevelStatementsParsingTests.UsingLocalDeclaration_06`, `DeclarationParsingTests.DefiniteStatementAfterGenericType_ReadOnlyKeyword`). 3 parse a contextual modifier before a destructor at C# 15, `partial ~C()` and `safe ~C()`, where `partial~` is now a task type (`SafeModifierParsingTests.Destructor_Before`, `Destructor_ExternSafe_Before`, `ModifierParserRecoveryTests.PartialBeforeDestructor`); both are errors either way. 2 assert that the options have no features (`LocalFunctionParsingTests.DiagnosticsWithoutExperimental`, `NodesWithExperimental`).
   - Semantic project: 29 of 20,085 fail. 24 are `SharperTests` that check the flag-off behavior or both modes; run the project with `--filter "FullyQualifiedName!~SharperTests"`. 5 are the same `readonly` locals in invalid C# (`UsingDeclarationTests.UsingDeclarationsWithInvalidModifiers`, `RefFieldTests.TypeScopeModifier_02_CSharp10` and `_CSharp11`, `ReadOnlyStructsTests.ReadOnlyLambda`, `TopLevelStatementsTests.LocalDeclarationStatement_02`). All pattern and deconstruction binding tests pass.
   - The run found one scanner difference, fixed: `ScanTupleOrSharperFunctionType` took a `ref` tuple element as a parameter modifier and refused the tuple, so `(ref readonly int, int)? t = null;` lost C#'s recovery (`RefReadonlyTests.RefReadonlyReturn_UnexpectedBindTime`; `SharperTests.FunctionType_Parsing_RefTupleElement`).

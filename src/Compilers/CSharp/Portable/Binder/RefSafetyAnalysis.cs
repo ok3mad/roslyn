@@ -485,6 +485,16 @@ namespace Microsoft.CodeAnalysis.CSharp
             return base.VisitSwitchExpressionArm(node);
         }
 
+        public override BoundNode? VisitSharperPipe(BoundSharperPipe node)
+        {
+            // The stage's 'it' is like a local declared with the left side as its initializer.
+            using var _ = new LocalScope(this, node.Locals.Insert(0, node.Local));
+            Visit(node.Left);
+            SetLocalScopes(node.Local, _localScopeDepth, GetValEscape(node.Left));
+            Visit(node.Stage);
+            return null;
+        }
+
         public override BoundNode? VisitCatchBlock(BoundCatchBlock node)
         {
             using var _ = new LocalScope(this, node.Locals);

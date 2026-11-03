@@ -265,7 +265,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             var location = member.GetFirstLocation();
             if (member.IsVirtual || member.IsAbstract || member.IsOverride)
             {
-                // PROTOTYPE(sharper): The rule for overrides and implementations (#173, second PR).
+                // Not supported yet: the rule for overrides and implementations is the second part of slice 1 (#173).
                 diagnostics.Add(ErrorCode.ERR_SharperPureVirtual, location, member);
                 return;
             }

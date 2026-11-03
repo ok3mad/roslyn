@@ -310,6 +310,28 @@ implementation plan, "Feature 3"):
    (`RudeEditKind.ChangeSharperInferredReturnType`, Sharper kinds from 1000), as the implicit `Main` is. The C# Edit and
    Continue tests take Sharper parse options through `GetTopEdits(..., parseOptions:)` and
    `VerifySemanticDiagnostics(parseOptions, ...)` (`SharperTopLevelEditingTests`).
+35. **A new operator token is merged by the parser, behind the flag.** The pipe `|>` is `|` and `>` with no trivia
+   between them (`IsAtSharperPipeToken`), merged in `EatExpressionOperatorToken` as `>>` is; a lexer token would exist
+   with the flag off too (trap 13). Its kind sits at the top of the free punctuation gap (`BarGreaterThanToken` = 8231),
+   so `SyntaxFacts.GetText` and `IsPunctuation` work; add it to `GetPunctuationKinds`, which an upstream range test
+   checks (`SyntaxTests.TestRangeBasedGetKindsMethodsReturnExpectedResults`). Check generic names before it: `F<int> |>`
+   stays generic only because `|` is in the list of tokens after which `<...>` is a type argument list.
+36. **A scope whose variable's type comes from binding gets its own binder map.** A pipe stage's `it` has the left
+   side's type, so its binder is made when the pipe binds (`SharperPipeStageBinder`, a `LocalScopeBinder` that builds
+   the stage's map with `LocalBinderFactory.BuildMap`), and the member's map leaves the stage out (trap 31). Do not use
+   an `ExecutableCodeBinder` for an expression: it clears the catch, filter and finally flags. Making the binder and the
+   local afresh at each binding keeps trial binding (trap 25) safe.
+37. **User variables cannot live in an expression's `BoundSequence`.** Codegen records a sequence's locals as expression
+   temps when the sequence is a receiver or a ref, and frees them (`LocalSlotManager.FreeSlot` asserts on a named slot);
+   a lowering temp instead cannot be captured (closure conversion has no field name for it). A lowering that declares a
+   variable the user can see or capture returns a `BoundSpillSequence` and sets `_needsSpilling`, as the switch
+   expression does; the spiller moves it into the statement list.
+38. **Debug checks enumerate the nodes that declare locals.** `BoundNode.LocalsScanner` ("undeclared local") and
+   `RefSafetyAnalysis.VisitLocal` (no escape scope) assert on a local no known node declares: add the node to both,
+   with `GetValEscape` and `CheckValEscape` cases. A `BoundCall` with new syntax meets
+   `BoundExpression.InterceptableNameSyntax`, and binding a name with `invoked: true` must agree with
+   `SyntaxFacts.IsInvoked` (`AdjustIdentifierMapIfAny`, for primary constructor captures): bind a callee that is not the
+   expression of an invocation as a method group conversion would.
 
 ## Inferred Types
 

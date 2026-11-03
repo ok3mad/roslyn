@@ -182,6 +182,9 @@ namespace Microsoft.CodeAnalysis.CSharp
                 yield return (SyntaxKind)i;
             }
 
+            // Sharper's pipe token, in the gap before the xml tokens.
+            yield return SyntaxKind.BarGreaterThanToken;
+
             for (int i = (int)SyntaxKind.SlashGreaterThanToken; i <= (int)SyntaxKind.XmlProcessingInstructionEndToken; i++)
             {
                 Debug.Assert(Enum.IsDefined(typeof(SyntaxKind), (SyntaxKind)i));
@@ -1590,6 +1593,8 @@ namespace Microsoft.CodeAnalysis.CSharp
                     return "??=";
                 case SyntaxKind.DotDotToken:
                     return "..";
+                case SyntaxKind.BarGreaterThanToken:
+                    return "|>";
 
                 // Keywords
                 case SyntaxKind.BoolKeyword:

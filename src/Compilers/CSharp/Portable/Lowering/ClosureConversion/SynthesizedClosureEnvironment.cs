@@ -118,7 +118,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 return;
             }
 
-            if (LambdaUtilities.IsClosureScope(syntaxOpt) || LambdaUtilities.IsSharperImplicitItLambdaBody(syntaxOpt))
+            if (LambdaUtilities.IsClosureScope(syntaxOpt) || LambdaUtilities.IsSharperImplicitItLambdaBody(syntaxOpt) || LambdaUtilities.IsSharperPipeClosureScope(syntaxOpt))
             {
                 return;
             }

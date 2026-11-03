@@ -24,8 +24,12 @@ namespace Microsoft.CodeAnalysis.CSharp
                                 or ConstructorInitializerSyntax
                                 or PrimaryConstructorBaseTypeSyntax { ArgumentList: { } }
                                 or WithElementSyntax
-                                or CollectionExpressionSyntax,
+                                or CollectionExpressionSyntax
+                                || this.Syntax.Parent is PipeExpressionSyntax,
                     $"Unexpected syntax kind for BoundCall: {this.Syntax.Kind()}");
+
+                // PROTOTYPE(sharper): the call of a bare pipe stage ('x |> F') has the stage as its syntax, and cannot be
+                // intercepted yet (#158).
 
                 if (this.WasCompilerGenerated || this.Syntax is not InvocationExpressionSyntax syntax)
                 {

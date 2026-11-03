@@ -35,8 +35,10 @@ The decisions are in the brainstorm's [Decided](../planning/brainstorm.md#decide
 - **Value or function.** When an outer `it` exists and the method takes a value or a function at that argument (both
   readings bind), it is CS20021, so an overload added to a library can never move `it` silently. Without an outer
   `it`, the function is used: `users.FirstOrDefault(it.IsAdmin)` is the predicate.
-- **Arguments only.** `var f = it * 2;`, a `return` and LINQ query clauses have no `it` (CS20019). The pipe `|>`
-  ([#25](https://github.com/ok3mad/roslyn/issues/25)) will add stages as the outermost slot.
+- **Arguments and pipe stages only.** `var f = it * 2;`, a `return` and LINQ query clauses have no `it` (CS20019). A
+  [pipe](pipe.md) stage is the outermost slot: in `x |> F(it, xs.Where(it > 0))` the inner `it` is the implicit
+  lambda's, which makes the stage CS20020, and the pipe's `it` is an outer `it` for CS20021. A pipe inside an implicit
+  lambda is not a second meaning, because a stage owns every `it` in it: `xs.Select(it.Id |> it * 10)`.
 - **No declarations.** A variable declared in an argument list that contains an implicit lambda (`out var v`,
   `is int n`) is CS20022, and the arguments bind as values. `await` in an implicit lambda is CS20023: an implicit
   lambda cannot be `async`.
@@ -85,7 +87,7 @@ change; three assertions that expect lambda syntax accept an argument expression
 ## Follow-ups
 
 Each item under [Not supported yet](#not-supported-yet) has an issue, [#122](https://github.com/ok3mad/roslyn/issues/122) to [#128](https://github.com/ok3mad/roslyn/issues/128), and the code
-marks them with `PROTOTYPE(sharper)` comments. Pipe stages come with [#25](https://github.com/ok3mad/roslyn/issues/25).
+marks them with `PROTOTYPE(sharper)` comments. Pipe stages are on the [pipe](pipe.md) page.
 
 ## Code
 

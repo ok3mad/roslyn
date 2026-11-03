@@ -225,40 +225,40 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (5,24): warning CS0414: The field 'C.s_x' is assigned but its value is never used
                 //     private static int s_x;
                 Diagnostic(ErrorCode.WRN_UnreferencedFieldAssg, "s_x").WithArguments("C.s_x").WithLocation(5, 24),
-                // (8,31): error CS20046: 'C.WriteThis()' is marked [Pure], but it is not pure: '_x = 1' writes state outside the member.
+                // (8,31): error CS20050: 'C.WriteThis()' is marked [Pure], but it is not pure: '_x = 1' writes state outside the member.
                 //     [Pure] int WriteThis() => _x = 1;
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, "_x = 1").WithArguments("C.WriteThis()", "'_x = 1' writes state outside the member").WithLocation(8, 31),
-                // (9,31): error CS20046: 'C.Increment()' is marked [Pure], but it is not pure: '_x++' writes state outside the member.
+                // (9,31): error CS20050: 'C.Increment()' is marked [Pure], but it is not pure: '_x++' writes state outside the member.
                 //     [Pure] int Increment() => _x++;
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, "_x++").WithArguments("C.Increment()", "'_x++' writes state outside the member").WithLocation(9, 31),
-                // (10,47): error CS20046: 'C.WriteArgument(Box)' is marked [Pure], but it is not pure: 'b.X = 1' writes state outside the member.
+                // (10,47): error CS20050: 'C.WriteArgument(Box)' is marked [Pure], but it is not pure: 'b.X = 1' writes state outside the member.
                 //     [Pure] static int WriteArgument(Box b) => b.X = 1;
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, "b.X = 1").WithArguments("C.WriteArgument(Box)", "'b.X = 1' writes state outside the member").WithLocation(10, 47),
-                // (11,49): error CS20046: 'C.WriteElement(int[])' is marked [Pure], but it is not pure: 'xs[0] = 1' writes state outside the member.
+                // (11,49): error CS20050: 'C.WriteElement(int[])' is marked [Pure], but it is not pure: 'xs[0] = 1' writes state outside the member.
                 //     [Pure] static int WriteElement(int[] xs) => xs[0] = 1;
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, "xs[0] = 1").WithArguments("C.WriteElement(int[])", "'xs[0] = 1' writes state outside the member").WithLocation(11, 49),
-                // (12,46): error CS20046: 'C.WriteRef(ref int)' is marked [Pure], but it is not pure: 'x = 1' writes state outside the member.
+                // (12,46): error CS20050: 'C.WriteRef(ref int)' is marked [Pure], but it is not pure: 'x = 1' writes state outside the member.
                 //     [Pure] static int WriteRef(ref int x) => x = 1;
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, "x = 1").WithArguments("C.WriteRef(ref int)", "'x = 1' writes state outside the member").WithLocation(12, 46),
-                // (13,40): error CS20046: 'C.WriteStatic()' is marked [Pure], but it is not pure: 's_x = 1' writes state outside the member.
+                // (13,40): error CS20050: 'C.WriteStatic()' is marked [Pure], but it is not pure: 's_x = 1' writes state outside the member.
                 //     [Pure] static int WriteStatic() => s_x = 1;
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, "s_x = 1").WithArguments("C.WriteStatic()", "'s_x = 1' writes state outside the member").WithLocation(13, 40),
-                // (14,54): error CS20046: 'C.WriteRefLocal()' is marked [Pure], but it is not pure: 'r = 1' writes state outside the member.
+                // (14,54): error CS20050: 'C.WriteRefLocal()' is marked [Pure], but it is not pure: 'r = 1' writes state outside the member.
                 //     [Pure] int WriteRefLocal() { ref int r = ref _x; r = 1; return r; }
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, "r = 1").WithArguments("C.WriteRefLocal()", "'r = 1' writes state outside the member").WithLocation(14, 54),
-                // (16,44): warning CS20049: The out argument '_x' of the [Pure] member 'C.TryGet(out int)' is not a fresh local, so 'C.TryGet(out int)' may observe its own write through another argument.
+                // (16,44): warning CS20053: The out argument '_x' of the [Pure] member 'C.TryGet(out int)' is not a fresh local, so 'C.TryGet(out int)' may observe its own write through another argument.
                 //     [Pure] bool OutToField() => TryGet(out _x);
                 Diagnostic(ErrorCode.WRN_SharperPureOutArgumentNotFresh, "_x").WithArguments("C.TryGet(out int)", "_x").WithLocation(16, 44),
-                // (16,44): error CS20046: 'C.OutToField()' is marked [Pure], but it is not pure: '_x' writes state outside the member.
+                // (16,44): error CS20050: 'C.OutToField()' is marked [Pure], but it is not pure: '_x' writes state outside the member.
                 //     [Pure] bool OutToField() => TryGet(out _x);
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, "_x").WithArguments("C.OutToField()", "'_x' writes state outside the member").WithLocation(16, 44),
-                // (17,46): warning CS20049: The out argument '_xs[0]' of the [Pure] member 'C.TryGet(out int)' is not a fresh local, so 'C.TryGet(out int)' may observe its own write through another argument.
+                // (17,46): warning CS20053: The out argument '_xs[0]' of the [Pure] member 'C.TryGet(out int)' is not a fresh local, so 'C.TryGet(out int)' may observe its own write through another argument.
                 //     [Pure] bool OutToElement() => TryGet(out _xs[0]);
                 Diagnostic(ErrorCode.WRN_SharperPureOutArgumentNotFresh, "_xs[0]").WithArguments("C.TryGet(out int)", "_xs[0]").WithLocation(17, 46),
-                // (17,46): error CS20046: 'C.OutToElement()' is marked [Pure], but it is not pure: '_xs[0]' writes state outside the member.
+                // (17,46): error CS20050: 'C.OutToElement()' is marked [Pure], but it is not pure: '_xs[0]' writes state outside the member.
                 //     [Pure] bool OutToElement() => TryGet(out _xs[0]);
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, "_xs[0]").WithArguments("C.OutToElement()", "'_xs[0]' writes state outside the member").WithLocation(17, 46),
-                // (21,31): error CS20046: 'Local()' is marked [Pure], but it is not pure: 'count++' writes state outside the member.
+                // (21,31): error CS20050: 'Local()' is marked [Pure], but it is not pure: 'count++' writes state outside the member.
                 //         [Pure] int Local() => count++;
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, "count++").WithArguments("Local()", "'count++' writes state outside the member").WithLocation(21, 31));
         }
@@ -289,19 +289,19 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (4,24): warning CS0649: Field 'C.s_mutable' is never assigned to, and will always have its default value 0
                 //     private static int s_mutable;
                 Diagnostic(ErrorCode.WRN_UnassignedInternalField, "s_mutable").WithArguments("C.s_mutable", "0").WithLocation(4, 24),
-                // (11,39): error CS20046: 'C.ReadStatic()' is marked [Pure], but it is not pure: 's_mutable' reads static state that can change.
+                // (11,39): error CS20050: 'C.ReadStatic()' is marked [Pure], but it is not pure: 's_mutable' reads static state that can change.
                 //     [Pure] static int ReadStatic() => s_mutable;
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, "s_mutable").WithArguments("C.ReadStatic()", "'s_mutable' reads static state that can change").WithLocation(11, 39),
-                // (12,43): error CS20046: 'C.ReadList()' is marked [Pure], but it is not pure: 's_list' reads static state that can change.
+                // (12,43): error CS20050: 'C.ReadList()' is marked [Pure], but it is not pure: 's_list' reads static state that can change.
                 //     [Pure] static List<int> ReadList() => s_list;
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, "s_list").WithArguments("C.ReadList()", "'s_list' reads static state that can change").WithLocation(12, 43),
-                // (13,38): error CS20046: 'C.ReadArray()' is marked [Pure], but it is not pure: 's_array' reads static state that can change.
+                // (13,38): error CS20050: 'C.ReadArray()' is marked [Pure], but it is not pure: 's_array' reads static state that can change.
                 //     [Pure] static int ReadArray() => s_array[0];
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, "s_array").WithArguments("C.ReadArray()", "'s_array' reads static state that can change").WithLocation(13, 38),
-                // (14,47): error CS20046: 'C.ReadStaticProperty()' is marked [Pure], but it is not pure: 'Static' calls 'C.Static', which is not known to be pure.
+                // (14,47): error CS20050: 'C.ReadStaticProperty()' is marked [Pure], but it is not pure: 'Static' calls 'C.Static', which is not known to be pure.
                 //     [Pure] static int ReadStaticProperty() => Static;
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, "Static").WithArguments("C.ReadStaticProperty()", "'Static' calls 'C.Static', which is not known to be pure").WithLocation(14, 47),
-                // (16,49): error CS20046: 'C.ReadStaticList()' is marked [Pure], but it is not pure: 'StaticList' calls 'C.StaticList', which is not known to be pure.
+                // (16,49): error CS20050: 'C.ReadStaticList()' is marked [Pure], but it is not pure: 'StaticList' calls 'C.StaticList', which is not known to be pure.
                 //     [Pure] static List<int> ReadStaticList() => StaticList;
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, "StaticList").WithArguments("C.ReadStaticList()", "'StaticList' calls 'C.StaticList', which is not known to be pure").WithLocation(16, 49));
         }
@@ -338,55 +338,55 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             CreateImmutableCompilation(source).VerifyDiagnostics(
-                // (9,35): error CS20046: 'C.CallsUnmarked()' is marked [Pure], but it is not pure: 'Unmarked()' calls 'C.Unmarked()', which is not known to be pure.
+                // (9,35): error CS20050: 'C.CallsUnmarked()' is marked [Pure], but it is not pure: 'Unmarked()' calls 'C.Unmarked()', which is not known to be pure.
                 //     [Pure] int CallsUnmarked() => Unmarked();
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, "Unmarked()").WithArguments("C.CallsUnmarked()", "'Unmarked()' calls 'C.Unmarked()', which is not known to be pure").WithLocation(9, 35),
-                // (10,40): error CS20046: 'C.CallsVirtual(Base)' is marked [Pure], but it is not pure: 'b.V()' calls 'Base.V()', which is not known to be pure.
+                // (10,40): error CS20050: 'C.CallsVirtual(Base)' is marked [Pure], but it is not pure: 'b.V()' calls 'Base.V()', which is not known to be pure.
                 //     [Pure] int CallsVirtual(Base b) => b.V();
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, "b.V()").WithArguments("C.CallsVirtual(Base)", "'b.V()' calls 'Base.V()', which is not known to be pure").WithLocation(10, 40),
-                // (11,46): error CS20046: 'C.Invoke(Func<int>)' is marked [Pure], but it is not pure: 'f()' calls 'System.Func<int>.Invoke()', which is not known to be pure.
+                // (11,46): error CS20050: 'C.Invoke(Func<int>)' is marked [Pure], but it is not pure: 'f()' calls 'System.Func<int>.Invoke()', which is not known to be pure.
                 //     [Pure] static int Invoke(Func<int> f) => f();
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, "f()").WithArguments("C.Invoke(System.Func<int>)", "'f()' calls 'System.Func<int>.Invoke()', which is not known to be pure").WithLocation(11, 46),
-                // (12,41): error CS20046: 'C.Lambda()' is marked [Pure], but it is not pure: '() => 1' is not allowed in a pure member.
+                // (12,41): error CS20050: 'C.Lambda()' is marked [Pure], but it is not pure: '() => 1' is not allowed in a pure member.
                 //     [Pure] static Func<int> Lambda() => () => 1;
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, "() => 1").WithArguments("C.Lambda()", "'() => 1' is not allowed in a pure member").WithLocation(12, 41),
-                // (13,43): error CS20046: 'C.Format(int)' is marked [Pure], but it is not pure: 'x.ToString()' calls 'int.ToString()', which is not known to be pure.
+                // (13,43): error CS20050: 'C.Format(int)' is marked [Pure], but it is not pure: 'x.ToString()' calls 'int.ToString()', which is not known to be pure.
                 //     [Pure] static string Format(int x) => x.ToString();
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, "x.ToString()").WithArguments("C.Format(int)", "'x.ToString()' calls 'int.ToString()', which is not known to be pure").WithLocation(13, 43),
-                // (14,51): error CS20046: 'C.Interpolate(int)' is marked [Pure], but it is not pure: 'x' formats with the current culture.
+                // (14,51): error CS20050: 'C.Interpolate(int)' is marked [Pure], but it is not pure: 'x' formats with the current culture.
                 //     [Pure] static string Interpolate(int x) => $"{x}";
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, "x").WithArguments("C.Interpolate(int)", "'x' formats with the current culture").WithLocation(14, 51),
-                // (15,53): error CS20046: 'C.Concat(string, int)' is marked [Pure], but it is not pure: 's + x' formats with the current culture.
+                // (15,53): error CS20050: 'C.Concat(string, int)' is marked [Pure], but it is not pure: 's + x' formats with the current culture.
                 //     [Pure] static string Concat(string s, int x) => s + x;
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, "s + x").WithArguments("C.Concat(string, int)", "'s + x' formats with the current culture").WithLocation(15, 53),
-                // (16,48): error CS20046: 'C.StartsWith(string)' is marked [Pure], but it is not pure: 's.StartsWith("a")' calls 'string.StartsWith(string)', which is not known to be pure.
+                // (16,48): error CS20050: 'C.StartsWith(string)' is marked [Pure], but it is not pure: 's.StartsWith("a")' calls 'string.StartsWith(string)', which is not known to be pure.
                 //     [Pure] static bool StartsWith(string s) => s.StartsWith("a");
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, @"s.StartsWith(""a"")").WithArguments("C.StartsWith(string)", @"'s.StartsWith(""a"")' calls 'string.StartsWith(string)', which is not known to be pure").WithLocation(16, 48),
-                // (17,56): error CS20046: 'C.Identity(object, object)' is marked [Pure], but it is not pure: 'ReferenceEquals(a, b)' observes object identity.
+                // (17,56): error CS20050: 'C.Identity(object, object)' is marked [Pure], but it is not pure: 'ReferenceEquals(a, b)' observes object identity.
                 //     [Pure] static bool Identity(object a, object b) => ReferenceEquals(a, b);
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, "ReferenceEquals(a, b)").WithArguments("C.Identity(object, object)", "'ReferenceEquals(a, b)' observes object identity").WithLocation(17, 56),
-                // (18,52): error CS20046: 'C.ReferenceEqual(C, C)' is marked [Pure], but it is not pure: 'a == b' observes object identity.
+                // (18,52): error CS20050: 'C.ReferenceEqual(C, C)' is marked [Pure], but it is not pure: 'a == b' observes object identity.
                 //     [Pure] static bool ReferenceEqual(C a, C b) => a == b;
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, "a == b").WithArguments("C.ReferenceEqual(C, C)", "'a == b' observes object identity").WithLocation(18, 52),
-                // (19,35): error CS20046: 'C.Print()' is marked [Pure], but it is not pure: 'Console.WriteLine()' calls 'System.Console.WriteLine()', which is not known to be pure.
+                // (19,35): error CS20050: 'C.Print()' is marked [Pure], but it is not pure: 'Console.WriteLine()' calls 'System.Console.WriteLine()', which is not known to be pure.
                 //     [Pure] static void Print() => Console.WriteLine();
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, "Console.WriteLine()").WithArguments("C.Print()", "'Console.WriteLine()' calls 'System.Console.WriteLine()', which is not known to be pure").WithLocation(19, 35),
-                // (20,42): error CS20046: 'C.NewList()' is marked [Pure], but it is not pure: 'new List<int>()' calls 'System.Collections.Generic.List<int>.List()', which is not known to be pure.
+                // (20,42): error CS20050: 'C.NewList()' is marked [Pure], but it is not pure: 'new List<int>()' calls 'System.Collections.Generic.List<int>.List()', which is not known to be pure.
                 //     [Pure] static List<int> NewList() => new List<int>();
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, "new List<int>()").WithArguments("C.NewList()", "'new List<int>()' calls 'System.Collections.Generic.List<int>.List()', which is not known to be pure").WithLocation(20, 42),
-                // (21,38): error CS20046: 'C.NewUnmarked()' is marked [Pure], but it is not pure: 'new C(1)' calls 'C.C(int)', which is not known to be pure.
+                // (21,38): error CS20050: 'C.NewUnmarked()' is marked [Pure], but it is not pure: 'new C(1)' calls 'C.C(int)', which is not known to be pure.
                 //     [Pure] static C NewUnmarked() => new C(1);
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, "new C(1)").WithArguments("C.NewUnmarked()", "'new C(1)' calls 'C.C(int)', which is not known to be pure").WithLocation(21, 38),
-                // (22,42): error CS20046: 'C.WithInitializer()' is marked [Pure], but it is not pure: 'new C { }' is not allowed in a pure member.
+                // (22,42): error CS20050: 'C.WithInitializer()' is marked [Pure], but it is not pure: 'new C { }' is not allowed in a pure member.
                 //     [Pure] static C WithInitializer() => new C { };
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, "new C { }").WithArguments("C.WithInitializer()", "'new C { }' is not allowed in a pure member").WithLocation(22, 42),
-                // (23,37): error CS20046: 'C.Now()' is marked [Pure], but it is not pure: 'DateTime.Now' calls 'System.DateTime.Now', which is not known to be pure.
+                // (23,37): error CS20050: 'C.Now()' is marked [Pure], but it is not pure: 'DateTime.Now' calls 'System.DateTime.Now', which is not known to be pure.
                 //     [Pure] static DateTime Now() => DateTime.Now;
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, "DateTime.Now").WithArguments("C.Now()", "'DateTime.Now' calls 'System.DateTime.Now', which is not known to be pure").WithLocation(23, 37),
-                // (24,40): error CS20046: 'C.Lock(object)' is marked [Pure], but it is not pure: 'lock (o) { return 1; }' is not allowed in a pure member.
+                // (24,40): error CS20050: 'C.Lock(object)' is marked [Pure], but it is not pure: 'lock (o) { return 1; }' is not allowed in a pure member.
                 //     [Pure] static int Lock(object o) { lock (o) { return 1; } }
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, "lock (o) { return 1; }").WithArguments("C.Lock(object)", "'lock (o) { return 1; }' is not allowed in a pure member").WithLocation(24, 40),
-                // (25,103): error CS20046: 'C.Await(Task<int>)' is marked [Pure], but it is not pure: 'await t' is not allowed in a pure member.
+                // (25,103): error CS20050: 'C.Await(Task<int>)' is marked [Pure], but it is not pure: 'await t' is not allowed in a pure member.
                 //     [Pure] static async System.Threading.Tasks.Task<int> Await(System.Threading.Tasks.Task<int> t) => await t;
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, "await t").WithArguments("C.Await(System.Threading.Tasks.Task<int>)", "'await t' is not allowed in a pure member").WithLocation(25, 103));
         }
@@ -426,25 +426,25 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             CreateImmutableCompilation(source).VerifyDiagnostics(
-                // (3,31): error CS20048: 'Base.V()' cannot be marked [Pure] yet: [Pure] is not supported on virtual, abstract and override members.
+                // (3,31): error CS20052: 'Base.V()' cannot be marked [Pure] yet: [Pure] is not supported on virtual, abstract and override members.
                 //     [Pure] public virtual int V() => 1;
                 Diagnostic(ErrorCode.ERR_SharperPureVirtual, "V").WithArguments("Base.V()").WithLocation(3, 31),
-                // (4,32): error CS20048: 'Base.A()' cannot be marked [Pure] yet: [Pure] is not supported on virtual, abstract and override members.
+                // (4,32): error CS20052: 'Base.A()' cannot be marked [Pure] yet: [Pure] is not supported on virtual, abstract and override members.
                 //     [Pure] public abstract int A();
                 Diagnostic(ErrorCode.ERR_SharperPureVirtual, "A").WithArguments("Base.A()").WithLocation(4, 32),
-                // (10,32): error CS20048: 'Derived.A()' cannot be marked [Pure] yet: [Pure] is not supported on virtual, abstract and override members.
+                // (10,32): error CS20052: 'Derived.A()' cannot be marked [Pure] yet: [Pure] is not supported on virtual, abstract and override members.
                 //     [Pure] public override int A() => 1;
                 Diagnostic(ErrorCode.ERR_SharperPureVirtual, "A").WithArguments("Derived.A()").WithLocation(10, 32),
-                // (11,39): error CS20048: 'Derived.O()' cannot be marked [Pure] yet: [Pure] is not supported on virtual, abstract and override members.
+                // (11,39): error CS20052: 'Derived.O()' cannot be marked [Pure] yet: [Pure] is not supported on virtual, abstract and override members.
                 //     [Pure] public sealed override int O() => 1;
                 Diagnostic(ErrorCode.ERR_SharperPureVirtual, "O").WithArguments("Derived.O()").WithLocation(11, 39),
-                // (16,16): error CS20048: 'I.M()' cannot be marked [Pure] yet: [Pure] is not supported on virtual, abstract and override members.
+                // (16,16): error CS20052: 'I.M()' cannot be marked [Pure] yet: [Pure] is not supported on virtual, abstract and override members.
                 //     [Pure] int M();
                 Diagnostic(ErrorCode.ERR_SharperPureVirtual, "M").WithArguments("I.M()").WithLocation(16, 16),
-                // (23,23): error CS20047: 'S.Get()' is marked [Pure], so it must be readonly: declare it 'readonly', or make the struct 'readonly'.
+                // (23,23): error CS20051: 'S.Get()' is marked [Pure], so it must be readonly: declare it 'readonly', or make the struct 'readonly'.
                 //     [Pure] public int Get() => _x;
                 Diagnostic(ErrorCode.ERR_SharperPureStructMemberNotReadOnly, "Get").WithArguments("S.Get()").WithLocation(23, 23),
-                // (24,23): error CS20047: 'S.Property' is marked [Pure], so it must be readonly: declare it 'readonly', or make the struct 'readonly'.
+                // (24,23): error CS20051: 'S.Property' is marked [Pure], so it must be readonly: declare it 'readonly', or make the struct 'readonly'.
                 //     [Pure] public int Property => _x;
                 Diagnostic(ErrorCode.ERR_SharperPureStructMemberNotReadOnly, "Property").WithArguments("S.Property").WithLocation(24, 23));
         }
@@ -480,19 +480,19 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             CreateImmutableCompilation(source).VerifyDiagnostics(
-                // (15,25): warning CS20049: The out argument 'box.X' of the [Pure] member 'C.TryGet(Box, out int)' is not a fresh local, so 'C.TryGet(Box, out int)' may observe its own write through another argument.
+                // (15,25): warning CS20053: The out argument 'box.X' of the [Pure] member 'C.TryGet(Box, out int)' is not a fresh local, so 'C.TryGet(Box, out int)' may observe its own write through another argument.
                 //         TryGet(box, out box.X);
                 Diagnostic(ErrorCode.WRN_SharperPureOutArgumentNotFresh, "box.X").WithArguments("C.TryGet(Box, out int)", "box.X").WithLocation(15, 25),
-                // (16,25): warning CS20049: The out argument '_field' of the [Pure] member 'C.TryGet(Box, out int)' is not a fresh local, so 'C.TryGet(Box, out int)' may observe its own write through another argument.
+                // (16,25): warning CS20053: The out argument '_field' of the [Pure] member 'C.TryGet(Box, out int)' is not a fresh local, so 'C.TryGet(Box, out int)' may observe its own write through another argument.
                 //         TryGet(box, out _field);
                 Diagnostic(ErrorCode.WRN_SharperPureOutArgumentNotFresh, "_field").WithArguments("C.TryGet(Box, out int)", "_field").WithLocation(16, 25),
-                // (17,25): warning CS20049: The out argument 'xs[0]' of the [Pure] member 'C.TryGet(Box, out int)' is not a fresh local, so 'C.TryGet(Box, out int)' may observe its own write through another argument.
+                // (17,25): warning CS20053: The out argument 'xs[0]' of the [Pure] member 'C.TryGet(Box, out int)' is not a fresh local, so 'C.TryGet(Box, out int)' may observe its own write through another argument.
                 //         TryGet(box, out xs[0]);
                 Diagnostic(ErrorCode.WRN_SharperPureOutArgumentNotFresh, "xs[0]").WithArguments("C.TryGet(Box, out int)", "xs[0]").WithLocation(17, 25),
-                // (19,25): warning CS20049: The out argument 'r' of the [Pure] member 'C.TryGet(Box, out int)' is not a fresh local, so 'C.TryGet(Box, out int)' may observe its own write through another argument.
+                // (19,25): warning CS20053: The out argument 'r' of the [Pure] member 'C.TryGet(Box, out int)' is not a fresh local, so 'C.TryGet(Box, out int)' may observe its own write through another argument.
                 //         TryGet(box, out r);
                 Diagnostic(ErrorCode.WRN_SharperPureOutArgumentNotFresh, "r").WithArguments("C.TryGet(Box, out int)", "r").WithLocation(19, 25),
-                // (20,25): warning CS20049: The out argument 'o' of the [Pure] member 'C.TryGet(Box, out int)' is not a fresh local, so 'C.TryGet(Box, out int)' may observe its own write through another argument.
+                // (20,25): warning CS20053: The out argument 'o' of the [Pure] member 'C.TryGet(Box, out int)' is not a fresh local, so 'C.TryGet(Box, out int)' may observe its own write through another argument.
                 //         TryGet(box, out o);
                 Diagnostic(ErrorCode.WRN_SharperPureOutArgumentNotFresh, "o").WithArguments("C.TryGet(Box, out int)", "o").WithLocation(20, 25));
         }
@@ -519,7 +519,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 """;
             CreateImmutableCompilation(source, parseOptions: TestOptions.Regular, references: [libraryComp.EmitToImageReference()]).VerifyDiagnostics();
             CreateImmutableCompilation(source, references: [libraryComp.EmitToImageReference()]).VerifyDiagnostics(
-                // (4,32): warning CS20049: The out argument '_field' of the [Pure] member 'Lib.TryGet(out int)' is not a fresh local, so 'Lib.TryGet(out int)' may observe its own write through another argument.
+                // (4,32): warning CS20053: The out argument '_field' of the [Pure] member 'Lib.TryGet(out int)' is not a fresh local, so 'Lib.TryGet(out int)' may observe its own write through another argument.
                 //     void M() => Lib.TryGet(out _field);
                 Diagnostic(ErrorCode.WRN_SharperPureOutArgumentNotFresh, "_field").WithArguments("Lib.TryGet(out int)", "_field").WithLocation(4, 32));
         }
@@ -568,16 +568,16 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             CreateImmutableCompilation(source).VerifyDiagnostics(
-                // (12,31): error CS20046: 'C.C(int)' is marked [Pure], but it is not pure: 'Compute()' calls 'C.Compute()', which is not known to be pure.
+                // (12,31): error CS20050: 'C.C(int)' is marked [Pure], but it is not pure: 'Compute()' calls 'C.Compute()', which is not known to be pure.
                 //     private readonly int _y = Compute();
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, "Compute()").WithArguments("C.C(int)", "'Compute()' calls 'C.Compute()', which is not known to be pure").WithLocation(12, 31),
-                // (17,24): error CS20046: 'C.C(string)' is marked [Pure], but it is not pure: ': base()' calls 'Base.Base()', which is not known to be pure.
+                // (17,24): error CS20050: 'C.C(string)' is marked [Pure], but it is not pure: ': base()' calls 'Base.Base()', which is not known to be pure.
                 //     [Pure] C(string s) : base() { _x = s.Length; }
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, ": base()").WithArguments("C.C(string)", "': base()' calls 'Base.Base()', which is not known to be pure").WithLocation(17, 24),
-                // (18,39): error CS20046: 'C.C(long)' is marked [Pure], but it is not pure: 's_count++' writes state outside the member.
+                // (18,39): error CS20050: 'C.C(long)' is marked [Pure], but it is not pure: 's_count++' writes state outside the member.
                 //     [Pure] C(long x) : this((int)x) { s_count++; }
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, "s_count++").WithArguments("C.C(long)", "'s_count++' writes state outside the member").WithLocation(18, 39),
-                // (36,31): error CS20046: 'Primary.Primary(int)' is marked [Pure], but it is not pure: 'Impure()' calls 'Primary.Impure()', which is not known to be pure.
+                // (36,31): error CS20050: 'Primary.Primary(int)' is marked [Pure], but it is not pure: 'Impure()' calls 'Primary.Impure()', which is not known to be pure.
                 //     private readonly int _y = Impure();
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, "Impure()").WithArguments("Primary.Primary(int)", "'Impure()' calls 'Primary.Impure()', which is not known to be pure").WithLocation(36, 31));
         }
@@ -603,11 +603,11 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             CreateImmutableCompilation(source, references: [libraryComp.EmitToImageReference()]).VerifyDiagnostics(
-                // (4,47): error CS20046: 'C.CallsUnmarked(int)' is marked [Pure], but it is not pure: 'Lib.Unmarked(x)' calls 'Lib.Unmarked(int)', which is not known to be pure.
+                // (4,47): error CS20050: 'C.CallsUnmarked(int)' is marked [Pure], but it is not pure: 'Lib.Unmarked(x)' calls 'Lib.Unmarked(int)', which is not known to be pure.
                 //     [Pure] static int CallsUnmarked(int x) => Lib.Unmarked(x);
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, "Lib.Unmarked(x)").WithArguments("C.CallsUnmarked(int)", "'Lib.Unmarked(x)' calls 'Lib.Unmarked(int)', which is not known to be pure").WithLocation(4, 47));
             CreateImmutableCompilation(source, references: [libraryComp.ToMetadataReference()]).VerifyDiagnostics(
-                // (4,47): error CS20046: 'C.CallsUnmarked(int)' is marked [Pure], but it is not pure: 'Lib.Unmarked(x)' calls 'Lib.Unmarked(int)', which is not known to be pure.
+                // (4,47): error CS20050: 'C.CallsUnmarked(int)' is marked [Pure], but it is not pure: 'Lib.Unmarked(x)' calls 'Lib.Unmarked(int)', which is not known to be pure.
                 //     [Pure] static int CallsUnmarked(int x) => Lib.Unmarked(x);
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, "Lib.Unmarked(x)").WithArguments("C.CallsUnmarked(int)", "'Lib.Unmarked(x)' calls 'Lib.Unmarked(int)', which is not known to be pure").WithLocation(4, 47));
 
