@@ -128,6 +128,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                     long Size { get; set; }
                     int this[int i, string s] { get; set; }
                     event Action<string> Renamed;
+                    event Action Cleared;
                 }
 
                 class Thing : IThing
@@ -151,6 +152,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                         remove => _renamed -= value;
                     }
                     public void Rename(string name) => _renamed?.Invoke(name);
+                    event infer IThing.Cleared { add => value(); remove { } }
                 }
 
                 class ThingCSharp : IThing
@@ -174,6 +176,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                         remove => _renamed -= value;
                     }
                     public void Rename(string name) => _renamed?.Invoke(name);
+                    event Action IThing.Cleared { add => value(); remove { } }
                 }
 
                 class Program
@@ -187,17 +190,19 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                         Console.Write(i[1, "ab"] + ";");
                         i[0, ""] = 5;
                         Console.Write(i.Size + ";");
+                        i.Cleared += () => Console.Write("cleared;");
                     }
                 }
                 """;
             var verifier = CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90,
-                expectedOutput: ExecutionConditionUtil.IsCoreClr ? "a4;3;5;" : null);
+                expectedOutput: ExecutionConditionUtil.IsCoreClr ? "a4;3;5;cleared;" : null);
             verifier.VerifyDiagnostics();
             var comp = (CSharpCompilation)verifier.Compilation;
             VerifySameType(comp, "Thing.Name", "ThingCSharp.Name");
             VerifySameType(comp, "Thing.Size", "ThingCSharp.Size");
             VerifySameType(comp, "Thing.IThing.this[]", "ThingCSharp.IThing.this[]");
             VerifySameType(comp, "Thing.Renamed", "ThingCSharp.Renamed");
+            VerifySameType(comp, "Thing.IThing.Cleared", "ThingCSharp.IThing.Cleared");
             Assert.Equal("void modreq(System.Runtime.CompilerServices.IsExternalInit) Thing.Name.init", comp.GetMember<PropertySymbol>("Thing.Name").SetMethod.ToTestDisplayString());
             Assert.Equal("System.Int64 value", comp.GetMember<PropertySymbol>("Thing.Size").SetMethod.Parameters[0].ToTestDisplayString());
             Assert.Equal("System.String Thing.<Name>k__BackingField", comp.GetMember<FieldSymbol>("Thing.<Name>k__BackingField").ToTestDisplayString());
