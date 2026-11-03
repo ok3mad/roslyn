@@ -2651,6 +2651,9 @@ namespace Microsoft.CodeAnalysis.CSharp
                 or ErrorCode.ERR_SharperImmutableHierarchyWithoutImmutable
                 or ErrorCode.ERR_SharperMisplacedUnobservableWrite
                 or ErrorCode.ERR_SharperPhantomTypeParameterInState
+                or ErrorCode.ERR_SharperInferNoOverriddenMember
+                or ErrorCode.ERR_SharperInferAmbiguousOverriddenMember
+                or ErrorCode.ERR_SharperInferOverriddenMemberCycle
                 or ErrorCode.ERR_SharperPipeNoValue
                 or ErrorCode.ERR_SharperPipeStageItNotUsed
                 or ErrorCode.ERR_SharperPipeStageNotFunction

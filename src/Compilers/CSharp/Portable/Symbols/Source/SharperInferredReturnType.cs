@@ -95,21 +95,27 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
         private readonly MethodSymbol _method;
         private readonly TypeSyntax _inferSyntax;
-        private readonly CSharpSyntaxNode _body;
+        private readonly CSharpSyntaxNode? _body;
         private readonly object _publishLock = new object();
 
         /// <summary>The result, decided before it is published, so that every member of a cycle is decided at once.</summary>
         private Result? _lazyDecided;
         private TypeWithAnnotations.Boxed? _lazyType;
 
-        protected SharperInferredReturnType(MethodSymbol method, TypeSyntax inferSyntax, CSharpSyntaxNode body)
+        /// <param name="body">
+        /// The expression body or block body to infer from; null for a type that is taken from another declaration,
+        /// which overrides <see cref="GetReturnType"/>.
+        /// </param>
+        protected SharperInferredReturnType(MethodSymbol method, TypeSyntax inferSyntax, CSharpSyntaxNode? body)
         {
             Debug.Assert(inferSyntax.IsInfer);
-            Debug.Assert(body is ArrowExpressionClauseSyntax or BlockSyntax);
+            Debug.Assert(body is null or ArrowExpressionClauseSyntax or BlockSyntax);
             _method = method;
             _inferSyntax = inferSyntax;
             _body = body;
         }
+
+        protected MethodSymbol Method => _method;
 
         /// <summary>The binder of the expression body or block body, as the method body binding gets it.</summary>
         protected abstract Binder? GetBodyBinder(CSharpSyntaxNode body);
@@ -135,8 +141,9 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             => method is SourceOrdinaryMethodOrUserDefinedOperatorSymbol { IsSharperInferredReturnType: true } or LocalFunctionSymbol { IsSharperInferredReturnType: true } &&
                 method.ReturnType.IsErrorType();
 
-        internal TypeWithAnnotations GetReturnType()
+        internal virtual TypeWithAnnotations GetReturnType()
         {
+            Debug.Assert(_body is not null);
             if (Volatile.Read(ref _lazyType) is { } type)
             {
                 return type.Value;
@@ -200,8 +207,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             var diagnostics = BindingDiagnosticBag.GetInstance();
             try
             {
-                frame.Type = GetBodyBinder(_body) is { } binder
-                    ? binder.BindSharperInferredReturnType(_method, _body, _inferSyntax, diagnostics)
+                frame.Type = GetBodyBinder(_body!) is { } binder
+                    ? binder.BindSharperInferredReturnType(_method, _body!, _inferSyntax, diagnostics)
                     : CreateErrorType();
                 frame.Diagnostics = diagnostics;
             }

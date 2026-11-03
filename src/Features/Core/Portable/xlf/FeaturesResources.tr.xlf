@@ -200,6 +200,11 @@ AM ve PM arasındaki farkın korunmasının gerekli olduğu diller için "tt" be
         <target state="translated">Örtük Main yönteminin dönüş türü değişikliğine neden olan bir güncelleştirme, uygulamanın yeniden başlatılmasını gerektirir.</target>
         <note>{Locked="Main"} is C# keywords and should not be localized.</note>
       </trans-unit>
+      <trans-unit id="An_update_that_changes_the_inferred_return_type_of_0_requires_restarting_the_application">
+        <source>An update that changes the inferred return type of {0} requires restarting the application.</source>
+        <target state="new">An update that changes the inferred return type of {0} requires restarting the application.</target>
+        <note>{0} is the kind of the member, such as "method".</note>
+      </trans-unit>
       <trans-unit id="Apply_auto_property_preferences">
         <source>Apply auto property preferences</source>
         <target state="translated">Otomatik özellik tercihlerini uygula</target>

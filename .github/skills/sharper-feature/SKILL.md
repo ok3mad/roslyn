@@ -56,6 +56,7 @@ BCL type; `sharper/sequence-type`). See `SharperTests.cs` for all of them.
 6. **Before merging, make the analyzer build clean** (see Testing). Test runs and plain builds skip the analyzers, so
    public API changes (RS0016, RS0017) show up only there. An error that is already on `main` still blocks: fix it or
    link its issue in the PR.
+7. **Before opening a PR, build the Semantic test project with `-warnaserror`** (see Testing); test runs don't fail on it.
 
 ## Layer Checklist
 
@@ -241,7 +242,10 @@ implementation plan, "Feature 3"):
    its own member's signature re-enters that member, which then completes its signature with an error type while the
    outer inference is still running. Another thread can now find that signature complete and infer the rest of the
    cycle without an error, so marking the cycle when the outer inference ends is too late: publish the error for every
-   parameter of the cycle at the moment it is found. Test cycles from each end, and on two threads at once.
+   parameter of the cycle at the moment it is found. Publishing them one by one is not enough either: a third thread can
+   complete a signature from the first published error and compute the next member without seeing the cycle. Decide
+   all of the cycle's results first (`CSharpCompilation.SharperInferenceCycleResults`), and let every publication prefer
+   a decided result (`SharperInferredParameterType.Publish`). Test cycles from each end, and on several threads at once.
 29. **A cycle found on a stack depends on where the search started.** With inference nested on a thread-static stack,
    "a member on the stack is a cycle" misses a member that reaches the cycle through a member that already finished
    and published its error, so whether it errs depends on the starting member and the thread. Find cycles as strongly
@@ -290,23 +294,39 @@ implementation plan, "Feature 3"):
    whitelist of node kinds, so a kind nobody reviewed fails safe. Run such checks from
    `SourceMemberContainerTypeSymbol.AfterMembersChecks`, gated so that compilations without Sharper do nothing.
 
-33. **A new operator token is merged by the parser, behind the flag.** The pipe `|>` is `|` and `>` with no trivia
+33. **Checks that read a signature can sit inside the method checks.** Lifting a limit on an inferred return type is not
+   enough where the member's own method checks read the type under their lock: operators check their signature there
+   (`CheckOperatorSignatures`), and explicit implementations match the implemented member by return type. Move such a
+   check out (to `AfterAddingTypeMembersChecks`) or keep the limit. Partial methods hide another order: the parts are
+   linked after the definition's method checks, which the partial method comparer runs while merging, so a definition
+   must find its implementation lazily (`SourcePartialImplementation`), not in its method checks.
+34. **Files shared with the IDE see only public compiler API.** Some compiler files are compiled into the IDE too
+   (`Syntax/LambdaUtilities.cs` into the C# Features project), where internal helpers such as
+   `IsFeatureEnabled(MessageID.IDS_FeatureSharper)` do not exist. Gate there with
+   `node.SyntaxTree.Options.Features.ContainsKey("sharper")`, as the IDE's Sharper code does, and build the Features
+   project after touching such a file; the compiler and its tests build fine without it. Edit and Continue decides
+   rude edits from the symbols of both versions, so a type the compiler infers changes the signature with no change in
+   the declaration syntax: an edit of a body that changes an inferred return type is a rude edit
+   (`RudeEditKind.ChangeSharperInferredReturnType`, Sharper kinds from 1000), as the implicit `Main` is. The C# Edit and
+   Continue tests take Sharper parse options through `GetTopEdits(..., parseOptions:)` and
+   `VerifySemanticDiagnostics(parseOptions, ...)` (`SharperTopLevelEditingTests`).
+35. **A new operator token is merged by the parser, behind the flag.** The pipe `|>` is `|` and `>` with no trivia
    between them (`IsAtSharperPipeToken`), merged in `EatExpressionOperatorToken` as `>>` is; a lexer token would exist
    with the flag off too (trap 13). Its kind sits at the top of the free punctuation gap (`BarGreaterThanToken` = 8231),
    so `SyntaxFacts.GetText` and `IsPunctuation` work; add it to `GetPunctuationKinds`, which an upstream range test
    checks (`SyntaxTests.TestRangeBasedGetKindsMethodsReturnExpectedResults`). Check generic names before it: `F<int> |>`
    stays generic only because `|` is in the list of tokens after which `<...>` is a type argument list.
-34. **A scope whose variable's type comes from binding gets its own binder map.** A pipe stage's `it` has the left
+36. **A scope whose variable's type comes from binding gets its own binder map.** A pipe stage's `it` has the left
    side's type, so its binder is made when the pipe binds (`SharperPipeStageBinder`, a `LocalScopeBinder` that builds
    the stage's map with `LocalBinderFactory.BuildMap`), and the member's map leaves the stage out (trap 31). Do not use
    an `ExecutableCodeBinder` for an expression: it clears the catch, filter and finally flags. Making the binder and the
    local afresh at each binding keeps trial binding (trap 25) safe.
-35. **User variables cannot live in an expression's `BoundSequence`.** Codegen records a sequence's locals as expression
+37. **User variables cannot live in an expression's `BoundSequence`.** Codegen records a sequence's locals as expression
    temps when the sequence is a receiver or a ref, and frees them (`LocalSlotManager.FreeSlot` asserts on a named slot);
    a lowering temp instead cannot be captured (closure conversion has no field name for it). A lowering that declares a
    variable the user can see or capture returns a `BoundSpillSequence` and sets `_needsSpilling`, as the switch
    expression does; the spiller moves it into the statement list.
-36. **Debug checks enumerate the nodes that declare locals.** `BoundNode.LocalsScanner` ("undeclared local") and
+38. **Debug checks enumerate the nodes that declare locals.** `BoundNode.LocalsScanner` ("undeclared local") and
    `RefSafetyAnalysis.VisitLocal` (no escape scope) assert on a local no known node declares: add the node to both,
    with `GetValEscape` and `CheckValEscape` cases. A `BoundCall` with new syntax meets
    `BoundExpression.InterceptableNameSyntax`, and binding a name with `invoked: true` must agree with
@@ -321,14 +341,21 @@ expression body (`BindToNaturalType`, `BindToInferredDelegateType`) and the lamb
 re-inference (`NullableWalker` with `returnTypesOpt`). The body is bound once to infer and again to compile; drop the
 diagnostics of the first binding unless they are the inference's own, and make sure the second binding reports
 whatever made the inference fail (an error type return must not end up with no diagnostic). An inference that reads
-another inferred type infers it in a nested frame; cycles are components, not stack hits (trap 29). The design and the
-plan for the later steps are in the implementation plan, "Feature 6".
+another inferred type infers it in a nested frame; cycles are components, not stack hits (trap 29). Every member kind
+with a body infers (R4): `SourceOrdinaryMethodOrUserDefinedOperatorSymbol` holds the `SharperInferredReturnType` for
+methods and operators, and a partial definition reads its implementation's type. Overrides and implementations copy
+(P2) and never infer from their body. The design and the plan for the later steps are in the implementation plan,
+"Feature 6".
 
 Inference of a parameter type (`infer x = 3`, row 15) has one entry point, `ParameterHelpers.MakeParameter`, which
-every member kind uses (lambdas: `Binder.BindLambdaParameterType`). A new source for a parameter type (the overridden
-member, uses in the body) goes into `SharperInferredParameterType.GetType`, keeping its cache and its cycle stack;
-a source that binds something must run before the signature lock, as the default value does (trap 28). The design is
-in the implementation plan, "Feature 9".
+every member kind uses (lambdas: `Binder.BindLambdaParameterType`). A new source for a parameter type (uses in the
+body) goes into `SharperInferredParameterType`, keeping its cache and its cycle stack; a source that binds something
+or reads other members' signatures must run before the signature lock, as the default value does (trap 28). Step P2
+shows the shape: the overridden or implemented member is searched for once per method
+(`GetOverriddenSignature`, cached per method syntax), from `InferBeforeSignature`, on the same stack of syntax nodes
+as the default values, and its result fills both the parameters and the return type. C# matches overrides and
+implementations by complete signatures, which do not exist yet at that point, so such a search matches by name and
+parameter count and narrows with the types that are written. The design is in the implementation plan, "Feature 9".
 
 ## Testing
 

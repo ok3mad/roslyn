@@ -143,7 +143,8 @@ namespace Microsoft.CodeAnalysis.CSharp
         // The syntax offset of the body still identifies each one; decide how the IDE's lambda matching finds them (#124).
         internal static bool IsSharperImplicitItLambdaBody(SyntaxNode node)
         {
-            return node is ExpressionSyntax { Parent: ArgumentSyntax } && node.IsFeatureEnabled(MessageID.IDS_FeatureSharper);
+            // The file is shared with the IDE, which cannot see the compiler's internal IsFeatureEnabled.
+            return node is ExpressionSyntax { Parent: ArgumentSyntax } && node.SyntaxTree.Options.Features.ContainsKey("sharper");
         }
 
         /// <summary>

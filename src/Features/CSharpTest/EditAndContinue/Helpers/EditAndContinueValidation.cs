@@ -81,6 +81,19 @@ internal static class EditAndContinueValidation
             capabilities);
     }
 
+    /// <param name="parseOptions">The project's parse options, for sources parsed with options other than the default (Sharper).</param>
+    internal static void VerifySemanticDiagnostics(
+        this EditScriptDescription editScript,
+        CSharpParseOptions parseOptions,
+        params RudeEditDiagnosticDescription[] diagnostics)
+    {
+        foreach (var targetFramework in new[] { TargetFramework.NetCoreApp, TargetFramework.NetFramework })
+        {
+            new CSharpEditAndContinueTestVerifier(parseOptions: parseOptions).VerifySemantics(
+                [editScript], targetFramework, [new DocumentAnalysisResultsDescription(diagnostics: diagnostics)], capabilities: null);
+        }
+    }
+
     internal static void VerifySemantics(
         this EditScriptDescription editScript,
         ActiveStatementsDescription activeStatements,

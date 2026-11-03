@@ -200,6 +200,11 @@ Make sure to use the "tt" specifier for languages for which it's necessary to ma
         <target state="translated">암시적 Main 메서드의 반환 유형이 변경되도록 하는 업데이트는 응용 프로그램을 다시 시작해야 합니다.</target>
         <note>{Locked="Main"} is C# keywords and should not be localized.</note>
       </trans-unit>
+      <trans-unit id="An_update_that_changes_the_inferred_return_type_of_0_requires_restarting_the_application">
+        <source>An update that changes the inferred return type of {0} requires restarting the application.</source>
+        <target state="new">An update that changes the inferred return type of {0} requires restarting the application.</target>
+        <note>{0} is the kind of the member, such as "method".</note>
+      </trans-unit>
       <trans-unit id="Apply_auto_property_preferences">
         <source>Apply auto property preferences</source>
         <target state="translated">자동 속성 적용 기본 설정</target>

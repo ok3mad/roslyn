@@ -341,7 +341,19 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 // the operator method as being a varargs method.
             }
 
-            returnType = signatureBinder.BindTypeReportingSharperInferNotSupportedYet(returnTypeSyntax, MessageID.IDS_SharperInferOnOperator, diagnostics);
+            returnType = signatureBinder.BindTypeOrSharperInferKeyword(returnTypeSyntax, diagnostics, out bool isInfer);
+            if (isInfer)
+            {
+                // Sharper: the return type is inferred from the body, after the method checks (see SharperInferredReturnType).
+                var body = (CSharpSyntaxNode)declarationSyntax.Body ?? declarationSyntax.ExpressionBody;
+                if (CheckSharperInferredReturnTypeSupported(returnTypeSyntax, hasBody: body is not null, diagnostics))
+                {
+                    _sharperInferredReturnTypeForMethodChecks = new InferredReturnType(this, returnTypeSyntax, body);
+                    return (default, parameters);
+                }
+
+                returnType = TypeWithAnnotations.Create(signatureBinder.CreateErrorType("infer"));
+            }
 
             // restricted types cannot be returned. 
             // NOTE: Span-like types can be returned (if expression is returnable).
@@ -362,11 +374,77 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             return (returnType, parameters);
         }
 
+#nullable enable
+        /// <summary>
+        /// Sharper: set by <see cref="MakeParametersAndBindReturnType(BaseMethodDeclarationSyntax, TypeSyntax, BindingDiagnosticBag)"/>
+        /// when the return type is inferred, for the method checks, which run under a lock on this symbol.
+        /// </summary>
+        private SharperInferredReturnType? _sharperInferredReturnTypeForMethodChecks;
+
+        /// <summary>
+        /// Sharper, step R4: an operator or a conversion operator with a body can infer its return type. One with no body
+        /// never can; an explicit implementation waits for the copy from the implemented member.
+        /// </summary>
+        private bool CheckSharperInferredReturnTypeSupported(TypeSyntax inferSyntax, bool hasBody, BindingDiagnosticBag diagnostics)
+        {
+            MessageID notSupportedYet;
+            if (!hasBody)
+            {
+                diagnostics.Add(ErrorCode.ERR_SharperInferNoBody, inferSyntax.Location, this);
+                return false;
+            }
+            else if (_explicitInterfaceType is not null)
+            {
+                // PROTOTYPE(sharper): copy the return type from the implemented operator, as step P2 does for methods (#166).
+                // Inferring it from the body would read it in the method checks, which match the implemented member.
+                notSupportedYet = MessageID.IDS_SharperInferOnExplicitImplementation;
+            }
+            else
+            {
+                return true;
+            }
+
+            diagnostics.Add(ErrorCode.ERR_SharperInferNotSupportedYet, inferSyntax.Location, notSupportedYet.Localize());
+            return false;
+        }
+
+        private sealed class InferredReturnType : SharperInferredReturnType
+        {
+            private readonly SourceUserDefinedOperatorSymbolBase _operator;
+
+            internal InferredReturnType(SourceUserDefinedOperatorSymbolBase @operator, TypeSyntax inferSyntax, CSharpSyntaxNode body)
+                : base(@operator, inferSyntax, body)
+            {
+                _operator = @operator;
+            }
+
+            protected override Binder? GetBodyBinder(CSharpSyntaxNode body)
+                => _operator.TryGetBodyBinder()?.GetBinder(body);
+
+            protected override void CheckInferredType(TypeWithAnnotations type, TypeSyntax inferSyntax, BindingDiagnosticBag diagnostics)
+            {
+                // span-like types are returnable in general
+                if (type.IsRestrictedType(ignoreSpanLikeTypes: true))
+                {
+                    // The return type of a method, delegate, or function pointer cannot be '{0}'
+                    diagnostics.Add(ErrorCode.ERR_MethodReturnCantBeRefAny, inferSyntax.Location, type.Type);
+                }
+
+                _operator.CheckEffectiveAccessibility(type, _operator.Parameters, diagnostics);
+                _operator.CheckFileTypeUsage(type, _operator.Parameters, diagnostics);
+            }
+
+            protected override void AddDeclarationDiagnostics(BindingDiagnosticBag diagnostics)
+                => _operator.AddDeclarationDiagnostics(diagnostics);
+        }
+#nullable disable
+
         protected override void MethodChecks(BindingDiagnosticBag diagnostics)
         {
             var (returnType, parameters) = MakeParametersAndBindReturnType(diagnostics);
+            var inferredReturnType = _sharperInferredReturnTypeForMethodChecks;
 
-            MethodChecks(returnType, parameters, diagnostics);
+            MethodChecks(returnType, parameters, diagnostics, inferredReturnType);
 
             // If we have a static class then we already 
             // have reported that fact as an error. No need to cascade the error further.
@@ -376,7 +454,23 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             }
 
             CheckValueParameters(diagnostics);
-            CheckOperatorSignatures(diagnostics);
+
+            if (inferredReturnType is null)
+            {
+                CheckOperatorSignatures(diagnostics);
+            }
+        }
+
+        internal override void AfterAddingTypeMembersChecks(ConversionsBase conversions, BindingDiagnosticBag diagnostics)
+        {
+            base.AfterAddingTypeMembersChecks(conversions, diagnostics);
+
+            // Sharper: the signature checks read the return type, so an inferred one is checked here, outside the lock of
+            // the method checks, once inferred.
+            if (IsSharperInferredReturnType && !ContainingType.IsStatic && !ReturnType.IsErrorType())
+            {
+                CheckOperatorSignatures(diagnostics);
+            }
         }
 
         protected abstract (TypeWithAnnotations ReturnType, ImmutableArray<ParameterSymbol> Parameters) MakeParametersAndBindReturnType(BindingDiagnosticBag diagnostics);

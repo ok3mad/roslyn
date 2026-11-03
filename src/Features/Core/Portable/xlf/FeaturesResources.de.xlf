@@ -200,6 +200,11 @@ Stellen Sie sicher, dass Sie den Bezeichner "tt" für Sprachen verwenden, für d
         <target state="translated">Ein Update, das bewirkt, dass der Rückgabetyp der impliziten Main-Methode geändert wird, erfordert einen Neustart der Anwendung.</target>
         <note>{Locked="Main"} is C# keywords and should not be localized.</note>
       </trans-unit>
+      <trans-unit id="An_update_that_changes_the_inferred_return_type_of_0_requires_restarting_the_application">
+        <source>An update that changes the inferred return type of {0} requires restarting the application.</source>
+        <target state="new">An update that changes the inferred return type of {0} requires restarting the application.</target>
+        <note>{0} is the kind of the member, such as "method".</note>
+      </trans-unit>
       <trans-unit id="Apply_auto_property_preferences">
         <source>Apply auto property preferences</source>
         <target state="translated">Automatische Eigenschaftsvoreinstellungen anwenden</target>

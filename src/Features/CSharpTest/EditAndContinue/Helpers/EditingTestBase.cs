@@ -139,24 +139,24 @@ public abstract class EditingTestBase : CSharpTestBase
     internal static string GetDocumentFilePath(int documentIndex)
         => Path.Combine(TempRoot.Root, documentIndex.ToString() + ".cs");
 
-    private static SyntaxTree ParseSource(string markedSource, int documentIndex = 0)
+    private static SyntaxTree ParseSource(string markedSource, int documentIndex = 0, CSharpParseOptions? parseOptions = null)
         => SyntaxFactory.ParseSyntaxTree(
             SourceMarkers.Clear(markedSource),
-            CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.Preview),
+            parseOptions ?? CSharpParseOptions.Default.WithLanguageVersion(LanguageVersion.Preview),
             path: GetDocumentFilePath(documentIndex));
 
     internal static EditScriptDescription GetTopEdits(string methodBody1, string methodBody2, MethodKind kind)
         => GetTopEdits(WrapMethodBodyWithClass(methodBody1, kind), WrapMethodBodyWithClass(methodBody2, kind));
 
-    internal static EditScriptDescription GetTopEdits(string src1, string src2, int documentIndex = 0)
+    internal static EditScriptDescription GetTopEdits(string src1, string src2, int documentIndex = 0, CSharpParseOptions? parseOptions = null)
     {
         // Normalize line endings to \r\n so that character offsets in VerifyEdits
         // assertions are consistent across Windows and Unix.
         src1 = src1.NormalizeLineEndings();
         src2 = src2.NormalizeLineEndings();
 
-        var tree1 = ParseSource(src1, documentIndex);
-        var tree2 = ParseSource(src2, documentIndex);
+        var tree1 = ParseSource(src1, documentIndex, parseOptions);
+        var tree2 = ParseSource(src2, documentIndex, parseOptions);
 
         tree1.GetDiagnostics().Verify();
         tree2.GetDiagnostics().Verify();

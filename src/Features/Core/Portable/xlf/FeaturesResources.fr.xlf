@@ -200,6 +200,11 @@ Veillez à utiliser le spécificateur "tt" pour les langues où il est nécessai
         <target state="translated">Une mise à jour qui entraîne la modification du type de retour de la méthode implicite Main requiert le redémarrage de l'application.</target>
         <note>{Locked="Main"} is C# keywords and should not be localized.</note>
       </trans-unit>
+      <trans-unit id="An_update_that_changes_the_inferred_return_type_of_0_requires_restarting_the_application">
+        <source>An update that changes the inferred return type of {0} requires restarting the application.</source>
+        <target state="new">An update that changes the inferred return type of {0} requires restarting the application.</target>
+        <note>{0} is the kind of the member, such as "method".</note>
+      </trans-unit>
       <trans-unit id="Apply_auto_property_preferences">
         <source>Apply auto property preferences</source>
         <target state="translated">Appliquer les préférences de propriété automatique</target>

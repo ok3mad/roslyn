@@ -39,7 +39,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             bool isExtensionMethodThis,
             bool addRefReadOnlyModifier,
             ScopedKind scope,
-            BindingDiagnosticBag declarationDiagnostics)
+            BindingDiagnosticBag declarationDiagnostics,
+            bool isParamsFromOverriddenMember = false)
         {
             Debug.Assert(owner is not LambdaSymbol); // therefore we don't need to deal with discard parameters
 
@@ -70,12 +71,13 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     location,
                     syntax.GetReference(),
                     hasParamsModifier: hasParamsModifier,
-                    isParams: hasParamsModifier,
+                    isParams: hasParamsModifier || isParamsFromOverriddenMember,
                     isExtensionMethodThis,
                     scope);
             }
 
             if (!hasParamsModifier &&
+                !isParamsFromOverriddenMember &&
                 !isExtensionMethodThis &&
                 (syntax.Default == null) &&
                 (syntax.AttributeLists.Count == 0) &&
@@ -95,7 +97,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 location,
                 syntax.GetReference(),
                 hasParamsModifier: hasParamsModifier,
-                isParams: hasParamsModifier,
+                // Sharper: an 'infer' parameter copies 'params' from the member its method implements (step P2).
+                isParams: hasParamsModifier || isParamsFromOverriddenMember,
                 isExtensionMethodThis,
                 scope);
         }

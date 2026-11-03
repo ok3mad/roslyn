@@ -175,6 +175,34 @@ internal sealed class CSharpEditAndContinueAnalyzer() : AbstractEditAndContinueA
     internal override bool IsDeclarationWithSharedBody(SyntaxNode declaration, ISymbol member)
         => member is IMethodSymbol { AssociatedSymbol: IPropertySymbol property } && property.IsSynthesizedAutoProperty();
 
+    protected override bool IsSharperReturnTypeInferred(IMethodSymbol method)
+    {
+        // 'infer' is a keyword only where no type of that name is in scope, as 'var'.
+        if (method.ReturnType.Name == "infer")
+        {
+            return false;
+        }
+
+        foreach (var reference in method.DeclaringSyntaxReferences)
+        {
+            var returnType = reference.GetSyntax() switch
+            {
+                MethodDeclarationSyntax m => m.ReturnType,
+                OperatorDeclarationSyntax o => o.ReturnType,
+                ConversionOperatorDeclarationSyntax c => c.Type,
+                _ => null,
+            };
+
+            if (returnType is IdentifierNameSyntax { Identifier.ValueText: "infer" } &&
+                returnType.SyntaxTree.Options.Features.ContainsKey("sharper"))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     protected override bool AreHandledEventsEqual(IMethodSymbol oldMethod, IMethodSymbol newMethod)
         => true;
 

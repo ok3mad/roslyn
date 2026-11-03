@@ -272,16 +272,16 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
-                // (13,13): error CS20043: The left side of '|>' must be a value with a type, but it is void.
+                // (13,13): error CS20046: The left side of '|>' must be a value with a type, but it is void.
                 //         _ = V() |> F;                       // 1: no value
                 Diagnostic(ErrorCode.ERR_SharperPipeNoValue, "V()").WithArguments("void").WithLocation(13, 13),
-                // (14,13): error CS20043: The left side of '|>' must be a value with a type, but it is <null>.
+                // (14,13): error CS20046: The left side of '|>' must be a value with a type, but it is <null>.
                 //         _ = null |> F;                      // 2: no type
                 Diagnostic(ErrorCode.ERR_SharperPipeNoValue, "null").WithArguments("<null>").WithLocation(14, 13),
-                // (15,18): error CS20045: The stage after '|>' must be a function, such as a method group or a delegate, or an expression that uses 'it', but it is int.
+                // (15,18): error CS20048: The stage after '|>' must be a function, such as a method group or a delegate, or an expression that uses 'it', but it is int.
                 //         _ = 1 |> s.Length;                  // 3: not a function
                 Diagnostic(ErrorCode.ERR_SharperPipeStageNotFunction, "s.Length").WithArguments("int").WithLocation(15, 18),
-                // (16,27): error CS20044: This stage does not use the value piped into it: its 'it' belongs to an inner lambda, the argument of 'xs.Where'. Name that lambda's parameter, as in 'x => ...', or use the piped 'it' outside it.
+                // (16,27): error CS20047: This stage does not use the value piped into it: its 'it' belongs to an inner lambda, the argument of 'xs.Where'. Name that lambda's parameter, as in 'x => ...', or use the piped 'it' outside it.
                 //         _ = 1 |> xs.Where(it > 0);          // 4: 'it' belongs to Where
                 Diagnostic(ErrorCode.ERR_SharperPipeStageItNotUsed, "it").WithArguments("xs.Where").WithLocation(16, 27),
                 // (17,29): error CS20020: 'it' has two meanings here: the parameter of an outer lambda and of this inner one. Name one of them, as in 'x => ...'.
@@ -299,13 +299,13 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (21,9): error CS0201: Only assignment, call, increment, decrement, await, and new object expressions can be used as a statement
                 //         1 |> it + 1;                        // 9: not a statement
                 Diagnostic(ErrorCode.ERR_IllegalStatement, "1 |> it + 1").WithLocation(21, 9),
-                // (22,18): error CS20045: The stage after '|>' must be a function, such as a method group or a delegate, or an expression that uses 'it', but it is lambda expression.
+                // (22,18): error CS20048: The stage after '|>' must be a function, such as a method group or a delegate, or an expression that uses 'it', but it is lambda expression.
                 //         _ = 1 |> (y => y);                  // 10: a lambda has no type
                 Diagnostic(ErrorCode.ERR_SharperPipeStageNotFunction, "(y => y)").WithArguments("lambda expression").WithLocation(22, 18),
-                // (23,23): error CS20044: This stage does not use the value piped into it: its 'it' belongs to an inner lambda, the argument of 'G'. Name that lambda's parameter, as in 'x => ...', or use the piped 'it' outside it.
+                // (23,23): error CS20047: This stage does not use the value piped into it: its 'it' belongs to an inner lambda, the argument of 'G'. Name that lambda's parameter, as in 'x => ...', or use the piped 'it' outside it.
                 //         _ = xs |> G(F(it));                 // 11: G takes a function, and the innermost argument claims 'it'
                 Diagnostic(ErrorCode.ERR_SharperPipeStageItNotUsed, "it").WithArguments("G").WithLocation(23, 23),
-                // (24,69): error CS20046: An expression tree cannot contain a pipe '|>'.
+                // (24,69): error CS20049: An expression tree cannot contain a pipe '|>'.
                 //         System.Linq.Expressions.Expression<Func<int, int>> e = x => x |> F;  // 12: expression tree
                 Diagnostic(ErrorCode.ERR_SharperPipeInExpressionTree, "x |> F").WithLocation(24, 69));
         }
@@ -509,10 +509,10 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
-                // (12,18): error CS20045: The stage after '|>' must be a function, such as a method group or a delegate, or an expression that uses 'it', but it is int.
+                // (12,18): error CS20048: The stage after '|>' must be a function, such as a method group or a delegate, or an expression that uses 'it', but it is int.
                 //         _ = 1 |> F(it);         // F(5) is not a function
                 Diagnostic(ErrorCode.ERR_SharperPipeStageNotFunction, "F(it)").WithArguments("int").WithLocation(12, 18),
-                // (13,18): error CS20045: The stage after '|>' must be a function, such as a method group or a delegate, or an expression that uses 'it', but it is int.
+                // (13,18): error CS20048: The stage after '|>' must be a function, such as a method group or a delegate, or an expression that uses 'it', but it is int.
                 //         _ = 1 |> F(@it);
                 Diagnostic(ErrorCode.ERR_SharperPipeStageNotFunction, "F(@it)").WithArguments("int").WithLocation(13, 18),
                 // (19,23): error CS20021: 'it' is ambiguous here: 'Pick' takes a value or a function at this argument, and the outer 'it' fits both. Write the lambda, as in 'x => ...', or name the outer value.

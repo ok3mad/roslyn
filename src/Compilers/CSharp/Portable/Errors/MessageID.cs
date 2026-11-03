@@ -319,14 +319,10 @@ namespace Microsoft.CodeAnalysis.CSharp
         IDS_VALLOCAL = MessageBase + 12866,
         IDS_READONLYLOCAL = MessageBase + 12867,
         IDS_READONLYPARAMETER = MessageBase + 12868,
-        IDS_SharperInferOnNonPrivateMember = MessageBase + 12870,
         IDS_SharperInferOnAsyncIterator = MessageBase + 12871,
         IDS_SharperInferOnRefReturn = MessageBase + 12872,
-        IDS_SharperInferOnPartialMethod = MessageBase + 12873,
         IDS_SharperInferOnExplicitImplementation = MessageBase + 12874,
-        IDS_SharperInferOnExtensionMember = MessageBase + 12875,
         IDS_SharperInferOnPropertyOrIndexer = MessageBase + 12876,
-        IDS_SharperInferOnOperator = MessageBase + 12877,
         IDS_SharperTryExpression = MessageBase + 12878,
         IDS_SharperImmutableReasonBase = MessageBase + 12879,
         IDS_SharperImmutableReasonNotClaimed = MessageBase + 12880,
@@ -340,6 +336,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         IDS_SharperImmutableReasonTypePhantom = MessageBase + 12888,
         IDS_SharperImmutableReasonObserver = MessageBase + 12889,
         IDS_SharperImmutableReasonEvent = MessageBase + 12890,
+        IDS_SharperImmutableReasonObserverIdentity = MessageBase + 12891,
     }
 
     // Message IDs may refer to strings that need to be localized.

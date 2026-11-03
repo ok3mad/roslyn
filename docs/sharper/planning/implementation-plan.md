@@ -76,7 +76,7 @@ Each trap was probed before deciding how to handle it.
 | `->` as a lambda arrow | No: `->` is only the arrow of function types; lambdas keep `=>`. | `x -> F(x)` is already a pointer member access, parsed the same in and out of unsafe code (`ParsePostFixExpression`); a lambda meaning could only win after binding fails. |
 | What a function type lowers to | Always `Func` or `Action`; `ref`/`out`/`in` parameters and more than 16 parameters are errors for now (#56). | The lambda's natural type synthesizes an anonymous delegate there, but that type is internal to one compilation, so it cannot appear in public signatures, where function types mostly go. |
 | Implicit `it` scope | The innermost argument around `it` whose parameter, in the chosen overload, is a one-parameter delegate; a pipe stage is the outermost slot. Decided in the binder: the argument is bound as an implicit lambda first, and as a value only when no candidate takes a one-parameter delegate there. | Greeter's `() => profiles.Load(it.Id)` needs a type-directed rule: Scala's syntactic `_` rule would make `Load(x => x.Id)`. Converting a lambda to a parameter that is not a delegate fails without binding its body, so the fallback costs one more overload resolution, not a second binding. |
-| Nested `it` | An error: one meaning of `it` per implicit lambda or pipe stage. An outer `it` plus a value and a function overload at the same argument is an error too. An inner pipe stage is not a second meaning: it owns every `it` in it, which the syntax shows (Feature 11). | Telling two `it`s apart needs every signature in between, and adding a function in between, or an overload in a library, would move the boundary silently. Allowing it later breaks nothing; banning it later would. |
+| Nested `it` | An error: one meaning of `it` per implicit lambda or pipe stage. An outer `it` plus a value and a function overload at the same argument is an error too. An inner pipe stage is not a second meaning: it owns every `it` in it, which the syntax shows (Feature 12). | Telling two `it`s apart needs every signature in between, and adding a function in between, or an overload in a library, would move the boundary silently. Allowing it later breaks nothing; banning it later would. |
 | Where `ValKeyword` is a keyword | Only on tokens the parser makes, with Sharper on, for a val pattern. `GetContextualKeywordKind("val")` is `None`, and `GetContextualKeywordKinds()` does not list `ValKeyword`; `IsContextualKeyword(ValKeyword)` (and so `IsKeywordKind`) stays true. | Callers of the text-based and list members (Razor's tokenizer and escaping, and through `GetKeywordKinds()` the IDE's doc-comment `langword` completion) apply them to all code, so they must answer as upstream ([#109](https://github.com/ok3mad/roslyn/issues/109), design rule 2). The kind-based check only sees tokens that already are keywords: with Sharper off none exists, and the incremental parser (`Blender.Reader.IsFabricatedToken`) needs it so it re-parses a `ValKeyword` token instead of reusing it where `val` is an identifier. The upstream test of the list's range (`SyntaxTests.TestRangeBasedGetKindsMethodsReturnExpectedResults`) stops below `ValKeyword`. |
 | New syntax nodes | Allowed when no existing node can hold the tokens; numbered from `SyntaxKind` 9900 up. | `(A) -> R` fits no existing node. A high range keeps upstream merges from reusing the values, as CS20000 does for diagnostics. |
 
@@ -124,7 +124,7 @@ The brainstorm proposes 26 pieces of syntax (#28, discard arguments, is still to
 | # | Syntax | Example | Lowers to | Parser change | Size | Certainty | Main risk or open point | Issue |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 12 | Implicit `it` | `xs.Select(Process(it, a))`, `when: it is X` | lambda `x => ...` | none | L | Prototype | Decided: the innermost argument whose parameter is a one-parameter delegate becomes the lambda; one meaning of `it` per lambda or stage; an outer `it` plus value and function overloads is an error; an existing `it` keeps its C# meaning (see [Decided](brainstorm.md#decided)). Calls only so far; `LookupSymbols` and Edit and Continue do not see the lambda yet. See the [feature page](../features/implicit-it.md) | [#24](https://github.com/ok3mad/roslyn/issues/24) |
-| 13 | Pipe, without lifting | `x \|> F`, `x \|> F(it, y)` | nested call (a spill sequence with one local) | yes (`\|>` merged from `\|` and `>`, a new token kind and node) | M | Prototype | Decided: a stage with a free `it` is an expression, any other stage a function applied to the value; left-associative between `??` and `?:`; the left side first; a stage is its own scope. See [Feature 11](#feature-11-pipe-without-lifting) and the [feature page](../features/pipe.md) | [#25](https://github.com/ok3mad/roslyn/issues/25) |
+| 13 | Pipe, without lifting | `x \|> F`, `x \|> F(it, y)` | nested call (a spill sequence with one local) | yes (`\|>` merged from `\|` and `>`, a new token kind and node) | M | Prototype | Decided: a stage with a free `it` is an expression, any other stage a function applied to the value; left-associative between `??` and `?:`; the left side first; a stage is its own scope. See [Feature 12](#feature-12-pipe-without-lifting) and the [feature page](../features/pipe.md) | [#25](https://github.com/ok3mad/roslyn/issues/25) |
 | 16 | `try` expression | `try await F(url) catch { HttpRequestException { ... } => ..., }` | try/catch with the arms in a catch filter, with spilling | yes (`try` in expression position) | L (low end) | Med; slice 1 prototype | Slice 1: target-typed to a declared C# 15 union, or the best common type of the body and arms; anonymous union results wait for #19. Unmatched exceptions propagate untouched through the filter; no `finally`; an awaitable body must be awaited. See [Feature 8](#feature-8-try-expression-slice-1-design) | [#28](https://github.com/ok3mad/roslyn/issues/28) |
 | 17 | Lambda to single-method interface | `Render(user, id => new Profile())` | generated sealed class | none | M | Med | Only where C# reports an error today; the class needs a readable name for stack traces | [#29](https://github.com/ok3mad/roslyn/issues/29) |
 | 18 | Interface initializer | `new IProfiles { Load = id => ... }`, `_ = Unexpected` | generated class | none (binder only) | M | Med | Builds on #17 | [#30](https://github.com/ok3mad/roslyn/issues/30) |
@@ -181,7 +181,7 @@ Return type (#10):
 | R1 | `infer` as a return type: gating, a type named `infer` wins, CS0246 with the flag off. Expression bodies of private methods and local functions that call only methods with written return types | S–M | Prototype ([#67](https://github.com/ok3mad/roslyn/issues/67)). Decided: nothing to infer from is CS20014, where `var` reports CS0815, CS8917 or CS8716 |
 | R2 | Block bodies: several `return` statements with the best common type, no return value as `void`, iterators, `async` | M | Prototype ([#68](https://github.com/ok3mad/roslyn/issues/68)). Decided: one maybe-null `return` makes the type annotated, as for a lambda. Async iterators wait |
 | R3 | Methods with inferred return types calling each other: binding order across members, cycle and recursion errors | L | Prototype ([#69](https://github.com/ok3mad/roslyn/issues/69)). Decided: a recursive method with a non-recursive `return` stays CS20018; a cycle is CS20033 on every member, naming it |
-| R4 | Every member kind and accessibility: public and protected members, `virtual`, `partial`, operators, metadata emission, Edit and Continue (a body edit that changes the type is a signature change) | M | None for public members: they infer like any other (decided) |
+| R4 | Every member kind and accessibility: public and protected members, `virtual`, `partial`, operators, metadata emission, Edit and Continue (a body edit that changes the type is a signature change) | M | Prototype ([#70](https://github.com/ok3mad/roslyn/issues/70)). Decided: public members infer like any other; overrides and implementations copy (P2) and never infer from their body; properties and indexers wait for a step with [#166](https://github.com/ok3mad/roslyn/issues/166) |
 | R5 | IDE: Quick Info and inlay hints show the inferred type, a fixer writes it out | M | |
 
 Parameter types (#15):
@@ -189,7 +189,7 @@ Parameter types (#15):
 | Step | Scope | Size | Open point |
 | --- | --- | --- | --- |
 | P1 | `infer` as a parameter type, with source 2: the default value's type. `null`, `default` and target-typed values give an error | S | Prototype ([#72](https://github.com/ok3mad/roslyn/issues/72)). Decided: every member kind and lambdas; a value that is not a constant gives its type, then CS1736 as in C#; cycles through signatures are CS20028 |
-| P2 | Source 1: the overridden or implemented member gives the parameter and return types. Members are matched by name and parameter count before their types are known; more than one candidate is an error | M | Explicit interface implementations; a partial `infer` signature where some types are written |
+| P2 | Source 1: the overridden or implemented member gives the parameter and return types. Members are matched by name and parameter count before their types are known; more than one candidate is an error | M | Prototype ([#73](https://github.com/ok3mad/roslyn/issues/73)). Decided: explicit implementations copy from the interface they name; several interfaces with different signatures are CS20044; written types narrow the candidates |
 | P3 | `readonly infer x` | S | Whether `val x` is its shorthand on method parameters |
 | P4 | Source 4, first cut: the parameter passed directly as an argument to a call with exactly one candidate (method, constructor, delegate). Needs binding the body with a placeholder type | L | How the placeholder interacts with lambdas and local functions in the body |
 | P5 | Source 4 with overloads: every applicable candidate takes the same type at that position, including generic methods whose type arguments come from other arguments | L | |
@@ -466,10 +466,8 @@ with a thread-static set) and lambda return types (`UnboundLambda.InferReturnTyp
   the same method at once and compute the same type. A published type is read directly, also during inference,
   which is safe once nesting is allowed. Partial declarations and other types need nothing more, since inference is
   per symbol.
-- **R4, every member.** Lift the accessibility row. Overrides and explicit implementations copy the type of the
-  member they implement (P2), so `MethodChecks` must find that member before the custom-modifier copy that now
-  assumes a return type. Properties need the same lazy type on `SourcePropertySymbolBase`; operators on
-  `SourceUserDefinedOperatorSymbolBase`. Edit and Continue treats a changed inferred type as a signature change.
+- **R4, every member.** Done; see [step R4](#feature-6-inferred-return-type-step-r4). The plan held for methods and
+  operators; properties were left to a later step with [#166](https://github.com/ok3mad/roslyn/issues/166).
 
 Tests: 16 `Infer_*` tests in `SharperTests.cs`: runtime output, every inferred type next to a C# twin, the errors,
 nullable annotations, the semantic model, IOperation, metadata seen from a C# compilation, the order of inference
@@ -654,6 +652,57 @@ iterators, lambdas, errors, definite assignment and nullable, IOperation, flow g
 parsing, the flag off), and five union conversion tests in `UnionsTests` (#137). They found a C# 15 gap: a possibly
 null value converted into a union case in a target-typed arm does not warn ([#146](https://github.com/ok3mad/roslyn/issues/146), since fixed).
 
+## Feature 6: inferred return type, step R4
+
+Every member kind and accessibility ([#70](https://github.com/ok3mad/roslyn/issues/70), on branch
+`sharper/infer-return-r4`): `public static infer Hello(int id) => $"Hello, {id}!";` returns `string`, and so do
+`virtual` methods, partial methods, extension block members, operators and conversion operators. The step builds on
+R1 to R3's `SharperInferredReturnType` and on P2's copy from the overridden member, and adds no syntax, bound node or
+public API.
+
+**Probe.** Lifting the accessibility row was enough for methods: the inferred type is published before anything reads
+it, and the checks of a written type (`CheckEffectiveAccessibility`, override and implementation matching, nullable
+attributes) run on it as on a written one. Three member kinds needed more. Operators read their return type in the
+method checks, under the lock (`CheckOperatorSignatures`). A partial definition has no body, and its parts are linked
+after its method checks, which the partial method comparer runs while merging the parts. Edit and Continue saw a body
+edit that changes the type as an ordinary signature change, which the runtime allows, so callers compiled against the
+old type would break.
+
+| Piece | What it does |
+| --- | --- |
+| `SourceOrdinaryMethodSymbol.CheckSharperInferredReturnTypeSupported` | Only async iterators, `ref` returns and members without a body remain; accessibility, partial methods and extension block members are lifted |
+| `ReturnTypeFromPartialImplementation` | The `infer` type of a partial definition: reads its implementation's return type, inferred or written, renaming the type parameters. A read during an inference counts as a use of the implementation, so a body that calls its own partial method is CS20018. A definition without an implementation is CS20016, from the partial method checks |
+| `SourceUserDefinedOperatorSymbolBase` | Creates an `InferredReturnType` for operators and conversion operators (the base class `SourceOrdinaryMethodOrUserDefinedOperatorSymbol` already held one), and moves `CheckOperatorSignatures` to `AfterAddingTypeMembersChecks` for an inferred type |
+| `CSharpSemanticModel.GetSharperInferredReturnTypeMethod` | Also answers for the `infer` of an operator and of a conversion operator |
+| `AbstractEditAndContinueAnalyzer.GetSignatureChangeRudeEdit` | A changed return type of a method whose old and new declarations both have `infer` is `RudeEditKind.ChangeSharperInferredReturnType` (ENC1000), as a change of the implicit `Main`'s return type is. `CSharpEditAndContinueAnalyzer.IsSharperReturnTypeInferred` reads the declaration syntax, since the IDE cannot see the compiler's internal flag |
+
+### Decisions
+
+| Question | Decision | Why |
+| --- | --- | --- |
+| Public members | Infer like private ones, with no warning (decided in the issue) | The author chooses; the public API analyzers still catch an accidental change |
+| A body-inferred type on an override (the issue's check) | Never happens: an override, an explicit implementation and a public method that implements an interface member copy their type (P2), and their body converts to it as to a written type (`override infer V() => "d"` over `int V()` is CS0029). When P2 finds no member, its error stands (CS20043) | Inferring from the body and then comparing with the base would make the body choose between an override and an error; the base already says the type. A method that infers because its own type has no interface member of that name, and that a derived type uses as an implementation, is checked as a written one (CS0738) |
+| Partial methods | The implementation infers from its body; a definition with `infer` takes the implementation's type; written on one part and inferred on the other is compared as usual (CS8817) | The definition has nothing else to infer from, and callers bind to it |
+| Operators and conversion operators | Infer from their body; the signature checks (CS0215, CS0216, CS0448, ...) apply to the inferred type after inference | As for methods. A conversion operator is read by every lookup of its type's user-defined conversions, so one whose body converts from its own type uses itself (CS20018) |
+| Explicit implementations of operators | CS20015 until [#166](https://github.com/ok3mad/roslyn/issues/166) | Their method checks match the implemented operator by return type, under the lock; copying, as P2 does for methods, is #166's |
+| Extension block members | Infer, operators included | The implementation methods read the member's return type lazily (`RewrittenMethodSymbol`), so nothing else was needed |
+| Members without a body | CS20016, permanent | Nothing to infer from |
+| `ref` returns | CS20015, later | The lambda rule the inference follows infers no `ref` returns |
+| Anonymous types on visible members | CS0050, as for any internal type | An anonymous type is internal. The issue's exception for an anonymous union `(A \| B)` on a visible member waits for unions ([#31](https://github.com/ok3mad/roslyn/issues/31)); a `PROTOTYPE(sharper)` comment marks the place |
+| Ref safety | Nothing to add: the second binding, against the inferred type, runs the escape analysis of a written `Span<T>` (CS8352) | The inference binds without a target type, as a lambda does |
+| Properties and indexers (open point) | Not in R4: CS20015 stays, and a later step does them together with [#166](https://github.com/ok3mad/roslyn/issues/166) | A property's type has two sources, the getter and the overridden property, and is read by its accessors, backing field and object initializers before a lazy type exists on `SourcePropertySymbolBase`. One step decides both sources together |
+| Edit and Continue | A body edit that changes the inferred type is a rude edit; one that keeps it is a body update | The runtime would accept the signature change, but callers are not recompiled, so they would call a deleted method. The implicit `Main` is the precedent |
+
+Tests: 15 `InferMember_*` tests in `SharperTests_InferEveryMember.cs`: every accessibility next to C# twins with runtime
+output, `virtual` and overrides, interface default and static virtual members, the errors of overrides and
+implementations against body-inferred bases, partial methods (written and inferred parts, generic, errors), operators
+and conversion operators next to C# twins and their signature errors, extension block members, the accessibility of
+the inferred type, ref safety, metadata seen from a C# compilation (image and compilation references), the semantic
+model, IOperation, the order of inference across operators, conversions and partial methods, and a conversion operator
+in a cycle. `Infer_NotSupportedYet` and two P2 tests lost their rows for public members, partial methods, operators and
+extension members. `SharperTopLevelEditingTests.InferredReturnType_BodyEditChangesType` in the C# Features tests covers
+Edit and Continue.
+
 ## Feature 9: inferred parameter type, step P1
 
 `void Fetch(string url, infer retries = 3)` gives `retries` the type `int`, on branch `sharper/infer-parameter-p1`
@@ -698,6 +747,55 @@ two threads, caller information attributes, signature matching, nullable annotat
 metadata seen from a C# compilation, and concurrent inference. `readonly infer x = 1u` already works (P3 needs only
 its tests and the `val` decision).
 
+## Feature 9: inferred parameter type, step P2
+
+An override or an interface implementation copies its `infer` parameter and return types from the member it overrides or
+implements: `public infer Load(infer userId) => result;` in a class implementing `IProfiles` is
+`Task<ProfileResult> Load(int userId)`, on branch `sharper/infer-from-overridden-p2`
+([#73](https://github.com/ok3mad/roslyn/issues/73), feature page
+[inferred-parameter-type.md](../features/inferred-parameter-type.md#from-the-overridden-or-implemented-member-step-p2)).
+No syntax, bound node, public API or lowering.
+
+**Probe.** C# finds the overridden member (`OverriddenOrHiddenMembers`) and the implemented one
+(`FindImplementationForInterfaceMember`, `FindExplicitlyImplementedMember`) by comparing complete signatures, after
+`MethodChecks` has created the parameters. An `infer` parameter without a default value cannot be created without its
+type, so the member must be found earlier, from syntax and the symbols that exist before the signature. Reading a
+candidate's parameters completes the candidate's signature, which can bind its default values and so read the copying
+method again: the same lock-order and cycle problem as P1's default values.
+
+### The mechanism
+
+| Piece | What it does |
+| --- | --- |
+| `SharperInferredParameterType.GetOverriddenSignature` | For a method with an `infer` this source can fill (`override`, explicit implementation, or public in a type with interfaces), binds the written types, takes the P1 types of `infer` parameters with defaults, and matches candidates by name, arity, parameter count and `static`, narrowed by those types and the written ref kinds. Kept per method syntax by the compilation, published once |
+| The P1 stack, now of syntax nodes | A search and a default value in progress share the thread-static stack, so a cycle through both is found from either end; each member of the cycle gets its error (CS20045 for a search, CS20028 for a default value) when it is found |
+| `InferBeforeSignature` | Runs the search before the signature lock, after the default values |
+| `ParameterHelpers.MakeParameter`, `SourceParameterSymbol.Create` | Take the copied type, the ref kind (when none is written) and `params` |
+| `SourceOrdinaryMethodSymbol.MakeParametersAndBindReturnType` | Takes the copied return type instead of R1's inference, and reports the search's errors once |
+| `CSharpSemanticModel.GetSharperInferredReturnTypeMethod` | Also answers for a copied return type (`IsSharperReturnTypeFromOverriddenMember`) |
+
+### Decisions
+
+| Question | Decision | Why |
+| --- | --- | --- |
+| Which methods copy | `override` from base classes; explicit implementations from the interface they name; public methods from the interfaces of their type, when one has a member with the same name and parameter count | These are the methods C# matches against another member's signature. A public method with no such interface member has no source, so its `infer` keeps P1's and R1's rules (CS20027, CS20015) |
+| Explicit implementations (open point) | Supported: the named interface's members are the candidates | The interface is named, so the candidate set is as small as it gets |
+| Several interfaces (open point) | Members with the same signature (`I1.N(int)` and `I2.N(int)`) count once and one method implements both; different signatures are CS20044, which lists them | The issue's proposal; the method could only implement one of them, and guessing which would hide the other |
+| Written types | Narrow the candidates (types compared ignoring nullability, tuple names and `dynamic`, ref kinds exactly); `infer` with a default value narrows with its P1 type | A partial signature chooses an overload, which was the open point of the work breakdown. A written type with its own errors narrows nothing |
+| A virtual member and its overrides | One candidate, the most derived | They are one slot; counting each would make every override chain ambiguous |
+| What is copied | Types with nullability and tuple names, generic substitutions, method type parameters renamed; ref kinds and `params` for parameters that write none. Not custom modifiers (the method checks copy them for overrides, as for written types) and not the return's `ref` | The issue's list. A written `ref` on the return is part of the declaration's shape, as for R1 |
+| Default value and overridden member both present | The default value gives the type (P1), and narrows the candidates | No disagreement can arise from narrowing; a mismatch then is ordinary C# (CS0115) |
+| Return type limits | None of R1's limits (CS20015 for public members, CS20016 for no body) and none of R4's restrictions on public members | Nothing is inferred from a body: the type is copied from a signature that is already written somewhere |
+| Errors | CS20043 no candidate, CS20044 several, CS20045 cycle, on the method name, once; the `infer`s get error types | One error per method, which asks for the types; error types keep C#'s override and implementation errors quiet |
+| Properties, indexers, operators, events | Not yet | They have their own signature code; the search would move to their symbols with R4's properties |
+| Records | Overrides of synthesized members of a base record and of `object` copy like any other; a record's own declaration of a member it would synthesize overrides nothing and needs its types | That declaration is matched against the synthesized member by signature, which needs the types |
+
+Tests: 14 `InferOverridden_*` tests in `SharperTests_InferFromOverridden.cs`: runtime output next to C# twins (the
+issue's example, overrides, explicit implementations), the copied ref kinds, `params`, nullability, tuple names and
+generics, narrowing by written and P1 types, the errors, binding order from every member, cycles from every member
+and on several threads, records, nullable warnings, the semantic model, IOperation, metadata seen from a C#
+compilation, and concurrent searches. `Infer_NotSupportedYet` lost its override and implementation rows.
+
 ## Feature 10: immutable types, slice 1 (design)
 
 `[Immutable] sealed record Money(decimal Amount, string Currency);` (issue [#139](https://github.com/ok3mad/roslyn/issues/139),
@@ -723,10 +821,12 @@ as a prototype (see [Implementation of slice 1](#implementation-of-slice-1) and 
 | Question | Decision | Why |
 | --- | --- | --- |
 | Depth | Deep, as a property of a type. `val` stays binding-only | Purity needs it; C# already has binding and shallow immutability |
-| Definition | Observationally immutable. Hold everything outside the object fixed (statics, clock, randomness, I/O). Then every repeated access returns the same result, including the identity of returned objects. Reflection, `Unsafe`, debuggers and timing do not count | A lazy cache does not change what anyone can observe, and representational immutability alone would reject it |
+| Definition | Observationally immutable. Hold everything outside the object fixed (statics, clock, randomness, I/O). Then every repeated access returns an equivalent result: structurally (the same exact type, every field equivalent, primitives compared by bits, `[UnobservableWrite]` fields skipped), and the same reference for a result whose type is not statically immutable. Identity is not observable to pure code. Reflection, `Unsafe`, debuggers and timing do not count | A lazy cache does not change what anyone can observe, and representational immutability alone would reject it. Requiring the same object rejected most real getters (`FullName => $"{First} {Last}"`, `Total => new Money(...)`); revised in [#153](https://github.com/ok3mad/roslyn/issues/153) |
+| Equivalence | User-written `Equals` is not part of the definition; it is an ordinary observer, which must be pure. Optimizations use a comparer the compiler generates, and every `[Immutable]` type carries a synthesized equivalence member for other assemblies; types that cannot be analyzed get attested equivalences (`string` ordinal, collections element by element) ([#154](https://github.com/ok3mad/roslyn/issues/154)) | `Equals` is weaker than indistinguishable: `1.0m` equals `1.00m` but has another `Scale`, and `0.0` equals `-0.0` but `1 / x` differs. A user's `Equals` can also be wrong. Fields suffice: observers are pure functions of the fields, so equal fields give equal observations. The exact type matters because a subclass can add observers. A mutable result must stay the same reference, because two callers sharing one memoized mutable object would see each other's writes |
 | Observers | Instance getters, indexers, `Equals`, `GetHashCode` and `IEquatable<T>.Equals` must be pure. Ordinary methods may be impure, and statics are not observers | `Now => DateTime.Now` has no fields yet changes on every read. A `Roll()` method reads the outside world, and declaring it as an extension method instead could not change the type's immutability; the purity checker sees the effect at the call. Property patterns, extractors and memoization keys rely on stable observers |
-| Not implied | Neither pure methods (`ToString()` may read the culture) nor interchangeable instances: the compiler never merges or splits instances | `ReferenceEquals`, `lock` and `ConditionalWeakTable` see identity |
-| What the compiler proves | Proven: every field is of an immutable type and, in a class, `readonly`; the base is immutable; observers are pure (slice 1: they only read fields, constants and other pure observers). Disproven: state writable from outside after construction (a non-`readonly` class field, a non-`init` setter). Otherwise not proven | Inference is only ever from representational immutability; the observational definition is what claims may assert beyond it |
+| Not implied | Pure methods (`ToString()` may read the culture) | Only observers are required to be pure |
+| Identity | Not observable to pure code, so it is impure: `ReferenceEquals`, `==` and `!=` on references without a user-defined operator, `object.Equals` and `object.GetHashCode` where they are not overridden, `lock` and `ConditionalWeakTable`. Comparisons with `null` stay pure, and so does an identity fast path at the start of `Equals` (records generate one). The compiler may merge or split the results of pure code (memoization, sharing) and keeps the identity of `this`. A type without value equality can still be immutable; only calls to its identity-based `Equals` are impure ([#153](https://github.com/ok3mad/roslyn/issues/153)) | The price of equivalence: once identity is invisible, equivalent results are interchangeable. It also settles memoization keys: pure code cannot observe identity and its primitives compare by bits, so equivalent arguments give equivalent results |
+| What the compiler proves | Proven: every field is of an immutable type and, in a class, `readonly`; the base is immutable; observers are pure (they read fields, constants and other pure observers, and may create immutable results). Disproven: state writable from outside after construction (a non-`readonly` class field, a non-`init` setter). Otherwise not proven | Inference is only ever from representational immutability; the observational definition is what claims may assert beyond it |
 | Purity spiral | Immutability and purity depend on each other. Each step only widens what is accepted, and cycles assume immutable or pure until disproven (`sealed record Node(int V, Node? Next)` passes). Totality is the exception and assumes the worst | A monotone, optimistic fixpoint converges, and later steps break nothing |
 | Inferred, declared, attested | Inferred is certain for the binary analyzed but says nothing about the next one. Declared (the owner) and attested (a third party) are promises over versions. Inside one assembly, inference is as good as a declaration and is never emitted as a public contract; across assemblies only claims count | A patch of .NET can change any inferred fact, while the code inside one assembly is the code that runs |
 | Conditional and hard claims | `[Immutable]` is conditional: the build fails unless inference proves it, also when the type cannot be analyzed. A hard claim is accepted unless disproven, and names what it vouches for: `[UnobservableWrite]` on a cache field (its reads and writes do not count against an observer's purity), `[AssumePure]` on an observer. A whole-type hard claim exists only in attestations about types that cannot be analyzed | A named obstacle catches the honest mistake of a hard claim going stale (a new mutable field fails the build) without hashing everything the type reaches |
@@ -740,7 +840,7 @@ as a prototype (see [Implementation of slice 1](#implementation-of-slice-1) and 
 | Run-time guard | Later, with optimizations ([#140](https://github.com/ok3mad/roslyn/issues/140)): where memoization, hoisting or laziness relies on immutability that is not static, check that `x.GetType()` carries `[Immutable]`, cached per `Type` in an emitted helper, else take the unoptimized path | A mutable subclass then costs a missed optimization, never a wrong result |
 | Views | Read-only views protect the producer ("you cannot change this"), immutability protects the consumer ("nobody can change this"). Views are never immutable and belong with effects | An `IReadOnlyList<T>` that is a `List<T>` can be cast back |
 | Lazy `T[..]` | A collection expression may be made lazy only if every spread source is total and immutable, or created inside the expression | `List<T>` converts to `T[..]` silently |
-| Weak and strong purity | A function touching only its arguments is weakly pure; with every parameter immutable it is strongly pure, and only strongly pure calls may be memoized, hoisted or made lazy | #36 can start with weak purity, which needs no immutability |
+| Weak and strong purity | A function touching only its arguments is weakly pure; with every parameter immutable it is strongly pure, and only strongly pure calls may be memoized, hoisted or made lazy. Purity holds within one process: `string.GetHashCode` is randomized per process, which is part of the outside held fixed. Compile-time evaluation needs results that are the same across runs, which is settled with `total` | #36 can start with weak purity, which needs no immutability |
 | Spelling | Attributes first, embedded like `IsReadOnlyAttribute`; a keyword later. All names are placeholders | No parser change, no break. `readonly class` would clash with the shallow `readonly struct` |
 
 ### Plan
@@ -783,7 +883,7 @@ Done as planned, with no parser change: `Symbols/SharperImmutability.cs`, about 
 | Generic conditions | Declared, never inferred: every generic type, marked or not, depends on all its type parameters, including those of containing types, except `[Phantom]` ones. A `[Phantom]` parameter in a field type or a non-phantom base type argument is CS20042 | No fixpoint over conditions, so polymorphic recursion terminates by construction. An unmarked generic type that ignores a parameter needs `[Phantom]` too, which is rare |
 | Cycles | Tarjan's algorithm on a thread-static stack; a component is cached only when its root finishes. A failure under the optimistic assumption is real; the other members are analyzed again knowing it | The optimistic, monotone fixpoint of the design, without caching results that depend on an assumption |
 | Reasons in a cycle | The reason does not depend on where the analysis started: first a reason of the type's own (analyzed with the other source types assumed immutable), else the first check that fails with every status known | Which member is reached first decides where a cycle is found, and so which check fails first; diagnostics must not depend on threads or on which type asked first. Members of a cycle then point to the one that breaks it |
-| What an observer may do | Read fields (static ones only when `readonly` or `const`), constants, parameters and locals; write locals and `[UnobservableWrite]` fields; call observers on `this` or `base`, on a receiver whose static type is immutable, or non-virtual ones of an immutable type; use built-in operators, patterns (not deconstruction), `is`, `as`, `?:`, `??`, `??=`, switch expressions, tuples, `typeof` and `throw`. Not: other calls, `new`, boxing, string concatenation, lambdas, interpolation, `await` | "Only read fields and other pure observers", read strictly: an observer returns the same object on every access, so nothing may create one. A whitelist of bound node kinds, so new kinds are impure until reviewed |
+| What an observer may do | Read fields (static ones only when `readonly` or `const`), constants, parameters and locals; write locals and `[UnobservableWrite]` fields; call observers on `this` or `base`, on a receiver whose static type is immutable, or non-virtual ones of an immutable type; use built-in operators, patterns (not deconstruction), `is`, `as`, `?:`, `??`, `??=`, switch expressions, tuples, `typeof` and `throw`. When its return type is statically immutable ([#153](https://github.com/ok3mad/roslyn/issues/153)), also: `new` of a statically immutable type with a pure constructor (one that writes only its own `this`'s fields and auto-properties and otherwise follows these rules, with the initializers it runs and the constructor it calls), string concatenation and interpolation with string or `char` parts, and `System.HashCode`. Not: other calls, other allocations, boxing, lambdas, object initializers, `with`, `await`, and identity: `ReferenceEquals`, reference `==` and `!=` without a user-defined operator (null comparisons are fine), and `Equals(object)` or `GetHashCode()` when the receiver's type does not override them. A hand-written `Equals` may start with `if (ReferenceEquals(this, other)) return true;` | Equivalent results suffice when the result is immutable; a mutable result shared by two callers of a memoized observer would alias, so then nothing may be allocated. Holes other than strings and chars format with the current culture. A call binds to the least derived declaration, so whether `Equals` is identity is decided by the receiver's type. A whitelist of bound node kinds, so new kinds are impure until reviewed |
 | Operators | Pure when declared by an attested type and returning a value type (`decimal +`, `string ==`); otherwise `[AssumePure]` | They are not observers, but `Equals` and getters over `decimal` and `string` are common and the BCL operators are known |
 | `[AssumePure]` | On a property, an indexer or any method, including operators; never misplaced | A call to it counts as pure anywhere, which is all a hard claim on purity can mean in slice 1 |
 | `[UnobservableWrite]` | Only on a non-`readonly` instance field of a class marked `[Immutable]` (CS20041). Its type must still be immutable | Elsewhere it vouches for nothing: a struct's fields need not be `readonly`, and a `readonly` field cannot be written |
@@ -796,7 +896,71 @@ immutable is not yet closed (a `PROTOTYPE(sharper)` comment), and the CS20003 co
 proven immutable may still have members that change it, so [#84](https://github.com/ok3mad/roslyn/issues/84) still
 needs member mutation inference.
 
-## Feature 11: pipe, without lifting
+## Feature 11: refined types, slice 1 (design)
+
+`static int Page(int i is >=0) => ...;` and, later, `record Money(decimal Amount is >0, Currency Currency);` (issue
+[#33](https://github.com/ok3mad/roslyn/issues/33)). A refinement is a closed pattern over constants attached to a
+declaration; a value reaches it only through a door that proves the pattern, and a runtime guard covers every door the
+compiler cannot see. This section is the design; nothing is implemented yet.
+
+**Probe.** What the compiler does today, and what the design reuses:
+
+| Area | What the code shows |
+| --- | --- |
+| Flag off | `ParseParameter` (`LanguageParser.cs`) reads attributes, modifiers, a type, a name and an optional `= default`; an `is` after the name is a syntax error from the parameter list's recovery. Record parameters take the same path (`ParseParenthesizedParameterList`), and `decimal Amount is >0 { get; }` is a syntax error too, so no valid C# changes meaning |
+| Default values | `int i = 0 is >=0` is valid syntax today: a default value of `(0 is >=0)`. The refinement must come before `=` |
+| Type positions | In expressions a refinement on a type would clash with valid C#: `e is int is >0` is `(e is int) is >0`. Refinements therefore stay on declarations |
+| Pattern parser | `ParsePattern(Precedence...)` (`LanguageParser_Patterns.cs`) parses relational, `and`, `or` and `not` patterns. A relational operand stops at `=`, `,` and `)`, so it ends cleanly inside a parameter list |
+| Proofs | `ValueSetFactory.ForType` (`Utilities/ValueSetFactory.cs`) gives `IConstantValueSet`s with `Related`, `Intersect`, `Complement` and `IsEmpty` for the integer types, `char`, `bool`, `float`, `double`, `decimal`, `string`, `nint`, `nuint` and enums. "A implies B" is `A ∩ ¬B` empty; no decision DAG is needed |
+| Exhaustiveness | The switch DAG starts from `ImmutableDictionary<BoundDagTemp, IValueSet>.Empty` (`DecisionDagBuilder.cs`, the initial `uniquifyState`). Seeding the root input with the refinement's set makes `i switch { 0 or 1 => 1, >=2 => ... }` exhaustive for `int i is >=0`, and `PatternExplainer` then names only missing values inside the domain. The DAG also holds the narrowed set at each arm's leaf, which slice 2 uses |
+| Flow state | Flow analysis tracks only definite assignment and null state. Narrowing after `if (x > 0)` and `assume` ([#39](https://github.com/ok3mad/roslyn/issues/39)) need a new per-slot value-set state, split on true and false like nullable and joined by union |
+| Subsumed arms | An arm that can never match is an error (`ERR_SwitchArmSubsumed`, `SwitchExpressionBinder.cs`); a non-exhaustive switch expression is the warning CS8509 |
+
+### Decisions
+
+| Question | Decision | Why |
+| --- | --- | --- |
+| Spelling | `int i is >=0` after the parameter name, before any `= default`. No refined type form such as `int is >=0` in slice 1 | It reads as a predicate on the name, as in the brainstorm and the Fib example; a type form clashes with `e is int is >0` |
+| Syntax | A new `RefinementClauseSyntax` (`is` keyword, pattern), kind 9900 or above, as a new optional last field of `ParameterSyntax` | The token order needs a slot on the parameter; a new type node (the precedent of `T~`) cannot hold a pattern written after the name. Upstream rarely changes `ParameterSyntax` |
+| What a refinement may contain | Closed patterns over constants (relational, constant, `and`, `or`, `not`, parentheses) on a type `ValueSetFactory` supports. Opaque patterns ([#34](https://github.com/ok3mad/roslyn/issues/34)) are an error | Declared domains stay with constants, so subsumption is exact |
+| Parameter refinements | Always written out; never inferred from a default value or from switch arms. `infer` may carry one: `infer retries is >=0 = 3` is `int is >=0` | A domain is a contract, and an inferred domain would swallow a forgotten arm |
+| Return refinements | Inferred for `infer` returns, as the union of what every return can produce: `infer Sign(int x) => x switch { >0 => 1, 0 => 0, _ => -1 }` is `int is -1 or 0 or 1`. `val y = e` keeps the refinement of `e` | Widening a return domain is meant to break callers at compile time, so they adapt |
+| Where an inferred return refinement goes | With the inferred return type: where `infer` is allowed on a public member, its refinement is emitted too. Slice 1 follows R1 and R2, which cover private methods and local functions | Inferred types are allowed on public members, and whoever cares about a published API writes its types out. Forcing written refinements on public members would be the language taking a side; a fixer that offers to write the inferred refinement out, to stabilize an API, is the tool for it |
+| Call sites | Proven is silent and disproven is an error (`Page(-1)`). An argument that cannot be proven is an error when its value carries an inferred refinement (a widened return breaks the caller), and a warning when its value has no refinement at all (a C# result, or a value flow analysis does not cover yet) | Slice 1 proves little; the warning tightens as slices 2 and 3 prove more, while inferred refinements already break callers as intended |
+| Exhaustiveness | A switch on a refined value seeds the DAG with the refinement's set. When an inferred refinement widens and a switch is no longer exhaustive, that is an error, not CS8509 | Same reason: the widening must break the caller |
+| Unreachable arms | An arm that is unreachable only because of a refinement is a warning, not `ERR_SwitchArmSubsumed` | Narrowing a domain, by a body change or a better prover, must never break a caller |
+| Runtime guard | At entry, on every accessibility: `if (!(i is >=0)) throw new ArgumentOutOfRangeException(nameof(i), i, "...")`, lowered through the `is`-pattern lowering. In iterators and `async` methods it runs in the kickoff method, so it throws eagerly | Guards make every escape sound: unproven callers, C# callers, method groups converted to delegates, reflection. Eliding proven guards is an optimization for later |
+| Metadata | An embedded `SharperRefinementAttribute(string pattern)` on the parameter (and on the return) holding the normalized pattern text. Sharper consumers re-parse it and trust it; C# callers see the plain type and meet the guard | Readable in decompilers and independent of the type; trust as for `[Immutable]` |
+| Reassignment | A refined parameter is implicitly `readonly` ([#23](https://github.com/ok3mad/roslyn/issues/23)) | The fact then holds for the whole body, which seeding and later flow analysis rely on |
+| Signatures | A refinement is not part of the signature. Slice 1 reports an error on virtual, abstract, override, interface, partial and extern members, on lambdas, and on recursive `infer` returns (as R1 does) | Overriding rules (identical, or wider parameters and narrower returns) can be added later without a break |
+| Default values | The default must satisfy the refinement; a disproven default is an error | It is a call site the compiler always sees |
+
+### Plan
+
+1. **Syntax.** `RefinementClauseSyntax` and the new `ParameterSyntax` field in `Syntax.xml`, with its public API; the
+   gated parse after the parameter name; parser tests with the flag on and off, including `= default` after the clause.
+2. **Binding.** Bind the pattern against the parameter type, check that it is closed and constant, and compute its
+   value set once per parameter symbol; the default-value check; implicit `readonly`.
+3. **Return refinements.** A refinement slot on the return of `infer` methods and local functions and on `val` locals,
+   inferred from constants, a refined parameter or `val` returned unchanged, and switch expressions whose arms all
+   yield such values.
+4. **Call sites and switches.** Proven, disproven and unknown arguments with the error-or-warning rule above; DAG
+   seeding; the exhaustiveness error and the unreachable-arm warning.
+5. **Guard and metadata.** The entry guard (kickoff method for state machines) and the embedded attribute, written
+   and read.
+6. **Tests** in `SharperTests.cs`, next to the C# they stand for: constants in and out of the domain, refined to
+   refined calls, Fib's switch without `_`, a widened inferred return breaking a caller, a narrowed one only warning,
+   guards for C# callers, iterators and `async`, metadata round trips, and the flag off.
+
+Not in slice 1: records and properties, whose `with` and `init` accessors bypass the constructor and need guards
+there, with immutable fields from [#139](https://github.com/ok3mad/roslyn/issues/139); written refinements on
+returns; arm narrowing plus interval arithmetic, which makes `Fib(i - 1)` provable (slice 2); value flow after `if`
+tests and `assume` (slice 3).
+
+**Size:** L, about 3.5k lines with tests. The parser and the guard are S; most of the work is binding, the call-site
+rules and return inference.
+
+## Feature 12: pipe, without lifting
 
 `raw |> ParseOrder |> Resolve(it, accounts)` is `Resolve(ParseOrder(raw), accounts)` (issue
 [#25](https://github.com/ok3mad/roslyn/issues/25)). The rules are on the [feature page](../features/pipe.md); this
@@ -811,13 +975,13 @@ section keeps the decisions and what the implementation taught. Lifting over `Ta
 | Precedence | Left-associative, a level of its own between `?:` (looser) and `??` (tighter), so looser than every binary operator | F# puts `\|>` with the comparisons, above `&&` and `\|\|`; the TC39 (Hack) proposal puts it with `=>` and assignment, below `?:` and `??`. A Sharper stage is often an expression with `it`, so a loose pipe lets `x \|> it > 3 && it < 9` be one stage without parentheses, as in TC39. Below `??`: `s ?? "default" \|> Parse` reads left to right as data flow, and the other reading, `s ?? Parse("default")`, would type-check and silently differ, while `x \|> F ?? d` is only an error (`F ?? d` on a method group). Above `?:`: `x \|> IsValid ? a : b` tests the result, and the branches of `?:` take a pipe (`c ? a : b \|> F`). Lambdas and assignment take a whole pipe: `y = x \|> F`, `x => x \|> F` |
 | Bare stage | A method group, a delegate value or an expression of delegate type, invoked with the value as its only argument through the ordinary invocation binder: overloads, type inference, extension methods, `dynamic`. Bound as a method group conversion would be (not "invoked"), because lookup's mode must match `SyntaxFacts.IsInvoked`, which primary constructor captures rely on. Anything else is CS20045 | The stage is a function; C# already knows how to call one. CS20045 catches the common slip `x \|> y.Length` for `x \|> it.Length` |
 | Stage with `it` | A stage with a free `it` (the implicit lambda's test: C# finds no `it`, or only an outer implicit one) binds as an expression in a scope that declares `it` as a read-only local holding the value. Not a lambda | So `await` works in a stage, nothing is allocated, and `it` is an ordinary variable for closures, the debugger and flow analysis |
-| `it` scoping | A stage is the outermost slot: an argument inside it that takes a one-parameter function claims an `it` first (innermost wins, Feature 7). A stage left without an `it` of its own is CS20044. A stage that uses its `it` and contains an implicit lambda is CS20020, and CS20021 takes the stage's `it` as the outer one. An inner pipe stage is not a second meaning: `xs.Select(it.Id \|> it * 10)` | The implicit lambda rules exist because only signatures tell lambdas apart; a stage's extent is syntax, so nesting pipes needs no signature to read |
+| `it` scoping | A stage is the outermost slot: an argument inside it that takes a one-parameter function claims an `it` first (innermost wins, Feature 7). A stage left without an `it` of its own is CS20047. A stage that uses its `it` and contains an implicit lambda is CS20020, and CS20021 takes the stage's `it` as the outer one. An inner pipe stage is not a second meaning: `xs.Select(it.Id \|> it * 10)` | The implicit lambda rules exist because only signatures tell lambdas apart; a stage's extent is syntax, so nesting pipes needs no signature to read |
 | Evaluation order | The left side once, before anything in the stage, including a bare stage's receiver or delegate expression | Reading order. `x \|> o.M` as the plain call `o.M(x)` would evaluate `o` first |
 | Scope of declarations | A stage is its own scope, like a lambda body: `out var` and pattern variables in it end with it | The stage binds when its `it` has a type, under its own binder map; the enclosing statement's scope cannot hold variables bound later. `x \|> (TryParse(it, out var n) ? n : 0)` needs the parentheses, since `?:` is looser |
 | `await` | Allowed in a stage (`id \|> await Load(it)`, `x \|> F \|> await it`); `await x \|> F` awaits `x` | `await` is a unary operator, tighter than any binary one |
 | Lowering | A spill sequence: `it = x;` before the enclosing statement and the stage in place, as a switch expression lowers. No new runtime type; in optimized builds a local read once stays on the stack, which leaves the nested call | `it` and the stage's variables are user variables (the debugger shows them, closures capture them), and codegen keeps those out of an expression's sequence: it records a sequence's locals as expression temps and frees them, which named locals cannot be. Closure conversion has no field name for a captured lowering temp |
 | IOperation | `OperationKind.None` with the left side as its only child ([#155](https://github.com/ok3mad/roslyn/issues/155)) | The control flow graph has no region for the stage's `it` |
-| Expression trees | CS20046 | The stage's `it` is a variable |
+| Expression trees | CS20049 | The stage's `it` is a variable |
 
 ### What it taught
 
@@ -845,6 +1009,7 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 - [x] Treat `.cx` files as C# in the language server.
 - [ ] Support `dotnet run app.cx`. File-based apps live in the SDK and only accept `.cs` files, so this needs an SDK change; until then the language server treats a loose `.cx` file as a miscellaneous file, never a file-based app.
 - [x] Add `*.cx` to the default `Compile` items (the `Microsoft.Net.Compilers.Toolset` props).
+- [ ] A fixer that writes an inferred return refinement out explicitly, so a public API stops following its body ([#33](https://github.com/ok3mad/roslyn/issues/33)).
 - [ ] Decide whether `dynamic` should choose range or spread at runtime, under the sharpening rules. [#42](https://github.com/ok3mad/roslyn/issues/42)
 - [x] Decide whether async iterators should ever support spreads: never for an asynchronous source. [#43](https://github.com/ok3mad/roslyn/issues/43)
 - [x] Support spreading a synchronous source in an async iterator. [#49](https://github.com/ok3mad/roslyn/issues/49)
@@ -894,8 +1059,10 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 - [ ] `readonly` locals: decide `readonly` in `for` initializers, `foreach`, deconstruction and `out` (no modifier slot; a public syntax change). [#95](https://github.com/ok3mad/roslyn/issues/95)
 - [ ] `readonly` locals: IDE support (completion, refactorings that drop or break `readonly`). [#96](https://github.com/ok3mad/roslyn/issues/96)
 - [x] `readonly` parameters, the grid's remaining explicitly typed corner. [#97](https://github.com/ok3mad/roslyn/issues/97)
-- [ ] Inferred parameter type: steps P2 to P8 ([#73](https://github.com/ok3mad/roslyn/issues/73), [#74](https://github.com/ok3mad/roslyn/issues/74) and the rest of [#27](https://github.com/ok3mad/roslyn/issues/27)); the default value is bound twice, once to infer and once against the type.
-- [ ] Inferred return type: steps R4 and R5 ([#70](https://github.com/ok3mad/roslyn/issues/70), [#71](https://github.com/ok3mad/roslyn/issues/71)); a local function's nullable inference sees captured variables at their declared state; a local function that calls the inferred method around it makes a cycle even when the method never calls it.
+- [ ] Inferred parameter type: steps P3 to P8 ([#74](https://github.com/ok3mad/roslyn/issues/74) and the rest of [#27](https://github.com/ok3mad/roslyn/issues/27)); the default value is bound twice, once to infer and once against the type. P2 ([#73](https://github.com/ok3mad/roslyn/issues/73)): properties, indexers, operators and events of overrides and implementations do not copy yet.
+- [ ] Inferred return type: step R5 ([#71](https://github.com/ok3mad/roslyn/issues/71)); a local function's nullable inference sees captured variables at their declared state; a local function that calls the inferred method around it makes a cycle even when the method never calls it.
+- [ ] Inferred return type after R4 ([#70](https://github.com/ok3mad/roslyn/issues/70)): properties and indexers, together with [#166](https://github.com/ok3mad/roslyn/issues/166) (P2 for properties, indexers, operators and events, including explicit implementations of operators); `ref` returns; the anonymous union exception for visible members, with unions ([#31](https://github.com/ok3mad/roslyn/issues/31)).
+- [ ] Inferred return type: `Infer_Cycle_Concurrent` fails about once in 2,000 iterations, on `main` too: under threads, the cycle that CS20033 names for one member of a three-member cycle can differ from the single-threaded one (seen while validating R4).
 - [ ] Inferred return type: async iterators (`IAsyncEnumerable<T>`), and an inferred union when the returned values have no best common type, which waits for [#31](https://github.com/ok3mad/roslyn/issues/31).
 - [ ] `readonly` locals share the `val` follow-ups: silence CS20010 with CS20003 (#84), the "never reassigned" fixer can offer `readonly int` (#89), and the public API (#88) and Edit and Continue (#90) items cover them too.
 - [x] Run the upstream parser tests with Sharper on ([#63](https://github.com/ok3mad/roslyn/issues/63)): `ROSLYN_TEST_SHARPER=1` adds the feature to the test parse options (`TestOptions`, `CSharpTestSource.Parse`, the `ParsingTests` helpers). Tests that call `SyntaxFactory` without options are not covered. Last run (net10.0, Debug, `main` with `val`, `readonly` locals and parameters, `T[..]`, function types, also parenthesized and in patterns, and `T~`; the Syntax project again on `sharper/pipe` with `|>`, with the same 37 failures), with no valid C# parsing differently:

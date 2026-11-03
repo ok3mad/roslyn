@@ -2637,6 +2637,11 @@
         <target state="new">'{0}' is marked [Immutable], but it cannot be proven immutable: {1}.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperInferAmbiguousOverriddenMember">
+        <source>Cannot infer the types of '{0}', because it could override or implement more than one member: {1}. Write the types of the one it overrides or implements.</source>
+        <target state="new">Cannot infer the types of '{0}', because it could override or implement more than one member: {1}. Write the types of the one it overrides or implements.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperInferCycle">
         <source>Cannot infer the return type of '{0}', because it depends on itself: {1}. Write the return type of one of these methods.</source>
         <target state="new">Cannot infer the return type of '{0}', because it depends on itself: {1}. Write the return type of one of these methods.</target>
@@ -2657,6 +2662,11 @@
         <target state="new">'{0}' has no body to infer its return type from. Write the return type.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperInferNoOverriddenMember">
+        <source>Cannot infer the types of '{0}', because it overrides or implements no member '{0}' with {1} parameters that matches its written types. Write the types.</source>
+        <target state="new">Cannot infer the types of '{0}', because it overrides or implements no member '{0}' with {1} parameters that matches its written types. Write the types.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperInferNoType">
         <source>Cannot infer the return type of '{0}', because the value it returns ({1}) has no type. Write the return type.</source>
         <target state="new">Cannot infer the return type of '{0}', because the value it returns ({1}) has no type. Write the return type.</target>
@@ -2665,6 +2675,11 @@
       <trans-unit id="ERR_SharperInferNotSupportedYet">
         <source>An inferred return type ('infer') is not supported {0} yet. Write the return type.</source>
         <target state="new">An inferred return type ('infer') is not supported {0} yet. Write the return type.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperInferOverriddenMemberCycle">
+        <source>Cannot infer the types of '{0}' from the member it overrides or implements, because the signature of that member depends on '{0}' itself. Write the types.</source>
+        <target state="new">Cannot infer the types of '{0}' from the member it overrides or implements, because the signature of that member depends on '{0}' itself. Write the types.</target>
         <note />
       </trans-unit>
       <trans-unit id="ERR_SharperInferParameterCycle">
@@ -3587,6 +3602,11 @@
         <target state="new">the observer '{0}' does more than read fields and pure observers: '{1}'</target>
         <note />
       </trans-unit>
+      <trans-unit id="IDS_SharperImmutableReasonObserverIdentity">
+        <source>the observer '{0}' observes object identity: '{1}'</source>
+        <target state="new">the observer '{0}' observes object identity: '{1}'</target>
+        <note />
+      </trans-unit>
       <trans-unit id="IDS_SharperImmutableReasonRefField">
         <source>'{0}' is a ref field</source>
         <target state="new">'{0}' is a ref field</target>
@@ -3625,26 +3645,6 @@
       <trans-unit id="IDS_SharperInferOnExplicitImplementation">
         <source>on an explicit interface implementation</source>
         <target state="new">on an explicit interface implementation</target>
-        <note />
-      </trans-unit>
-      <trans-unit id="IDS_SharperInferOnExtensionMember">
-        <source>on an extension block member</source>
-        <target state="new">on an extension block member</target>
-        <note />
-      </trans-unit>
-      <trans-unit id="IDS_SharperInferOnNonPrivateMember">
-        <source>on a member that is not private</source>
-        <target state="new">on a member that is not private</target>
-        <note />
-      </trans-unit>
-      <trans-unit id="IDS_SharperInferOnOperator">
-        <source>on an operator</source>
-        <target state="new">on an operator</target>
-        <note />
-      </trans-unit>
-      <trans-unit id="IDS_SharperInferOnPartialMethod">
-        <source>on a partial method</source>
-        <target state="new">on a partial method</target>
         <note />
       </trans-unit>
       <trans-unit id="IDS_SharperInferOnPropertyOrIndexer">
