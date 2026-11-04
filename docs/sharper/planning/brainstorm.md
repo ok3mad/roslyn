@@ -150,7 +150,7 @@ already names, in this order, and two sources that disagree are an error that na
 | 2 | The default value | `infer timeout = TimeSpan.FromSeconds(5)` | `TimeSpan`, as `var` infers a local. `null` and `default` give nothing |
 | 3 | A function type the method is converted to | `xs.Select(Format)`, `(int) -> string f = Format;` | the delegate's parameter types, as for a lambda. Local functions and private members only, where every conversion is visible |
 | 4 | Uses in the body that pin one type | `infer Hello(infer id) => users.Find(id);` | `int`, when every candidate of `Find` takes `int` at that position. Member access (`id.Length`) and operators pin nothing |
-| 5 | Nothing pins it | `infer Pair(infer a, infer b) => (a, b);` | open: a generic type parameter (`(T1, T2) Pair<T1, T2>(T1 a, T2 b)`), or an error |
+| 5 | Nothing pins it | `infer Pair(infer a, infer b) => (a, b);` | an error that asks for the type; the IDE offers to make the method generic (`(TA, TB) Pair<TA, TB>(TA a, TB b)`) |
 
 - **Each member alone.** Every source is in the member's own signature or body, or in a signature that is already
   known. A member's types never depend on its callers, so editing a caller never changes a callee.
@@ -162,10 +162,18 @@ already names, in this order, and two sources that disagree are an error that na
   `Find(int)`. But Roslyn binds a body only after it knows the parameter types, so this needs binding with a
   placeholder type and collecting what overload resolution requires of it. It is built in small steps, starting
   with a call that has exactly one candidate.
-- **Doubts about source 5.** A generic method is what C++ makes of `auto f(auto x)`, and it is sound on the CLR,
-  because generics are real at runtime. But a method silently becomes generic, its type parameters appear in
-  metadata and in stack traces, and a later use that pins the type changes its arity. The alternative is an error
-  that asks for the type. Undecided.
+- **Source 5 is an error, not a generic method** (decided in [#79](https://github.com/ok3mad/roslyn/issues/79)).
+  A generic method is what C++ makes of `auto f(auto x)`, and it is sound on the CLR. But a parameter that nothing
+  pins would silently change the method's arity: removing its only pinning use, or a library adding an overload to
+  the call that pinned it (source 4 then no longer pins), makes the method generic, and adding a pinning use later
+  removes a type parameter. That breaks callers that write type arguments, reflection, overrides, and every compiled
+  caller in other assemblies (the signature changes from `!!0` to `int`). It is the risk of
+  [inferred domains](#open-questions) again: a missing source would widen a signature instead of raising an error.
+  Arity is also fixed when a method symbol is created, before any binding, so a lazy arity would put lookup itself
+  in the cycle of binding the body. So the error asks for the type, and the IDE fix (R5) offers either writing a
+  type or making the method generic in source, where the arity is visible and changing it is deliberate.
+  Generic for local functions only, which have no reflection or cross-assembly callers, can be reconsidered after
+  source 4 ships if the error turns out to be common.
 
 ### What happened to the rest
 
@@ -745,6 +753,7 @@ What is settled so far, what was tried and dropped, and what waits for a later s
 - Functions are ordinary methods, and the parts of the earlier `fun` are separate features (see [Functions as separate elements](#functions-as-separate-elements)). `fun` is parked for a later "functional all in" mode.
 - `infer` stands in place of an inferred return or parameter type. Parameter types are copied from a type that a signature or a value names (an overridden member, a default value, a function type, a call that pins one type), never from the shape of their uses.
 - Inferred types are allowed on public members, with no warning: whoever cares about a published API writes its types out.
+- A parameter that nothing pins (source 5) is an error that asks for the type, never a silent generic method (#79). The IDE offers to make the method generic in source. See [Inferred parameter types](#inferred-parameter-types).
 - A general default arm after the specific ones expresses a domain rule that also covers cases added later, such as "anything can be cancelled".
 - Lifting through pipes happens one argument at a time.
 - `it` (#24), where C# reports that no `it` is in scope (CS0103); a variable, field, parameter or type named `it` keeps its C# meaning:
@@ -824,6 +833,5 @@ What is settled so far, what was tried and dropped, and what waits for a later s
 - **Purity needs deep immutability (deep dive).** Resolved by #92: purity is meaningful over deeply immutable data, which the compiler infers only from representational immutability and lets authors claim beyond that. See [Decided](#decided) and the [implementation plan](implementation-plan.md#feature-10-immutable-types-slice-1-design).
 - **Implicit lifting stops at generics and `object` (deep dive).** Lifting fires on a type mismatch, but a generic `Log<T>(T x)` or an `object` parameter accepts a `Task` with no mismatch, and with the object root every value fits there. A library adding an overload can silently flip a call site between lifting and not lifting. At minimum generic and `object` positions need an explicit lift marker, which largely answers the implicit-versus-explicit question above.
 - **Inferred domains swallow exhaustiveness.** If a refined domain were ever inferred from arm patterns, a forgotten arm would narrow the domain instead of raising a non-exhaustive error, and the errors would surface at call sites instead. That is why arms are not a source of parameter types; domains are written out.
-- **Generic by default (source 5).** Should a parameter that nothing pins become a generic type parameter, or be an error? See [Inferred parameter types](#inferred-parameter-types).
 - **Lowering is really binding.** Lifting and union inference interleave with overload resolution, so Sharper cannot be a syntax-desugaring pass in front of Roslyn. It needs its own binder or a Roslyn fork, with ongoing upstream tracking.
 - **Lifting impure stages over sequences must be eager.** Lowering to a lazy `Select` would repeat the I/O on every enumeration, which contradicts "eager by semantics".
