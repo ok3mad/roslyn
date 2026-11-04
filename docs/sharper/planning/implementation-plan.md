@@ -891,6 +891,64 @@ written twins (methods, local functions, constructors, primary constructors, lam
 writes in every member kind, the copied and written ref kinds, struct copies (CS20013) from both sources, and the
 flag off.
 
+## Feature 9: inferred parameter type, step P4
+
+`public infer Hello(infer id) => profiles.Load(id);` gives `id` the type `int` when `IProfiles.Load(int)` is the only
+`Load`, on branch `sharper/infer-parameter-p4` ([#75](https://github.com/ok3mad/roslyn/issues/75), feature page
+[inferred-parameter-type.md](../features/inferred-parameter-type.md#from-uses-in-the-body-step-p4)). Source 4 of the
+brainstorm, first cut: the parameter, passed directly as an argument to a method, constructor or delegate invocation
+with exactly one candidate, gets that candidate's parameter type. No syntax, bound node, public API or lowering.
+
+**Probe.** Roslyn binds a body only after the signature exists: `InMethodBinder` looks every name up in
+`method.Parameters`, which completes the signature, which needs the type being inferred. Binding the body with the
+method itself would make every name lookup a cycle, and the binder reads the containing method's return type, ref
+kind and async state in more places than the user wrote (trap 27). The precedent is the lambda: `UnboundLambda`
+binds the same body once per candidate delegate type, each time with a fresh `LambdaSymbol` whose parameters have
+that delegate's types, and keeps or drops each binding.
+
+### The mechanism
+
+The body is bound once with a stand-in for the method, the **placeholder method**, whose `infer` parameters have a
+placeholder type; the pinning uses are read from the bound tree; then the signature is completed and the body is
+bound normally, against the real types, by the method compiler, which reports its errors.
+
+| Piece | What it does | Extended by |
+| --- | --- | --- |
+| `SharperPlaceholderMethodSymbol` | A `SourceMemberMethodSymbol` over the method's syntax, modifiers and type parameters, outside its type's members. Its parameters are synthesized: written types, P1 types and P2 types as the signature will have them, and the placeholder type (an error type) for the parameters being inferred. Its return type is "being inferred" (`LambdaSymbol.ReturnTypeIsBeingInferred`, and `Binder.IsSharperReturnTypeBeingInferred` is true for it), so `return`, `yield` and `async` bind as in a lambda being inferred and never read the method's signature | P6 gives it the written return type, for `return x` |
+| `SharperInferredParameterType.GetBodyInference` | Binds the body (`Binder.BindMethodBody`, initializers included) with the placeholder method's body binder: the method's own binder chain with the `InMethodBinder` replaced. Runs from `InferBeforeSignature`, after P1 and P2, outside the signature lock; the result is kept by the compilation per parameter list and published once, like P1's and P2's | |
+| `SharperBodyUsesCollector` | Walks the bound body, lambdas and local functions included, and collects every *use* of a placeholder parameter that pins a type: the parameter itself as a by-value argument of a call whose candidate set has one member, mapped to a parameter by position or name, that is neither `params` nor `ref`/`out`, and whose type does not involve the candidate's own method type parameters. Each use keeps its argument syntax, the candidate and the type | P5 widens "one candidate" (overloads, generic inference from the other arguments); P6 adds assignments, returns, `ref` and `out` arguments |
+| `SharperInferredParameterType.DecideFromUses` | One type per parameter from its uses: none is CS20027 ("nothing to infer from"), uses that agree (the same type ignoring nullability and tuple names, merged as inputs: not annotated wins) give that type, uses that disagree are CS20057, which names the first two uses and their types | P5 and P6 add uses, not rules |
+| The P1 stack | The body inference is on the thread-static stack of P1 and P2 (keyed by the parameter list), so a body that needs the method's own signature, directly (recursion) or through other members whose types are inferred, is a cycle found from either end: CS20056 on every parameter inferred from that body, published at once with the rest of the cycle | |
+| Return type inference (R3) | Suspended while the placeholder body is bound (`SharperInferredReturnType.SuspendContext`): the body is not an R3 frame, so a read of an inferred return type there starts its own frames instead of counting as a use by whichever body R3 is binding below it | |
+
+The placeholder type is an error type, so the call that pins a type fails overload resolution in that binding, and
+the binder's error recovery keeps the single candidate (`BoundCall.Method` and `OriginalMethodsOpt`,
+`BoundBadExpression.Symbols` for a constructor) and the call's return type, so the rest of the body binds as it will
+with the real type: `profiles.Load(id).Name` still finds `Name`. Every other use of the placeholder (member access,
+operators, `is`, interpolation) binds to an error silently and pins nothing. All diagnostics of the placeholder
+binding are dropped.
+
+Results computed inside the placeholder binding that depend on the placeholder are not cached: the P1 type of a
+lambda or local function parameter declared in the body is computed, not published, while that body is bound with
+placeholders. Everything the body reads of other members (their signatures, inferred return types, default values)
+does not depend on the placeholder and is inferred and published as usual.
+
+### Decisions
+
+| Question | Decision | Why |
+| --- | --- | --- |
+| Which members | Methods of any accessibility (also extension methods), constructors and user-defined operators and conversions, when an `infer` parameter has no default value and P2 has no member to copy from. Local functions, lambdas, indexers, primary constructors and delegates keep CS20027 | They are the members with a body and a signature lock (`InferBeforeSignature`). A local function's body binder is built by the enclosing body's binder map, so it needs its own placeholder; P7 starts with local functions and can add it |
+| Precedence of sources | P2, then P1, then the body: the body is bound with placeholders only when neither gives the type. A use that does not accept the type a higher source gives reports the C# error of the written twin (CS1503 names both types) | P2's precedent: a default value narrows the candidates, and a mismatch is ordinary C#. Binding every overridden member's body to detect a disagreement would add a body binding, and its cycles, to members that need none |
+| Several uses | Must agree; disagreeing uses are CS20057 naming two uses and their types. Uses that pin nothing do not count | P6's rule, already needed with one-candidate calls (`Take(x); TakeLong(x);`) |
+| Lambdas and local functions in the body (the open point) | Their uses count like any other: the parameter has one type in the whole body. Only the final binding of a lambda is read (the bound tree), never the trial bindings overload resolution makes for other delegate types. A lambda or local function parameter with the same name hides the parameter and is not a use | A trial binding with a rejected delegate type can find other candidates; the bound tree holds only the chosen one |
+| What a candidate means | The members of the method group (or the constructors of the type, or the delegate's `Invoke`) that overload resolution considered. One member is P4; more is P5 and pins nothing yet | A candidate count that does not depend on applicability keeps P4 independent of the other arguments, which P5 must look at |
+| `params`, `ref`, `out`, `in` | A `params` parameter pins nothing (normal and expanded form are two candidates: P5); `ref` and `out` arguments are P6; a by-value argument to an `in` or `ref readonly` parameter pins its type | The exact-type rule of `ref` belongs with P6's other uses |
+| Generic candidates | A parameter type that involves the candidate's own type parameters pins nothing unless the type arguments are written (`Load<int>(id)`); other parameters of a generic method pin as usual. Types of the candidate's containing type are substituted (`IRepo<User>.Load(T)` pins `User`) | Inferring type arguments from the other arguments is P5 |
+| Recursion | A body that calls its own method (or reaches it through other inferred members) is a cycle, CS20056, even when another use pins the type | Overload resolution reads the candidate's signature. R3's decision for return types (CS20018), for the same reason |
+| Nullability | The type is copied as the candidate declares it (`Load(string?)` pins `string?`), as P2 copies | The candidate's declaration is the source |
+| Thread safety | The result is published once per parameter list, after the cycle results decided for it (`Publish`); racing threads compute the same result | P1's and P2's rule |
+| IDE cost | One extra binding of the body, without flow analysis, per member that has an `infer` parameter with neither a default value nor an overridden member, once per compilation (cached by syntax). Other members are not rebound; an edit in the body makes a new compilation infer again, as for return types | |
+
 ## Feature 10: immutable types, slice 1 (design)
 
 `[Immutable] sealed record Money(decimal Amount, string Currency);` (issue [#139](https://github.com/ok3mad/roslyn/issues/139),
