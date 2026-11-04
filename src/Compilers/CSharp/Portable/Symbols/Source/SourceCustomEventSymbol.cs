@@ -21,6 +21,9 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         private readonly SourceEventAccessorSymbol? _addMethod;
         private readonly SourceEventAccessorSymbol? _removeMethod;
         private readonly TypeSymbol _explicitInterfaceType;
+
+        /// <summary>The interface an explicit implementation names, which Sharper's step P2 reads when the type is bound.</summary>
+        internal TypeSymbol SharperExplicitInterfaceType => _explicitInterfaceType;
         private readonly ImmutableArray<EventSymbol> _explicitInterfaceImplementations;
 
         internal SourceCustomEventSymbol(SourceMemberContainerTypeSymbol containingType, Binder binder, EventDeclarationSyntax syntax, BindingDiagnosticBag diagnostics) :

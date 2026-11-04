@@ -8512,6 +8512,9 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
   <data name="WRN_SharperPureOutArgumentNotFresh" xml:space="preserve">
     <value>The out argument '{1}' of the [Pure] member '{0}' is not a fresh local, so '{0}' may observe its own write through another argument.</value>
   </data>
+  <data name="ERR_SharperInferEventNoOverriddenMember" xml:space="preserve">
+    <value>Cannot infer the type of event '{0}', because it overrides or implements no event. Write the type.</value>
+  </data>
   <data name="WRN_SharperPureOutArgumentNotFresh_Title" xml:space="preserve">
     <value>The out argument of a [Pure] member is not a fresh local</value>
   </data>

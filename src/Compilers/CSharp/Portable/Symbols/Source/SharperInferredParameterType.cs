@@ -47,8 +47,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
         /// <summary>
         /// The inferences in progress on this thread, innermost last: a <see cref="ParameterSyntax"/> for a type inferred
-        /// from a default value, a <see cref="MethodDeclarationSyntax"/> for types copied from the member that the method
-        /// overrides or implements (step P2).
+        /// from a default value, a member declaration (or the declarator of a field-like event) for types copied from the
+        /// member that it overrides or implements (step P2).
         /// </summary>
         [ThreadStatic] private static List<SyntaxNode>? s_inProgress;
 
@@ -58,12 +58,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         /// </summary>
         internal static void InferBeforeSignature(Symbol owner, BaseParameterListSyntax? parameterList)
         {
-            if (parameterList is null)
-            {
-                return;
-            }
-
-            foreach (var parameter in parameterList.Parameters)
+            foreach (var parameter in parameterList?.Parameters ?? default)
             {
                 if (parameter is ParameterSyntax { Type.IsInfer: true, Default: { } } concreteParameter)
                 {
@@ -76,7 +71,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 }
             }
 
-            // Step P2: the types copied from the member that a method overrides or implements.
+            // Step P2: the types copied from the member that a method, property, indexer or operator overrides or implements.
             GetOverriddenSignature(owner);
         }
 
@@ -113,9 +108,9 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
         /// <summary>
         /// Adds the diagnostics of the default value of an <c>infer</c> parameter whose inference failed and reported why,
-        /// except the conversion errors of arguments to methods with error-typed parameters. In a cycle, the default
-        /// value calls a member of the cycle, whose parameters are error types; converting the arguments to them would
-        /// report CS1503 after the cycle error.
+        /// except the conversion errors of arguments to methods and indexers with error-typed parameters. In a cycle, the
+        /// default value calls (or indexes) a member of the cycle, whose parameters are error types; converting the
+        /// arguments to them would report CS1503 after the cycle error.
         /// </summary>
         internal static void AddDefaultValueDiagnostics(BindingDiagnosticBag diagnostics, BindingDiagnosticBag valueDiagnostics)
         {
@@ -133,7 +128,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
             static bool isConversionToErrorType(Diagnostic diagnostic)
                 => diagnostic is DiagnosticWithInfo { Info: DiagnosticInfoWithSymbols { Code: (int)ErrorCode.ERR_BadArgType } info } &&
-                    info.Symbols.Any(static s => s is MethodSymbol method && method.Parameters.Any(static p => p.Type.IsErrorType()));
+                    info.Symbols.Any(static s => s is MethodSymbol or PropertySymbol && s.GetParameters().Any(static p => p.Type.IsErrorType()));
         }
 
         private static Result GetOrInfer(Symbol owner, ParameterSyntax parameter, Binder binder)
@@ -189,7 +184,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 decided.GetValue(inProgress[i], node => node switch
                 {
                     ParameterSyntax parameter => CreateCycleResult(parameter, compilation),
-                    MethodDeclarationSyntax method => OverriddenSignature.CreateCycle(method),
+                    CSharpSyntaxNode member => OverriddenSignature.CreateCycle(member),
                     _ => throw ExceptionUtilities.UnexpectedValue(node),
                 });
             }
@@ -201,8 +196,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     case ParameterSyntax parameter:
                         Publish(compilation.SharperInferredParameterTypes, compilation, parameter, (Result)decided.GetValue(parameter, _ => throw ExceptionUtilities.Unreachable()));
                         break;
-                    case MethodDeclarationSyntax method:
-                        Publish(compilation.SharperOverriddenSignatures, compilation, method, (OverriddenSignature)decided.GetValue(method, _ => throw ExceptionUtilities.Unreachable()));
+                    case CSharpSyntaxNode member:
+                        Publish(compilation.SharperOverriddenSignatures, compilation, member, (OverriddenSignature)decided.GetValue(member, _ => throw ExceptionUtilities.Unreachable()));
                         break;
                     default:
                         throw ExceptionUtilities.UnexpectedValue(inProgress[i]);

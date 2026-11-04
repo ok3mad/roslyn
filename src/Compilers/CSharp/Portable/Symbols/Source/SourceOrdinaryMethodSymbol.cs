@@ -113,24 +113,6 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         private bool HasAnyBody => flags.HasAnyBody;
 
 #nullable enable
-        /// <summary>
-        /// Set by the method checks when the return type is Sharper's <c>infer</c>, copied from the member this method
-        /// overrides or implements (step P2).
-        /// </summary>
-        private bool _isSharperReturnTypeFromOverriddenMember;
-
-        /// <summary>
-        /// True if the return type is Sharper's <c>infer</c>, copied from the member this method overrides or implements.
-        /// </summary>
-        internal bool IsSharperReturnTypeFromOverriddenMember
-        {
-            get
-            {
-                LazyMethodChecks();
-                return _isSharperReturnTypeFromOverriddenMember;
-            }
-        }
-
         /// <summary>The interface an explicit implementation names, which Sharper's step P2 reads before the method checks.</summary>
         internal TypeSymbol? SharperExplicitInterfaceType => ExplicitInterfaceType;
 #nullable disable
@@ -173,7 +155,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             {
                 // Nothing is inferred from the body, so the limits of an inferred return type do not apply.
                 returnType = overridden.GetReturnType(DeclaringCompilation);
-                _isSharperReturnTypeFromOverriddenMember = true;
+                IsSharperReturnTypeFromOverriddenMemberForMethodChecks = true;
             }
             else if (isInfer && IsPartialDefinition)
             {

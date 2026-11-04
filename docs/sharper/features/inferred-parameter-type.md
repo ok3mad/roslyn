@@ -1,9 +1,10 @@
 # Inferred parameter type (`infer`)
 
-**Status:** Prototype of steps P1 to P3, merged into `main`. Requires
-`/features:sharper`. Issues: [#72](https://github.com/ok3mad/roslyn/issues/72) (P1),
-[#73](https://github.com/ok3mad/roslyn/issues/73) (P2), [#74](https://github.com/ok3mad/roslyn/issues/74) (P3), under
-[#27](https://github.com/ok3mad/roslyn/issues/27).
+**Status:** Prototype of steps P1 to P3, merged into `main`; P2 for properties, indexers, operators and events on
+branch `sharper/infer-p2-member-kinds`. Requires `/features:sharper`. Issues:
+[#72](https://github.com/ok3mad/roslyn/issues/72) (P1), [#73](https://github.com/ok3mad/roslyn/issues/73) (P2),
+[#166](https://github.com/ok3mad/roslyn/issues/166) (P2 for the other member kinds),
+[#74](https://github.com/ok3mad/roslyn/issues/74) (P3), under [#27](https://github.com/ok3mad/roslyn/issues/27).
 
 ## Summary
 
@@ -76,8 +77,36 @@ be reassigned. Uses in the body (P4 to P6) are the next steps of the
   limits of an [inferred return type](inferred-return-type.md): such members may be abstract or without a body.
 - **Which members.** A method declared `override` copies from its base classes, an explicit implementation
   (`infer IProfiles.Load(infer userId)`) from the interface it names, and a public method from the interfaces of its
-  type that have a member with its name and parameter count. Properties, indexers, operators and events do not copy
-  yet.
+  type that have a member with its name and parameter count.
+- **Every member kind** ([#166](https://github.com/ok3mad/roslyn/issues/166)). Properties, indexers, operators,
+  conversion operators and events copy the same way, from a member of their own kind:
+
+  ```csharp
+  abstract class B { public abstract string Name { get; } public abstract int this[string key] { get; } public virtual event EventHandler Changed; }
+
+  class C : B
+  {
+      public override infer Name => "c";              // string Name
+      public override infer this[infer key] => 0;     // int this[string key]
+      public override event infer Changed;            // event EventHandler Changed
+  }
+
+  interface IAdd<T> where T : IAdd<T> { static abstract T operator +(T a, T b); }
+  struct S : IAdd<S> { public static infer operator +(infer a, infer b) => a; }   // S operator +(S a, S b)
+  ```
+
+  An indexer copies its parameter types and its type, a property and an event their type, and an operator that
+  implements a static abstract or static virtual interface operator, implicitly or explicitly
+  (`static infer IAdd<S>.operator +(infer a, infer b)`), its parameter and return types. The accessors follow the
+  copied type: `get`, `set` and `init`, `add` and `remove`, with expression or block bodies, and the backing field of
+  an auto-property or a field-like event. The candidates are matched by kind and name (an indexer's name is `this`,
+  an operator's is its kind: `op_Addition`, `op_CheckedUnaryNegation`, `op_Implicit`) and by parameter count, and the
+  written types narrow them as for methods.
+- **Properties and events with no member to copy from.** A property or an indexer that is neither an override nor an
+  implementation keeps R4's error (CS20015, "not supported on a property or indexer yet"): inferring it from the
+  getter waits for R4's open point ([#70](https://github.com/ok3mad/roslyn/issues/70)). Such an event reports CS20055,
+  since it has no body to infer from either. An operator with no interface operator to copy from infers its return
+  type from its body (R4), and its `infer` parameters need a default value (CS20027).
 - **Finding the member.** The member is matched before the method's types are known: by name, arity, parameter count
   and `static`, among the members it could override (virtual, abstract or override, and accessible) or implement.
   The types the method writes, its ref kinds, and the types of `infer` parameters with a default value (P1) narrow the
@@ -98,6 +127,8 @@ be reassigned. Uses in the body (P4 to P6) are the next steps of the
   from it (`virtual int M(infer x = new D().M(1))` in the base of `D`, which declares `override int M(infer x)`) is a
   cycle: CS20045 on the copying method and CS20028 on the default value, whichever is used first. The default value's
   call to a member of the cycle reports no conversion error (CS1503) for its arguments, whose parameters have no type.
+  An indexer whose base's default value indexes it (`virtual int this[int i, infer j = new D()[1, 2]]`) is the same
+  cycle.
 - **Records.** An override of a member that a base record synthesizes (`protected override infer PrintMembers(infer
   builder)`) or of `object`'s members (`public override infer ToString()`) copies like any other. A record's own
   declaration of a member it would otherwise synthesize (`virtual bool Equals(R? other)`) overrides nothing, so its
@@ -157,13 +188,19 @@ No syntax, bound node or lowering is added: `infer` parses as a type name, and t
    thread that computed a member of the cycle without seeing it publishes the decided result instead of its own.
 5. **The overridden or implemented member** (P2) is searched for before the signature lock too
    (`SharperInferredParameterType.GetOverriddenSignature`, called from `InferBeforeSignature`), since matching reads the
-   candidates' signatures. The result is kept by the compilation per method syntax and published once;
-   `MakeParameter` takes the parameter types, ref kinds and `params` from it, and
-   `SourceOrdinaryMethodSymbol.MakeParametersAndBindReturnType` the return type and the errors of the search. The
-   search is on the same stack as default values, so a cycle through both is found from either end, and every member
-   of it gets its error at once.
-6. **Semantic model.** `GetTypeInfo` and `GetSymbolInfo` on a parameter's `infer`, and on a copied `infer` return type,
-   return the type, with its nullable annotation, like `var`.
+   candidates' signatures. The result is kept by the compilation per member syntax (the declarator of a field-like
+   event) and published once; `MakeParameter` takes the parameter types, ref kinds and `params` from it, and the
+   member's own signature code the return, property or event type and the errors of the search:
+   `MakeParametersAndBindReturnType` of methods and of operators, `SourcePropertySymbol.ComputeType` for properties
+   and indexers, and `SourceEventSymbol.BindEventType` for events. The search is on the same stack as default values,
+   so a cycle through both is found from either end, and every member of it gets its error at once. One description
+   per member kind (`MemberDeclaration`: the cache key, the candidates' name and kind, the parameters and the type
+   syntax) feeds the same matching and copying.
+6. **Events bind their type in their constructor**, before they are members of their type, so their search runs there.
+   It reads only base types and interfaces, whose members are complete by then, and binds the written types with the
+   binder of the containing type, without looking the event up.
+7. **Semantic model.** `GetTypeInfo` and `GetSymbolInfo` on a parameter's `infer`, and on a copied `infer` return,
+   property, indexer or event type, return the type, with its nullable annotation, like `var`.
 
 ## Follow-ups
 
@@ -173,8 +210,10 @@ No syntax, bound node or lowering is added: `infer` parses as a type name, and t
 - In a group of members that depend on each other in more than one cycle, which members report CS20028 can depend on
   the order of binding. Every such member has a call as its default value, which reports CS1736 once the type is
   written.
-- Properties, indexers, operators and events of overrides and implementations do not copy their types yet; they need
-  the same search on their own symbols (R4's open point for properties): [#166](https://github.com/ok3mad/roslyn/issues/166).
+- A property or an indexer that overrides or implements nothing does not infer its type from its getter yet (R4's open
+  point, [#70](https://github.com/ok3mad/roslyn/issues/70)).
+- A property, an indexer or an event whose search fails gets an error type, and C# then reports its own errors about
+  matching the member as well (CS0534, CS0535, CS0738, CS0506, CS0115), as for methods.
 - A copied type is checked like a written one only after it is copied; a member that is not found because the written
   types do not match is CS20043, not the C# error for the mismatch (CS0115, CS0535). CS20043 names the members that
   were ruled out ([#167](https://github.com/ok3mad/roslyn/issues/167)).
@@ -189,7 +228,10 @@ No syntax, bound node or lowering is added: `infer` parses as a type name, and t
 branch of `ParameterHelpers.MakeParameter`, `Binder.BindLambdaParameterType`, the `InferBeforeSignature` calls in
 `SourceMemberMethodSymbol.LazyMethodChecks` and `SourcePropertySymbolBase.EnsureSignature`, and
 `CSharpSemanticModel.GetSharperInferredParameter`. Step P2: `Symbols/Source/SharperInferredParameterType_OverriddenMember.cs`,
-the `GetOverriddenSignature` calls in `ParameterHelpers` and `SourceOrdinaryMethodSymbol.MakeParametersAndBindReturnType`,
-and `SourceOrdinaryMethodSymbol.IsSharperReturnTypeFromOverriddenMember` for the semantic model. Tests: `InferParameter_*`
-in `SharperTests.cs`, `InferOverridden_*` in `SharperTests_InferFromOverridden.cs`, and step P3's `ReadonlyInfer_*` in
+the `GetOverriddenSignature` calls in `ParameterHelpers`, `SourceOrdinaryMethodSymbol.MakeParametersAndBindReturnType`,
+`SourceUserDefinedOperatorSymbolBase.MakeParametersAndBindReturnType`, `SourcePropertySymbol.ComputeType` and
+`SourceEventSymbol.BindEventType`, `SourceOrdinaryMethodOrUserDefinedOperatorSymbol.IsSharperReturnTypeFromOverriddenMember`
+and `CSharpSemanticModel.GetSharperInferredPropertyOrEventType` for the semantic model. Tests: `InferParameter_*` in
+`SharperTests.cs`, `InferOverridden_*` in `SharperTests_InferFromOverridden.cs`, P2's other member kinds'
+`InferMemberKinds_*` in `SharperTests_InferMemberKinds.cs`, and step P3's `ReadonlyInfer_*` in
 `SharperTests_ReadonlyInfer.cs`.

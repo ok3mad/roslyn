@@ -17,10 +17,11 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
     internal static partial class SharperInferredParameterType
     {
         /// <summary>
-        /// The types that a method copies from the member it overrides or implements, for its <c>infer</c> parameters
-        /// without a default value and its <c>infer</c> return type (source 1, step P2):
+        /// The types that a member copies from the member it overrides or implements, for its <c>infer</c> parameters
+        /// without a default value and its <c>infer</c> return, property or event type (source 1, step P2):
         /// <c>public infer Load(infer userId) => result;</c> implementing <c>Task&lt;ProfileResult&gt; IProfiles.Load(int)</c>
-        /// is a <c>Task&lt;ProfileResult&gt; Load(int userId)</c>. Nothing is inferred from the body.
+        /// is a <c>Task&lt;ProfileResult&gt; Load(int userId)</c>. Nothing is inferred from the body. Methods, properties,
+        /// indexers, operators, conversion operators and events copy alike (<see cref="MemberDeclaration"/>).
         /// </summary>
         /// <remarks>
         /// The member is found before the method's signature exists, by name and parameter count, and the types the method
@@ -38,7 +39,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             internal readonly bool IsApplicable;
 
             /// <summary>The member the types are copied from; null when there is none, or more than one.</summary>
-            internal readonly MethodSymbol? Member;
+            internal readonly Symbol? Member;
 
             private readonly ImmutableArray<TypeWithAnnotations> _parameterTypes;
             private readonly ImmutableArray<RefKind> _refKinds;
@@ -50,7 +51,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
             private OverriddenSignature(
                 bool isApplicable,
-                MethodSymbol? member,
+                Symbol? member,
                 ImmutableArray<TypeWithAnnotations> parameterTypes,
                 ImmutableArray<RefKind> refKinds,
                 ImmutableArray<bool> isParams,
@@ -69,19 +70,20 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             internal static OverriddenSignature CreateError(ReadOnlyBindingDiagnostic<AssemblySymbol> diagnostics)
                 => new OverriddenSignature(isApplicable: true, member: null, default, default, default, default, diagnostics);
 
-            internal static OverriddenSignature CreateCycle(MethodDeclarationSyntax method)
+            internal static OverriddenSignature CreateCycle(CSharpSyntaxNode member)
             {
+                var (location, name) = MemberDeclaration.GetNameForDiagnostics(member);
                 var diagnostics = BindingDiagnosticBag.GetInstance(withDiagnostics: true, withDependencies: false);
-                diagnostics.Add(ErrorCode.ERR_SharperInferOverriddenMemberCycle, method.Identifier.GetLocation(), method.Identifier.ValueText);
+                diagnostics.Add(ErrorCode.ERR_SharperInferOverriddenMemberCycle, location, name);
                 return CreateError(diagnostics.ToReadOnlyAndFree());
             }
 
-            internal static OverriddenSignature Create(MethodSymbol member, ImmutableArray<TypeWithAnnotations> parameterTypes, ImmutableArray<bool> isParams, TypeWithAnnotations returnType)
+            internal static OverriddenSignature Create(Symbol member, ImmutableArray<TypeWithAnnotations> parameterTypes, ImmutableArray<bool> isParams, TypeWithAnnotations returnType)
                 => new OverriddenSignature(
                     isApplicable: true,
                     member,
                     parameterTypes,
-                    member.Parameters.SelectAsArray(p => p.RefKind),
+                    member.GetParameters().SelectAsArray(p => p.RefKind),
                     isParams,
                     returnType,
                     ReadOnlyBindingDiagnostic<AssemblySymbol>.Empty);
@@ -99,7 +101,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             /// <summary>Whether the parameter at <paramref name="ordinal"/>, an <c>infer</c> one, copies <c>params</c>.</summary>
             internal bool IsParams(int ordinal) => !_isParams.IsDefault && _isParams[ordinal];
 
-            /// <summary>The return type, or an error type when there is no member.</summary>
+            /// <summary>The return type (of a property or indexer: its type; of an event: its delegate type), or an error type when there is no member.</summary>
             internal TypeWithAnnotations GetReturnType(CSharpCompilation compilation)
             {
                 Debug.Assert(IsApplicable);
@@ -109,20 +111,22 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
         /// <summary>
         /// The types that <paramref name="owner"/> copies from the member it overrides or implements, or
-        /// <see cref="OverriddenSignature.NotApplicable"/>. Only methods take types from there: an <c>override</c> from its
-        /// base classes, an explicit implementation from the interface it names, and a public method from the interfaces
-        /// of its type, when one of them has a member with its name and parameter count.
+        /// <see cref="OverriddenSignature.NotApplicable"/>. A method, property, indexer, operator, conversion operator or
+        /// event takes types from there when it is an <c>override</c> (from its base classes), an explicit implementation
+        /// (from the interface it names), or public (from the interfaces of its type, when one of them has a member of its
+        /// kind with its name and parameter count).
         /// </summary>
         internal static OverriddenSignature GetOverriddenSignature(Symbol owner)
         {
-            if (owner is not SourceOrdinaryMethodSymbol method ||
-                method.SyntaxNode is not MethodDeclarationSyntax syntax ||
-                !MayCopyFromOverriddenMember(method, syntax))
+            if (MemberDeclaration.Create(owner) is not { } declaration ||
+                !MayCopyFromOverriddenMember(declaration))
             {
                 return OverriddenSignature.NotApplicable;
             }
 
-            var results = method.DeclaringCompilation.SharperOverriddenSignatures;
+            CSharpSyntaxNode syntax = declaration.Syntax;
+            CSharpCompilation compilation = owner.DeclaringCompilation;
+            var results = compilation.SharperOverriddenSignatures;
             if (results.TryGetValue(syntax, out OverriddenSignature? result))
             {
                 return result;
@@ -132,14 +136,14 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             int cycleStart = inProgress.IndexOf(syntax);
             if (cycleStart >= 0)
             {
-                PublishCycle(method.DeclaringCompilation, inProgress, cycleStart);
+                PublishCycle(compilation, inProgress, cycleStart);
                 return results.GetValue(syntax, _ => throw ExceptionUtilities.Unreachable());
             }
 
             inProgress.Add(syntax);
             try
             {
-                result = FindOverriddenSignature(method, syntax);
+                result = FindOverriddenSignature(declaration);
             }
             finally
             {
@@ -147,29 +151,30 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 inProgress.RemoveAt(inProgress.Count - 1);
             }
 
-            // A method found to be in a cycle while its candidates were read already has its result.
-            return Publish(results, method.DeclaringCompilation, syntax, result);
+            // A member found to be in a cycle while its candidates were read already has its result.
+            return Publish(results, compilation, syntax, result);
         }
 
         /// <summary>
-        /// A check on syntax and modifiers only, which every method goes through: whether the method may override or
+        /// A check on syntax and modifiers only, which every member goes through: whether the member may override or
         /// implement a member, and has an <c>infer</c> that the member could fill.
         /// </summary>
-        private static bool MayCopyFromOverriddenMember(SourceOrdinaryMethodSymbol method, MethodDeclarationSyntax syntax)
+        private static bool MayCopyFromOverriddenMember(MemberDeclaration declaration)
         {
-            if (!method.IsOverride &&
-                method.MethodKind != MethodKind.ExplicitInterfaceImplementation &&
-                (method.DeclaredAccessibility != Accessibility.Public || method.ContainingType.IsInterface))
+            Symbol owner = declaration.Owner;
+            if (!owner.IsOverride &&
+                !declaration.IsExplicitImplementation &&
+                (owner.DeclaredAccessibility != Accessibility.Public || owner.ContainingType.IsInterface))
             {
                 return false;
             }
 
-            if (syntax.ReturnType.SkipScoped(out _).SkipRef().IsInfer)
+            if (declaration.TypeSyntax.IsInfer)
             {
                 return true;
             }
 
-            foreach (var parameter in syntax.ParameterList.Parameters)
+            foreach (var parameter in declaration.Parameters)
             {
                 if (parameter is { Type.IsInfer: true, Default: null })
                 {
@@ -181,18 +186,18 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         }
 
         /// <summary>
-        /// Finds the member that <paramref name="method"/> overrides or implements, in four steps: read the signature the
-        /// method writes, collect the members it could override or implement, copy each one's signature and keep those
+        /// Finds the member that <paramref name="declaration"/> overrides or implements, in four steps: read the signature
+        /// the member writes, collect the members it could override or implement, copy each one's signature and keep those
         /// that fit what is written, then pick the one match or report why there is none.
         /// </summary>
-        private static OverriddenSignature FindOverriddenSignature(SourceOrdinaryMethodSymbol method, MethodDeclarationSyntax syntax)
+        private static OverriddenSignature FindOverriddenSignature(MemberDeclaration declaration)
         {
-            if (WrittenSignature.Read(method, syntax) is not { } written)
+            if (WrittenSignature.Read(declaration) is not { } written)
             {
                 return OverriddenSignature.NotApplicable;
             }
 
-            ArrayBuilder<MethodSymbol>? candidates = GetCandidates(method, syntax);
+            ArrayBuilder<Symbol>? candidates = GetCandidates(declaration);
             if (candidates is null)
             {
                 return OverriddenSignature.NotApplicable;
@@ -200,9 +205,9 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
             var matches = ArrayBuilder<CopiedSignature>.GetInstance();
             var ruledOut = ArrayBuilder<(CopiedSignature Copied, int Position)>.GetInstance();
-            foreach (MethodSymbol candidate in candidates)
+            foreach (Symbol candidate in candidates)
             {
-                var copied = CopiedSignature.Create(candidate, method);
+                var copied = CopiedSignature.Create(candidate, declaration.Owner);
                 if (written.GetRuledOutPosition(copied) is int position)
                 {
                     if (!ruledOut.Any(static (other, copied) => other.Copied.HasSameSignature(copied), copied))
@@ -217,54 +222,55 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             }
 
             candidates.Free();
-            OverriddenSignature result = Decide(syntax, written, matches, ruledOut);
+            OverriddenSignature result = Decide(declaration, written, matches, ruledOut);
             matches.Free();
             ruledOut.Free();
             return result;
         }
 
         /// <summary>
-        /// The members <paramref name="method"/> could override or implement, with its name, arity and parameter count,
-        /// or null when it is a public method that implements nothing. Members of base classes come nearest first, so
-        /// that of a virtual member and its overrides, which have the same signature, the most derived is kept.
+        /// The members <paramref name="declaration"/> could override or implement, of its kind, with its name, arity and
+        /// parameter count, or null when it is a public member that implements nothing. Members of base classes come
+        /// nearest first, so that of a virtual member and its overrides, which have the same signature, the most derived
+        /// is kept.
         /// </summary>
-        private static ArrayBuilder<MethodSymbol>? GetCandidates(SourceOrdinaryMethodSymbol method, MethodDeclarationSyntax syntax)
+        private static ArrayBuilder<Symbol>? GetCandidates(MemberDeclaration declaration)
         {
-            string name = syntax.Identifier.ValueText;
-            var candidates = ArrayBuilder<MethodSymbol>.GetInstance();
+            Symbol owner = declaration.Owner;
+            var candidates = ArrayBuilder<Symbol>.GetInstance();
 
-            if (method.IsOverride)
+            if (owner.IsOverride)
             {
                 var useSiteInfo = CompoundUseSiteInfo<AssemblySymbol>.Discarded;
-                for (NamedTypeSymbol? type = method.ContainingType.BaseTypeNoUseSiteDiagnostics; type is not null; type = type.BaseTypeNoUseSiteDiagnostics)
+                for (NamedTypeSymbol? type = owner.ContainingType.BaseTypeNoUseSiteDiagnostics; type is not null; type = type.BaseTypeNoUseSiteDiagnostics)
                 {
-                    foreach (Symbol member in type.GetMembers(name))
+                    foreach (Symbol member in type.GetMembers(declaration.Name))
                     {
-                        if (isCandidate(member, out MethodSymbol? candidate) &&
-                            !candidate.IsStatic &&
-                            (candidate.IsVirtual || candidate.IsAbstract || candidate.IsOverride) &&
-                            AccessCheck.IsSymbolAccessible(candidate, method.ContainingType, ref useSiteInfo))
+                        if (declaration.IsCandidate(member) &&
+                            !member.IsStatic &&
+                            (member.IsVirtual || member.IsAbstract || member.IsOverride) &&
+                            AccessCheck.IsSymbolAccessible(member, owner.ContainingType, ref useSiteInfo))
                         {
-                            candidates.Add(candidate);
+                            candidates.Add(member);
                         }
                     }
                 }
             }
-            else if (method.MethodKind == MethodKind.ExplicitInterfaceImplementation)
+            else if (declaration.IsExplicitImplementation)
             {
-                if (method.SharperExplicitInterfaceType is NamedTypeSymbol { IsInterface: true } explicitInterface)
+                if (declaration.ExplicitInterfaceType is NamedTypeSymbol { IsInterface: true } explicitInterface)
                 {
                     addInterfaceMembers(explicitInterface);
                 }
             }
             else
             {
-                foreach (NamedTypeSymbol @interface in method.ContainingType.AllInterfacesNoUseSiteDiagnostics)
+                foreach (NamedTypeSymbol @interface in owner.ContainingType.AllInterfacesNoUseSiteDiagnostics)
                 {
                     addInterfaceMembers(@interface);
                 }
 
-                // A public method that overrides nothing implements an interface member only if one has its name and
+                // A public member that overrides nothing implements an interface member only if one has its kind, name and
                 // parameter count; otherwise its 'infer' has no source here.
                 if (candidates.Count == 0)
                 {
@@ -277,23 +283,141 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
             void addInterfaceMembers(NamedTypeSymbol @interface)
             {
-                foreach (Symbol member in @interface.GetMembers(name))
+                foreach (Symbol member in @interface.GetMembers(declaration.Name))
                 {
-                    if (isCandidate(member, out MethodSymbol? candidate) &&
-                        candidate.IsImplementableInterfaceMember() &&
-                        candidate.IsStatic == method.IsStatic)
+                    if (declaration.IsCandidate(member) &&
+                        member.IsImplementableInterfaceMember() &&
+                        member.IsStatic == owner.IsStatic)
                     {
-                        candidates.Add(candidate);
+                        candidates.Add(member);
                     }
                 }
             }
+        }
 
-            bool isCandidate(Symbol member, [NotNullWhen(true)] out MethodSymbol? candidate)
+        /// <summary>
+        /// What the search reads from a member's declaration, for each kind of member that can copy its types: the cache
+        /// key, the name its candidates have, its parameters and its type (the return type without <c>ref</c>, or the
+        /// type of a property, indexer or event). The member symbol may not be complete yet: an event binds its type in
+        /// its constructor, a property and an indexer before their signature, a method and an operator before their
+        /// method checks.
+        /// </summary>
+        private readonly struct MemberDeclaration
+        {
+            internal readonly Symbol Owner;
+
+            /// <summary>The syntax the result is kept by: the member declaration, or the declarator of a field-like event.</summary>
+            internal readonly CSharpSyntaxNode Syntax;
+
+            /// <summary>The name of the members it can override or implement (<c>op_Addition</c>, <c>this[]</c>).</summary>
+            internal readonly string Name;
+
+            internal readonly SeparatedSyntaxList<ParameterSyntax> Parameters;
+
+            /// <summary>The return, property or event type, without <c>scoped</c> and <c>ref</c>.</summary>
+            internal readonly TypeSyntax TypeSyntax;
+
+            /// <summary>The type as written, with <c>ref</c>: where a written return type that rules out a member is.</summary>
+            internal readonly TypeSyntax WrittenTypeSyntax;
+            internal readonly bool IsExplicitImplementation;
+            internal readonly TypeSymbol? ExplicitInterfaceType;
+            private readonly int _arity;
+
+            private MemberDeclaration(Symbol owner, CSharpSyntaxNode syntax, string name, SeparatedSyntaxList<ParameterSyntax> parameters, TypeSyntax typeSyntax, ExplicitInterfaceSpecifierSyntax? explicitInterfaceSpecifier, TypeSymbol? explicitInterfaceType, int arity = 0)
             {
-                candidate = member as MethodSymbol;
-                return candidate is { MethodKind: MethodKind.Ordinary, IsVararg: false } &&
-                    candidate.Arity == syntax.Arity &&
-                    candidate.ParameterCount == syntax.ParameterList.Parameters.Count;
+                Owner = owner;
+                Syntax = syntax;
+                Name = name;
+                Parameters = parameters;
+                TypeSyntax = typeSyntax.SkipScoped(out _).SkipRef();
+                WrittenTypeSyntax = typeSyntax;
+                IsExplicitImplementation = explicitInterfaceSpecifier is not null;
+                ExplicitInterfaceType = explicitInterfaceType;
+                _arity = arity;
+            }
+
+            internal static MemberDeclaration? Create(Symbol owner)
+            {
+                switch (owner)
+                {
+                    case SourceOrdinaryMethodSymbol { SyntaxNode: MethodDeclarationSyntax method } ordinary:
+                        return new MemberDeclaration(owner, method, method.Identifier.ValueText, method.ParameterList.Parameters, method.ReturnType,
+                            method.ExplicitInterfaceSpecifier, ordinary.SharperExplicitInterfaceType, method.Arity);
+
+                    case SourceUserDefinedOperatorSymbolBase { SyntaxNode: OperatorDeclarationSyntax @operator } userDefined:
+                        return new MemberDeclaration(owner, @operator, OperatorFacts.OperatorNameFromDeclaration(@operator), @operator.ParameterList.Parameters, @operator.ReturnType,
+                            @operator.ExplicitInterfaceSpecifier, userDefined.SharperExplicitInterfaceType);
+
+                    case SourceUserDefinedOperatorSymbolBase { SyntaxNode: ConversionOperatorDeclarationSyntax conversion } userDefined:
+                        return new MemberDeclaration(owner, conversion, OperatorFacts.OperatorNameFromDeclaration(conversion), conversion.ParameterList.Parameters, conversion.Type,
+                            conversion.ExplicitInterfaceSpecifier, userDefined.SharperExplicitInterfaceType);
+
+                    case SourcePropertySymbol property when property.CSharpSyntaxNode is PropertyDeclarationSyntax syntax:
+                        return new MemberDeclaration(owner, syntax, syntax.Identifier.ValueText, default, syntax.Type,
+                            syntax.ExplicitInterfaceSpecifier, property.SharperExplicitInterfaceType);
+
+                    case SourcePropertySymbol indexer when indexer.CSharpSyntaxNode is IndexerDeclarationSyntax syntax:
+                        return new MemberDeclaration(owner, syntax, WellKnownMemberNames.Indexer, syntax.ParameterList.Parameters, syntax.Type,
+                            syntax.ExplicitInterfaceSpecifier, indexer.SharperExplicitInterfaceType);
+
+                    case SourceCustomEventSymbol @event when @event.CSharpSyntaxNode is EventDeclarationSyntax syntax:
+                        return new MemberDeclaration(owner, syntax, syntax.Identifier.ValueText, default, syntax.Type,
+                            syntax.ExplicitInterfaceSpecifier, @event.SharperExplicitInterfaceType);
+
+                    case SourceFieldLikeEventSymbol @event when @event.CSharpSyntaxNode is VariableDeclaratorSyntax { Parent: VariableDeclarationSyntax declaration } declarator:
+                        return new MemberDeclaration(owner, declarator, declarator.Identifier.ValueText, default, declaration.Type,
+                            explicitInterfaceSpecifier: null, explicitInterfaceType: null);
+
+                    default:
+                        return null;
+                }
+            }
+
+            /// <summary>Whether <paramref name="member"/> is of this declaration's kind, arity and parameter count.</summary>
+            internal bool IsCandidate(Symbol member)
+            {
+                bool isOfKind = (Syntax, member) switch
+                {
+                    (MethodDeclarationSyntax, MethodSymbol { MethodKind: MethodKind.Ordinary, IsVararg: false } method) => method.Arity == _arity,
+                    (OperatorDeclarationSyntax, MethodSymbol { MethodKind: MethodKind.UserDefinedOperator }) => true,
+                    (ConversionOperatorDeclarationSyntax, MethodSymbol { MethodKind: MethodKind.Conversion }) => true,
+                    (PropertyDeclarationSyntax, PropertySymbol { IsIndexer: false }) => true,
+                    (IndexerDeclarationSyntax, PropertySymbol { IsIndexer: true }) => true,
+                    (EventDeclarationSyntax or VariableDeclaratorSyntax, EventSymbol) => true,
+                    _ => false,
+                };
+
+                return isOfKind && member.GetParameters().Length == Parameters.Count;
+            }
+
+            /// <summary>
+            /// The binder the written types are bound with. Only methods and operators are looked up by the binder factory
+            /// (for their type parameters and their parameters' scope); a property, an indexer and an event bind their
+            /// types in the scope of their type, and an event is not a member of its type yet when it binds its type.
+            /// </summary>
+            internal Binder GetSignatureBinder()
+            {
+                var factory = Owner.DeclaringCompilation.GetBinderFactory(Syntax.SyntaxTree);
+                Binder binder = Owner is MethodSymbol
+                    ? factory.GetBinder(TypeSyntax, Syntax, Owner)
+                    : factory.GetBinder(TypeSyntax);
+                return binder.WithAdditionalFlagsAndContainingMemberOrLambda(BinderFlags.SuppressConstraintChecks, Owner);
+            }
+
+            /// <summary>Where the search's errors are reported, and the name they give the member.</summary>
+            internal static (Location Location, string Name) GetNameForDiagnostics(CSharpSyntaxNode syntax)
+            {
+                return syntax switch
+                {
+                    MethodDeclarationSyntax method => (method.Identifier.GetLocation(), method.Identifier.ValueText),
+                    OperatorDeclarationSyntax @operator => (@operator.OperatorToken.GetLocation(), SyntaxFacts.GetText(SyntaxKind.OperatorKeyword) + " " + @operator.OperatorToken.ValueText),
+                    ConversionOperatorDeclarationSyntax conversion => (conversion.OperatorKeyword.GetLocation(), conversion.ImplicitOrExplicitKeyword.ValueText + " " + SyntaxFacts.GetText(SyntaxKind.OperatorKeyword)),
+                    PropertyDeclarationSyntax property => (property.Identifier.GetLocation(), property.Identifier.ValueText),
+                    IndexerDeclarationSyntax indexer => (indexer.ThisKeyword.GetLocation(), indexer.ThisKeyword.ValueText),
+                    EventDeclarationSyntax @event => (@event.Identifier.GetLocation(), @event.Identifier.ValueText),
+                    VariableDeclaratorSyntax declarator => (declarator.Identifier.GetLocation(), declarator.Identifier.ValueText),
+                    _ => throw ExceptionUtilities.UnexpectedValue(syntax),
+                };
             }
         }
 
@@ -302,16 +426,16 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         /// signature ruled out, with the written part that ruled it out, which is also an additional location.
         /// </summary>
         private static OverriddenSignature Decide(
-            MethodDeclarationSyntax syntax,
+            MemberDeclaration declaration,
             WrittenSignature written,
             ArrayBuilder<CopiedSignature> matches,
             ArrayBuilder<(CopiedSignature Copied, int Position)> ruledOut)
         {
-            string name = syntax.Identifier.ValueText;
+            var (location, name) = MemberDeclaration.GetNameForDiagnostics(declaration.Syntax);
             if (matches.Count == 1)
             {
                 CopiedSignature match = matches[0];
-                var isParams = match.Member.Parameters.SelectAsArray(static (p, i, written) => p.IsParams && written.IsOpen(i), written);
+                var isParams = match.Member.GetParameters().SelectAsArray(static (p, i, written) => p.IsParams && written.IsOpen(i), written);
                 return OverriddenSignature.Create(match.Member, match.ParameterTypes, isParams, match.ReturnType);
             }
 
@@ -321,30 +445,30 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 if (ruledOut.Count == 0)
                 {
                     var reason = new MessageFragment(MessageID.IDS_SharperInferNoMemberWithParameterCount, [name]);
-                    diagnostics.Add(ErrorCode.ERR_SharperInferNoOverriddenMember, syntax.Identifier.GetLocation(), name, reason);
+                    diagnostics.Add(ErrorCode.ERR_SharperInferNoOverriddenMember, location, name, reason);
                 }
                 else
                 {
-                    var members = ruledOut.SelectAsArray(static (r, syntax) => describeRuledOut(r.Copied, r.Position, syntax), syntax);
+                    var members = ruledOut.SelectAsArray(static (r, declaration) => describeRuledOut(r.Copied, r.Position, declaration), declaration);
                     var reason = new MessageFragment(MessageID.IDS_SharperInferAllMembersRuledOut, [name, new MessageFragmentList(members)]);
                     var info = new CSDiagnosticInfo(
                         ErrorCode.ERR_SharperInferNoOverriddenMember,
                         args: [name, reason],
                         symbols: ruledOut.SelectAsArray(static r => (Symbol)r.Copied.Member),
-                        additionalLocations: ruledOut.Select(r => getWrittenLocation(r.Position, syntax)).Distinct().ToImmutableArray());
-                    diagnostics.Add(info, syntax.Identifier.GetLocation());
+                        additionalLocations: ruledOut.Select(r => getWrittenLocation(r.Position, declaration)).Distinct().ToImmutableArray());
+                    diagnostics.Add(info, location);
                 }
             }
             else
             {
                 string list = string.Join(", ", matches.Select(m => "'" + m.Member.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat) + "'"));
-                diagnostics.Add(ErrorCode.ERR_SharperInferAmbiguousOverriddenMember, syntax.Identifier.GetLocation(), name, list);
+                diagnostics.Add(ErrorCode.ERR_SharperInferAmbiguousOverriddenMember, location, name, list);
             }
 
             return OverriddenSignature.CreateError(diagnostics.ToReadOnlyAndFree());
 
             // "'B.M(long, string)' (it takes 'long' for 'a')" or "'B.M()' (it returns 'int')".
-            static MessageFragment describeRuledOut(CopiedSignature copied, int position, MethodDeclarationSyntax syntax)
+            static MessageFragment describeRuledOut(CopiedSignature copied, int position, MemberDeclaration declaration)
             {
                 string member = copied.Member.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat);
                 if (position == copied.ParameterTypes.Length)
@@ -352,17 +476,17 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     return new MessageFragment(MessageID.IDS_SharperInferRuledOutByReturnType, [member, copied.ReturnType.Type.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat)]);
                 }
 
-                RefKind refKind = copied.Member.Parameters[position].RefKind;
+                RefKind refKind = copied.Member.GetParameters()[position].RefKind;
                 string type = copied.ParameterTypes[position].Type.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat);
                 return new MessageFragment(
                     MessageID.IDS_SharperInferRuledOutByParameter,
-                    [member, refKind == RefKind.None ? type : refKind.ToParameterDisplayString() + " " + type, syntax.ParameterList.Parameters[position].Identifier.ValueText]);
+                    [member, refKind == RefKind.None ? type : refKind.ToParameterDisplayString() + " " + type, declaration.Parameters[position].Identifier.ValueText]);
             }
 
-            static Location getWrittenLocation(int position, MethodDeclarationSyntax syntax)
-                => position == syntax.ParameterList.Parameters.Count
-                    ? syntax.ReturnType.GetLocation()
-                    : syntax.ParameterList.Parameters[position].GetLocation();
+            static Location getWrittenLocation(int position, MemberDeclaration declaration)
+                => position == declaration.Parameters.Count
+                    ? declaration.WrittenTypeSyntax.GetLocation()
+                    : declaration.Parameters[position].GetLocation();
         }
 
         /// <summary>A part of a message, from a resource and formatted in the culture of the message.</summary>
@@ -409,18 +533,18 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             internal bool IsOpen(int ordinal) => !_parameterTypes[ordinal].HasType;
 
             /// <summary>
-            /// Reads the signature of <paramref name="method"/>, or returns null when nothing in it is open (a type named
-            /// <c>infer</c> is in scope) or it has an <c>__arglist</c>.
+            /// Reads the signature of <paramref name="declaration"/>, or returns null when nothing in it is open (a type
+            /// named <c>infer</c> is in scope) or it has an <c>__arglist</c>.
             /// </summary>
-            internal static WrittenSignature? Read(SourceOrdinaryMethodSymbol method, MethodDeclarationSyntax syntax)
+            internal static WrittenSignature? Read(MemberDeclaration declaration)
             {
-                Binder binder = method.DeclaringCompilation.GetBinderFactory(syntax.SyntaxTree).GetBinder(syntax.ReturnType, syntax, method)
-                    .WithAdditionalFlagsAndContainingMemberOrLambda(BinderFlags.SuppressConstraintChecks, method);
+                Symbol owner = declaration.Owner;
+                Binder binder = declaration.GetSignatureBinder();
 
                 var parameterTypes = ArrayBuilder<TypeWithAnnotations>.GetInstance();
                 var refKinds = ArrayBuilder<RefKind?>.GetInstance();
                 bool anyOpen = false;
-                foreach (var parameter in syntax.ParameterList.Parameters)
+                foreach (var parameter in declaration.Parameters)
                 {
                     if (parameter.IsArgList || parameter.Type is null)
                     {
@@ -434,7 +558,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     bool isOpen = isInfer && parameter.Default is null;
                     if (isInfer && !isOpen)
                     {
-                        type = GetOrInfer(method, parameter, GetDefaultValueBinder(method, parameter)).Type;
+                        type = GetOrInfer(owner, parameter, GetDefaultValueBinder(owner, parameter)).Type;
                     }
 
                     anyOpen |= isOpen;
@@ -442,7 +566,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     refKinds.Add(isOpen && refnessKeyword.Kind() == SyntaxKind.None ? null : refKind);
                 }
 
-                TypeWithAnnotations returnType = binder.BindTypeOrSharperInferKeyword(syntax.ReturnType.SkipScoped(out _).SkipRef(), BindingDiagnosticBag.Discarded, out bool returnIsInfer);
+                TypeWithAnnotations returnType = binder.BindTypeOrSharperInferKeyword(declaration.TypeSyntax, BindingDiagnosticBag.Discarded, out bool returnIsInfer);
                 anyOpen |= returnIsInfer;
 
                 var result = new WrittenSignature(parameterTypes.ToImmutableAndFree(), refKinds.ToImmutableAndFree(), returnIsInfer ? default : returnType);
@@ -459,7 +583,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             {
                 for (int i = 0; i < _parameterTypes.Length; i++)
                 {
-                    if (_refKinds[i] is { } refKind && refKind != copied.Member.Parameters[i].RefKind)
+                    if (_refKinds[i] is { } refKind && refKind != copied.Member.GetParameters()[i].RefKind)
                     {
                         return i;
                     }
@@ -480,11 +604,11 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         /// <summary>The signature of a candidate member, as the method would copy it.</summary>
         private readonly struct CopiedSignature
         {
-            internal readonly MethodSymbol Member;
+            internal readonly Symbol Member;
             internal readonly ImmutableArray<TypeWithAnnotations> ParameterTypes;
             internal readonly TypeWithAnnotations ReturnType;
 
-            private CopiedSignature(MethodSymbol member, ImmutableArray<TypeWithAnnotations> parameterTypes, TypeWithAnnotations returnType)
+            private CopiedSignature(Symbol member, ImmutableArray<TypeWithAnnotations> parameterTypes, TypeWithAnnotations returnType)
             {
                 Member = member;
                 ParameterTypes = parameterTypes;
@@ -492,18 +616,21 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             }
 
             /// <summary>
-            /// Copies the types of <paramref name="member"/> for <paramref name="method"/>: the member's method type
+            /// Copies the types of <paramref name="member"/> for <paramref name="owner"/>: the member's method type
             /// parameters become the method's own (alpha-renamed, since a member of a constructed base type has
-            /// substituted type parameters), and custom modifiers are dropped. The method checks copy those from an
-            /// overridden or explicitly implemented member later, as for written types.
+            /// substituted type parameters), and custom modifiers are dropped. The method checks (and the property and
+            /// event constructors) copy those from an overridden or explicitly implemented member later, as for written
+            /// types.
             /// </summary>
-            internal static CopiedSignature Create(MethodSymbol member, SourceOrdinaryMethodSymbol method)
+            internal static CopiedSignature Create(Symbol member, Symbol owner)
             {
-                TypeMap? typeMap = member.Arity == 0 ? null : new TypeMap(member.TypeParameters, method.TypeParameters, allowAlpha: true);
+                TypeMap? typeMap = member is MethodSymbol { Arity: > 0 } method && owner is MethodSymbol ownerMethod
+                    ? new TypeMap(method.TypeParameters, ownerMethod.TypeParameters, allowAlpha: true)
+                    : null;
                 return new CopiedSignature(
                     member,
-                    member.Parameters.SelectAsArray(static (p, typeMap) => copy(p.TypeWithAnnotations, typeMap), typeMap),
-                    copy(member.ReturnTypeWithAnnotations, typeMap));
+                    member.GetParameters().SelectAsArray(static (p, typeMap) => copy(p.TypeWithAnnotations, typeMap), typeMap),
+                    copy(member.GetTypeOrReturnType(), typeMap));
 
                 static TypeWithAnnotations copy(TypeWithAnnotations type, TypeMap? typeMap)
                     => (typeMap is null ? type : typeMap.SubstituteType(type)).WithModifiers(ImmutableArray<CustomModifier>.Empty);
@@ -517,7 +644,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             {
                 for (int i = 0; i < ParameterTypes.Length; i++)
                 {
-                    if (Member.Parameters[i].RefKind != other.Member.Parameters[i].RefKind ||
+                    if (Member.GetParameters()[i].RefKind != other.Member.GetParameters()[i].RefKind ||
                         !ParameterTypes[i].Type.Equals(other.ParameterTypes[i].Type, TypeCompareKind.AllIgnoreOptions))
                     {
                         return false;

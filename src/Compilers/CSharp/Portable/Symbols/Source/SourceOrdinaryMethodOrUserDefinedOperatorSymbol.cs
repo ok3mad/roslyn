@@ -53,6 +53,25 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             }
         }
 
+        /// <summary>
+        /// Set by the method checks when the return type is Sharper's <c>infer</c>, copied from the member this method or
+        /// operator overrides or implements (step P2).
+        /// </summary>
+        protected bool IsSharperReturnTypeFromOverriddenMemberForMethodChecks { private get; set; }
+
+        /// <summary>
+        /// True if the return type is Sharper's <c>infer</c>, copied from the member this method or operator overrides or
+        /// implements.
+        /// </summary>
+        internal bool IsSharperReturnTypeFromOverriddenMember
+        {
+            get
+            {
+                LazyMethodChecks();
+                return IsSharperReturnTypeFromOverriddenMemberForMethodChecks;
+            }
+        }
+
         /// <param name="sharperInferredReturnType">
         /// Set, with a default <paramref name="returnType"/>, when the return type is Sharper's <c>infer</c>. The checks
         /// of the return type then run when it is inferred.
