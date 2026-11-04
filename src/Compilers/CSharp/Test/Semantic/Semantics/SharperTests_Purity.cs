@@ -392,6 +392,40 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         }
 
         [Fact]
+        public void Pure_IdentityOfImmutableArray()
+        {
+            // ImmutableArray<T>'s Equals, GetHashCode, == and != compare the underlying array by reference (#185).
+            var source = """
+                using System.Collections.Immutable;
+                static class C
+                {
+                    [Pure] static bool Same(ImmutableArray<int> a, ImmutableArray<int> b) => a.Equals(b);
+                    [Pure] static bool SameObject(ImmutableArray<int> a, object b) => a.Equals(b);
+                    [Pure] static int Hash(ImmutableArray<int> a) => a.GetHashCode();
+                    [Pure] static bool Operator(ImmutableArray<int> a, ImmutableArray<int> b) => a == b;
+                    [Pure] static bool TupleEquals((ImmutableArray<int>, int) a) => a.Equals(a);
+                    [Pure] static bool Ok(ImmutableArray<int> a, ImmutableList<int> l, (int, string) t) => a.IsDefaultOrEmpty || a.Length == 0 || t.Equals(t) || l.IsEmpty;
+                }
+                """;
+            CreateImmutableCompilation(source).VerifyDiagnostics(
+                // (4,78): error CS20050: 'C.Same(ImmutableArray<int>, ImmutableArray<int>)' is marked [Pure], but it is not pure: 'a.Equals(b)' observes object identity.
+                //     [Pure] static bool Same(ImmutableArray<int> a, ImmutableArray<int> b) => a.Equals(b);
+                Diagnostic(ErrorCode.ERR_SharperPureNotPure, "a.Equals(b)").WithArguments("C.Same(System.Collections.Immutable.ImmutableArray<int>, System.Collections.Immutable.ImmutableArray<int>)", "'a.Equals(b)' observes object identity").WithLocation(4, 78),
+                // (5,71): error CS20050: 'C.SameObject(ImmutableArray<int>, object)' is marked [Pure], but it is not pure: 'a.Equals(b)' observes object identity.
+                //     [Pure] static bool SameObject(ImmutableArray<int> a, object b) => a.Equals(b);
+                Diagnostic(ErrorCode.ERR_SharperPureNotPure, "a.Equals(b)").WithArguments("C.SameObject(System.Collections.Immutable.ImmutableArray<int>, object)", "'a.Equals(b)' observes object identity").WithLocation(5, 71),
+                // (6,54): error CS20050: 'C.Hash(ImmutableArray<int>)' is marked [Pure], but it is not pure: 'a.GetHashCode()' observes object identity.
+                //     [Pure] static int Hash(ImmutableArray<int> a) => a.GetHashCode();
+                Diagnostic(ErrorCode.ERR_SharperPureNotPure, "a.GetHashCode()").WithArguments("C.Hash(System.Collections.Immutable.ImmutableArray<int>)", "'a.GetHashCode()' observes object identity").WithLocation(6, 54),
+                // (7,82): error CS20050: 'C.Operator(ImmutableArray<int>, ImmutableArray<int>)' is marked [Pure], but it is not pure: 'a == b' observes object identity.
+                //     [Pure] static bool Operator(ImmutableArray<int> a, ImmutableArray<int> b) => a == b;
+                Diagnostic(ErrorCode.ERR_SharperPureNotPure, "a == b").WithArguments("C.Operator(System.Collections.Immutable.ImmutableArray<int>, System.Collections.Immutable.ImmutableArray<int>)", "'a == b' observes object identity").WithLocation(7, 82),
+                // (8,69): error CS20050: 'C.TupleEquals((ImmutableArray<int>, int))' is marked [Pure], but it is not pure: 'a.Equals(a)' observes object identity.
+                //     [Pure] static bool TupleEquals((ImmutableArray<int>, int) a) => a.Equals(a);
+                Diagnostic(ErrorCode.ERR_SharperPureNotPure, "a.Equals(a)").WithArguments("C.TupleEquals((System.Collections.Immutable.ImmutableArray<int>, int))", "'a.Equals(a)' observes object identity").WithLocation(8, 69));
+        }
+
+        [Fact]
         public void Pure_Declarations()
         {
             var source = """

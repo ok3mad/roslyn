@@ -77,7 +77,8 @@ It reports the first expression that does anything else (CS20050), with the reas
   from other assemblies;
 - reading a mutable static, including a `static readonly` field of a mutable type: that is a global variable in
   disguise;
-- observing identity (`ReferenceEquals`, reference `==`, `object.Equals` and `GetHashCode` that are not overridden);
+- observing identity (`ReferenceEquals`, reference `==`, `object.Equals` and `GetHashCode` that are not overridden,
+  and the identity-based equality of `ImmutableArray<T>` and of tuples holding one, as for observers);
 - formatting with the current culture (`x.ToString()`, `$"{x}"` and `s + x` for a number `x`);
 - lambdas, `await`, `yield`, `lock`, `using`, pointers, nested object initializers, collection initializers, and
   collection expressions.
