@@ -352,6 +352,9 @@ namespace Microsoft.CodeAnalysis.CSharp
                         result = ConvertSharperTryExpression(expr, commonType, conversionIfTargetTyped: null, diagnostics, hasErrors);
                     }
                     break;
+                case BoundUnconvertedSharperPipe pipe:
+                    result = ConvertSharperPipe(pipe, destination: null, conversionIfTargetTyped: null, diagnostics);
+                    break;
                 case BoundUnconvertedConditionalOperator op:
                     {
                         TypeSymbol type = op.Type;

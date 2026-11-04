@@ -2317,6 +2317,24 @@ namespace Microsoft.CodeAnalysis.CSharp
                         conversion = Conversion.Identity;
                     }
                 }
+                else if (boundExpr is BoundSharperPipe { WasTargetTyped: true } convertedPipe)
+                {
+                    if (highestBoundExpr is BoundConversion { ConversionKind: ConversionKind.SharperPipe, Conversion: var convertedPipeConversion })
+                    {
+                        // There was an implicit cast.
+                        type = convertedPipe.NaturalTypeOpt;
+                        convertedType = convertedPipe.Type;
+                        convertedNullability = convertedPipe.TopLevelNullability;
+                        conversion = convertedPipeConversion.IsValid ? convertedPipeConversion : Conversion.NoConversion;
+                    }
+                    else
+                    {
+                        // There was an explicit cast on top of this
+                        type = convertedPipe.NaturalTypeOpt;
+                        (convertedType, convertedNullability) = (type, nullability);
+                        conversion = Conversion.Identity;
+                    }
+                }
                 else if (boundExpr is BoundConditionalOperator { WasTargetTyped: true } cond)
                 {
                     if (highestBoundExpr is BoundConversion { ConversionKind: ConversionKind.ConditionalExpression })

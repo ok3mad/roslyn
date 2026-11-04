@@ -405,6 +405,14 @@ namespace Microsoft.CodeAnalysis.CSharp
             return new Conversion(ConversionKind.SharperTryExpression, innerConversions);
         }
 
+        /// <summary>
+        /// A conversion of a Sharper pipe whose stage is target-typed: the conversion of its stage.
+        /// </summary>
+        internal static Conversion MakeSharperPipe(Conversion stageConversion)
+        {
+            return new Conversion(ConversionKind.SharperPipe, ImmutableArray.Create(stageConversion));
+        }
+
         internal ConversionKind Kind
         {
             get

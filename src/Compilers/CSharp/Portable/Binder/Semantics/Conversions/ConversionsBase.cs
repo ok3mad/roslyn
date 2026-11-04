@@ -166,6 +166,12 @@ namespace Microsoft.CodeAnalysis.CSharp
                 return conversion;
             }
 
+            conversion = GetSharperPipeConversion(sourceExpression, destination, ref useSiteInfo);
+            if (conversion.Exists)
+            {
+                return conversion;
+            }
+
             return GetConditionalExpressionConversion(sourceExpression, destination, ref useSiteInfo);
         }
 
@@ -1262,6 +1268,20 @@ namespace Microsoft.CodeAnalysis.CSharp
             }
 
             return Conversion.MakeSharperTryExpression(innerConversions.ToImmutableAndFree());
+        }
+
+        /// <summary>
+        /// A Sharper pipe whose stage uses <c>it</c> converts to a type when its stage does, as a switch expression's arms
+        /// do (#187). Like the switch expression conversion, it has the lowest priority: a conversion from the stage's
+        /// natural type is found first.
+        /// </summary>
+        private Conversion GetSharperPipeConversion(BoundExpression source, TypeSymbol destination, ref CompoundUseSiteInfo<AssemblySymbol> useSiteInfo)
+        {
+            if (source is not BoundUnconvertedSharperPipe pipe)
+                return Conversion.NoConversion;
+
+            var stageConversion = this.ClassifyImplicitConversionFromExpression(pipe.Stage, destination, ref useSiteInfo);
+            return stageConversion.Exists ? Conversion.MakeSharperPipe(stageConversion) : Conversion.NoConversion;
         }
 
         private Conversion GetConditionalExpressionConversion(BoundExpression source, TypeSymbol destination, ref CompoundUseSiteInfo<AssemblySymbol> useSiteInfo)

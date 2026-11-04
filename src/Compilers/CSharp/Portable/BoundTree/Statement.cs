@@ -40,7 +40,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         protected override ImmutableArray<BoundNode?> Children => ImmutableArray.Create<BoundNode?>(this.Expression);
     }
 
-    partial class BoundSharperPipe
+    partial class BoundSharperPipeBase
     {
         protected override ImmutableArray<BoundNode?> Children => ImmutableArray.Create<BoundNode?>(this.Left);
     }

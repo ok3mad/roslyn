@@ -325,7 +325,10 @@ implementation plan, "Feature 3"):
    temps when the sequence is a receiver or a ref, and frees them (`LocalSlotManager.FreeSlot` asserts on a named slot);
    a lowering temp instead cannot be captured (closure conversion has no field name for it). A lowering that declares a
    variable the user can see or capture returns a `BoundSpillSequence` and sets `_needsSpilling`, as the switch
-   expression does; the spiller moves it into the statement list.
+   expression does; the spiller moves it into the statement list. The spiller's block takes the enclosing statement's
+   syntax, so a lambda that captures such a variable in a local declaration's initializer trips
+   `SynthesizedClosureEnvironment.AssertIsClosureScopeSyntax` (`VariableDeclarator`) in Debug, as a captured pattern
+   variable of C#'s switch expression does; test captures in an expression statement or a return.
 38. **Debug checks enumerate the nodes that declare locals.** `BoundNode.LocalsScanner` ("undeclared local") and
    `RefSafetyAnalysis.VisitLocal` (no escape scope) assert on a local no known node declares: add the node to both,
    with `GetValEscape` and `CheckValEscape` cases. A `BoundCall` with new syntax meets

@@ -49,6 +49,16 @@ The design is in the implementation plan, [Feature 12](../planning/implementatio
 - **A stage with `it`.** A stage that contains an `it` that C# does not find (the same test as for an implicit
   lambda's `it`) is an expression with `it` as a read-only variable holding the value: `x |> it * it`,
   `order |> Resolve(it, accounts)`, `user |> $"Hello, {it.Name}"`. Its type is the stage's type.
+- **Target typing.** A stage with `it` is target-typed, as a switch expression's arms are
+  ([#187](https://github.com/ok3mad/roslyn/issues/187)): `int? r = x |> (it > 0 ? 1 : null)`,
+  `Func<int, int> f = x |> (y => y + it)`, `int[] a = x |> [it, it + 1]`, `List<int> l = x |> new() { it }`. The stage's
+  natural type comes first: `object o = x |> (it > 0 ? 1 : 2)` boxes an `int`. With no natural type and no target,
+  the pipe is an error, as the stage would be: `var r = x |> (it > 0 ? 1 : null)` is CS0173, and a stage that does not
+  convert reports the stage's error (`string s = x |> (it > 0 ? 1 : null)` is CS0029 on `1`). In a call, each
+  candidate classifies the stage's conversion, with no betterness rule of its own: `F(x |> (it > 0 ? 1 : null))` picks
+  `F(int?)` over `F(long?)`, as `F(c ? 1 : null)` does. Type inference does not look through the pipe, as C# does not
+  look through `?:` or a switch: `Id(x |> (it > 0 ? 1 : null))` is CS0411, while `Id(x |> it + 1)` infers `int` from
+  the natural type. A bare stage is a call and has the call's type.
 - **A bare stage.** Any other stage is a function: a method group (`x |> Parse`, `x |> list.Add`, `x |> F<int>`), a
   delegate value, or an expression of delegate type such as `x |> MakeParser(culture)`. It is called with the value as
   its only argument, with C#'s overload resolution, type inference and extension methods (`x |> Enumerable.Sum`).
@@ -84,8 +94,6 @@ The design is in the implementation plan, [Feature 12](../planning/implementatio
 ## Not supported yet
 
 - No lifting over `Task`, sequences and unions ([#32](https://github.com/ok3mad/roslyn/issues/32)).
-- A stage is not target-typed: `x |> (it > 0 ? 1 : null)` has no type. Decided: it will be, as a switch expression's
-  arms are, with the natural type preferred ([#187](https://github.com/ok3mad/roslyn/issues/187)).
 - A bare lambda stage is CS20048. Decided: `x |> (y => y + 1)`, one parameter and an expression body, will name the
   value, as `x |> it + 1` with `y` for `it` ([#186](https://github.com/ok3mad/roslyn/issues/186)).
 - IOperation: an `OperationKind.None` node whose only child is the left side; the stage is not in the control flow
@@ -108,9 +116,19 @@ The design is in the implementation plan, [Feature 12](../planning/implementatio
   the member's map leaves stages out (`LocalBinderFactory`, `ExpressionVariableFinder`). A bare stage binds as a method
   group or value, then as an invocation with the local as its argument (`BindInvocationExpression`), whose syntax is
   the stage. For implicit lambdas, the pipe's `it` counts as an outer `it` (`IsSharperImplicitItSymbol`).
-- **Bound node.** `BoundSharperPipe` (`Local`, `Left`, `Locals`, `Stage`, `IsBareStage`). Flow analysis assigns the
-  local after the left side; the nullable walker infers it like a `var` local; ref safety gives it the left side's
-  escape scope.
+- **Target typing**, as for the Sharper try expression. A stage with `it` binds to a `BoundUnconvertedSharperPipe`
+  whose type is the stage's natural type, if any. `ConversionKind.SharperPipe`, with the stage's conversion as its only
+  underlying conversion, comes last in `ClassifyImplicitConversionFromExpression`, after the switch and try conversions.
+  `ConvertSharperPipe` converts the stage (`CreateConversion` with the pipe conversion, `BindToNaturalType` or the
+  inferred delegate type without one) and checks the stage's `it` rules (CS20047, CS20020) only then, since a lambda in
+  the stage is bound by its conversion. A target-typed pipe is a `BoundConversion` of kind `SharperPipe` over a
+  `BoundSharperPipe { WasTargetTyped: true }` whose stage holds the conversion; the semantic model reports the stage's
+  natural type (`NaturalTypeOpt`) as the pipe's type and the target as its converted type.
+- **Bound node.** `BoundSharperPipe` (`Local`, `Left`, `Locals`, `Stage`, `IsBareStage`, `NaturalTypeOpt`,
+  `WasTargetTyped`), with `BoundUnconvertedSharperPipe` sharing the base `BoundSharperPipeBase`. Flow analysis assigns
+  the local after the left side; the nullable walker infers it like a `var` local, and converts a target-typed stage
+  when the target type and its annotations are known (`TargetTypedAnalysisCompletion`), as for a switch arm; ref safety
+  gives it the left side's escape scope.
 - **Lowering.** A spill sequence: `it = x;` goes before the enclosing statement, the stage stays in place, and the
   spiller moves earlier operands to temps, as for a switch expression. `it` and the stage's variables are user
   variables, which codegen keeps in statements rather than in an expression's sequence. In optimized builds the

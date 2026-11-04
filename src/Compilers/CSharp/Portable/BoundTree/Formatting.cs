@@ -162,6 +162,18 @@ namespace Microsoft.CodeAnalysis.CSharp
             => (Type is null) ? MessageID.IDS_FeatureSwitchExpression.Localize() : base.Display;
     }
 
+    internal partial class BoundUnconvertedSharperPipe
+    {
+        public override object Display
+            => (Type is null) ? Stage.Display : base.Display;
+    }
+
+    internal partial class BoundSharperPipe
+    {
+        public override object Display
+            => (Type is null) ? Stage.Display : base.Display;
+    }
+
     internal partial class BoundUnconvertedTryExpression
     {
         public override object Display

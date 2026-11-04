@@ -85,6 +85,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 case BoundKind.TupleLiteral:
                 case BoundKind.UnconvertedSwitchExpression:
                 case BoundKind.UnconvertedTryExpression:
+                case BoundKind.UnconvertedSharperPipe:
                 case BoundKind.UnconvertedObjectCreationExpression:
                 case BoundKind.UnconvertedConditionalOperator:
                 case BoundKind.DefaultLiteral:

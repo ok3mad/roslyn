@@ -2608,6 +2608,15 @@ namespace Microsoft.CodeAnalysis.CSharp
                         Error(diagnostics, ErrorCode.ERR_InvalidAddrOp, ((BoundAddressOfOperator)operand).Operand.Syntax);
                         return;
                     }
+                case BoundKind.UnconvertedSharperPipe when operand.Type is null:
+                    {
+                        // The stage has no natural type: report why the stage does not convert.
+                        var stage = ((BoundUnconvertedSharperPipe)operand).Stage;
+                        var discardedUseSiteInfo = CompoundUseSiteInfo<AssemblySymbol>.Discarded;
+                        var stageConversion = this.Conversions.ClassifyImplicitConversionFromExpression(stage, targetType, ref discardedUseSiteInfo);
+                        GenerateImplicitConversionError(diagnostics, stage.Syntax, stageConversion, stage, targetType);
+                        return;
+                    }
                 case BoundKind.UnconvertedTryExpression:
                     {
                         var tryExpression = (BoundUnconvertedTryExpression)operand;

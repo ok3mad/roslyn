@@ -74,5 +74,6 @@ namespace Microsoft.CodeAnalysis.CSharp
         Union, // An implicit conversion to a union type from its case type.
 
         SharperTryExpression, // a conversion from a Sharper try expression to a type which its body and each arm can convert to
+        SharperPipe, // a conversion from a Sharper pipe to a type which its stage can convert to
     }
 }

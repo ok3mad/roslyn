@@ -751,5 +751,234 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             Assert.Equal("a, b", string.Join(", ", dataFlow.DataFlowsIn.Select(s => s.Name)));
             Assert.Equal("a, b, it", string.Join(", ", dataFlow.ReadInside.Select(s => s.Name)));
         }
+
+        [Fact]
+        public void Pipe_TargetTyped()
+        {
+            var source = """
+                using System;
+                using System.Collections.Generic;
+                using System.Threading.Tasks;
+
+                class C
+                {
+                    static int Inc(int x) => x + 1;
+
+                    static async Task<int?> LoadAsync(int x) => x |> (await Task.FromResult(it) > 0 ? it : null);
+
+                    static void Main()
+                    {
+                        int x = 2, z = -1;
+                        bool c = true;
+
+                        int? r = x |> (it > 0 ? 1 : null);
+                        int? rc = x > 0 ? 1 : null;                              // the C# twin
+                        Func<int, int> f;
+                        f = x |> (y => y + it);   // assigned: in a declaration, a lambda capturing 'it' trips closure conversion's Debug assertion on the scope, as C#'s switch expression pattern variables do
+                        object o = x |> (it > 0 ? 1 : 2);                        // the natural type, boxed
+                        long l = x |> it + 1;                                    // the natural type, converted
+                        int? chained = x |> Inc |> (it > 2 ? it : null);
+                        int? arm = c switch { true => z |> (it > 0 ? 1 : null), false => 0 };
+                        int? branch = c ? z |> (it > 0 ? 1 : null) : 0;
+                        int? cast = (int?)(x |> (it > 0 ? 1 : null));
+                        int[] array = x |> [it, it + 1];
+                        List<int> list = x |> new() { it };
+                        Func<int, int?> g = v => v |> (it > 0 ? v : null);
+
+                        Console.Write($"{r} {rc} {f(10)} {o.GetType().Name} {l} {chained} [{arm}] [{branch}] {cast} ");
+                        Console.Write($"{string.Join(",", array)} {list[0]} {g(5)} [{g(-5)}] {LoadAsync(3).Result} [{LoadAsync(-3).Result}]");
+                    }
+                }
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90,
+                expectedOutput: ExecutionConditionUtil.IsCoreClr ? "1 1 12 Int32 3 3 [] [] 1 2,3 2 5 [] 3 []" : null).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void Pipe_TargetTyped_Errors()
+        {
+            var source = """
+                using System;
+                using System.Collections.Generic;
+                using System.Linq;
+
+                class C
+                {
+                    void M(int x, List<int> xs)
+                    {
+                        var r = x |> (it > 0 ? 1 : null);
+                        var rc = x > 0 ? 1 : null;
+                        string s = x |> (it > 0 ? 1 : null);
+                        int i = x |> (it > 0 ? 1 : null);
+                        var f = x |> (y => y + it);
+                        Func<int, int> g = x |> (y => it + xs.Count(it > y));
+                        Func<int, int> h = x |> (y => xs.Count(it > y));
+                        string t = x |> it + 1;
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (9,23): error CS0173: Type of conditional expression cannot be determined because there is no implicit conversion between 'int' and '<null>'
+                //         var r = x |> (it > 0 ? 1 : null);
+                Diagnostic(ErrorCode.ERR_InvalidQM, "it > 0 ? 1 : null").WithArguments("int", "<null>").WithLocation(9, 23),
+                // (10,18): error CS0173: Type of conditional expression cannot be determined because there is no implicit conversion between 'int' and '<null>'
+                //         var rc = x > 0 ? 1 : null;
+                Diagnostic(ErrorCode.ERR_InvalidQM, "x > 0 ? 1 : null").WithArguments("int", "<null>").WithLocation(10, 18),
+                // (11,35): error CS0029: Cannot implicitly convert type 'int' to 'string'
+                //         string s = x |> (it > 0 ? 1 : null);
+                Diagnostic(ErrorCode.ERR_NoImplicitConv, "1").WithArguments("int", "string").WithLocation(11, 35),
+                // (12,36): error CS0037: Cannot convert null to 'int' because it is a non-nullable value type
+                //         int i = x |> (it > 0 ? 1 : null);
+                Diagnostic(ErrorCode.ERR_ValueCantBeNull, "null").WithArguments("int").WithLocation(12, 36),
+                // (13,23): error CS8917: The delegate type could not be inferred.
+                //         var f = x |> (y => y + it);
+                Diagnostic(ErrorCode.ERR_CannotInferDelegateType, "y => y + it").WithLocation(13, 23),
+                // (14,53): error CS20020: 'it' has two meanings here: the parameter of an outer lambda and of this inner one. Name one of them, as in 'x => ...'.
+                //         Func<int, int> g = x |> (y => it + xs.Count(it > y));
+                Diagnostic(ErrorCode.ERR_SharperItTwoMeanings, "it").WithLocation(14, 53),
+                // (15,48): error CS20047: This stage does not use the value piped into it: its 'it' belongs to an inner lambda, the argument of 'xs.Count'. Name that lambda's parameter, as in 'x => ...', or use the piped 'it' outside it.
+                //         Func<int, int> h = x |> (y => xs.Count(it > y));
+                Diagnostic(ErrorCode.ERR_SharperPipeStageItNotUsed, "it").WithArguments("xs.Count").WithLocation(15, 48),
+                // (16,20): error CS0029: Cannot implicitly convert type 'int' to 'string'
+                //         string t = x |> it + 1;
+                Diagnostic(ErrorCode.ERR_NoImplicitConv, "x |> it + 1").WithArguments("int", "string").WithLocation(16, 20));
+        }
+
+        [Fact]
+        public void Pipe_TargetTyped_OverloadResolution()
+        {
+            var source = """
+                using System;
+
+                class C
+                {
+                    static string F(int? x) => "int?";
+                    static string F(string x) => "string";
+                    static string G(int? x) => "int?";
+                    static string G(long? x) => "long?";
+                    static string H(Func<int, int> f) => "func " + f(1);
+                    static string H(int x) => "int";
+
+                    static void Main()
+                    {
+                        int x = 2;
+                        bool c = x > 0;
+                        Console.Write(F(x |> (it > 0 ? 1 : null)) + " " + F(c ? 1 : null));
+                        Console.Write(" " + G(x |> (it > 0 ? 1 : null)) + " " + G(c ? 1 : null));
+                        Console.Write(" " + H(x |> (y => y + it)) + " " + H(x |> it));
+                    }
+                }
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90,
+                expectedOutput: ExecutionConditionUtil.IsCoreClr ? "int? int? int? int? func 3 int" : null).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void Pipe_TargetTyped_TypeInference()
+        {
+            var source = """
+                using System;
+
+                class C
+                {
+                    static T Id<T>(T x) => x;
+                    static T Apply<T>(Func<int, T> f) => f(1);
+
+                    void M(int x, bool c)
+                    {
+                        _ = Id(x |> (it > 0 ? 1 : null));
+                        _ = Id(c ? 1 : null);
+                        _ = Apply(x |> (y => y + it));
+                        _ = Id(x |> it + 1);
+                        _ = Id<int?>(x |> (it > 0 ? 1 : null));
+                        _ = Apply(v => v |> it * 2);                // the lambda's return type is the stage's natural type
+                        var h = (int v) => v |> (it > 0 ? it : -it);
+                        int abs = h(-4);
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (10,13): error CS0411: The type arguments for method 'C.Id<T>(T)' cannot be inferred from the usage. Try specifying the type arguments explicitly.
+                //         _ = Id(x |> (it > 0 ? 1 : null));
+                Diagnostic(ErrorCode.ERR_CantInferMethTypeArgs, "Id").WithArguments("C.Id<T>(T)").WithLocation(10, 13),
+                // (11,13): error CS0411: The type arguments for method 'C.Id<T>(T)' cannot be inferred from the usage. Try specifying the type arguments explicitly.
+                //         _ = Id(c ? 1 : null);
+                Diagnostic(ErrorCode.ERR_CantInferMethTypeArgs, "Id").WithArguments("C.Id<T>(T)").WithLocation(11, 13),
+                // (12,13): error CS0411: The type arguments for method 'C.Apply<T>(Func<int, T>)' cannot be inferred from the usage. Try specifying the type arguments explicitly.
+                //         _ = Apply(x |> (y => y + it));
+                Diagnostic(ErrorCode.ERR_CantInferMethTypeArgs, "Apply").WithArguments("C.Apply<T>(System.Func<int, T>)").WithLocation(12, 13));
+        }
+
+        [Fact]
+        public void Pipe_TargetTyped_Nullable()
+        {
+            var source = """
+                #nullable enable
+                using System;
+
+                class C
+                {
+                    void M(int x, string? maybe, bool c)
+                    {
+                        string? s = x |> (it > 0 ? "a" : null);
+                        string t = x |> (it > 0 ? "a" : null);              // warning
+                        string tc = x > 0 ? "a" : null;                    // warning, the C# twin
+                        string u = maybe |> (c ? it : "b");                 // warning
+                        Func<string, int> g = maybe |> (y => it.Length);    // warning
+                        object[] a = maybe |> [it];                         // warning
+                        var k = (string? v) => v |> (it ?? "d");
+                        string n = k(null);
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (9,20): warning CS8600: Converting null literal or possible null value to non-nullable type.
+                //         string t = x |> (it > 0 ? "a" : null);              // warning
+                Diagnostic(ErrorCode.WRN_ConvertingNullableToNonNullable, @"x |> (it > 0 ? ""a"" : null)").WithLocation(9, 20),
+                // (10,21): warning CS8600: Converting null literal or possible null value to non-nullable type.
+                //         string tc = x > 0 ? "a" : null;                    // warning, the C# twin
+                Diagnostic(ErrorCode.WRN_ConvertingNullableToNonNullable, @"x > 0 ? ""a"" : null").WithLocation(10, 21),
+                // (11,20): warning CS8600: Converting null literal or possible null value to non-nullable type.
+                //         string u = maybe |> (c ? it : "b");                 // warning
+                Diagnostic(ErrorCode.WRN_ConvertingNullableToNonNullable, @"maybe |> (c ? it : ""b"")").WithLocation(11, 20),
+                // (12,46): warning CS8602: Dereference of a possibly null reference.
+                //         Func<string, int> g = maybe |> (y => it.Length);    // warning
+                Diagnostic(ErrorCode.WRN_NullReferenceReceiver, "it").WithLocation(12, 46),
+                // (13,32): warning CS8601: Possible null reference assignment.
+                //         object[] a = maybe |> [it];                         // warning
+                Diagnostic(ErrorCode.WRN_NullReferenceAssignment, "it").WithLocation(13, 32));
+        }
+
+        [Fact]
+        public void Pipe_TargetTyped_SemanticModel()
+        {
+            var source = """
+                class C
+                {
+                    int? M(int a) => a |> (it > 0 ? 1 : null);
+                    object N(int a) => a |> (it > 0 ? 1 : 2);
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics();
+            var tree = comp.SyntaxTrees[0];
+            var model = comp.GetSemanticModel(tree);
+            var pipes = tree.GetRoot().DescendantNodes().OfType<PipeExpressionSyntax>().ToArray();
+
+            var targetTyped = model.GetTypeInfo(pipes[0]);
+            Assert.Null(targetTyped.Type);
+            Assert.Equal("System.Int32?", targetTyped.ConvertedType.ToTestDisplayString());
+            Assert.True(model.GetConversion(pipes[0]).IsImplicit);
+            var stage = ((ParenthesizedExpressionSyntax)pipes[0].Stage).Expression;
+            Assert.Null(model.GetTypeInfo(stage).Type);
+            Assert.Equal("System.Int32?", model.GetTypeInfo(stage).ConvertedType.ToTestDisplayString());
+
+            var natural = model.GetTypeInfo(pipes[1]);
+            Assert.Equal("System.Int32", natural.Type.ToTestDisplayString());
+            Assert.Equal("System.Object", natural.ConvertedType.ToTestDisplayString());
+            Assert.True(model.GetConversion(pipes[1]).IsBoxing);
+
+            Assert.Equal(OperationKind.Conversion, model.GetOperation(pipes[0])!.Parent!.Kind);
+        }
     }
 }

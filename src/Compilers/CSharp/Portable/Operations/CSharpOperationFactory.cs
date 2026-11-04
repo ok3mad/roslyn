@@ -345,6 +345,7 @@ namespace Microsoft.CodeAnalysis.Operations
                 case BoundKind.UnconvertedConditionalOperator:
                 case BoundKind.UnconvertedSwitchExpression:
                 case BoundKind.UnconvertedTryExpression:
+                case BoundKind.UnconvertedSharperPipe:
                 case BoundKind.AnonymousPropertyDeclaration:
                 default:
                     // If you're hitting this because the IOperation test hook has failed, see

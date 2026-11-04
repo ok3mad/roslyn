@@ -8,16 +8,16 @@ namespace Microsoft.CodeAnalysis.CSharp
 {
     internal partial class DefiniteAssignmentPass
     {
-        public override BoundNode VisitSharperPipe(BoundSharperPipe node)
+        protected override BoundNode VisitSharperPipeBase(BoundSharperPipeBase node)
         {
             DeclareVariable(node.Local);
             DeclareVariables(node.Locals);
-            var result = base.VisitSharperPipe(node);
+            var result = base.VisitSharperPipeBase(node);
             ReportUnusedVariables(node.Locals);
             return result;
         }
 
-        protected override void VisitSharperPipeLocal(BoundSharperPipe node)
+        protected override void VisitSharperPipeLocal(BoundSharperPipeBase node)
         {
             // The stage's 'it' is assigned once, from the left side, and is always considered used.
             int slot = GetOrCreateSlot(node.Local);
