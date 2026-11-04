@@ -347,6 +347,13 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             flags = modifiersAndFlags.flags;
         }
 
+        /// <summary>
+        /// The modifiers and flags of <paramref name="method"/>, for the Sharper placeholder that stands for it while its
+        /// parameter types are inferred from its body (<see cref="SharperPlaceholderMethodSymbol"/>).
+        /// </summary>
+        protected static (DeclarationModifiers, Flags) GetModifiersAndFlags(SourceMemberMethodSymbol method)
+            => (method.DeclarationModifiers, method.flags);
+
         protected void CheckEffectiveAccessibility(TypeWithAnnotations returnType, ImmutableArray<ParameterSymbol> parameters, BindingDiagnosticBag diagnostics)
         {
             if (this.DeclaredAccessibility <= Accessibility.Private || MethodKind == MethodKind.ExplicitInterfaceImplementation)

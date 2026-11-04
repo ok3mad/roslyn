@@ -2687,19 +2687,29 @@
         <target state="new">Cannot infer the types of '{0}' from the member it overrides or implements, because the signature of that member depends on '{0}' itself. Write the types.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperInferParameterBodyCycle">
+        <source>Cannot infer the type of parameter '{0}' from its uses, because binding the body of '{1}' needs the signature of '{1}', directly or through other members whose types are inferred. Write the parameter type.</source>
+        <target state="new">Cannot infer the type of parameter '{0}' from its uses, because binding the body of '{1}' needs the signature of '{1}', directly or through other members whose types are inferred. Write the parameter type.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperInferParameterCycle">
         <source>Cannot infer the type of parameter '{0}', because its default value depends on the type of '{0}' itself. Write the parameter type.</source>
         <target state="new">Cannot infer the type of parameter '{0}', because its default value depends on the type of '{0}' itself. Write the parameter type.</target>
         <note />
       </trans-unit>
       <trans-unit id="ERR_SharperInferParameterNoDefault">
-        <source>Cannot infer the type of parameter '{0}', because it has no default value. Write the parameter type.</source>
-        <target state="new">Cannot infer the type of parameter '{0}', because it has no default value. Write the parameter type.</target>
+        <source>Cannot infer the type of parameter '{0}', because it has no default value, and nothing else gives its type. Write the parameter type.</source>
+        <target state="new">Cannot infer the type of parameter '{0}', because it has no default value, and nothing else gives its type. Write the parameter type.</target>
         <note />
       </trans-unit>
       <trans-unit id="ERR_SharperInferParameterNoType">
         <source>Cannot infer the type of parameter '{0}', because its default value ({1}) has no type. Write the parameter type.</source>
         <target state="new">Cannot infer the type of parameter '{0}', because its default value ({1}) has no type. Write the parameter type.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperInferParameterUsesDisagree">
+        <source>Cannot infer the type of parameter '{0}', because its uses need different types: '{1}' for '{2}' and '{3}' for '{4}'. Write the parameter type.</source>
+        <target state="new">Cannot infer the type of parameter '{0}', because its uses need different types: '{1}' for '{2}' and '{3}' for '{4}'. Write the parameter type.</target>
         <note />
       </trans-unit>
       <trans-unit id="ERR_SharperInferUsesItself">

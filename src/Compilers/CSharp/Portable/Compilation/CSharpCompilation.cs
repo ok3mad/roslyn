@@ -1626,6 +1626,25 @@ namespace Microsoft.CodeAnalysis.CSharp
             }
         }
 
+        private System.Runtime.CompilerServices.ConditionalWeakTable<ParameterListSyntax, SharperInferredParameterType.BodyInference>? _lazySharperBodyInferences;
+
+        /// <summary>
+        /// Sharper: the parameter types that members infer from the uses in their body, by parameter list (see
+        /// <see cref="SharperInferredParameterType.GetBodyInference"/>).
+        /// </summary>
+        internal System.Runtime.CompilerServices.ConditionalWeakTable<ParameterListSyntax, SharperInferredParameterType.BodyInference> SharperBodyInferences
+        {
+            get
+            {
+                if (_lazySharperBodyInferences == null)
+                {
+                    Interlocked.CompareExchange(ref _lazySharperBodyInferences, new System.Runtime.CompilerServices.ConditionalWeakTable<ParameterListSyntax, SharperInferredParameterType.BodyInference>(), null);
+                }
+
+                return _lazySharperBodyInferences;
+            }
+        }
+
         private SharperImmutability? _lazySharperImmutability;
 
         /// <summary>

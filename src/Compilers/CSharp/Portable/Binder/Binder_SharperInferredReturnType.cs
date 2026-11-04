@@ -56,12 +56,14 @@ namespace Microsoft.CodeAnalysis.CSharp
         }
 
         /// <summary>
-        /// True while the body of <paramref name="method"/> is bound to infer its return type ('infer'). Its
-        /// <c>return</c> and <c>yield return</c> statements are then bound as in a lambda whose return type is being
+        /// True while the body of <paramref name="method"/> is bound to infer its return type ('infer'), and for the
+        /// placeholder of a method with an inferred return type, whose body is bound to infer its parameter types
+        /// (<see cref="SharperPlaceholderMethodSymbol"/>).
+        /// Its <c>return</c> and <c>yield return</c> statements are then bound as in a lambda whose return type is being
         /// inferred, without a target type, and without reading the return type of the method.
         /// </summary>
         internal static bool IsSharperReturnTypeBeingInferred(MethodSymbol? method)
-            => method is not null && SharperInferredReturnType.IsBeingInferred(method);
+            => method is SharperPlaceholderMethodSymbol { IsReturnTypeInferred: true } || (method is not null && SharperInferredReturnType.IsBeingInferred(method));
 
         /// <summary>
         /// Infers the return type of <paramref name="method"/> from its body. This binder is the binder of the body, as

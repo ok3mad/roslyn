@@ -8652,19 +8652,19 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (1,7): error CS1106: Extension method must be defined in a non-generic static class
                 // class C
                 Diagnostic(ErrorCode.ERR_BadExtensionAgg, "C").WithLocation(1, 7),
-                // (3,13): error CS20027: Cannot infer the type of parameter 'x', because it has no default value. Write the parameter type.
+                // (3,13): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and nothing else gives its type. Write the parameter type.
                 //     void M1(infer x) { }
                 Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x").WithLocation(3, 13),
-                // (4,17): error CS20027: Cannot infer the type of parameter 'x', because it has no default value. Write the parameter type.
+                // (4,17): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and nothing else gives its type. Write the parameter type.
                 //     void M2(ref infer x) { }
                 Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x").WithLocation(4, 17),
-                // (5,17): error CS20027: Cannot infer the type of parameter 'x', because it has no default value. Write the parameter type.
+                // (5,17): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and nothing else gives its type. Write the parameter type.
                 //     void M3(out infer x) { x = default; }
                 Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x").WithLocation(5, 17),
                 // (6,13): error CS0225: The params parameter must have a valid collection type
                 //     void M4(params infer x) { }
                 Diagnostic(ErrorCode.ERR_ParamsMustBeCollection, "params").WithLocation(6, 13),
-                // (6,20): error CS20027: Cannot infer the type of parameter 'x', because it has no default value. Write the parameter type.
+                // (6,20): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and nothing else gives its type. Write the parameter type.
                 //     void M4(params infer x) { }
                 Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x").WithLocation(6, 20),
                 // (7,13): error CS1741: A ref or out parameter cannot have a default value

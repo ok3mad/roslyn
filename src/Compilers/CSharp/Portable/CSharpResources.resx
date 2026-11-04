@@ -8423,7 +8423,7 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
     <value>Cannot infer the type of parameter '{0}', because its default value ({1}) has no type. Write the parameter type.</value>
   </data>
   <data name="ERR_SharperInferParameterNoDefault" xml:space="preserve">
-    <value>Cannot infer the type of parameter '{0}', because it has no default value. Write the parameter type.</value>
+    <value>Cannot infer the type of parameter '{0}', because it has no default value, and nothing else gives its type. Write the parameter type.</value>
   </data>
   <data name="ERR_SharperInferParameterCycle" xml:space="preserve">
     <value>Cannot infer the type of parameter '{0}', because its default value depends on the type of '{0}' itself. Write the parameter type.</value>
@@ -8514,6 +8514,12 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
   </data>
   <data name="ERR_SharperInferEventNoOverriddenMember" xml:space="preserve">
     <value>Cannot infer the type of event '{0}', because it overrides or implements no event. Write the type.</value>
+  </data>
+  <data name="ERR_SharperInferParameterBodyCycle" xml:space="preserve">
+    <value>Cannot infer the type of parameter '{0}' from its uses, because binding the body of '{1}' needs the signature of '{1}', directly or through other members whose types are inferred. Write the parameter type.</value>
+  </data>
+  <data name="ERR_SharperInferParameterUsesDisagree" xml:space="preserve">
+    <value>Cannot infer the type of parameter '{0}', because its uses need different types: '{1}' for '{2}' and '{3}' for '{4}'. Write the parameter type.</value>
   </data>
   <data name="WRN_SharperPureOutArgumentNotFresh_Title" xml:space="preserve">
     <value>The out argument of a [Pure] member is not a fresh local</value>
