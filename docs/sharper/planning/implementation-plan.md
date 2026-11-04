@@ -958,7 +958,9 @@ functions, `async`, iterators, operators and conversions), what pins nothing and
 with nullability and tuple names, precedence over P1 and P2, generics, recursion, cycles from every starting member,
 concurrent inference, the semantic model and IOperation, metadata seen from a C# compilation, default values of
 lambdas and local functions in the body, and the flag off. The CS20027 expectations of P1 and P2 tests now carry
-their reason.
+their reason. All 434 Sharper test cases pass, also with `ROSLYN_TEST_IOPERATION=1`. Regression run (net10.0, Debug):
+Semantic 20,256 passed, Symbol 13,923 and Emit 7,312, none failed; the Syntax project with `ROSLYN_TEST_SHARPER=1` has
+the 37 expected failures listed under Follow-ups and no other; the analyzer build reports no error.
 
 Follow-ups:
 
