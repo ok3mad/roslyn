@@ -1,4 +1,4 @@
-# Immutable types
+﻿# Immutable types
 
 **Status:** Prototype of slice 1. Requires `/features:sharper`. Issue: [#139](https://github.com/ok3mad/roslyn/issues/139),
 designed in [#92](https://github.com/ok3mad/roslyn/issues/92) (implementation plan,
@@ -63,8 +63,12 @@ A type is immutable for its exact instances when:
   - `new` of a statically immutable type whose constructor is pure (`Total => new Money(Net + Tax, "EUR")`). A
     constructor is pure when it writes only the fields and auto-properties of its own `this` and otherwise follows the
     observer rules, and so do the instance initializers it runs and the constructor it calls; a record's or a primary
-    constructor is checked the same way. An object initializer, `with` and a constructor from another assembly (unless
-    `[AssumePure]`) are not covered yet;
+    constructor is checked the same way. A constructor from another assembly needs `[AssumePure]`;
+  - an object initializer on such a `new` (`new Money(1, "EUR") { Amount = 2 }`) and `with` (`this with { Amount = 0 }`),
+    which are part of construction: every setter they run must be pure, by the constructor rules (an auto-property's setter
+    writes only the new object's field), and `with` needs a pure clone: a record's synthesized `<Clone>$` runs its copy
+    constructor, synthesized (no initializers) or hand-written, without virtual dispatch. Nested initializers
+    (`P = { X = 1 }`), indexers and collection initializers are impure;
   - string concatenation and interpolation whose parts are strings or `char` (`FullName => $"{First} {Last}"`); any
     other part formats with the current culture;
   - `HashCode.Combine` and the other members of `System.HashCode`, attested: the seed is per process, part of the

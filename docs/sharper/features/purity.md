@@ -1,4 +1,4 @@
-# Purity
+﻿# Purity
 
 **Status:** Prototype of slice 1, first part. Requires `/features:sharper`. Issue:
 [#173](https://github.com/ok3mad/roslyn/issues/173), under [#36](https://github.com/ok3mad/roslyn/issues/36);
@@ -64,6 +64,8 @@ A `[Pure]` member's body may:
   and the attested members of other assemblies (below);
 - create objects of any type whose constructor is `[Pure]`, attested, or written by the compiler (a record's, a primary
   constructor, a default constructor) and pure itself; create arrays; box;
+- set fields and auto-properties (or `[AssumePure]` setters) of a new object in its object initializer, and use `with`
+  on a struct or a sealed record whose clone and copy constructor the compiler writes;
 - use loops, `foreach` over arrays and strings, `switch`, `try`, `catch`, `finally`, `throw`, local functions,
   `nameof`, string concatenation and interpolation of strings and characters, and tuple swaps such as
   `(a, b) = (b, a + b)`.
@@ -77,8 +79,8 @@ It reports the first expression that does anything else (CS20050), with the reas
   disguise;
 - observing identity (`ReferenceEquals`, reference `==`, `object.Equals` and `GetHashCode` that are not overridden);
 - formatting with the current culture (`x.ToString()`, `$"{x}"` and `s + x` for a number `x`);
-- lambdas, `await`, `yield`, `lock`, `using`, pointers, object and collection initializers, and collection
-  expressions.
+- lambdas, `await`, `yield`, `lock`, `using`, pointers, nested object initializers, collection initializers, and
+  collection expressions.
 
 A constructor may also write the fields and auto-properties of its own `this`, and its instance initializers are
 checked with it.

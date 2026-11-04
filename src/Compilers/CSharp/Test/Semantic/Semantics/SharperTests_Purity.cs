@@ -377,9 +377,9 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (21,38): error CS20050: 'C.NewUnmarked()' is marked [Pure], but it is not pure: 'new C(1)' calls 'C.C(int)', which is not known to be pure.
                 //     [Pure] static C NewUnmarked() => new C(1);
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, "new C(1)").WithArguments("C.NewUnmarked()", "'new C(1)' calls 'C.C(int)', which is not known to be pure").WithLocation(21, 38),
-                // (22,42): error CS20050: 'C.WithInitializer()' is marked [Pure], but it is not pure: 'new C { }' is not allowed in a pure member.
+                // (22,42): error CS20050: 'C.WithInitializer()' is marked [Pure], but it is not pure: 'new C { }' calls 'C.C()', which is not known to be pure.
                 //     [Pure] static C WithInitializer() => new C { };
-                Diagnostic(ErrorCode.ERR_SharperPureNotPure, "new C { }").WithArguments("C.WithInitializer()", "'new C { }' is not allowed in a pure member").WithLocation(22, 42),
+                Diagnostic(ErrorCode.ERR_SharperPureNotPure, "new C { }").WithArguments("C.WithInitializer()", "'new C { }' calls 'C.C()', which is not known to be pure").WithLocation(22, 42),
                 // (23,37): error CS20050: 'C.Now()' is marked [Pure], but it is not pure: 'DateTime.Now' calls 'System.DateTime.Now', which is not known to be pure.
                 //     [Pure] static DateTime Now() => DateTime.Now;
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, "DateTime.Now").WithArguments("C.Now()", "'DateTime.Now' calls 'System.DateTime.Now', which is not known to be pure").WithLocation(23, 37),
@@ -580,6 +580,33 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (36,31): error CS20050: 'Primary.Primary(int)' is marked [Pure], but it is not pure: 'Impure()' calls 'Primary.Impure()', which is not known to be pure.
                 //     private readonly int _y = Impure();
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, "Impure()").WithArguments("Primary.Primary(int)", "'Impure()' calls 'Primary.Impure()', which is not known to be pure").WithLocation(36, 31));
+        }
+
+        [Fact]
+        public void Pure_InitializersAndWith()
+        {
+            // A pure member does not infer: auto-property setters and synthesized clones are pure, hand-written setters need
+            // [AssumePure]. A clone of a record that is not sealed dispatches virtually.
+            var source = """
+                sealed record R(int A) { public int B { get; init; } }
+                record Open(int A);
+                class Setter { private int _x; public int X { get => _x; set => _x = value; } }
+
+                static class C
+                {
+                    [Pure] static R Make(int a) => new R(a) { B = a };
+                    [Pure] static R Bump(R r) => r with { A = r.A + 1 };
+                    [Pure] static Open Copy(Open o) => o with { A = 1 };
+                    [Pure] static Setter Set() => new Setter { X = 1 };
+                }
+                """;
+            CreateImmutableCompilation(source).VerifyDiagnostics(
+                // (9,40): error CS20050: 'C.Copy(Open)' is marked [Pure], but it is not pure: 'o with { A = 1 }' calls 'Open.<Clone>$()', which is not known to be pure.
+                //     [Pure] static Open Copy(Open o) => o with { A = 1 };
+                Diagnostic(ErrorCode.ERR_SharperPureNotPure, "o with { A = 1 }").WithArguments("C.Copy(Open)", "'o with { A = 1 }' calls 'Open.<Clone>$()', which is not known to be pure").WithLocation(9, 40),
+                // (10,48): error CS20050: 'C.Set()' is marked [Pure], but it is not pure: 'X = 1' calls 'Setter.X.set', which is not known to be pure.
+                //     [Pure] static Setter Set() => new Setter { X = 1 };
+                Diagnostic(ErrorCode.ERR_SharperPureNotPure, "X = 1").WithArguments("C.Set()", "'X = 1' calls 'Setter.X.set', which is not known to be pure").WithLocation(10, 48));
         }
 
         [Fact]
