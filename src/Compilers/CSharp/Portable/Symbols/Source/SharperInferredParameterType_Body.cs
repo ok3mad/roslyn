@@ -241,7 +241,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             }
 
             var placeholder = new SharperPlaceholderMethodSymbol(method, placeholderParameters.ToImmutableAndFree(), returnType);
-            var uses = new ArrayBuilder<PinningUse>?[placeholder.ParameterCount];
+            var collector = new UsesCollector(ImmutableArray<ParameterSymbol>.Empty, placeholder.ParameterCount);
             var dependencies = BindingDiagnosticBag.GetInstance(withDiagnostics: false, withDependencies: true);
             if (placeholder.TryGetBodyBinder() is { } bodyBinder)
             {
@@ -263,7 +263,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                         }
                     }
 
-                    new UsesCollector(targets.ToImmutableAndFree(), uses).Visit(body);
+                    collector = new UsesCollector(targets.ToImmutableAndFree(), placeholder.ParameterCount);
+                    collector.Visit(body);
                 }
                 finally
                 {
@@ -285,8 +286,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 }
 
                 int ordinal = placeholderOrdinal++;
-                results.Add(isTarget[ordinal] ? DecideFromUses(parameter, uses[ordinal], dependencies, compilation) : null);
-                uses[ordinal]?.Free();
+                results.Add(isTarget[ordinal] ? DecideFromUses(parameter, collector.Uses[ordinal], collector.FirstNotPinning[ordinal], dependencies, compilation) : null);
+                collector.Uses[ordinal]?.Free();
             }
 
             isTarget.Free();
@@ -295,16 +296,35 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         }
 
         /// <summary>
-        /// The type of <paramref name="parameter"/> from the uses that pin it: none is CS20027, uses that agree give their
-        /// type, and uses that disagree are CS20057, naming the first two that differ.
+        /// The type of <paramref name="parameter"/> from the uses that pin it: none is CS20027, which says why with the
+        /// first use that pins nothing, uses that agree give their type, and uses that disagree are CS20057, naming the
+        /// first two that differ.
         /// </summary>
-        private static Result DecideFromUses(ParameterSyntax parameter, ArrayBuilder<PinningUse>? uses, BindingDiagnosticBag dependencies, CSharpCompilation compilation)
+        private static Result DecideFromUses(
+            ParameterSyntax parameter,
+            ArrayBuilder<PinningUse>? uses,
+            (SyntaxNode Syntax, IFormattable Reason)? firstNotPinning,
+            BindingDiagnosticBag dependencies,
+            CSharpCompilation compilation)
         {
             var diagnostics = BindingDiagnosticBag.GetInstance(withDiagnostics: true, withDependencies: true);
             TypeWithAnnotations type;
             if (uses is null or { Count: 0 })
             {
-                diagnostics.Add(ErrorCode.ERR_SharperInferParameterNoDefault, parameter.Type!.Location, parameter.Identifier.ValueText);
+                // Why nothing pinned the parameter: its first use that pins nothing, or no use.
+                if (firstNotPinning is var (syntax, reason))
+                {
+                    var info = new CSDiagnosticInfo(
+                        ErrorCode.ERR_SharperInferParameterNoDefault,
+                        args: [parameter.Identifier.ValueText, reason],
+                        symbols: ImmutableArray<Symbol>.Empty,
+                        additionalLocations: [syntax.Location]);
+                    diagnostics.Add(info, parameter.Type!.Location);
+                }
+                else
+                {
+                    diagnostics.Add(ErrorCode.ERR_SharperInferParameterNoDefault, parameter.Type!.Location, parameter.Identifier.ValueText, MessageID.IDS_SharperInferNotUsedInBody.Localize());
+                }
                 type = CreateErrorType(compilation);
             }
             else
@@ -409,12 +429,18 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         private sealed class UsesCollector : BoundTreeWalkerWithStackGuardWithoutRecursionOnTheLeftOfBinaryOperator
         {
             private readonly ImmutableArray<ParameterSymbol> _targets;
-            private readonly ArrayBuilder<PinningUse>?[] _uses;
 
-            internal UsesCollector(ImmutableArray<ParameterSymbol> targets, ArrayBuilder<PinningUse>?[] uses)
+            /// <summary>Per placeholder parameter, the uses that pin a type, in the order of the body.</summary>
+            internal readonly ArrayBuilder<PinningUse>?[] Uses;
+
+            /// <summary>Per placeholder parameter, its first use that pins nothing, and why.</summary>
+            internal readonly (SyntaxNode Syntax, IFormattable Reason)?[] FirstNotPinning;
+
+            internal UsesCollector(ImmutableArray<ParameterSymbol> targets, int parameterCount)
             {
                 _targets = targets;
-                _uses = uses;
+                Uses = new ArrayBuilder<PinningUse>?[parameterCount];
+                FirstNotPinning = new (SyntaxNode, IFormattable)?[parameterCount];
             }
 
             public override BoundNode? VisitCall(BoundCall node)
@@ -426,9 +452,19 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     node.Method is ErrorMethodSymbol ? candidates[0] :
                     node.Method;
 
+                if (node.InvokedAsExtensionMethod && node.Arguments is [var receiver, ..] && GetTarget(receiver) is { } receiverTarget)
+                {
+                    // The receiver of an extension method call is a member access, which pins nothing.
+                    NoteNotPinning(receiverTarget, receiver.Syntax, MessageID.IDS_SharperInferMemberAccessPinsNothing.Localize());
+                }
+
                 if (candidate is MethodSymbol method)
                 {
-                    AddUses(node.Arguments, node.ArgumentNamesOpt, node.ArgumentRefKindsOpt, method, method.Parameters);
+                    AddUses(node.Arguments, node.ArgumentNamesOpt, node.ArgumentRefKindsOpt, method, method.Parameters, skipReceiver: node.InvokedAsExtensionMethod);
+                }
+                else if (candidates is [var someCandidate, ..])
+                {
+                    NoteSeveralCandidates(node.Arguments, someCandidate.Name);
                 }
 
                 return base.VisitCall(node);
@@ -444,9 +480,16 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             {
                 // A constructor call that failed overload resolution keeps its candidates and its arguments.
                 if (node.Syntax is BaseObjectCreationExpressionSyntax { ArgumentList: { } argumentList } &&
-                    node.Symbols is [MethodSymbol { MethodKind: MethodKind.Constructor } constructor] &&
+                    node.Symbols is [MethodSymbol { MethodKind: MethodKind.Constructor } constructor, ..] &&
                     node.ChildBoundNodes.Length >= argumentList.Arguments.Count)
                 {
+                    ImmutableArray<BoundExpression> arguments = node.ChildBoundNodes.RemoveRange(argumentList.Arguments.Count, node.ChildBoundNodes.Length - argumentList.Arguments.Count);
+                    if (node.Symbols.Length > 1)
+                    {
+                        NoteSeveralCandidates(arguments, constructor.ContainingType.Name);
+                        return base.VisitBadExpression(node);
+                    }
+
                     var names = ArrayBuilder<string?>.GetInstance(argumentList.Arguments.Count);
                     var refKinds = ArrayBuilder<RefKind>.GetInstance(argumentList.Arguments.Count);
                     foreach (var argument in argumentList.Arguments)
@@ -461,15 +504,59 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                         });
                     }
 
-                    AddUses(
-                        node.ChildBoundNodes.RemoveRange(argumentList.Arguments.Count, node.ChildBoundNodes.Length - argumentList.Arguments.Count),
-                        names.ToImmutableAndFree(),
-                        refKinds.ToImmutableAndFree(),
-                        constructor,
-                        constructor.Parameters);
+                    AddUses(arguments, names.ToImmutableAndFree(), refKinds.ToImmutableAndFree(), constructor, constructor.Parameters);
                 }
 
                 return base.VisitBadExpression(node);
+            }
+
+            /// <summary>
+            /// Every use of a placeholder parameter that no call has pinned or explained: member access, operators, type
+            /// tests and interpolations pin nothing.
+            /// </summary>
+            public override BoundNode? VisitParameter(BoundParameter node)
+            {
+                if (_targets.Contains(node.ParameterSymbol))
+                {
+                    SyntaxNode syntax = node.Syntax;
+                    SyntaxNode? parent = syntax.Parent;
+                    while (parent is ParenthesizedExpressionSyntax)
+                    {
+                        syntax = parent;
+                        parent = parent.Parent;
+                    }
+
+                    MessageID reason = parent switch
+                    {
+                        MemberAccessExpressionSyntax memberAccess when memberAccess.Expression == syntax => MessageID.IDS_SharperInferMemberAccessPinsNothing,
+                        ConditionalAccessExpressionSyntax conditionalAccess when conditionalAccess.Expression == syntax => MessageID.IDS_SharperInferMemberAccessPinsNothing,
+                        ElementAccessExpressionSyntax elementAccess when elementAccess.Expression == syntax => MessageID.IDS_SharperInferMemberAccessPinsNothing,
+                        BinaryExpressionSyntax binary when binary.Kind() is SyntaxKind.IsExpression or SyntaxKind.AsExpression => MessageID.IDS_SharperInferTypeTestPinsNothing,
+                        IsPatternExpressionSyntax or SwitchExpressionSyntax or SwitchStatementSyntax => MessageID.IDS_SharperInferTypeTestPinsNothing,
+                        BinaryExpressionSyntax or PrefixUnaryExpressionSyntax or PostfixUnaryExpressionSyntax => MessageID.IDS_SharperInferOperatorPinsNothing,
+                        AssignmentExpressionSyntax assignment when !assignment.IsKind(SyntaxKind.SimpleAssignmentExpression) => MessageID.IDS_SharperInferOperatorPinsNothing,
+                        InterpolationSyntax => MessageID.IDS_SharperInferInterpolationPinsNothing,
+                        _ => MessageID.IDS_SharperInferUsePinsNothing,
+                    };
+
+                    NoteNotPinning(node.ParameterSymbol, syntax, reason.Localize());
+                }
+
+                return base.VisitParameter(node);
+            }
+
+            private void NoteNotPinning(ParameterSymbol target, SyntaxNode syntax, IFormattable reason)
+                => FirstNotPinning[target.Ordinal] ??= (syntax, reason);
+
+            private void NoteSeveralCandidates(ImmutableArray<BoundExpression> arguments, string name)
+            {
+                foreach (var argument in arguments)
+                {
+                    if (GetTarget(argument) is { } target)
+                    {
+                        NoteNotPinning(target, argument.Syntax, new MessageFragment(MessageID.IDS_SharperInferSeveralCandidatesPinNothing, [name]));
+                    }
+                }
             }
 
             private void AddUses(
@@ -477,23 +564,44 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 ImmutableArray<string?> argumentNames,
                 ImmutableArray<RefKind> argumentRefKinds,
                 MethodSymbol candidate,
-                ImmutableArray<ParameterSymbol> parameters)
+                ImmutableArray<ParameterSymbol> parameters,
+                bool skipReceiver = false)
             {
-                for (int i = 0; i < arguments.Length; i++)
+                for (int i = skipReceiver ? 1 : 0; i < arguments.Length; i++)
                 {
-                    if (GetTarget(arguments[i]) is not { } target ||
-                        (!argumentRefKinds.IsDefault && argumentRefKinds[i] != RefKind.None) ||
-                        GetParameter(i, argumentNames, parameters) is not { } parameter ||
-                        parameter.IsParams ||
-                        parameter.RefKind is RefKind.Ref or RefKind.Out ||
-                        parameter.Type.IsErrorType() ||
-                        InvolvesTypeParametersNotInScope(parameter.Type))
+                    if (GetTarget(arguments[i]) is not { } target)
                     {
                         continue;
                     }
 
-                    var uses = _uses[target.Ordinal] ??= ArrayBuilder<PinningUse>.GetInstance();
-                    uses.Add(new PinningUse(arguments[i].Syntax, candidate, parameter.TypeWithAnnotations));
+                    SyntaxNode syntax = arguments[i].Syntax;
+                    if ((!argumentRefKinds.IsDefault && argumentRefKinds[i] != RefKind.None) ||
+                        GetParameter(i, argumentNames, parameters) is not { } parameter)
+                    {
+                        NoteNotPinning(target, syntax, (argumentRefKinds.IsDefault || argumentRefKinds[i] == RefKind.None ? MessageID.IDS_SharperInferUsePinsNothing : MessageID.IDS_SharperInferRefArgumentPinsNothing).Localize());
+                    }
+                    else if (parameter.IsParams)
+                    {
+                        NoteNotPinning(target, syntax, MessageID.IDS_SharperInferParamsPinsNothing.Localize());
+                    }
+                    else if (parameter.RefKind is RefKind.Ref or RefKind.Out)
+                    {
+                        NoteNotPinning(target, syntax, MessageID.IDS_SharperInferRefArgumentPinsNothing.Localize());
+                    }
+                    else if (InvolvesTypeParametersNotInScope(parameter.Type))
+                    {
+                        NoteNotPinning(target, syntax, new MessageFragment(MessageID.IDS_SharperInferTypeParameterPinsNothing, [candidate.Name]));
+                    }
+                    else if (parameter.Type.IsErrorType())
+                    {
+                        // A parameter of the placeholder itself (recursion), or of a member whose type has errors.
+                        NoteNotPinning(target, syntax, MessageID.IDS_SharperInferUsePinsNothing.Localize());
+                    }
+                    else
+                    {
+                        var uses = Uses[target.Ordinal] ??= ArrayBuilder<PinningUse>.GetInstance();
+                        uses.Add(new PinningUse(syntax, candidate, parameter.TypeWithAnnotations));
+                    }
                 }
             }
 

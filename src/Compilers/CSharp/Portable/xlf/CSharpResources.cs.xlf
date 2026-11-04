@@ -2698,8 +2698,8 @@
         <note />
       </trans-unit>
       <trans-unit id="ERR_SharperInferParameterNoDefault">
-        <source>Cannot infer the type of parameter '{0}', because it has no default value, and nothing else gives its type. Write the parameter type.</source>
-        <target state="new">Cannot infer the type of parameter '{0}', because it has no default value, and nothing else gives its type. Write the parameter type.</target>
+        <source>Cannot infer the type of parameter '{0}', because it has no default value, and {1}. Write the parameter type.</source>
+        <target state="new">Cannot infer the type of parameter '{0}', because it has no default value, and {1}. Write the parameter type.</target>
         <note />
       </trans-unit>
       <trans-unit id="ERR_SharperInferParameterNoType">
@@ -3682,9 +3682,29 @@
         <target state="new">its written types rule out every member '{0}' with the same number of parameters: {1}</target>
         <note />
       </trans-unit>
+      <trans-unit id="IDS_SharperInferInterpolationPinsNothing">
+        <source>an interpolation pins nothing</source>
+        <target state="new">an interpolation pins nothing</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperInferMemberAccessPinsNothing">
+        <source>a member access pins nothing</source>
+        <target state="new">a member access pins nothing</target>
+        <note />
+      </trans-unit>
       <trans-unit id="IDS_SharperInferNoMemberWithParameterCount">
         <source>it could override or implement no member '{0}' with the same number of parameters</source>
         <target state="new">it could override or implement no member '{0}' with the same number of parameters</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperInferNotUsedInBody">
+        <source>the body does not use it</source>
+        <target state="new">the body does not use it</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperInferNothingElseGivesType">
+        <source>nothing else gives its type</source>
+        <target state="new">nothing else gives its type</target>
         <note />
       </trans-unit>
       <trans-unit id="IDS_SharperInferOnAsyncIterator">
@@ -3707,6 +3727,21 @@
         <target state="new">on a ref return</target>
         <note />
       </trans-unit>
+      <trans-unit id="IDS_SharperInferOperatorPinsNothing">
+        <source>an operator pins nothing</source>
+        <target state="new">an operator pins nothing</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperInferParamsPinsNothing">
+        <source>a params parameter pins nothing yet</source>
+        <target state="new">a params parameter pins nothing yet</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperInferRefArgumentPinsNothing">
+        <source>a ref or out argument pins nothing yet</source>
+        <target state="new">a ref or out argument pins nothing yet</target>
+        <note />
+      </trans-unit>
       <trans-unit id="IDS_SharperInferRuledOutByParameter">
         <source>'{0}' (it takes '{1}' for '{2}')</source>
         <target state="new">'{0}' (it takes '{1}' for '{2}')</target>
@@ -3715,6 +3750,26 @@
       <trans-unit id="IDS_SharperInferRuledOutByReturnType">
         <source>'{0}' (it returns '{1}')</source>
         <target state="new">'{0}' (it returns '{1}')</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperInferSeveralCandidatesPinNothing">
+        <source>a call to '{0}', which has more than one candidate, pins nothing yet</source>
+        <target state="new">a call to '{0}', which has more than one candidate, pins nothing yet</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperInferTypeParameterPinsNothing">
+        <source>'{0}' takes a type parameter there, which pins nothing yet</source>
+        <target state="new">'{0}' takes a type parameter there, which pins nothing yet</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperInferTypeTestPinsNothing">
+        <source>a type test pins nothing</source>
+        <target state="new">a type test pins nothing</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperInferUsePinsNothing">
+        <source>no use passes it directly to a call with one candidate</source>
+        <target state="new">no use passes it directly to a call with one candidate</target>
         <note />
       </trans-unit>
       <trans-unit id="IDS_SharperPureReasonCall">

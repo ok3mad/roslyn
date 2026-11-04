@@ -388,9 +388,9 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (31,34): error CS20044: Cannot infer the types of 'operator +', because it could override or implement more than one member: 'IOp<S>.operator +(S, int)', 'IOp<S>.operator +(S, long)'. Write the types of the one it overrides or implements.
                 //     public static infer operator +(S a, infer b) => a;
                 Diagnostic(ErrorCode.ERR_SharperInferAmbiguousOverriddenMember, "+").WithArguments("operator +", "'IOp<S>.operator +(S, int)', 'IOp<S>.operator +(S, long)'").WithLocation(31, 34),
-                // (32,41): error CS20027: Cannot infer the type of parameter 'b', because it has no default value, and nothing else gives its type. Write the parameter type.
+                // (32,41): error CS20027: Cannot infer the type of parameter 'b', because it has no default value, and the body does not use it. Write the parameter type.
                 //     public static infer operator -(S a, infer b) => a;
-                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("b").WithLocation(32, 41));
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("b", "the body does not use it").WithLocation(32, 41));
         }
 
         [Fact]
@@ -483,9 +483,9 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (16,12): error CS20015: An inferred return type ('infer') is not supported on a property or indexer yet. Write the return type.
                 //     public infer M { get; }
                 Diagnostic(ErrorCode.ERR_SharperInferNotSupportedYet, "infer").WithArguments("on a property or indexer").WithLocation(16, 12),
-                // (24,36): error CS20027: Cannot infer the type of parameter 'a', because it has no default value, and nothing else gives its type. Write the parameter type.
+                // (24,36): error CS20027: Cannot infer the type of parameter 'a', because it has no default value, and the body does not use it. Write the parameter type.
                 //     public static infer operator -(infer a, D b) => b;
-                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("a").WithLocation(24, 36));
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("a", "the body does not use it").WithLocation(24, 36));
 
             // With the flag off, 'infer' is an ordinary type name.
             var errors = CreateCompilation(source, targetFramework: TargetFramework.Net90).GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).ToArray();

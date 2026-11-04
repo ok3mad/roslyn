@@ -155,64 +155,72 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                     static void Abstract(infer x);
                 }
                 """;
-            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics(
                 // (2,1): hidden CS8019: Unnecessary using directive.
                 // using System.Linq;
                 Diagnostic(ErrorCode.HDN_UnusedUsingDirective, "using System.Linq;").WithLocation(2, 1),
-                // (16,25): error CS20027: Cannot infer the type of parameter 's', because it has no default value, and nothing else gives its type. Write the parameter type.
+                // (16,25): error CS20027: Cannot infer the type of parameter 's', because it has no default value, and a member access pins nothing. Write the parameter type.
                 //     static infer Member(infer s) => s.Length;
-                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("s").WithLocation(16, 25),
-                // (17,27): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and nothing else gives its type. Write the parameter type.
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("s", "a member access pins nothing").WithLocation(16, 25),
+                // (17,27): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and an operator pins nothing. Write the parameter type.
                 //     static infer Operator(infer x) => x + 1;
-                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x").WithLocation(17, 27),
-                // (18,21): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and nothing else gives its type. Write the parameter type.
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "an operator pins nothing").WithLocation(17, 27),
+                // (18,21): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and a type test pins nothing. Write the parameter type.
                 //     static infer Is(infer x) => x is int;
-                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x").WithLocation(18, 21),
-                // (19,32): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and nothing else gives its type. Write the parameter type.
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "a type test pins nothing").WithLocation(18, 21),
+                // (19,32): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and an interpolation pins nothing. Write the parameter type.
                 //     static infer Interpolation(infer x) => $"{x}";
-                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x").WithLocation(19, 32),
-                // (20,27): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and nothing else gives its type. Write the parameter type.
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "an interpolation pins nothing").WithLocation(19, 32),
+                // (20,27): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and a call to 'Over', which has more than one candidate, pins nothing yet. Write the parameter type.
                 //     static void Overloads(infer x) => Over(x);
-                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x").WithLocation(20, 27),
-                // (21,26): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and nothing else gives its type. Write the parameter type.
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "a call to 'Over', which has more than one candidate, pins nothing yet").WithLocation(20, 27),
+                // (21,26): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and 'Generic' takes a type parameter there, which pins nothing yet. Write the parameter type.
                 //     static void Inferred(infer x) => Generic(x);
-                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x").WithLocation(21, 26),
-                // (22,26): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and nothing else gives its type. Write the parameter type.
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "'Generic' takes a type parameter there, which pins nothing yet").WithLocation(21, 26),
+                // (22,26): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and a params parameter pins nothing yet. Write the parameter type.
                 //     static void InParams(infer x) => Params(x);
-                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x").WithLocation(22, 26),
-                // (23,29): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and nothing else gives its type. Write the parameter type.
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "a params parameter pins nothing yet").WithLocation(22, 26),
+                // (23,29): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and a ref or out argument pins nothing yet. Write the parameter type.
                 //     static void RefArgument(infer x) => Ref(ref x);
-                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x").WithLocation(23, 29),
-                // (24,29): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and nothing else gives its type. Write the parameter type.
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "a ref or out argument pins nothing yet").WithLocation(23, 29),
+                // (24,29): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and a ref or out argument pins nothing yet. Write the parameter type.
                 //     static void OutArgument(infer x) => Out(out x);
-                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x").WithLocation(24, 29),
-                // (26,28): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and nothing else gives its type. Write the parameter type.
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "a ref or out argument pins nothing yet").WithLocation(24, 29),
+                // (25,27): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and a member access pins nothing. Write the parameter type.
+                //     static infer Receiver(infer x) => x.Twice();
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "a member access pins nothing").WithLocation(25, 27),
+                // (26,28): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and no use passes it directly to a call with one candidate. Write the parameter type.
                 //     static void Expression(infer x) => Take((int)x);
-                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x").WithLocation(26, 28),
-                // (27,26): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and nothing else gives its type. Write the parameter type.
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "no use passes it directly to a call with one candidate").WithLocation(26, 28),
+                // (27,26): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and the body does not use it. Write the parameter type.
                 //     static void Shadowed(infer x) { Func<int, int> f = x => { Take(x); return x; }; }
-                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x").WithLocation(27, 26),
-                // (28,24): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and nothing else gives its type. Write the parameter type.
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "the body does not use it").WithLocation(27, 26),
+                // (28,24): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and the body does not use it. Write the parameter type.
                 //     static void Unused(infer x) { }
-                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x").WithLocation(28, 24),
-                // (29,24): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and nothing else gives its type. Write the parameter type.
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "the body does not use it").WithLocation(28, 24),
+                // (29,24): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and the body does not use it. Write the parameter type.
                 //     static void Lambda(infer x) { Func<int, int> f = (infer y) => y; }
-                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x").WithLocation(29, 24),
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "the body does not use it").WithLocation(29, 24),
                 // (29,55): error CS20027: Cannot infer the type of parameter 'y', because it has no default value, and nothing else gives its type. Write the parameter type.
                 //     static void Lambda(infer x) { Func<int, int> f = (infer y) => y; }
-                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("y").WithLocation(29, 55),
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("y", "nothing else gives its type").WithLocation(29, 55),
                 // (30,47): warning CS8321: The local function 'L' is declared but never used
                 //     static void LocalFunction(infer x) { void L(infer y) => Take(y); Take(x); }
                 Diagnostic(ErrorCode.WRN_UnreferencedLocalFunction, "L").WithArguments("L").WithLocation(30, 47),
                 // (30,49): error CS20027: Cannot infer the type of parameter 'y', because it has no default value, and nothing else gives its type. Write the parameter type.
                 //     static void LocalFunction(infer x) { void L(infer y) => Take(y); Take(x); }
-                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("y").WithLocation(30, 49),
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("y", "nothing else gives its type").WithLocation(30, 49),
                 // (31,17): error CS0501: 'C.Abstract(infer)' must declare a body because it is not marked abstract, extern, or partial
                 //     static void Abstract(infer x);
                 Diagnostic(ErrorCode.ERR_ConcreteMissingBody, "Abstract").WithArguments("C.Abstract(infer)").WithLocation(31, 17),
                 // (31,26): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and nothing else gives its type. Write the parameter type.
                 //     static void Abstract(infer x);
-                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x").WithLocation(31, 26));
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "nothing else gives its type").WithLocation(31, 26));
+
+            // The error points at the use that pins nothing.
+            var member = comp.GetDiagnostics().First(d => d.Code == (int)ErrorCode.ERR_SharperInferParameterNoDefault);
+            Assert.Equal(source.IndexOf("s.Length"), member.AdditionalLocations.Single().SourceSpan.Start);
         }
 
         [Fact]
@@ -323,12 +331,12 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 """;
             var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
             comp.VerifyDiagnostics(
-                // (8,31): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and nothing else gives its type. Write the parameter type.
+                // (8,31): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and 'Generic' takes a type parameter there, which pins nothing yet. Write the parameter type.
                 //     static void OtherPosition(infer x, infer i) => Generic(x, i);
-                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x").WithLocation(8, 31),
-                // (9,23): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and nothing else gives its type. Write the parameter type.
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "'Generic' takes a type parameter there, which pins nothing yet").WithLocation(8, 31),
+                // (9,23): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and 'Put' takes a type parameter there, which pins nothing yet. Write the parameter type.
                 //     static void Local(infer x) { void L<U>(IRepo<U> r) => r.Put(x); }
-                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x").WithLocation(9, 23),
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "'Put' takes a type parameter there, which pins nothing yet").WithLocation(9, 23),
                 // (9,39): warning CS8321: The local function 'L' is declared but never used
                 //     static void Local(infer x) { void L<U>(IRepo<U> r) => r.Put(x); }
                 Diagnostic(ErrorCode.WRN_UnreferencedLocalFunction, "L").WithArguments("L").WithLocation(9, 39));
@@ -363,12 +371,12 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 """;
             var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, options: TestOptions.DebugExe);
             comp.VerifyDiagnostics(
-                // (9,22): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and nothing else gives its type. Write the parameter type.
+                // (9,22): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and no use passes it directly to a call with one candidate. Write the parameter type.
                 //     static void Only(infer x) => Only(x);
-                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x").WithLocation(9, 22),
-                // (10,26): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and nothing else gives its type. Write the parameter type.
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "no use passes it directly to a call with one candidate").WithLocation(9, 22),
+                // (10,26): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and a call to 'Overload', which has more than one candidate, pins nothing yet. Write the parameter type.
                 //     static void Overload(infer x) => Overload(x, 0);
-                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x").WithLocation(10, 26));
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "a call to 'Overload', which has more than one candidate, pins nothing yet").WithLocation(10, 26));
             VerifySameSignature(comp, "C.Recursive", "C.RecursiveCSharp");
             VerifySameSignature(comp, "C.Swap", "C.SwapCSharp");
             Assert.Equal("C..ctor(System.String a, System.Int64 b, System.String c)", comp.GetMember<NamedTypeSymbol>("C").InstanceConstructors.Last().ToTestDisplayString());

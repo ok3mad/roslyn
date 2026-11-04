@@ -423,6 +423,39 @@
   <data name="IDS_SharperPureReasonOther" xml:space="preserve">
     <value>'{0}' is not allowed in a pure member</value>
   </data>
+  <data name="IDS_SharperInferNothingElseGivesType" xml:space="preserve">
+    <value>nothing else gives its type</value>
+  </data>
+  <data name="IDS_SharperInferNotUsedInBody" xml:space="preserve">
+    <value>the body does not use it</value>
+  </data>
+  <data name="IDS_SharperInferMemberAccessPinsNothing" xml:space="preserve">
+    <value>a member access pins nothing</value>
+  </data>
+  <data name="IDS_SharperInferOperatorPinsNothing" xml:space="preserve">
+    <value>an operator pins nothing</value>
+  </data>
+  <data name="IDS_SharperInferTypeTestPinsNothing" xml:space="preserve">
+    <value>a type test pins nothing</value>
+  </data>
+  <data name="IDS_SharperInferInterpolationPinsNothing" xml:space="preserve">
+    <value>an interpolation pins nothing</value>
+  </data>
+  <data name="IDS_SharperInferSeveralCandidatesPinNothing" xml:space="preserve">
+    <value>a call to '{0}', which has more than one candidate, pins nothing yet</value>
+  </data>
+  <data name="IDS_SharperInferTypeParameterPinsNothing" xml:space="preserve">
+    <value>'{0}' takes a type parameter there, which pins nothing yet</value>
+  </data>
+  <data name="IDS_SharperInferParamsPinsNothing" xml:space="preserve">
+    <value>a params parameter pins nothing yet</value>
+  </data>
+  <data name="IDS_SharperInferRefArgumentPinsNothing" xml:space="preserve">
+    <value>a ref or out argument pins nothing yet</value>
+  </data>
+  <data name="IDS_SharperInferUsePinsNothing" xml:space="preserve">
+    <value>no use passes it directly to a call with one candidate</value>
+  </data>
   <data name="IDS_SharperInferNoMemberWithParameterCount" xml:space="preserve">
     <value>it could override or implement no member '{0}' with the same number of parameters</value>
   </data>
@@ -8423,7 +8456,7 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
     <value>Cannot infer the type of parameter '{0}', because its default value ({1}) has no type. Write the parameter type.</value>
   </data>
   <data name="ERR_SharperInferParameterNoDefault" xml:space="preserve">
-    <value>Cannot infer the type of parameter '{0}', because it has no default value, and nothing else gives its type. Write the parameter type.</value>
+    <value>Cannot infer the type of parameter '{0}', because it has no default value, and {1}. Write the parameter type.</value>
   </data>
   <data name="ERR_SharperInferParameterCycle" xml:space="preserve">
     <value>Cannot infer the type of parameter '{0}', because its default value depends on the type of '{0}' itself. Write the parameter type.</value>

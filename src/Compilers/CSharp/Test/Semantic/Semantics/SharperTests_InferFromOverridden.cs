@@ -302,9 +302,9 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (25,18): error CS20044: Cannot infer the types of 'M', because it could override or implement more than one member: 'I1.M(int)', 'I2.M(int)'. Write the types of the one it overrides or implements.
                 //     public infer M(infer a) => 0;
                 Diagnostic(ErrorCode.ERR_SharperInferAmbiguousOverriddenMember, "M").WithArguments("M", "'I1.M(int)', 'I2.M(int)'").WithLocation(25, 18),
-                // (27,28): error CS20027: Cannot infer the type of parameter 'a', because it has no default value, and nothing else gives its type. Write the parameter type.
+                // (27,28): error CS20027: Cannot infer the type of parameter 'a', because it has no default value, and the body does not use it. Write the parameter type.
                 //     public infer Unrelated(infer a) => 0;
-                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("a").WithLocation(27, 28),
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("a", "the body does not use it").WithLocation(27, 28),
                 // (28,14): error CS20043: Cannot infer the types of 'Missing' from the member it overrides or implements, because it could override or implement no member 'Missing' with the same number of parameters. Write the types.
                 //     infer I1.Missing(infer a) => 0;
                 Diagnostic(ErrorCode.ERR_SharperInferNoOverriddenMember, "Missing").WithArguments("Missing", "it could override or implement no member 'Missing' with the same number of parameters").WithLocation(28, 14),
@@ -677,12 +677,12 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 """;
             var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
             comp.VerifyDiagnostics(
-                // (6,21): error CS20027: Cannot infer the type of parameter 'a', because it has no default value, and nothing else gives its type. Write the parameter type.
+                // (6,21): error CS20027: Cannot infer the type of parameter 'a', because it has no default value, and no use passes it directly to a call with one candidate. Write the parameter type.
                 //     private infer M(infer a, int b) => a;
-                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("a").WithLocation(6, 21),
-                // (7,21): error CS20027: Cannot infer the type of parameter 'a', because it has no default value, and nothing else gives its type. Write the parameter type.
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("a", "no use passes it directly to a call with one candidate").WithLocation(6, 21),
+                // (7,21): error CS20027: Cannot infer the type of parameter 'a', because it has no default value, and the body does not use it. Write the parameter type.
                 //     internal void N(infer a) { }
-                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("a").WithLocation(7, 21),
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("a", "the body does not use it").WithLocation(7, 21),
                 // (13,11): warning CS8981: The type name 'infer' only contains lower-cased ascii characters. Such names may become reserved for the language.
                 //     class infer { }
                 Diagnostic(ErrorCode.WRN_LowerCaseTypeName, "infer").WithArguments("infer").WithLocation(13, 11));

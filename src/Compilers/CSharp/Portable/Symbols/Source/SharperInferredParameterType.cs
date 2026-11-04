@@ -107,7 +107,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     return fromBody.Type;
                 }
 
-                diagnostics.Add(ErrorCode.ERR_SharperInferParameterNoDefault, parameter.Type.Location, parameter.Identifier.ValueText);
+                diagnostics.Add(ErrorCode.ERR_SharperInferParameterNoDefault, parameter.Type.Location, parameter.Identifier.ValueText, MessageID.IDS_SharperInferNothingElseGivesType.Localize());
                 return TypeWithAnnotations.Create(binder.CreateErrorType("infer"));
             }
 
