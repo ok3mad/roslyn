@@ -426,7 +426,8 @@ namespace Microsoft.CodeAnalysis.CSharp
                     break;
                 case BoundUnconvertedObjectCreationExpression expr:
                     {
-                        if (reportNoTargetType && !expr.HasAnyErrors)
+                        // With implicit 'it' lambdas, error recovery reports the arguments' 'it' instead (CS20019).
+                        if (reportNoTargetType && !expr.HasAnyErrors && !HasSharperImplicitItTargetTypedArguments(expr))
                         {
                             diagnostics.Add(ErrorCode.ERR_ImplicitObjectCreationNoTargetType, expr.Syntax.GetLocation(), expr.Display);
                         }
@@ -4943,6 +4944,20 @@ namespace Microsoft.CodeAnalysis.CSharp
             MethodSymbol constructor,
             BindingDiagnosticBag diagnostics)
         {
+            if (initializerArgumentListOpt != null && HasSharperImplicitItArgument(initializerArgumentListOpt))
+            {
+                return BindSharperImplicitItConstructorInitializer(initializerArgumentListOpt, constructor, diagnostics);
+            }
+
+            return BindConstructorInitializerCore(initializerArgumentListOpt, constructor, diagnostics, sharperImplicitItArguments: null);
+        }
+
+        private BoundExpression BindConstructorInitializerCore(
+            ArgumentListSyntax initializerArgumentListOpt,
+            MethodSymbol constructor,
+            BindingDiagnosticBag diagnostics,
+            ArrayBuilder<ArgumentSyntax> sharperImplicitItArguments)
+        {
             // Either our base type is not object, or we have an initializer syntax, or both. We're going to
             // need to do overload resolution on the set of constructors of the base type, either on
             // the provided initializer syntax, or on an implicit ": base()" syntax.
@@ -4986,7 +5001,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 // : this(__arglist()) is legal
                 if (initializerArgumentListOpt != null)
                 {
-                    this.BindArgumentsAndNames(initializerArgumentListOpt, diagnostics, analyzedArguments, allowArglist: true);
+                    this.BindArgumentsAndNames(initializerArgumentListOpt, diagnostics, analyzedArguments, allowArglist: true, sharperImplicitItArguments: sharperImplicitItArguments);
                 }
 
                 NamedTypeSymbol initializerType = containingType;
@@ -5314,7 +5329,11 @@ namespace Microsoft.CodeAnalysis.CSharp
             MessageID.IDS_FeatureImplicitObjectCreation.CheckFeatureAvailability(diagnostics, node.NewKeyword);
 
             var arguments = AnalyzedArguments.GetInstance();
-            BindArgumentsAndNames(node.ArgumentList, diagnostics, arguments, allowArglist: true);
+
+            // An argument with a free 'it' is an implicit lambda until the type is known (ConvertObjectCreationExpression).
+            var sharperImplicitItArguments = GetSharperImplicitItTargetTypedArguments(node);
+            BindArgumentsAndNames(node.ArgumentList, diagnostics, arguments, allowArglist: true, sharperImplicitItArguments: sharperImplicitItArguments);
+            sharperImplicitItArguments?.Free();
             var result = new BoundUnconvertedObjectCreationExpression(
                 node,
                 arguments.Arguments.ToImmutable(),
@@ -5737,13 +5756,28 @@ namespace Microsoft.CodeAnalysis.CSharp
 
         private BoundExpression BindClassCreationExpression(ObjectCreationExpressionSyntax node, NamedTypeSymbol type, string typeName, BindingDiagnosticBag diagnostics, TypeSymbol initializerType = null)
         {
+            if (node.ArgumentList is { } argumentList && HasSharperImplicitItArgument(argumentList))
+            {
+                return BindSharperImplicitItClassCreation(node, type, typeName, initializerType, diagnostics);
+            }
+
             // Get the bound arguments and the argument names.
             AnalyzedArguments analyzedArguments = AnalyzedArguments.GetInstance();
             try
             {
                 // new C(__arglist()) is legal
                 BindArgumentsAndNames(node.ArgumentList, diagnostics, analyzedArguments, allowArglist: true);
+                return BindClassCreationExpressionWithArguments(node, type, typeName, analyzedArguments, diagnostics, initializerType);
+            }
+            finally
+            {
+                analyzedArguments.Free();
+            }
+        }
 
+        private BoundExpression BindClassCreationExpressionWithArguments(ObjectCreationExpressionSyntax node, NamedTypeSymbol type, string typeName, AnalyzedArguments analyzedArguments, BindingDiagnosticBag diagnostics, TypeSymbol initializerType)
+        {
+            {
                 // No point in performing overload resolution if the type is static or a tuple literal.  
                 // Just return a bad expression containing the arguments.
                 if (type.IsStatic)
@@ -5758,10 +5792,6 @@ namespace Microsoft.CodeAnalysis.CSharp
                 }
 
                 return BindClassCreationExpression(node, typeName, node.Type, type, analyzedArguments, diagnostics, node.Initializer, initializerType);
-            }
-            finally
-            {
-                analyzedArguments.Free();
             }
         }
 
@@ -5802,6 +5832,11 @@ namespace Microsoft.CodeAnalysis.CSharp
 
         internal BoundExpression BindObjectCreationForErrorRecovery(BoundUnconvertedObjectCreationExpression node, BindingDiagnosticBag diagnostics)
         {
+            if (HasSharperImplicitItTargetTypedArguments(node))
+            {
+                return BindSharperImplicitItTargetTypedCreationForErrorRecovery(node, diagnostics);
+            }
+
             var arguments = AnalyzedArguments.GetInstance(node.Arguments, node.ArgumentRefKindsOpt, node.ArgumentNamesOpt);
             var result = MakeBadExpressionForObjectCreation(node.Syntax, CreateErrorType(), arguments, node.InitializerOpt, typeSyntax: node.Syntax, diagnostics);
             arguments.Free();
@@ -10345,11 +10380,26 @@ namespace Microsoft.CodeAnalysis.CSharp
 
         private BoundExpression BindElementAccess(ExpressionSyntax node, BoundExpression receiver, BracketedArgumentListSyntax argumentList, bool allowInlineArrayElementAccess, BindingDiagnosticBag diagnostics)
         {
+            if (HasSharperImplicitItArgument(argumentList))
+            {
+                return BindSharperImplicitItElementAccess(node, receiver, argumentList, allowInlineArrayElementAccess, diagnostics);
+            }
+
             AnalyzedArguments analyzedArguments = AnalyzedArguments.GetInstance();
             try
             {
                 BindArgumentsAndNames(argumentList, diagnostics, analyzedArguments);
+                return BindElementAccessWithArguments(node, receiver, analyzedArguments, allowInlineArrayElementAccess, diagnostics);
+            }
+            finally
+            {
+                analyzedArguments.Free();
+            }
+        }
 
+        private BoundExpression BindElementAccessWithArguments(ExpressionSyntax node, BoundExpression receiver, AnalyzedArguments analyzedArguments, bool allowInlineArrayElementAccess, BindingDiagnosticBag diagnostics)
+        {
+            {
                 if (receiver.Kind == BoundKind.PropertyGroup)
                 {
                     var propertyGroup = (BoundPropertyGroup)receiver;
@@ -10361,10 +10411,6 @@ namespace Microsoft.CodeAnalysis.CSharp
                 receiver = BindToNaturalType(receiver, diagnostics);
 
                 return BindElementOrIndexerAccess(node, receiver, analyzedArguments, allowInlineArrayElementAccess, diagnostics);
-            }
-            finally
-            {
-                analyzedArguments.Free();
             }
         }
 

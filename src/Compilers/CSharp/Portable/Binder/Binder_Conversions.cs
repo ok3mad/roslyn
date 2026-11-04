@@ -852,9 +852,18 @@ namespace Microsoft.CodeAnalysis.CSharp
             SyntaxNode syntax, BoundUnconvertedObjectCreationExpression node, Conversion conversion, bool isCast, TypeSymbol destination,
             ConversionGroup? conversionGroupOpt, InConversionGroupFlags inConversionGroupFlags, bool wasCompilerGenerated, BindingDiagnosticBag diagnostics)
         {
-            var arguments = AnalyzedArguments.GetInstance(node.Arguments, node.ArgumentRefKindsOpt, node.ArgumentNamesOpt);
-            BoundExpression expr = bindObjectCreationExpression(node.Syntax, node.InitializerOpt, node.Binder, destination.StrippedType(), arguments, diagnostics);
-            arguments.Free();
+            BoundExpression expr;
+            if (Binder.HasSharperImplicitItTargetTypedArguments(node))
+            {
+                // A free 'it' in the arguments: the constructor decides which arguments are lambdas.
+                expr = bindSharperImplicitItObjectCreation(node, destination.StrippedType(), diagnostics);
+            }
+            else
+            {
+                var arguments = AnalyzedArguments.GetInstance(node.Arguments, node.ArgumentRefKindsOpt, node.ArgumentNamesOpt);
+                expr = bindObjectCreationExpression(node.Syntax, node.InitializerOpt, node.Binder, destination.StrippedType(), arguments, diagnostics);
+                arguments.Free();
+            }
 
             Debug.Assert(expr is BoundObjectCreationExpressionBase { WasTargetTyped: true } or
                                  BoundDelegateCreationExpression { WasTargetTyped: true } or
@@ -881,6 +890,15 @@ namespace Microsoft.CodeAnalysis.CSharp
             { WasCompilerGenerated = wasCompilerGenerated };
 
             return expr;
+
+            static BoundExpression bindSharperImplicitItObjectCreation(BoundUnconvertedObjectCreationExpression node, TypeSymbol type, BindingDiagnosticBag diagnostics)
+            {
+                return node.Binder.BindSharperImplicitItTargetTypedCreation(
+                    node,
+                    type,
+                    (arguments, trialDiagnostics) => bindObjectCreationExpression(node.Syntax, node.InitializerOpt, node.Binder, type, arguments, trialDiagnostics),
+                    diagnostics);
+            }
 
             static BoundExpression bindObjectCreationExpression(
                 SyntaxNode syntax, InitializerExpressionSyntax? initializerOpt, Binder binder,

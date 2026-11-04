@@ -9453,5 +9453,244 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 //     object N(object[] xs) => xs.Select(it is int n ? n : 0);
                 Diagnostic(ErrorCode.ERR_SharperItDeclaration, "n").WithArguments("n").WithLocation(7, 50));
         }
+
+        [Fact]
+        public void ImplicitIt_MoreArgumentLists()
+        {
+            // Object creation, target-typed 'new', indexers and constructor initializers (#122), each next to its C# twin.
+            var source = """
+                using System;
+
+                class User { public bool Active; public int Id; }
+                class Filter { public Func<User, bool> P; public Filter(Func<User, bool> p) => P = p; }
+                class Box
+                {
+                    public string Kind;
+                    public Box(int v) => Kind = "value" + v;
+                    public Box(Func<int, int> f) => Kind = "function" + f(1);
+                }
+                struct Op { public Func<int, int> F; public Op(Func<int, int> f) => F = f; }
+                class Handlers
+                {
+                    public string this[Func<int, int> key] => "f" + key(1);
+                    public string this[int i] => "i" + i;
+                }
+                class Sink
+                {
+                    public string Last;
+                    public string this[Func<int, int> key] { get => Last; set => Last = value + key(1); }
+                }
+                class B { public int R; public B(Func<int, int> f) => R = f(2); }
+                class D1 : B { public D1() : base(it * 10) { } }
+                class D1Twin : B { public D1Twin() : base(x => x * 10) { } }
+                class D2 : B { public D2(Func<int, int> f) : base(f) { } public D2() : this(it * 3) { } }
+                class D2Twin : B { public D2Twin(Func<int, int> f) : base(f) { } public D2Twin() : this(x => x * 3) { } }
+                class D3(int k) : B(it + k);
+                class D3Twin(int k) : B(x => x + k);
+
+                class C
+                {
+                    static void Main()
+                    {
+                        var user = new User { Active = true, Id = 7 };
+                        Console.Write(new Filter(it.Active).P(user));
+                        Console.Write(new Filter(u => u.Active).P(user));
+                        Console.Write(";");
+                        Filter f = new(it.Id > 5);
+                        Filter g = new(u => u.Id > 5);
+                        Console.Write(f.P(user));
+                        Console.Write(g.P(user));
+                        Console.Write(";");
+                        Op op = new(it + 1);
+                        Op opTwin = new(x => x + 1);
+                        Console.Write(op.F(1));
+                        Console.Write(opTwin.F(1));
+                        Console.Write(";");
+                        Console.Write(new Box(it + 1).Kind);
+                        Console.Write(new Box(x => x + 1).Kind);
+                        Console.Write(new Box(1).Kind);
+                        Box box = new(it * 5);
+                        Console.Write(box.Kind);
+                        Console.Write(";");
+                        var handlers = new Handlers();
+                        Console.Write(handlers[it + 1]);
+                        Console.Write(handlers[x => x + 1]);
+                        Console.Write(handlers[5]);
+                        Console.Write(";");
+                        Console.Write(new D1().R);
+                        Console.Write(new D1Twin().R);
+                        Console.Write(new D2().R);
+                        Console.Write(new D2Twin().R);
+                        Console.Write(new D3(4).R);
+                        Console.Write(new D3Twin(4).R);
+                        Console.Write(";");
+                        Handlers maybe = handlers;
+                        Console.Write(maybe?[it * 3]);
+                        Console.Write(maybe?[x => x * 3]);
+                        Console.Write(Use(new(it.Active), user));
+                        Console.Write(Use(new(u => u.Active), user));
+                        Console.Write(new Sink { [it + 4] = "s" }.Last);
+                        Console.Write(new Sink { [x => x + 4] = "s" }.Last);
+                        Console.Write(";");
+                        CSharpWins(handlers);
+                    }
+
+                    // With a local named 'it', the arguments are values, as in C#.
+                    static void CSharpWins(Handlers handlers)
+                    {
+                        int it = 3;
+                        Console.Write(new Box(it + 1).Kind);
+                        Console.Write(handlers[it + 1]);
+                        Box local = new(it);
+                        Console.Write(local.Kind);
+                    }
+
+                    static bool Use(Filter f, User u) => f.P(u);
+                }
+                """;
+            var verifier = CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90,
+                expectedOutput: ExecutionConditionUtil.IsCoreClr ? "TrueTrue;TrueTrue;22;function2function2value1function5;f2f2i5;20206666;f3f3TrueTrues5s5;value4i4value3" : null);
+            verifier.VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void ImplicitIt_MoreArgumentLists_Errors()
+        {
+            var source = """
+                using System;
+                using System.Collections.Generic;
+                using System.Linq;
+
+                class Box
+                {
+                    public Box(int v) { }
+                    public Box(Func<int, int> f) { }
+                }
+                class Value { public Value(int v) { } }
+                class Filter { public Filter(Func<int, bool> p) { } }
+                class Handlers
+                {
+                    public int this[Func<int, int> key] => key(1);
+                    public int this[int i] => i;
+                    public int this[Func<int, bool> key] => 0;
+                }
+                class B { public B(int v) { } }
+                class D : B { public D() : base(it + 1) { } }
+                class E(int k) : B(it + k);
+
+                class C
+                {
+                    [Obsolete(it.ToString())]
+                    void M(int[] xs, Handlers handlers)
+                    {
+                        xs.Select(new Box(it));
+                        xs.Select(new Box(it + 1));
+                        xs.Select(handlers[it]);
+                        xs.Select(handlers[it + 1]);
+                        new Value(it + 1);
+                        var v = new(it + 1);
+                        Value w = new(it + 1);
+                        _ = xs[it + 1];
+                        List<Func<int, int>> l = [it + 1];
+                        xs.Select(F(new Filter(it > 1)));
+                        xs.Select(F(handlers[it > 1]));
+                    }
+
+                    static int F(object o) => 0;
+                }
+                """;
+            // A constructor that takes only values, attributes (which take no delegates), arrays and collection
+            // expression elements have no lambda; a bare 'it' is never a lambda, and with an outer 'it' a constructor or
+            // indexer that takes a value or a function is ambiguous.
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (19,33): error CS20019: 'it' has no lambda here. 'it' is the parameter of an argument that takes a function with one parameter, such as 'xs.Select(it.Name)'.
+                // class D : B { public D() : base(it + 1) { } }
+                Diagnostic(ErrorCode.ERR_SharperItNoLambda, "it").WithLocation(19, 33),
+                // (20,20): error CS20019: 'it' has no lambda here. 'it' is the parameter of an argument that takes a function with one parameter, such as 'xs.Select(it.Name)'.
+                // class E(int k) : B(it + k);
+                Diagnostic(ErrorCode.ERR_SharperItNoLambda, "it").WithLocation(20, 20),
+                // (24,15): error CS20019: 'it' has no lambda here. 'it' is the parameter of an argument that takes a function with one parameter, such as 'xs.Select(it.Name)'.
+                //     [Obsolete(it.ToString())]
+                Diagnostic(ErrorCode.ERR_SharperItNoLambda, "it").WithLocation(24, 15),
+                // (28,27): error CS20021: 'it' is ambiguous here: 'Box' takes a value or a function at this argument, and the outer 'it' fits both. Write the lambda, as in 'x => ...', or name the outer value.
+                //         xs.Select(new Box(it + 1));
+                Diagnostic(ErrorCode.ERR_SharperItValueOrFunction, "it").WithArguments("Box").WithLocation(28, 27),
+                // (30,28): error CS20021: 'it' is ambiguous here: 'this[]' takes a value or a function at this argument, and the outer 'it' fits both. Write the lambda, as in 'x => ...', or name the outer value.
+                //         xs.Select(handlers[it + 1]);
+                Diagnostic(ErrorCode.ERR_SharperItValueOrFunction, "it").WithArguments("this[]").WithLocation(30, 28),
+                // (31,19): error CS20019: 'it' has no lambda here. 'it' is the parameter of an argument that takes a function with one parameter, such as 'xs.Select(it.Name)'.
+                //         new Value(it + 1);
+                Diagnostic(ErrorCode.ERR_SharperItNoLambda, "it").WithLocation(31, 19),
+                // (32,21): error CS20019: 'it' has no lambda here. 'it' is the parameter of an argument that takes a function with one parameter, such as 'xs.Select(it.Name)'.
+                //         var v = new(it + 1);
+                Diagnostic(ErrorCode.ERR_SharperItNoLambda, "it").WithLocation(32, 21),
+                // (33,23): error CS20019: 'it' has no lambda here. 'it' is the parameter of an argument that takes a function with one parameter, such as 'xs.Select(it.Name)'.
+                //         Value w = new(it + 1);
+                Diagnostic(ErrorCode.ERR_SharperItNoLambda, "it").WithLocation(33, 23),
+                // (34,16): error CS20019: 'it' has no lambda here. 'it' is the parameter of an argument that takes a function with one parameter, such as 'xs.Select(it.Name)'.
+                //         _ = xs[it + 1];
+                Diagnostic(ErrorCode.ERR_SharperItNoLambda, "it").WithLocation(34, 16),
+                // (35,35): error CS20019: 'it' has no lambda here. 'it' is the parameter of an argument that takes a function with one parameter, such as 'xs.Select(it.Name)'.
+                //         List<Func<int, int>> l = [it + 1];
+                Diagnostic(ErrorCode.ERR_SharperItNoLambda, "it").WithLocation(35, 35),
+                // (36,12): error CS0411: The type arguments for method 'Enumerable.Select<TSource, TResult>(IEnumerable<TSource>, Func<TSource, int, TResult>)' cannot be inferred from the usage. Try specifying the type arguments explicitly.
+                //         xs.Select(F(new Filter(it > 1)));
+                Diagnostic(ErrorCode.ERR_CantInferMethTypeArgs, "Select").WithArguments("System.Linq.Enumerable.Select<TSource, TResult>(System.Collections.Generic.IEnumerable<TSource>, System.Func<TSource, int, TResult>)").WithLocation(36, 12),
+                // (36,19): error CS20054: 'it' here belongs to 'Filter', so this argument is a value, not a lambda. Name the parameter, as in 'x => ...'.
+                //         xs.Select(F(new Filter(it > 1)));
+                Diagnostic(ErrorCode.ERR_SharperItClaimedByInnerCall, "F(new Filter(it > 1))").WithArguments("Filter").WithLocation(36, 19),
+                // (37,12): error CS0411: The type arguments for method 'Enumerable.Select<TSource, TResult>(IEnumerable<TSource>, Func<TSource, int, TResult>)' cannot be inferred from the usage. Try specifying the type arguments explicitly.
+                //         xs.Select(F(handlers[it > 1]));
+                Diagnostic(ErrorCode.ERR_CantInferMethTypeArgs, "Select").WithArguments("System.Linq.Enumerable.Select<TSource, TResult>(System.Collections.Generic.IEnumerable<TSource>, System.Func<TSource, int, TResult>)").WithLocation(37, 12),
+                // (37,19): error CS20054: 'it' here belongs to 'this[]', so this argument is a value, not a lambda. Name the parameter, as in 'x => ...'.
+                //         xs.Select(F(handlers[it > 1]));
+                Diagnostic(ErrorCode.ERR_SharperItClaimedByInnerCall, "F(handlers[it > 1])").WithArguments("this[]").WithLocation(37, 19));
+        }
+
+        [Fact]
+        public void ImplicitIt_MoreArgumentLists_FeatureOff()
+        {
+            var source = """
+                using System;
+
+                class Filter { public Filter(Func<int, bool> p) { } }
+                class C
+                {
+                    object M() => new Filter(it > 1);
+                }
+                """;
+            CreateCompilation(source, parseOptions: TestOptions.Regular, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (6,30): error CS0103: The name 'it' does not exist in the current context
+                //     object M() => new Filter(it > 1);
+                Diagnostic(ErrorCode.ERR_NameNotInContext, "it").WithArguments("it").WithLocation(6, 30));
+        }
+
+        [Fact]
+        public void ImplicitIt_MoreArgumentLists_SemanticModel()
+        {
+            var source = """
+                using System;
+
+                class B { public B(Func<int, int> f) { } }
+                class D : B { public D() : base(it * 2) { } }
+                class E() : B(it * 3);
+                class C
+                {
+                    object M() => new B(it * 4);
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics();
+            var tree = comp.SyntaxTrees[0];
+            var model = comp.GetSemanticModel(tree);
+            var its = tree.GetRoot().DescendantNodes().OfType<IdentifierNameSyntax>().Where(n => n.Identifier.Text == "it").ToArray();
+            Assert.Equal(3, its.Length);
+            foreach (var it in its)
+            {
+                var symbol = (IParameterSymbol)model.GetSymbolInfo(it).Symbol!;
+                Assert.Equal("System.Int32 it", symbol.ToTestDisplayString());
+                Assert.Equal(MethodKind.AnonymousFunction, ((IMethodSymbol)symbol.ContainingSymbol).MethodKind);
+            }
+        }
     }
 }

@@ -585,6 +585,17 @@ implementation taught.
   trial had no errors apart from a lambda without its own `it`. The value trial's C# errors stay: they can be
   independent mistakes (a wrong argument count), and telling them from consequences would mean guessing. An inner
   call that already reported makes the outer lambda trial fail, so the error appears once, at the innermost level.
+- **One pair of trials for every argument list.** Object creation, indexers and constructor initializers (#122) share
+  `BindSharperImplicitItArguments` with calls: each site passes its candidates (the instance constructors, the
+  receiver's indexers, the base or own constructors) for the filter and a callback that binds the arguments and the
+  expression. The upstream methods were split where the arguments are bound (`BindClassCreationExpressionWithArguments`,
+  `BindElementAccessWithArguments`, a `BindConstructorInitializerCore` overload), and the Sharper calls live in separate
+  methods, so the C# path allocates no closures.
+- **Target-typed `new(...)` decides at its conversion.** The constructors are known only when the expression gets its
+  type, so its free-`it` arguments bind first as unbound implicit lambdas, which carry no errors, and
+  `ConvertObjectCreationExpression` runs the trials, rebinding only those arguments. Binding them first as values with
+  discarded diagnostics did not work: the errors flagged the expression, and `GenerateConversionForAssignment` then
+  discarded the conversion's diagnostics too, so `Value v = new(it + 1)` reported nothing.
 
 ## Feature 8: `try` expression, slice 1 (design)
 
@@ -1067,7 +1078,7 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 - [ ] `val`: decide whether to expose val-ness in the public API (`ILocalSymbol` has no read-only flag). [#88](https://github.com/ok3mad/roslyn/issues/88)
 - [ ] `val`: analyzer and fixer "local is never reassigned, use `val`". [#89](https://github.com/ok3mad/roslyn/issues/89)
 - [ ] `val`: verify Edit and Continue with `val` locals and their struct copies. [#90](https://github.com/ok3mad/roslyn/issues/90)
-- [ ] Implicit `it` in object creation, indexers and constructor initializers; today only calls. [#122](https://github.com/ok3mad/roslyn/issues/122)
+- [x] Implicit `it` in object creation (also target-typed `new(...)`), indexers, constructor initializers and primary constructor base arguments; attributes keep CS20019. [#122](https://github.com/ok3mad/roslyn/issues/122)
 - [ ] Implicit `it`: `LookupSymbols` and speculative binding inside an implicit lambda, which the semantic model finds by lambda syntax. [#123](https://github.com/ok3mad/roslyn/issues/123)
 - [ ] Implicit `it`: Edit and Continue, whose lambda matching also works on syntax. [#124](https://github.com/ok3mad/roslyn/issues/124)
 - [ ] Implicit `it`: variables declared next to or inside an implicit lambda, such as `F(Make(it), out var v)`. [#125](https://github.com/ok3mad/roslyn/issues/125)

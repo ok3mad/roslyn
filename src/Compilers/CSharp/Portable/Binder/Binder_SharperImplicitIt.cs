@@ -32,7 +32,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         internal static bool IsSharperItIdentifier(SyntaxNode node)
             => node is IdentifierNameSyntax { Identifier.Text: SharperItName };
 
-        private bool HasSharperImplicitItArgument(ArgumentListSyntax argumentList)
+        private bool HasSharperImplicitItArgument(BaseArgumentListSyntax argumentList)
         {
             if (argumentList.Arguments.Count == 0 || !argumentList.IsFeatureEnabled(MessageID.IDS_FeatureSharper))
             {
@@ -182,10 +182,8 @@ namespace Microsoft.CodeAnalysis.CSharp
         }
 
         /// <summary>
-        /// Binds an invocation that has an argument with a free <c>it</c>, in two trials: the arguments as implicit
-        /// lambdas, then as values. The lambda trial wins when it binds without errors and each lambda uses its
-        /// <c>it</c>. With an outer <c>it</c> in scope both trials can bind, when the method takes a value or a
-        /// function at that argument; that is an error, so that an overload added later never moves <c>it</c>.
+        /// Binds an invocation that has an argument with a free <c>it</c>, in the two trials of
+        /// <see cref="BindSharperImplicitItArguments"/>; the candidates are the method group or the delegate.
         /// </summary>
         private BoundExpression BindSharperImplicitItInvocation(
             InvocationExpressionSyntax node,
@@ -194,7 +192,247 @@ namespace Microsoft.CodeAnalysis.CSharp
             AnalyzedArguments analyzedArguments,
             BindingDiagnosticBag diagnostics)
         {
-            if (FindSharperDeclaration(node.ArgumentList) is { } declaration)
+            return BindSharperImplicitItArguments(
+                node.ArgumentList,
+                methodName ?? node.Expression.ToString(),
+                argument => SharperCandidateTakesFunction(boundExpression, methodName, node.ArgumentList, argument),
+                (implicitItArguments, trialDiagnostics) =>
+                {
+                    analyzedArguments.Clear();
+                    BindArgumentsAndNames(node.ArgumentList, trialDiagnostics, analyzedArguments, allowArglist: true, sharperImplicitItArguments: implicitItArguments);
+                    return BindInvocationExpression(node, node.Expression, methodName, boundExpression, analyzedArguments, trialDiagnostics, acceptOnlyMethods: false);
+                },
+                diagnostics);
+        }
+
+        /// <summary>
+        /// Binds <c>new C(...)</c> when an argument has a free <c>it</c>; the candidates are the type's instance constructors.
+        /// </summary>
+        private BoundExpression BindSharperImplicitItClassCreation(ObjectCreationExpressionSyntax node, NamedTypeSymbol type, string typeName, TypeSymbol? initializerType, BindingDiagnosticBag diagnostics)
+        {
+            Debug.Assert(node.ArgumentList is not null);
+            return BindSharperImplicitItObjectCreation(
+                node.ArgumentList,
+                type,
+                (analyzedArguments, trialDiagnostics) => BindClassCreationExpressionWithArguments(node, type, typeName, analyzedArguments, trialDiagnostics, initializerType),
+                diagnostics);
+        }
+
+        /// <summary>
+        /// Binds an object creation (<c>new C(...)</c>, or a target-typed <c>new(...)</c> once its type is known) that has an
+        /// argument with a free <c>it</c>; the candidates are the type's instance constructors.
+        /// </summary>
+        private BoundExpression BindSharperImplicitItObjectCreation(
+            ArgumentListSyntax argumentList,
+            NamedTypeSymbol type,
+            Func<AnalyzedArguments, BindingDiagnosticBag, BoundExpression> bind,
+            BindingDiagnosticBag diagnostics)
+        {
+            return BindSharperImplicitItArguments(
+                argumentList,
+                type.Name,
+                argument => SharperCandidatesTakeFunction(type.InstanceConstructors, argumentList, argument),
+                (implicitItArguments, trialDiagnostics) =>
+                {
+                    var analyzedArguments = AnalyzedArguments.GetInstance();
+                    BindArgumentsAndNames(argumentList, trialDiagnostics, analyzedArguments, allowArglist: true, sharperImplicitItArguments: implicitItArguments);
+                    var result = bind(analyzedArguments, trialDiagnostics);
+                    analyzedArguments.Free();
+                    return result;
+                },
+                diagnostics);
+        }
+
+        /// <summary>
+        /// The arguments of a target-typed <c>new(...)</c> that are implicit lambdas until its type is known: those with a
+        /// free <c>it</c>, unless the arguments declare a variable. Null when there are none.
+        /// </summary>
+        private ArrayBuilder<ArgumentSyntax>? GetSharperImplicitItTargetTypedArguments(ImplicitObjectCreationExpressionSyntax node)
+        {
+            if (!HasSharperImplicitItArgument(node.ArgumentList) || FindSharperDeclaration(node.ArgumentList) is not null)
+            {
+                return null;
+            }
+
+            var arguments = ArrayBuilder<ArgumentSyntax>.GetInstance();
+            foreach (var argument in node.ArgumentList.Arguments)
+            {
+                if (FindSharperFreeIt(argument) is not null)
+                {
+                    arguments.Add(argument);
+                }
+            }
+
+            return arguments;
+        }
+
+        /// <summary>
+        /// Whether a target-typed <c>new(...)</c> holds implicit lambdas (see
+        /// <see cref="GetSharperImplicitItTargetTypedArguments"/>), which the constructor turns into lambdas or values once
+        /// the type is known (<see cref="BindSharperImplicitItTargetTypedCreation"/>).
+        /// </summary>
+        internal static bool HasSharperImplicitItTargetTypedArguments(BoundUnconvertedObjectCreationExpression node)
+        {
+            foreach (var argument in node.Arguments)
+            {
+                if (argument is UnboundLambda { Data.IsSharperImplicitIt: true })
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Binds a target-typed <c>new(...)</c> that holds implicit lambdas once its type is known: in the two trials for a
+        /// class, struct or enum, and with the lambdas bound as values otherwise. The other arguments keep the values bound
+        /// with the expression, whose diagnostics are already reported.
+        /// </summary>
+        internal BoundExpression BindSharperImplicitItTargetTypedCreation(
+            BoundUnconvertedObjectCreationExpression node,
+            TypeSymbol type,
+            Func<AnalyzedArguments, BindingDiagnosticBag, BoundExpression> bind,
+            BindingDiagnosticBag diagnostics)
+        {
+            var argumentList = ((ImplicitObjectCreationExpressionSyntax)node.Syntax).ArgumentList;
+            if (type is NamedTypeSymbol { TypeKind: TypeKind.Class or TypeKind.Struct or TypeKind.Enum, IsAnonymousType: false } namedType)
+            {
+                return BindSharperImplicitItArguments(
+                    argumentList,
+                    namedType.Name,
+                    argument => SharperCandidatesTakeFunction(namedType.InstanceConstructors, argumentList, argument),
+                    bindWithArguments,
+                    diagnostics);
+            }
+
+            return bindWithArguments(null, diagnostics);
+
+            BoundExpression bindWithArguments(ArrayBuilder<ArgumentSyntax>? implicitItArguments, BindingDiagnosticBag trialDiagnostics)
+            {
+                var analyzedArguments = AnalyzedArguments.GetInstance(node.Arguments, node.ArgumentRefKindsOpt, node.ArgumentNamesOpt);
+                for (int i = 0; i < analyzedArguments.Arguments.Count; i++)
+                {
+                    var argument = argumentList.Arguments[i];
+                    if (analyzedArguments.Arguments[i] is UnboundLambda { Data.IsSharperImplicitIt: true } && implicitItArguments?.Contains(argument) != true)
+                    {
+                        analyzedArguments.Arguments[i] = BindArgumentValue(trialDiagnostics, argument, allowArglist: true, RefKind.None);
+                    }
+                }
+
+                var result = bind(analyzedArguments, trialDiagnostics);
+                analyzedArguments.Free();
+                return result;
+            }
+        }
+
+        /// <summary>
+        /// A target-typed <c>new(...)</c> with no type, whose implicit lambdas become values.
+        /// </summary>
+        internal BoundExpression BindSharperImplicitItTargetTypedCreationForErrorRecovery(BoundUnconvertedObjectCreationExpression node, BindingDiagnosticBag diagnostics)
+        {
+            return BindSharperImplicitItTargetTypedCreation(
+                node,
+                CreateErrorType(),
+                (analyzedArguments, trialDiagnostics) => MakeBadExpressionForObjectCreation(node.Syntax, CreateErrorType(), analyzedArguments, node.InitializerOpt, typeSyntax: node.Syntax, trialDiagnostics),
+                diagnostics);
+        }
+
+        /// <summary>
+        /// Binds an element access that has an argument with a free <c>it</c>; the candidates are the indexers of the
+        /// receiver.
+        /// </summary>
+        private BoundExpression BindSharperImplicitItElementAccess(
+            ExpressionSyntax node,
+            BoundExpression receiver,
+            BracketedArgumentListSyntax argumentList,
+            bool allowInlineArrayElementAccess,
+            BindingDiagnosticBag diagnostics)
+        {
+            ImmutableArray<PropertySymbol> indexers = default;
+            return BindSharperImplicitItArguments(
+                argumentList,
+                "this[]",
+                argument =>
+                {
+                    switch (receiver)
+                    {
+                        case BoundPropertyGroup propertyGroup:
+                            return SharperCandidatesTakeFunction(propertyGroup.Properties, argumentList, argument);
+                        case { Type: { TypeKind: TypeKind.Class or TypeKind.Struct or TypeKind.Interface or TypeKind.TypeParameter } type }:
+                            if (indexers.IsDefault)
+                            {
+                                var lookupResult = LookupResult.GetInstance();
+                                var useSiteInfo = CompoundUseSiteInfo<AssemblySymbol>.Discarded;
+                                LookupMembersWithFallback(lookupResult, type, WellKnownMemberNames.Indexer, arity: 0, ref useSiteInfo);
+                                var builder = ArrayBuilder<PropertySymbol>.GetInstance();
+                                foreach (var symbol in lookupResult.Symbols)
+                                {
+                                    if (symbol is PropertySymbol { IsIndexer: true } indexer)
+                                    {
+                                        builder.Add(indexer);
+                                    }
+                                }
+
+                                lookupResult.Free();
+                                indexers = builder.ToImmutableAndFree();
+                            }
+
+                            return SharperCandidatesTakeFunction(indexers, argumentList, argument);
+                        case { Type: { TypeKind: TypeKind.Array or TypeKind.Pointer or TypeKind.FunctionPointer } }:
+                            return false;
+                        default:
+                            // 'dynamic', an error, or something else that binding reports on.
+                            return true;
+                    }
+                },
+                (implicitItArguments, trialDiagnostics) =>
+                {
+                    var analyzedArguments = AnalyzedArguments.GetInstance();
+                    BindArgumentsAndNames(argumentList, trialDiagnostics, analyzedArguments, sharperImplicitItArguments: implicitItArguments);
+                    var result = BindElementAccessWithArguments(node, receiver, analyzedArguments, allowInlineArrayElementAccess, trialDiagnostics);
+                    analyzedArguments.Free();
+                    return result;
+                },
+                diagnostics);
+        }
+
+        /// <summary>
+        /// Binds a constructor initializer (<c>: base(...)</c>, <c>: this(...)</c> or a primary constructor's base
+        /// arguments) that has an argument with a free <c>it</c>; the candidates are the constructors it can call.
+        /// </summary>
+        private BoundExpression BindSharperImplicitItConstructorInitializer(
+            ArgumentListSyntax argumentList,
+            MethodSymbol constructor,
+            BindingDiagnosticBag diagnostics)
+        {
+            bool isThis = argumentList.Parent.IsKind(SyntaxKind.ThisConstructorInitializer);
+            NamedTypeSymbol? initializerType = isThis ? constructor.ContainingType : constructor.ContainingType.BaseTypeNoUseSiteDiagnostics;
+            return BindSharperImplicitItArguments(
+                argumentList,
+                isThis ? "this" : "base",
+                argument => initializerType is not null && SharperCandidatesTakeFunction(initializerType.InstanceConstructors, argumentList, argument),
+                (implicitItArguments, trialDiagnostics) => BindConstructorInitializerCore(argumentList, constructor, trialDiagnostics, implicitItArguments),
+                diagnostics);
+        }
+
+        /// <summary>
+        /// Binds an argument list that has an argument with a free <c>it</c>, in two trials: the arguments as implicit
+        /// lambdas, then as values. The lambda trial wins when it binds without errors and each lambda uses its
+        /// <c>it</c>. With an outer <c>it</c> in scope both trials can bind, when the callee takes a value or a function
+        /// at that argument; that is an error, so that an overload added later never moves <c>it</c>.
+        /// </summary>
+        /// <param name="calleeName">The name in CS20021.</param>
+        /// <param name="takesFunction">Whether some candidate may take the argument as a function with one parameter.</param>
+        /// <param name="bind">Binds the arguments, the given ones as implicit lambdas (none when null), and the expression.</param>
+        private BoundExpression BindSharperImplicitItArguments(
+            BaseArgumentListSyntax argumentList,
+            string calleeName,
+            Func<ArgumentSyntax, bool> takesFunction,
+            Func<ArrayBuilder<ArgumentSyntax>?, BindingDiagnosticBag, BoundExpression> bind,
+            BindingDiagnosticBag diagnostics)
+        {
+            if (FindSharperDeclaration(argumentList) is { } declaration)
             {
                 // A variable declared in the arguments gets its type while the call binds, so the two trials would
                 // both set it. Bind as values, and report a declaration inside an argument that would be a lambda.
@@ -204,17 +442,16 @@ namespace Microsoft.CodeAnalysis.CSharp
                     diagnostics.Add(ErrorCode.ERR_SharperItDeclaration, declaration.designation.Location, declaration.designation.Identifier.ValueText);
                 }
 
-                BindArgumentsAndNames(node.ArgumentList, diagnostics, analyzedArguments, allowArglist: true);
-                return BindInvocationExpression(node, node.Expression, methodName, boundExpression, analyzedArguments, diagnostics, acceptOnlyMethods: false);
+                return bind(null, diagnostics);
             }
 
             // Only an argument that some candidate takes as a function can be a lambda. Without this check every call
             // with an 'it' in its arguments would bind twice, and a failed call binds its lambdas again for error
             // recovery, which multiplies with the nesting depth.
             var implicitItArguments = ArrayBuilder<ArgumentSyntax>.GetInstance();
-            foreach (var argument in node.ArgumentList.Arguments)
+            foreach (var argument in argumentList.Arguments)
             {
-                if (FindSharperFreeIt(argument) is not null && SharperCandidateTakesFunction(boundExpression, methodName, node.ArgumentList, argument))
+                if (FindSharperFreeIt(argument) is not null && takesFunction(argument))
                 {
                     implicitItArguments.Add(argument);
                 }
@@ -223,28 +460,24 @@ namespace Microsoft.CodeAnalysis.CSharp
             if (implicitItArguments.Count == 0)
             {
                 implicitItArguments.Free();
-                BindArgumentsAndNames(node.ArgumentList, diagnostics, analyzedArguments, allowArglist: true);
-                return BindInvocationExpression(node, node.Expression, methodName, boundExpression, analyzedArguments, diagnostics, acceptOnlyMethods: false);
+                return bind(null, diagnostics);
             }
 
             var lambdaDiagnostics = BindingDiagnosticBag.GetInstance(withDiagnostics: true, withDependencies: diagnostics.AccumulatesDependencies);
-            BindArgumentsAndNames(node.ArgumentList, lambdaDiagnostics, analyzedArguments, allowArglist: true, sharperImplicitItArguments: implicitItArguments);
-            BoundExpression lambdaResult = BindInvocationExpression(node, node.Expression, methodName, boundExpression, analyzedArguments, lambdaDiagnostics, acceptOnlyMethods: false);
-            bool lambdasUseIt = AllSharperImplicitItLambdasUseIt(lambdaResult, node.ArgumentList, implicitItArguments.Count, out BoundLambda? lambdaWithoutIt);
+            BoundExpression lambdaResult = bind(implicitItArguments, lambdaDiagnostics);
+            bool lambdasUseIt = AllSharperImplicitItLambdasUseIt(lambdaResult, argumentList, implicitItArguments.Count, out BoundLambda? lambdaWithoutIt);
             bool lambdaOk = lambdasUseIt && !lambdaDiagnostics.HasAnyErrors();
             bool lambdaFailedOnlyForIt = !lambdasUseIt && !lambdaDiagnostics.HasAnyErrors();
             implicitItArguments.Free();
 
-            if (lambdaOk && !IsSharperOuterItInScope(node))
+            if (lambdaOk && !IsSharperOuterItInScope(argumentList))
             {
                 diagnostics.AddRangeAndFree(lambdaDiagnostics);
                 return lambdaResult;
             }
 
-            analyzedArguments.Clear();
             var valueDiagnostics = BindingDiagnosticBag.GetInstance(withDiagnostics: true, withDependencies: diagnostics.AccumulatesDependencies);
-            BindArgumentsAndNames(node.ArgumentList, valueDiagnostics, analyzedArguments, allowArglist: true);
-            BoundExpression valueResult = BindInvocationExpression(node, node.Expression, methodName, boundExpression, analyzedArguments, valueDiagnostics, acceptOnlyMethods: false);
+            BoundExpression valueResult = bind(null, valueDiagnostics);
             bool valueOk = !valueDiagnostics.HasAnyErrors();
 
             if (lambdaOk && valueOk)
@@ -252,13 +485,13 @@ namespace Microsoft.CodeAnalysis.CSharp
                 // Keep the value, where 'it' is the outer one, so that the outer lambda reports no second error.
                 lambdaDiagnostics.Free();
                 diagnostics.AddRangeAndFree(valueDiagnostics);
-                var firstIt = FindSharperFirstFreeIt(node.ArgumentList);
+                var firstIt = FindSharperFirstFreeIt(argumentList);
                 Debug.Assert(firstIt is not null);
-                diagnostics.Add(ErrorCode.ERR_SharperItValueOrFunction, firstIt.Location, methodName ?? node.Expression.ToString());
+                diagnostics.Add(ErrorCode.ERR_SharperItValueOrFunction, firstIt.Location, calleeName);
                 return valueResult.WithHasErrors();
             }
 
-            // When neither binds, report the lambda trial if its lambdas use 'it' (the method takes a function there,
+            // When neither binds, report the lambda trial if its lambdas use 'it' (the callee takes a function there,
             // and the lambda has errors), and the value trial otherwise.
             if (lambdaOk || (!valueOk && lambdasUseIt))
             {
@@ -286,9 +519,24 @@ namespace Microsoft.CodeAnalysis.CSharp
         private static void ReportSharperItClaimedByInnerCall(BoundLambda lambda, BindingDiagnosticBag diagnostics)
         {
             var (_, innerLambda) = SharperItUseFinder.Find(lambda.Body, lambda.Symbol.Parameters[0]);
-            if (innerLambda?.Syntax.Parent is ArgumentSyntax { Parent: ArgumentListSyntax { Parent: InvocationExpressionSyntax innerCall } })
+            if (innerLambda?.Syntax.Parent is ArgumentSyntax { Parent: BaseArgumentListSyntax { Parent: { } innerCall } })
             {
-                diagnostics.Add(ErrorCode.ERR_SharperItClaimedByInnerCall, lambda.Syntax.Location, getCallName(innerCall.Expression));
+                // The names of CS20021.
+                string? name = innerCall switch
+                {
+                    InvocationExpressionSyntax invocation => getCallName(invocation.Expression),
+                    ObjectCreationExpressionSyntax creation => getCallName(creation.Type),
+                    ImplicitObjectCreationExpressionSyntax => "new",
+                    ElementAccessExpressionSyntax or ElementBindingExpressionSyntax or ImplicitElementAccessSyntax => "this[]",
+                    ConstructorInitializerSyntax initializer => initializer.ThisOrBaseKeyword.ValueText,
+                    PrimaryConstructorBaseTypeSyntax => "base",
+                    _ => null,
+                };
+
+                if (name is not null)
+                {
+                    diagnostics.Add(ErrorCode.ERR_SharperItClaimedByInnerCall, lambda.Syntax.Location, name);
+                }
             }
 
             static string getCallName(ExpressionSyntax expression)
@@ -297,6 +545,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 {
                     MemberAccessExpressionSyntax memberAccess => memberAccess.Name.Identifier.ValueText,
                     MemberBindingExpressionSyntax memberBinding => memberBinding.Name.Identifier.ValueText,
+                    QualifiedNameSyntax qualifiedName => qualifiedName.Right.Identifier.ValueText,
                     SimpleNameSyntax name => name.Identifier.ValueText,
                     _ => expression.ToString(),
                 };
@@ -307,7 +556,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         /// Finds a variable declared in the arguments, outside explicit lambdas and pipe stages (which get new locals each
         /// time they bind), preferring one inside an argument with a free <c>it</c>.
         /// </summary>
-        private (SingleVariableDesignationSyntax designation, ArgumentSyntax? argument)? FindSharperDeclaration(ArgumentListSyntax argumentList)
+        private (SingleVariableDesignationSyntax designation, ArgumentSyntax? argument)? FindSharperDeclaration(BaseArgumentListSyntax argumentList)
         {
             (SingleVariableDesignationSyntax designation, ArgumentSyntax? argument)? result = null;
             foreach (var argument in argumentList.Arguments)
@@ -384,50 +633,72 @@ namespace Microsoft.CodeAnalysis.CSharp
             }
 
             static bool takesFunction(MethodSymbol method, int position, string? name)
-            {
-                var parameters = method.Parameters;
-                ParameterSymbol? parameter = null;
-                if (name is not null)
-                {
-                    foreach (var p in parameters)
-                    {
-                        if (p.Name == name)
-                        {
-                            parameter = p;
-                            break;
-                        }
-                    }
-                }
-                else if (position < parameters.Length)
-                {
-                    parameter = parameters[position];
-                }
-                else if (parameters is [.., { IsParams: true } last])
-                {
-                    parameter = last;
-                }
-
-                if (parameter is null)
-                {
-                    return false;
-                }
-
-                var type = parameter.Type;
-                if (parameter.IsParams && type is ArrayTypeSymbol array)
-                {
-                    type = array.ElementType;
-                }
-
-                if (type.IsExpressionTree())
-                {
-                    type = ((NamedTypeSymbol)type).TypeArgumentsWithAnnotationsNoUseSiteDiagnostics[0].Type;
-                }
-
-                return type is NamedTypeSymbol { TypeKind: TypeKind.Delegate, DelegateInvokeMethod.ParameterCount: 1 };
-            }
+                => SharperParameterTakesFunction(method.Parameters, position, name);
         }
 
-        private IdentifierNameSyntax? FindSharperFirstFreeIt(ArgumentListSyntax argumentList)
+        /// <summary>
+        /// Whether one of the constructors or indexers may take the argument as a function with one parameter (see
+        /// <see cref="SharperCandidateTakesFunction"/>).
+        /// </summary>
+        private static bool SharperCandidatesTakeFunction<TSymbol>(ImmutableArray<TSymbol> candidates, BaseArgumentListSyntax argumentList, ArgumentSyntax argument)
+            where TSymbol : Symbol
+        {
+            int position = argumentList.Arguments.IndexOf(argument);
+            string? name = argument.NameColon?.Name.Identifier.ValueText;
+            foreach (var candidate in candidates)
+            {
+                if (SharperParameterTakesFunction(candidate.GetParameters(), position, name))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool SharperParameterTakesFunction(ImmutableArray<ParameterSymbol> parameters, int position, string? name)
+        {
+            ParameterSymbol? parameter = null;
+            if (name is not null)
+            {
+                foreach (var p in parameters)
+                {
+                    if (p.Name == name)
+                    {
+                        parameter = p;
+                        break;
+                    }
+                }
+            }
+            else if (position < parameters.Length)
+            {
+                parameter = parameters[position];
+            }
+            else if (parameters is [.., { IsParams: true } last])
+            {
+                parameter = last;
+            }
+
+            if (parameter is null)
+            {
+                return false;
+            }
+
+            var type = parameter.Type;
+            if (parameter.IsParams && type is ArrayTypeSymbol array)
+            {
+                type = array.ElementType;
+            }
+
+            if (type.IsExpressionTree())
+            {
+                type = ((NamedTypeSymbol)type).TypeArgumentsWithAnnotationsNoUseSiteDiagnostics[0].Type;
+            }
+
+            return type is NamedTypeSymbol { TypeKind: TypeKind.Delegate, DelegateInvokeMethod.ParameterCount: 1 };
+        }
+
+        private IdentifierNameSyntax? FindSharperFirstFreeIt(BaseArgumentListSyntax argumentList)
         {
             foreach (var argument in argumentList.Arguments)
             {
@@ -440,9 +711,9 @@ namespace Microsoft.CodeAnalysis.CSharp
             return null;
         }
 
-        private bool IsSharperOuterItInScope(InvocationExpressionSyntax node)
+        private bool IsSharperOuterItInScope(BaseArgumentListSyntax argumentList)
         {
-            return FindSharperFirstFreeIt(node.ArgumentList) is { } it &&
+            return FindSharperFirstFreeIt(argumentList) is { } it &&
                 IsSharperImplicitItSymbol(LookupSharperIt(it));
         }
 
@@ -451,7 +722,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         /// lambda whose <c>it</c> is used only by inner implicit lambdas is a value: <c>Make(ys.First(it.X))</c>; the
         /// first such lambda is returned for the error if the value does not bind either.
         /// </summary>
-        private static bool AllSharperImplicitItLambdasUseIt(BoundExpression result, ArgumentListSyntax argumentList, int expected, out BoundLambda? lambdaWithoutIt)
+        private static bool AllSharperImplicitItLambdasUseIt(BoundExpression result, BaseArgumentListSyntax argumentList, int expected, out BoundLambda? lambdaWithoutIt)
         {
             var finder = new SharperImplicitItLambdaFinder(argumentList, expected);
             finder.Visit(result);
@@ -461,14 +732,14 @@ namespace Microsoft.CodeAnalysis.CSharp
 
         private sealed class SharperImplicitItLambdaFinder : BoundTreeWalkerWithStackGuardWithoutRecursionOnTheLeftOfBinaryOperator
         {
-            private readonly ArgumentListSyntax _argumentList;
+            private readonly BaseArgumentListSyntax _argumentList;
 
             public int Expected { get; }
             public int Found { get; private set; }
             public bool AllUseIt { get; private set; } = true;
             public BoundLambda? FirstWithoutIt { get; private set; }
 
-            public SharperImplicitItLambdaFinder(ArgumentListSyntax argumentList, int expected)
+            public SharperImplicitItLambdaFinder(BaseArgumentListSyntax argumentList, int expected)
             {
                 _argumentList = argumentList;
                 Expected = expected;
