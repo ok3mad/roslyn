@@ -84,8 +84,10 @@ The design is in the implementation plan, [Feature 12](../planning/implementatio
 ## Not supported yet
 
 - No lifting over `Task`, sequences and unions ([#32](https://github.com/ok3mad/roslyn/issues/32)).
-- A stage is not target-typed: `x |> (it > 0 ? 1 : null)` has no type, and a bare lambda stage is CS20048
-  ([#157](https://github.com/ok3mad/roslyn/issues/157)).
+- A stage is not target-typed: `x |> (it > 0 ? 1 : null)` has no type. Decided: it will be, as a switch expression's
+  arms are, with the natural type preferred ([#187](https://github.com/ok3mad/roslyn/issues/187)).
+- A bare lambda stage is CS20048. Decided: `x |> (y => y + 1)`, one parameter and an expression body, will name the
+  value, as `x |> it + 1` with `y` for `it` ([#186](https://github.com/ok3mad/roslyn/issues/186)).
 - IOperation: an `OperationKind.None` node whose only child is the left side; the stage is not in the control flow
   graph ([#155](https://github.com/ok3mad/roslyn/issues/155)).
 - The semantic model finds `it` by `GetSymbolInfo`, but `LookupSymbols` and speculative binding inside a stage do not
