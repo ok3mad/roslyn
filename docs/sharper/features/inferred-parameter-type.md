@@ -49,7 +49,10 @@ be reassigned. Uses in the body (P4 to P6) are the next steps of the
   default value with errors of its own reports only those. In both cases the parameter type is an error type, and the
   default value reports nothing more.
 - **No default value.** `infer x` without a default value takes its type from the member its method overrides or
-  implements (below). A parameter with neither reports CS20027.
+  implements (below). A parameter with neither reports CS20027. It never becomes a generic type parameter
+  (decided in [#79](https://github.com/ok3mad/roslyn/issues/79)): write the type, or make the method generic in
+  source (`(TA, TB) Pair<TA, TB>(TA a, TB b)`). Once uses in the body are a source (P4), CS20027 says why nothing
+  pinned the parameter, and the IDE (R5) offers both fixes.
 - **Nullable.** In a `#nullable enable` context, a default value that is a null constant gives an annotated type
   (`infer s = default(string)` is `string?`), and any other default value a type that is not annotated (`infer s = "a"`
   is `string`, so `M(null)` warns). Where nullable annotations are disabled at `infer`, the type is oblivious, as a
