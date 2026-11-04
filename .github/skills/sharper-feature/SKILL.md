@@ -333,6 +333,18 @@ implementation plan, "Feature 3"):
    `SyntaxFacts.IsInvoked` (`AdjustIdentifierMapIfAny`, for primary constructor captures): bind a callee that is not the
    expression of an invocation as a method group conversion would.
 
+39. **A body bound before its member's signature needs a stand-in member.** Every name lookup in a body reads the
+   method's parameters (`InMethodBinder`), and the binder reads its return type, ref kind and async state, so a body
+   that infers a parameter type cannot be bound with the method itself. Bind it with a placeholder method, as a lambda
+   gets a fresh `LambdaSymbol` per delegate type (`SharperPlaceholderMethodSymbol`): a `SourceMemberMethodSymbol` over
+   the same syntax and flags, with synthesized parameters, its own method-checks lock object, `IsImplicitlyDeclared`
+   false (the binder asserts on it) and no declaration diagnostics (`AssertMemberExposure` fails for a symbol that is not
+   a member of its type, for example when its attributes are bound). A recursive call would still read the real
+   signature through overload resolution: replace the method by the placeholder among the candidates. Read the result
+   from the final bound tree, where an error-typed placeholder argument leaves the single candidate in
+   `BoundCall.OriginalMethodsOpt` or `BoundBadExpression.Symbols`; anything the binding caches by syntax (a lambda's
+   inferred parameter type) must not be published from it.
+
 ## Inferred Types
 
 Inference from a body (`infer` return types, rows 10 and 15) reuses `var`'s rules for the natural type of an
@@ -358,6 +370,10 @@ parameters and the return, property or event type. Each member kind is described
 candidates' name and kind, parameters, type syntax); a new kind adds a case there, not a second search. C# matches overrides and
 implementations by complete signatures, which do not exist yet at that point, so such a search matches by name and
 parameter count and narrows with the types that are written. The design is in the implementation plan, "Feature 9".
+Step P4 shows the shape of a body source: `GetBodyInference` binds the body once with a placeholder method (trap 39),
+on the same stack (keyed by the parameter list), with R3's frames suspended so that reads of inferred return types
+start their own frames, and `UsesCollector` reads the uses that pin a type from the bound tree. A new body source (P5's
+overloads, P6's assignments and returns) is a new kind of use in the collector, not a second binding.
 
 ## Testing
 

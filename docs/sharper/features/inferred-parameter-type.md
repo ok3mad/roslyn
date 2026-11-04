@@ -1,10 +1,10 @@
 # Inferred parameter type (`infer`)
 
-**Status:** Prototype of steps P1 to P3, merged into `main`; P2 for properties, indexers, operators and events on
-branch `sharper/infer-p2-member-kinds`. Requires `/features:sharper`. Issues:
-[#72](https://github.com/ok3mad/roslyn/issues/72) (P1), [#73](https://github.com/ok3mad/roslyn/issues/73) (P2),
-[#166](https://github.com/ok3mad/roslyn/issues/166) (P2 for the other member kinds),
-[#74](https://github.com/ok3mad/roslyn/issues/74) (P3), under [#27](https://github.com/ok3mad/roslyn/issues/27).
+**Status:** Prototype of steps P1 to P3, merged into `main`; P4 on branch `sharper/infer-parameter-p4`. Requires
+`/features:sharper`. Issues: [#72](https://github.com/ok3mad/roslyn/issues/72) (P1),
+[#73](https://github.com/ok3mad/roslyn/issues/73) (P2), [#166](https://github.com/ok3mad/roslyn/issues/166) (P2 for the
+other member kinds), [#74](https://github.com/ok3mad/roslyn/issues/74) (P3),
+[#75](https://github.com/ok3mad/roslyn/issues/75) (P4), under [#27](https://github.com/ok3mad/roslyn/issues/27).
 
 ## Summary
 
@@ -31,7 +31,9 @@ The parameter is an ordinary parameter with that type: callers, overload resolut
 metadata all see `int retries = 3`. Step P1 takes the type from the default value (source 2 of the
 [brainstorm](../planning/brainstorm.md#inferred-parameter-types)), step P2 from the overridden or implemented member
 (source 1). Step P3 combines both with [`readonly`](readonly-parameters.md): `readonly infer x` is inferred and cannot
-be reassigned. Uses in the body (P4 to P6) are the next steps of the
+be reassigned. Step P4 takes the type from a use in the body (source 4): the parameter passed directly to a call
+with exactly one candidate (`profiles.Load(id)` with one `Load(int)`) gets that candidate's parameter type. Overloads
+and generic calls (P5) and other uses (P6) are the next steps of the
 [work breakdown](../planning/implementation-plan.md#type-inference-work-breakdown).
 
 ## Rules
@@ -49,7 +51,8 @@ be reassigned. Uses in the body (P4 to P6) are the next steps of the
   default value with errors of its own reports only those. In both cases the parameter type is an error type, and the
   default value reports nothing more.
 - **No default value.** `infer x` without a default value takes its type from the member its method overrides or
-  implements (below). A parameter with neither reports CS20027. It never becomes a generic type parameter
+  implements (below), or else from the uses in the body (step P4, below). A parameter with none of them reports
+  CS20027, which says why nothing pinned it. It never becomes a generic type parameter
   (decided in [#79](https://github.com/ok3mad/roslyn/issues/79)): write the type, or make the method generic in
   source (`(TA, TB) Pair<TA, TB>(TA a, TB b)`). Once uses in the body are a source (P4), CS20027 says why nothing
   pinned the parameter, and the IDE (R5) offers both fixes.
@@ -166,6 +169,66 @@ class Square(double side) : Shape
 Nothing is added for it: `readonly` is read from the parameter syntax (`ParameterHelpers.IsSharperReadOnly`), the type
 from the `infer` branch of `MakeParameter`, and the two never meet.
 
+## From uses in the body (step P4)
+
+A parameter with neither a default value nor a member to copy from takes its type from the body, when the body passes
+it directly to a call that has exactly one candidate:
+
+```csharp
+interface IProfiles { ProfileResult Load(int userId); }
+record Point(long X, long Y);
+
+class C(IProfiles profiles)
+{
+    public infer Hello(infer id) => profiles.Load(id);         // ProfileResult Hello(int id)
+    public Point Make(infer x, infer y) => new Point(x, Y: y); // Point Make(long x, long y)
+    public int Call(Func<string, int> f, infer s) => f(s);     // int Call(Func<string, int> f, string s)
+    infer Len(infer s) => s.Length;                            // error CS20027: ... a member access pins nothing
+}
+```
+
+- **What pins a type.** The parameter itself, as a by-value argument (by position or by name) of a method call, an
+  object creation (also target-typed `new(x)`), a constructor initializer (`: base(x)`, `: this(x)`) or a delegate
+  invocation, when the call has exactly one candidate: one method of that name, one constructor, or the delegate's
+  `Invoke`. The parameter gets that candidate's parameter type as declared there, with its nullable annotation and the
+  type arguments of the candidate's type substituted (`IRepo<User>.Put(T)` pins `User`). An `in` or `ref readonly`
+  parameter pins its type. `Ext.Twice(x)` pins, and so does an argument of the extension call `p.Pad(x)`.
+- **What pins nothing.** Shape never pins: member access (`s.Length`, also as the receiver of an extension method,
+  `x.Twice()`), operators, type tests (`is`, `as`, patterns, `switch`) and interpolations. Not yet (P5 and P6): a call
+  with more than one candidate (`Console.WriteLine(x)`), a parameter whose type is a type parameter of the candidate
+  (`Generic(x)` for `Generic<T>(T t)`; with the type argument written, `Generic<long>(x)` pins `long`), a `params`
+  parameter, `ref` and `out` arguments, assignments, returns, casts and other expressions around the parameter.
+- **Several uses** must agree: the same type, ignoring nullability and tuple element names (`string?` and `string`
+  give `string`, which both accept; `(int a, int b)` and `(int x, int y)` give `(int, int)`). Uses that need different
+  types report CS20057, which names two of them with their candidates (`'int' for 'C.Take(int)' and 'long' for
+  'C.TakeLong(long)'`) and points at both.
+- **Nothing pins it.** CS20027 says why, from the first use that pins nothing: "a member access pins nothing", "an
+  operator pins nothing", "a type test pins nothing", "an interpolation pins nothing", "a call to 'Over', which has more
+  than one candidate, pins nothing yet", "'Generic' takes a type parameter there, which pins nothing yet", "a params
+  parameter pins nothing yet", "a ref or out argument pins nothing yet", "no use passes it directly to a call with one
+  candidate", or "the body does not use it". The use is an additional location of the error. Members whose body is no
+  source keep "nothing else gives its type". The parameter never becomes generic
+  ([#79](https://github.com/ok3mad/roslyn/issues/79)).
+- **Precedence.** The member that is overridden or implemented (P2), then the default value (P1), then the body. The
+  body is consulted only when neither gives the type; a use that does not accept the type of a higher source reports
+  the C# error of the twin with the type written (CS1503 names both types).
+- **Lambdas and local functions in the body** count like the rest of it: `xs.Select(x => profiles.Load(id))` pins
+  `id`. A lambda or local function parameter with the same name hides the parameter and is not a use of it. A lambda's
+  or local function's own `infer` parameter without a default value still reports CS20027.
+- **Recursion.** A call to the method itself, or to one of its overloads, binds to a placeholder for the method, so
+  `string Recursive(infer x, int n) => n == 0 ? Take(x) : Recursive(x, n - 1);` infers `x` from `Take`. The method's own
+  parameters being inferred pin nothing, and its written ones pin as any other (`Swap(int a, infer b) => ...
+  Swap(b, a - 1)` gives `b` the type `int`).
+- **Cycles.** A body that needs its own member's signature through other members whose types are inferred
+  (`P(infer x) => Q(x)` and `Q(infer y) => P(y)`, or a return type inferred from the member, R3) reports CS20056 on every
+  parameter inferred from a body of the cycle, whichever member is used first. Overload resolution reads every
+  candidate's signature, so two constructors with `infer` parameters whose initializers call the other overloads are a
+  cycle too.
+- **Members.** Methods of any accessibility, also extension methods, constructors, operators and conversion operators.
+  Lambdas, local functions, indexers, primary constructors and delegates have no body source yet (CS20027).
+- **Generics.** The method's own type parameters are in scope (`Owner<T>(IRepo<T> r, infer x) => r.Put(x)` gives `x`
+  the type `T`); a type parameter of a local function or a lambda in the body pins nothing.
+
 ## How it works
 
 No syntax, bound node or lowering is added: `infer` parses as a type name, and the binder decides.
@@ -202,7 +265,19 @@ No syntax, bound node or lowering is added: `infer` parses as a type name, and t
 6. **Events bind their type in their constructor**, before they are members of their type, so their search runs there.
    It reads only base types and interfaces, whose members are complete by then, and binds the written types with the
    binder of the containing type, without looking the event up.
-7. **Semantic model.** `GetTypeInfo` and `GetSymbolInfo` on a parameter's `infer`, and on a copied `infer` return,
+7. **Uses in the body** (P4). The body is bound once more, before the signature, with a stand-in for the member
+   (`SharperPlaceholderMethodSymbol`): its parameters have the types the signature will have where they are known,
+   and an error type, the placeholder, for the parameters being inferred. The placeholder converts to nothing, so a
+   call it pins fails overload resolution, and the binder's error recovery keeps the single candidate and the call's
+   type; the rest of the body binds as it will. The uses are read from the bound tree (`UsesCollector`), so a lambda's
+   trial bindings for rejected delegate types do not count. A call whose candidates include the member itself binds
+   to the placeholder (`ReplaceOriginal`, in overload resolution and constructor lookup), so recursion reads no
+   signature being inferred. The result is kept per parameter list, on the stack of default values and overridden
+   members (`GetBodyInference`, from `InferBeforeSignature`), and published once; while the placeholder body is bound,
+   return type inference (R3) is suspended, so its reads start their own frames, and the default values of lambdas and
+   local functions in that body are not cached. The body is then bound normally, against the real types, when the
+   member is compiled, and reports its errors there.
+8. **Semantic model.** `GetTypeInfo` and `GetSymbolInfo` on a parameter's `infer`, and on a copied `infer` return,
    property, indexer or event type, return the type, with its nullable annotation, like `var`.
 
 ## Follow-ups
@@ -223,6 +298,13 @@ No syntax, bound node or lowering is added: `infer` parses as a type name, and t
 - The race in publishing a cycle's results has no deterministic test: [#168](https://github.com/ok3mad/roslyn/issues/168).
 - Edit and Continue does not see a signature change that comes from the overridden or implemented member:
   [#169](https://github.com/ok3mad/roslyn/issues/169).
+- P4 binds a member's body once more, without flow analysis, when it has an `infer` parameter that neither a default
+  value nor an overridden member gives a type, once per compilation. Nothing else is rebound, but every new
+  compilation (an edit) infers again.
+- A call elsewhere to a member of a body cycle (CS20056) reports CS1503 for the argument whose parameter is an error
+  type, after the cycle error.
+- Edit and Continue does not see a signature change that comes from a body edit that changes a pinning use, as for
+  the overridden member ([#169](https://github.com/ok3mad/roslyn/issues/169)).
 - The IDE does not know `infer` yet (R5, [#71](https://github.com/ok3mad/roslyn/issues/71)).
 
 ## Code
@@ -238,3 +320,7 @@ and `CSharpSemanticModel.GetSharperInferredPropertyOrEventType` for the semantic
 `SharperTests.cs`, `InferOverridden_*` in `SharperTests_InferFromOverridden.cs`, P2's other member kinds'
 `InferMemberKinds_*` in `SharperTests_InferMemberKinds.cs`, and step P3's `ReadonlyInfer_*` in
 `SharperTests_ReadonlyInfer.cs`.
+Step P4: `Symbols/Source/SharperInferredParameterType_Body.cs`, `Symbols/Source/SharperPlaceholderMethodSymbol.cs`,
+the `ReplaceOriginal` calls in `OverloadResolution.MethodInvocationOverloadResolution` and
+`Binder.GetAccessibleConstructorsForOverloadResolution`, and `SharperInferredReturnType.SuspendInference`; tests
+`InferFromBody_*` in `SharperTests_InferFromBody.cs`.
