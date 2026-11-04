@@ -50,6 +50,27 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         /// <summary>The method this symbol stands for.</summary>
         internal SourceMemberMethodSymbol Original => _original;
 
+        /// <summary>
+        /// Replaces the original method among the candidates of a call in the body with this placeholder. A recursive call,
+        /// or a call to an overload of the method, then reads the placeholder's parameters instead of the signature that
+        /// is being inferred, which would be a cycle. The placeholder's parameter types pin nothing.
+        /// </summary>
+        internal void ReplaceOriginal(ArrayBuilder<MethodSymbol> candidates)
+        {
+            int index = candidates.IndexOf(_original);
+            if (index >= 0)
+            {
+                candidates[index] = this;
+            }
+        }
+
+        /// <inheritdoc cref="ReplaceOriginal(ArrayBuilder{MethodSymbol})"/>
+        internal ImmutableArray<MethodSymbol> ReplaceOriginal(ImmutableArray<MethodSymbol> candidates)
+        {
+            int index = candidates.IndexOf(_original);
+            return index >= 0 ? candidates.SetItem(index, this) : candidates;
+        }
+
         public override string Name => _original.Name;
 
         public override ImmutableArray<ParameterSymbol> Parameters => _parameters;
