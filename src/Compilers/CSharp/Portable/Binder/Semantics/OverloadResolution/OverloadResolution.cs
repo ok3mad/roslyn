@@ -162,6 +162,12 @@ namespace Microsoft.CodeAnalysis.CSharp
             var placeholder = _binder.ContainingMember() as SharperPlaceholderMethodSymbol;
             placeholder?.ReplaceOriginal(methods);
 
+            // Sharper: the delegate types a local function whose parameter types are being inferred is converted to (step P7).
+            if ((options & (Options.IsMethodGroupConversion | Options.IsFunctionPointerResolution)) == Options.IsMethodGroupConversion)
+            {
+                SharperInferredParameterType.RecordMethodGroupConversion(_binder, methods, arguments);
+            }
+
             MethodOrPropertyOverloadResolution(
                 methods, typeArguments, receiver, arguments, result,
                 ref useSiteInfo, options,

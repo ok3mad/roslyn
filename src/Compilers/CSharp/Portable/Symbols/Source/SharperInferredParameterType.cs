@@ -103,11 +103,12 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             {
                 // A parameter of a method that overrides or implements a member takes its type from there instead
                 // (GetOverriddenSignature, in ParameterHelpers.MakeParameter). Otherwise the uses in the body may give it
-                // (steps P4 to P6; a function type, P7, will come before them), or the parameter has no source.
-                if (GetResultFromBody(owner, parameter) is { } fromBody)
+                // (steps P4 to P6), the delegate types a local function is converted to (step P7), or the parameter has no
+                // source. A local function has no body source, and a member no conversion source yet.
+                if ((GetResultFromConversions(owner, parameter) ?? GetResultFromBody(owner, parameter)) is { } inferred)
                 {
-                    diagnostics.AddRange(fromBody.Diagnostics, allowMismatchInDependencyAccumulation: true);
-                    return fromBody.Type;
+                    diagnostics.AddRange(inferred.Diagnostics, allowMismatchInDependencyAccumulation: true);
+                    return inferred.Type;
                 }
 
                 diagnostics.Add(ErrorCode.ERR_SharperInferParameterNoDefault, parameter.Type.Location, parameter.Identifier.ValueText, MessageID.IDS_SharperInferNothingElseGivesType.Localize());

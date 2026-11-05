@@ -176,6 +176,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 ConstructorDeclarationSyntax constructor => constructor.Identifier.ValueText,
                 OperatorDeclarationSyntax @operator => "operator " + @operator.OperatorToken.ValueText,
                 ConversionOperatorDeclarationSyntax conversion => conversion.ImplicitOrExplicitKeyword.ValueText + " operator",
+                LocalFunctionStatementSyntax localFunction => localFunction.Identifier.ValueText,
                 var other => throw ExceptionUtilities.UnexpectedValue(other?.Kind()),
             };
 
@@ -302,15 +303,19 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
         /// <summary>
         /// The type of <paramref name="parameter"/> from the uses that pin it: none is CS20027, which says why with the
-        /// first use that pins nothing, uses that agree give their type, and uses that disagree are CS20057, naming the
-        /// first two that differ.
+        /// first use that pins nothing (or <paramref name="noUseReason"/>), uses that agree give their type, and uses that
+        /// disagree are CS20057, naming the first two that differ. Uses that the parameter flows into merge their
+        /// nullability with <see cref="VarianceKind.In"/> (not annotated wins); the delegate types a local function is
+        /// converted to (step P7) flow into it, with <see cref="VarianceKind.Out"/> (annotated wins).
         /// </summary>
         private static Result DecideFromUses(
             ParameterSyntax parameter,
             ArrayBuilder<PinningUse>? uses,
             (SyntaxNode Syntax, IFormattable Reason)? firstNotPinning,
             BindingDiagnosticBag dependencies,
-            CSharpCompilation compilation)
+            CSharpCompilation compilation,
+            IFormattable? noUseReason = null,
+            VarianceKind variance = VarianceKind.In)
         {
             var diagnostics = BindingDiagnosticBag.GetInstance(withDiagnostics: true, withDependencies: true);
             TypeWithAnnotations type;
@@ -328,7 +333,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 }
                 else
                 {
-                    diagnostics.Add(ErrorCode.ERR_SharperInferParameterNoDefault, parameter.Type!.Location, parameter.Identifier.ValueText, MessageID.IDS_SharperInferNotUsedInBody.Localize());
+                    diagnostics.Add(ErrorCode.ERR_SharperInferParameterNoDefault, parameter.Type!.Location, parameter.Identifier.ValueText, noUseReason ?? MessageID.IDS_SharperInferNotUsedInBody.Localize());
                 }
                 type = CreateErrorType(compilation);
             }
@@ -347,7 +352,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     }
 
                     // A type that every use accepts: not annotated wins, as for the inputs of a lambda.
-                    type = type.MergeEquivalentTypes(use.Type, VarianceKind.In);
+                    type = type.MergeEquivalentTypes(use.Type, variance);
                 }
 
                 if (disagreeing is { } other)
@@ -406,7 +411,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
         /// <summary>
         /// True while <paramref name="parameter"/>, a parameter of a lambda or local function, is in a body that is bound
-        /// with placeholders on this thread: its inferred type may depend on a placeholder, so it is not published.
+        /// with placeholders on this thread (for the member's own parameters, P4, or for a local function's, P7): its inferred type may depend on a placeholder, so it is not published.
         /// </summary>
         private static bool IsInPlaceholderBody(ParameterSyntax parameter)
         {
@@ -417,9 +422,11 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
             foreach (var body in bodies)
             {
+                // The body of top-level statements (step P7) holds only the global statements of its compilation unit.
                 if (body.SyntaxTree == parameter.SyntaxTree &&
                     body.Span.Contains(parameter.Span) &&
-                    parameter.Parent != ((BaseMethodDeclarationSyntax)body).ParameterList)
+                    parameter.Parent != (body as BaseMethodDeclarationSyntax)?.ParameterList &&
+                    (body is not CompilationUnitSyntax || parameter.FirstAncestorOrSelf<GlobalStatementSyntax>() is not null))
                 {
                     return true;
                 }
