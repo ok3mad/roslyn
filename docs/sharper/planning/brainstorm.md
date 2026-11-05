@@ -231,43 +231,25 @@ Idiomatic C# passes interfaces where a functional style would pass functions, pa
 - **Argument matching.** A switch expression in the lambda body does the job, so `When(42).Returns(...)` becomes `id => id switch { 42 => new Profile { ... }, _ => new Unavailable() }`.
 - **What it does not cover:** interaction verification (was `Load` called twice?), which works by capturing a list in the lambda, and auto-mocking of very large interfaces.
 
-## Discard arguments (proposed, not yet discussed)
+## Discard arguments (dropped)
 
-Tracked in [#40](https://github.com/ok3mad/roslyn/issues/40).
+Tracked in [#40](https://github.com/ok3mad/roslyn/issues/40). The proposal: a `_` argument, as in
+`store.LoadAsync(_)`, passes the only local or parameter in scope that fits the parameter, such as the one
+`CancellationToken`. Dropped, for these reasons:
 
-A `_` in argument position asks the compiler to fill in the argument from the caller's scope. The motivating case is
-`CancellationToken`: most async code receives exactly one token and forwards it to every call, so the name is
-repeated everywhere and is easy to forget.
-
-```
-async void~ Sync(Store store, CancellationToken ct)
-{
-    val items = await store.LoadAsync(_);       // ct is the only CancellationToken in scope
-    await store.SaveAsync(items, _);
-}
-```
-
-- **The rule, as a starting point.** For a `_` argument, collect the locals and parameters in scope whose type fits
-  the parameter it binds to. Exactly one candidate means it is passed; none or several is an error that lists the
-  candidates.
-- **No breaking change.** Today `_` in an argument is either a real variable named `_` (then C# wins) or an error
-  (CS0103), so Sharper only gives a meaning to code that does not compile.
-- **Not to be confused** with the existing discards: `out _`, `var _`, `_ =` and `(_, _) =>` lambda parameters.
-
-To discuss before this goes further:
-
-- **Is it a sound idea?** It is an implicit argument, much like Scala's implicits, and implicit wiring tends to read
-  well and debug badly: a new local of the same type turns working code into an error, or worse, changes which
-  value is passed if the rule were ever relaxed. For coding agents, explicit names may be easier to check.
-- **Which candidates count:** only locals and parameters, or also fields and properties of `this`? Exact type, or
-  any implicit conversion? `CancellationToken` only, or any type?
-- **Overload resolution.** A `_` argument has no type of its own, so each overload candidate may pick a different
-  value. This makes the feature an L in the roadmap's terms, not an S.
-- **Prior art in C#:** the CA2016 analyzer already asks to forward a `CancellationToken`, and an optional
-  `CancellationToken ct = default` parameter compiles when it is left out, which is exactly the bug `_` would
-  make visible.
-- **Alternatives:** an analyzer and fixer that inserts the name; a marker on the parameter (for example an
-  attribute) that opts it into automatic forwarding, so call sites stay unchanged; or nothing.
+- **Implicit wiring.** Like Scala's implicits, it reads well and debugs badly: a second token in scope, even a local
+  in a `using` block, breaks calls elsewhere. The explicit name is easier for people and coding agents to check.
+- **`_` already has meanings next to arguments.** `out _`, `out var _` and a `_` in a deconstruction are discards, and
+  a symbol named `_` wins, such as the parameter in `_ => Use(_)`. Only the leftovers report CS0103, and among them
+  are `(_, _) => F(_)` and the pipe stage `x |> (_ => F(_))`, whose `_` parameters are discards, so the `_` there
+  would quietly pick a variable from the enclosing scope.
+- **Overload resolution.** A `_` has no type, so each candidate could pick a different value. It would need a new
+  target-typed argument kind through overload resolution, type inference, named and optional arguments, flow analysis
+  and IOperation: an L even when limited to `CancellationToken`.
+- **The analyzer already covers the motivating case.** CA2016 (from `Microsoft.CodeAnalysis.NetAnalyzers`) reports a
+  call that does not forward the enclosing method's `CancellationToken`, including an optional `ct = default` left
+  out, and its fixer inserts the name. Turn it on as a warning; it is already one in this repository's
+  `Shipping.globalconfig`. An opt-in attribute on the parameter was also rejected: it changes what C# callers see.
 
 ## Patterns on pure functions
 
@@ -812,6 +794,7 @@ What is settled so far, what was tried and dropped, and what waits for a later s
 - `finally` and multi-argument lifting.
 - Overloads declared through arms, and separate repeated `fun` clauses: they interact badly with overload resolution, and overlapping patterns across clauses have no clear meaning. A C# switch expression over the parameters does the job.
 - The parameter switch body, `int Sign(int i) => switch { ... }`, and the same form on a lambda, `id => switch { ... }`. Rejected: once the clauses above were dropped, all it saved over `i switch` or `(a, b) switch` was the governing expression. It made nothing stricter, and it needed its own rules for `out`, ref struct and missing parameters.
+- Discard arguments, `store.LoadAsync(_)` passing the only fitting local or parameter (#40). Rejected: implicit wiring that a second variable of the same type breaks, a `_` that already means a discard or a real variable next to arguments, and an L in overload resolution, while CA2016 and its fixer already forward a `CancellationToken`. See [Discard arguments](#discard-arguments-dropped).
 - The `fun` declaration. It bundled return type inference, immutable-by-default parameters, ordered arms, inferred parameter domains, a strict scope and the effect modifiers, so none of them could be built or judged alone. Each is now a separate element on ordinary methods (see [Functions as separate elements](#functions-as-separate-elements)), and the defaults moved to the strictness ladder. The keyword itself is parked, not dropped.
 - `var` as an inferred return type: `var` means variable, and a return type is not one. Replaced by `infer`.
 - Parameter types inferred from a function's callers: editing one caller would change the callee, and that is whole-program inference.
@@ -821,7 +804,6 @@ What is settled so far, what was tried and dropped, and what waits for a later s
 ### Parked
 
 - A member declared on another type, `static infer Currency.Parse(string s) => ...` (#37). C# 14 extension blocks already do it, with `infer` and `[Pure]` on their members, so the shorthand would only save the wrapper class. If it comes back: file level only, where the dotted form is never valid C# (CS0116 or CS9348, plus CS0538), lowered to an extension block in a synthesized static class; inside a type it stays an explicit interface implementation. Open then: the synthesized class's name, instance members and their receiver, and a warning when a member of the type itself shadows it.
-- Discard arguments (`F(x, _)` passes the only fitting local), to be discussed: see [Discard arguments](#discard-arguments-proposed-not-yet-discussed).
 - Exceptions beyond the basics: one "may throw" bit versus typed throws.
 - The boundary with C#: runtime guards on public entry points, and how refined parameter types lower.
 - A virtual-thread feel for concurrency by inferring "may suspend".

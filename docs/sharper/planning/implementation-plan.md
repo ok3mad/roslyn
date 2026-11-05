@@ -96,7 +96,7 @@ A new construct's real cost is in the places that never mention it. Model it on 
 
 ## Syntax roadmap
 
-The brainstorm proposes 26 pieces of syntax (#28, discard arguments, is still to be discussed). Rows 14 and 26, the parameter switch body and its lambda form, were rejected (see [Dropped](brainstorm.md#dropped)), and the other rows keep their numbers. Each row has a GitHub issue, collected under the tracking issue [#12](https://github.com/ok3mad/roslyn/issues/12). Nine are done: `yield return ..xs`, `val` in locals, deconstruction, patterns and lambda parameters, `readonly` locals and parameters, the sequence type `T[..]` and function types `(A, B) -> R`. Everything that depends on unions or purity waits for those designs.
+The brainstorm proposes 26 pieces of syntax, and row 28, discard arguments, was proposed later. Rows 14 and 26, the parameter switch body and its lambda form, and row 28 were rejected (see [Dropped](brainstorm.md#dropped)), and the other rows keep their numbers. Each row has a GitHub issue, collected under the tracking issue [#12](https://github.com/ok3mad/roslyn/issues/12). Nine are done: `yield return ..xs`, `val` in locals, deconstruction, patterns and lambda parameters, `readonly` locals and parameters, the sequence type `T[..]` and function types `(A, B) -> R`. Everything that depends on unions or purity waits for those designs.
 
 - **Size**, relative to the `yield return ..xs` PoC. **S**: about that size (no parser change, one bound node, reused lowering). **M**: a gated parser change, or a new lowering with its own rules. **L**: new inference or binding rules that interact with overload resolution or signature binding. **XL**: a new checker layer (refinements, unions, effects).
 - **Certainty**. **High**: decided in the brainstorm, spelling stable. **Med**: the leading direction, details or spelling open. **Low**: only sketched in examples, contradicted elsewhere, or blocked on an open question.
@@ -141,12 +141,6 @@ The brainstorm proposes 26 pieces of syntax (#28, discard arguments, is still to
 | 24 | `pure` and `total` modifiers | `total int Fib(...)`, `pure(provider)` | erased, plus attributes | small | XL (syntax alone S) | Low | Needs the whole effect checker and bindings for existing .NET code | [#36](https://github.com/ok3mad/roslyn/issues/36) |
 | 25 | Member declared on another type | `static infer Currency.Parse(string s)` | C# 14 extension block | yes | M | Deferred | C# 14 `extension(Currency) { ... }` blocks already cover it, with `infer` and `[Pure]` on their members, so the shorthand only saves a wrapper class. If revived: file level only, where the dotted form is never valid C# (CS0116 or CS9348, plus CS0538); inside a type it stays an explicit interface implementation. See [Parked](brainstorm.md#parked) | [#37](https://github.com/ok3mad/roslyn/issues/37) |
 | 27 | `assume` escape hatch | `assume x is >0` | runtime check | yes | S–M | Low | Only an open question so far | [#39](https://github.com/ok3mad/roslyn/issues/39) |
-
-### Proposed, to be discussed
-
-| # | Syntax | Example | Lowers to | Parser change | Size | Certainty | Main risk or open point | Issue |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 28 | Discard arguments | `store.LoadAsync(_)` | the only fitting local or parameter in scope, such as the one `CancellationToken` | none (`_` parses as an identifier) | L | Low | Not yet discussed whether it is sound: implicit wiring, which candidates count, and interaction with overload resolution. See [Discard arguments](brainstorm.md#discard-arguments-proposed-not-yet-discussed) | [#40](https://github.com/ok3mad/roslyn/issues/40) |
 
 Not listed: `union Name(A, B)` comes from C# 15, and `collect`, `Retry` and `Unexpected` are library code.
 
