@@ -1,9 +1,9 @@
 # Inferred return type (`infer`)
 
-**Status:** Prototype of steps R1 to R3, merged into `main`; step R4 on branch `sharper/infer-return-r4`. Requires
-`/features:sharper`. Issues: [#67](https://github.com/ok3mad/roslyn/issues/67) (R1),
+**Status:** Prototype of steps R1 to R5 (R5 is the IDE), merged into `main`. Requires `/features:sharper`. Issues: [#67](https://github.com/ok3mad/roslyn/issues/67) (R1),
 [#68](https://github.com/ok3mad/roslyn/issues/68) (R2), [#69](https://github.com/ok3mad/roslyn/issues/69) (R3),
-[#70](https://github.com/ok3mad/roslyn/issues/70) (R4), under [#22](https://github.com/ok3mad/roslyn/issues/22).
+[#70](https://github.com/ok3mad/roslyn/issues/70) (R4), [#71](https://github.com/ok3mad/roslyn/issues/71) (R5), under
+[#22](https://github.com/ok3mad/roslyn/issues/22).
 
 ## Summary
 
@@ -39,8 +39,8 @@ The method is an ordinary method with that return type: callers, the semantic mo
 `string Greeting(int)`. Steps R1 to R3 cover the bodies of private methods and local functions: expression bodies
 (R1), block bodies, iterators and `async` (R2), and inferred methods that use each other (R3). Step R4 covers every
 member kind and accessibility: public, internal and protected methods, `virtual` methods, partial methods, extension
-block members, operators and conversion operators. The IDE (R5) is the next step of the
-[work breakdown](../planning/implementation-plan.md#type-inference-work-breakdown).
+block members, operators and conversion operators. Step R5 is the [IDE](#ide-step-r5), for inferred return and
+parameter types.
 
 ## Rules
 
@@ -115,6 +115,54 @@ block members, operators and conversion operators. The IDE (R5) is the next step
   (CS20018).
 - **Extension block members**, operators included, infer like other members; the implementation methods take the
   inferred type.
+
+## IDE (step R5)
+
+The IDE knows `infer` in Sharper documents: a `.cx` document, or any document of a project with
+`<Features>sharper</Features>`. In a plain C# document `infer` keeps its C# meaning, a type name, and nothing below
+applies. The language server uses the same services, so VS Code gets the same behavior. What applies to return types
+applies to the `infer` types of parameters, properties, indexers and events too
+([inferred parameter type](inferred-parameter-type.md)).
+
+```csharp
+private static infer Greeting(int id) => $"Hello, {id}!";      // Quick Info: string C.Greeting(int id)
+                                                               // inlay hint: infer string Greeting(...)
+void Fetch(string url, infer retries = 3) { }                  // inlay hint: infer int retries
+static string F(infer n) => Format(n, "N2");                    // CS20027; fix: Write the type 'int' / 'double'
+```
+
+- **Quick Info** shows the inferred types wherever the member is: on its name or on a call, as for a written type.
+  On `infer` itself it shows the type `infer` stands for, as on `var`.
+- **Inlay hints** for implicit types (the option that shows the type of `var`) show the type after `infer`, before the
+  name that follows it: `infer string Greeting(int id)`. Double-clicking the hint writes the type in place of
+  `infer`; "display all" shows the type over `infer`. Where nothing could be inferred (CS20027 and the like) there is
+  no hint.
+- **Classification.** `infer` is a keyword where the compiler infers a type (the return type of a method, local
+  function, operator or conversion operator, and the type of a parameter, property, indexer or event), unless a type
+  named `infer` is in scope. Elsewhere, as in a field type, it is an identifier, as for the compiler.
+- **Completion** offers `infer` where a member's return type, a local function, a parameter type, a lambda parameter
+  type or a conversion operator's type can start, and at the start of a statement (a local function).
+- **Write the type '{0}'** (refactoring) on `infer` replaces it with the inferred type, written with the shortest name
+  that binds there. Not offered for an anonymous type, which has no name to write, or where nothing was inferred.
+- **Use 'infer'** (refactoring) on a written return, parameter or member type replaces it with `infer` when the
+  document with `infer` in place gives the member the same type, nullable annotations included, and no new errors.
+  So it is not offered for `IEnumerable<int> F() => new List<int>()` (infers `List<int>`), `string? F(string s) => s`
+  (infers `string`), `async ValueTask<T>` (infers `Task<T>`), a recursive method (CS20018), a parameter that nothing
+  would pin (CS20027), `void`, or where a type named `infer` is in scope. It is offered on members of every
+  accessibility: it is a deliberate action. The upgrade analyzers that would suggest it (IDE20009 and IDE20010 in
+  [upgrade analyzers](../planning/upgrade-analyzers.md)) are not built yet.
+- **The fix for CS20027 and CS20057** writes the parameter type. Where CS20027 says that the candidates of a call
+  disagree, it offers the type each candidate takes; for CS20057 (uses that need different types), the type of each
+  use; otherwise `object`. This is the fix that [step P8](../planning/implementation-plan.md#type-inference-work-breakdown)
+  leaves to R5.
+- **Go to definition and Find all references** on calls to members with inferred signatures, and on their `infer`
+  parameters, need nothing new: the symbols are ordinary ones. Tests check them.
+
+The IDE needs no compiler API for this: the semantic model already gives the inferred types (`GetTypeInfo` and
+`GetSymbolInfo` on `infer`, and the declared symbols), and whether `infer` is the keyword follows from the syntax, the
+parse options and the symbol `infer` binds to, as in Edit and Continue (`IsSharperReturnTypeInferred`). The one gap is
+the list of types in CS20027's message, which is not public: the fix rebuilds it from the error's additional
+locations (the use that pinned nothing, or the disagreeing arguments) and the candidates of the call there.
 
 ## Not supported yet
 
@@ -206,7 +254,9 @@ The design for the later steps, and why, is in the implementation plan:
 - Async iterators, which would return `IAsyncEnumerable<T>`.
 - CS20018 and CS20033 are reported on `infer`, not on the use in the body, because the use is found through the
   symbol, which has no syntax.
-- The IDE does not know `infer` yet (R5, [#71](https://github.com/ok3mad/roslyn/issues/71)).
+- IDE (R5): the fix for CS20027 does not offer to make the method generic, and offers the types of every candidate of
+  the call, also those the compiler ruled out because the other arguments do not fit; CS20014, CS20024 and CS20026
+  have no fix yet ([#201](https://github.com/ok3mad/roslyn/issues/201)).
 
 ## Code
 
@@ -218,4 +268,8 @@ and `BoundLambda.InferSharperReturnType`; for R4, the operator's `InferredReturn
 `SourceUserDefinedOperatorSymbolBase`, `ReturnTypeFromPartialImplementation` in `SourceOrdinaryMethodSymbol`, and
 `IsSharperReturnTypeInferred` in the Edit and Continue analyzers. Tests: `Infer_*` and `Infer_Block_*` in
 `SharperTests.cs`; R3's are `Infer_UsesInferredMethod*` and `Infer_Cycle*`; R4's are `InferMember_*` in
-`SharperTests_InferEveryMember.cs` and `SharperTopLevelEditingTests` in the C# Features tests.
+`SharperTests_InferEveryMember.cs` and `SharperTopLevelEditingTests` in the C# Features tests. The IDE (R5): `SharperFacts` in
+`src/Workspaces/CSharp/Portable/Sharper/` (what `infer` is, and whether a document is Sharper), the `infer` branches of
+`NameSyntaxClassifier` and `CSharpInlineTypeHintsService`, `InferKeywordRecommender`, and the refactorings and the
+fix in `src/Features/CSharp/Portable/Sharper/InferredTypes/`; tests in `src/Features/CSharpTest/Sharper/` and
+`InferKeywordRecommenderTests` in `src/EditorFeatures/CSharpTest2/Recommendations/`.

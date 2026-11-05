@@ -24,7 +24,7 @@ internal sealed class SharperWriteInferredTypeCodeRefactoringProvider() : CodeRe
 {
     public override async Task ComputeRefactoringsAsync(CodeRefactoringContext context)
     {
-        var (document, span, cancellationToken) = context;
+        var (document, _, cancellationToken) = context;
         if (document.Project.Language != LanguageNames.CSharp)
             return;
 

@@ -96,7 +96,7 @@ Not done yet:
 | [`readonly` parameters](features/readonly-parameters.md) | `void F(readonly int x)` declares a parameter that cannot be reassigned; it is not part of the signature. | Prototype | [#23](https://github.com/ok3mad/roslyn/issues/23), [#97](https://github.com/ok3mad/roslyn/issues/97) |
 | [Sequence type](features/sequence-type.md) | `T[..]` is `IEnumerable<T>` in every type position. | Prototype, merged into `main` | [#19](https://github.com/ok3mad/roslyn/issues/19) |
 | [Task type](features/task-type.md) | `T~` is `Task<T>`, and `void~` is `Task`. | Prototype, merged into `main` | [#20](https://github.com/ok3mad/roslyn/issues/20) |
-| [Inferred return type](features/inferred-return-type.md) | `public static infer Greeting(int id) => $"Hello, {id}!";` returns `string`. Steps R1 to R3: expression and block bodies of private methods and local functions, iterators and `async`, inferred methods that use each other, and cycles. Step R4: every accessibility, `virtual`, partial methods, extension block members, operators and conversion operators, and Edit and Continue. | Prototype of steps R1 to R4, merged into `main` | [#67](https://github.com/ok3mad/roslyn/issues/67), [#68](https://github.com/ok3mad/roslyn/issues/68), [#69](https://github.com/ok3mad/roslyn/issues/69), [#70](https://github.com/ok3mad/roslyn/issues/70), under [#22](https://github.com/ok3mad/roslyn/issues/22) |
+| [Inferred return type](features/inferred-return-type.md) | `public static infer Greeting(int id) => $"Hello, {id}!";` returns `string`. Steps R1 to R3: expression and block bodies of private methods and local functions, iterators and `async`, inferred methods that use each other, and cycles. Step R4: every accessibility, `virtual`, partial methods, extension block members, operators and conversion operators, and Edit and Continue. Step R5: the IDE (Quick Info, inlay hints, classification, completion, writing the type out and back, the fix for CS20027). | Prototype of steps R1 to R5, merged into `main` | [#67](https://github.com/ok3mad/roslyn/issues/67), [#68](https://github.com/ok3mad/roslyn/issues/68), [#69](https://github.com/ok3mad/roslyn/issues/69), [#70](https://github.com/ok3mad/roslyn/issues/70), [#71](https://github.com/ok3mad/roslyn/issues/71), under [#22](https://github.com/ok3mad/roslyn/issues/22) |
 | [Inferred parameter type](features/inferred-parameter-type.md) | `void Fetch(string url, infer retries = 3)` gives `retries` the type of its default value, `int`. Step P1: default values, on every member kind and lambdas. Step P2: `public infer Load(infer userId)` implementing `IProfiles.Load` copies `Task<ProfileResult> Load(int userId)` from the member it overrides or implements; properties, indexers, operators and events copy too (`public override infer Name => "c";`). Step P3: `readonly infer x` cannot be reassigned. Step P4: `public infer Hello(infer id) => profiles.Load(id);` gives `id` the type of the one `Load`'s parameter, from a use in the body. Step P5: overloaded and generic calls pin it when every applicable candidate agrees (`Format(n, "N2")`, `dict.GetValueOrDefault(key)`). Step P6: assignments to typed locals, fields and properties, `return x` with a written return type, and `ref`, `out` and `in` arguments pin it too (`void Rename(infer name) { this.Name = name; }`; on `sharper/infer-parameter-p6`). | Prototype of steps P1 to P5, merged into `main`; P6 in progress | [#72](https://github.com/ok3mad/roslyn/issues/72), [#73](https://github.com/ok3mad/roslyn/issues/73), [#74](https://github.com/ok3mad/roslyn/issues/74), [#75](https://github.com/ok3mad/roslyn/issues/75), [#76](https://github.com/ok3mad/roslyn/issues/76), [#77](https://github.com/ok3mad/roslyn/issues/77), under [#27](https://github.com/ok3mad/roslyn/issues/27) |
 | [Immutable types](features/immutable-types.md) | `[Immutable] sealed record Money(decimal Amount, string Currency);` is checked to be deeply immutable; `[ImmutableHierarchy]` extends the claim to every subclass. Slice 1: the check, the attributes and their diagnostics. | Prototype of slice 1, on `sharper/immutable-types-slice1` | [#139](https://github.com/ok3mad/roslyn/issues/139), designed in [#92](https://github.com/ok3mad/roslyn/issues/92) |
 | [Purity](features/purity.md) | `[Pure] static int Fib(int i) => ...;` is checked to have no effect outside its own frame; its result depends only on the contents of its arguments. Slice 1, first part: declared `[Pure]` on non-virtual members, the attested BCL members, and the `out` warning. | Prototype of the first part of slice 1, on `sharper/purity-slice1` | [#173](https://github.com/ok3mad/roslyn/issues/173), [#177](https://github.com/ok3mad/roslyn/issues/177), under [#36](https://github.com/ok3mad/roslyn/issues/36) |
@@ -126,8 +126,8 @@ git grep -n "PROTOTYPE(sharper)"
   `sharper/readonly-locals`, `sharper/infer-return-r1`, `sharper/infer-return-r2`, `sharper/infer-return-r3`,
   `sharper/infer-parameter-p1`, `sharper/try-expression-slice1`, `sharper/implicit-it`, `sharper/readonly-parameters`,
   `sharper/immutable-types-slice1`, `sharper/infer-from-overridden-p2`, `sharper/infer-return-r4`, `sharper/pipe` and
-  `sharper/readonly-infer-p3`, `sharper/purity-slice1` and `sharper/infer-p2-member-kinds` are merged.
-  `sharper/infer-parameter-p4` is in progress.
+  `sharper/readonly-infer-p3`, `sharper/purity-slice1`, `sharper/infer-p2-member-kinds` and `sharper/infer-ide-r5` are
+  merged. `sharper/infer-parameter-p4` is in progress.
 
 ## Diagnostics
 
@@ -245,6 +245,18 @@ failures Sharper causes from the rest.
 
 ## Not covered yet
 
-Sharper currently changes only the C# compiler. The IDE (completion, classification, refactorings), the language
-server, Visual Basic, Razor and the expression evaluator know nothing about Sharper syntax yet, except that Edit and
-Continue tells a spread `yield return ..xs` from a plain yield return.
+Sharper mostly changes the C# compiler. The IDE (completion, classification, refactorings), the language server,
+Visual Basic, Razor and the expression evaluator know nothing about Sharper syntax yet, with two exceptions:
+
+- Edit and Continue tells a spread `yield return ..xs` from a plain yield return, and treats an edit that changes an
+  inferred return type as a rude edit.
+- The inferred types of `infer` (step R5): Quick Info and inlay hints show them, `infer` is classified as a keyword
+  and offered by completion, a refactoring writes the type out and its reverse replaces a written type with `infer`,
+  and a fix for CS20027 and CS20057 writes the parameter type. The language server gets these through the same
+  services. See [IDE](features/inferred-return-type.md#ide-step-r5).
+
+Every Sharper IDE feature works in Sharper documents only (a `.cx` document, or a project with
+`<Features>sharper</Features>`), through `SharperFacts.IsSharperEnabled` in `src/Workspaces/CSharp/Portable/Sharper/`;
+plain C# documents do not change. The other Sharper syntax (`val`, `T[..]`, `T~`, function types, `it`, `|>`, `try`
+expressions) has no IDE support yet, and the upgrade analyzers and fixers of
+[the proposal](planning/upgrade-analyzers.md) are not built yet.
