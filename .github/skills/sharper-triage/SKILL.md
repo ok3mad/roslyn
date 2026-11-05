@@ -21,6 +21,10 @@ below.
 - **Running** means the session's `session_status` is `SESSION_STATUS_RUNNING` (it is using tokens now). An idle
   session waiting for the user, or for its PR to be reviewed, is not running, but its open PR still counts as a work
   item in progress.
+- **Wrapping up is not running.** A work session that has already opened its PR and is only finishing (pushing, merging
+  `main` into the branch, re-running tests for the merge, merging the PR, filing follow-ups, archiving) does not count
+  toward the running limit, even while its status is `SESSION_STATUS_RUNNING`. Its PR counts as a work item until
+  it merges. Tell it apart by an open PR from that session plus a status summary about pushing, merging or filing.
 - **A work item** is backlog work: a running work session, or an open PR that closes a backlog issue or comes from a
   `triage:work` session. Tooling, infrastructure and docs PRs that close no issue (a devcontainer, a skill) are listed
   in the report as waiting for review, but do not count.
