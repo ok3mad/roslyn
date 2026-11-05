@@ -1703,6 +1703,13 @@
     <Field Name="OperatorKind" Type="BinaryOperatorKind"/>
     <Field Name="Value" Type="ConstantValue" Null="disallow"/>
   </Node>
+  <Node Name="BoundDagOpaqueTest" Base="BoundDagTest">
+    <!--Sharper: check that the input is related to the value of a pure, non-constant expression (an opaque pattern).
+        Nothing is known of its outcome but that an identical test has the same one; value sets are left alone.
+        Value is not lowered: the decision DAG rewriter lowers it where the test is evaluated.-->
+    <Field Name="OperatorKind" Type="BinaryOperatorKind"/>
+    <Field Name="Value" Type="BoundExpression" Null="disallow"/>
+  </Node>
   <!-- As a decision, an evaluation is considered to always succeed. -->
   <AbstractNode Name="BoundDagEvaluation" Base="BoundDagTest">
   </AbstractNode>
@@ -2709,6 +2716,18 @@
     <Field Name="Value" Type="BoundExpression"/>
     <Field Name="ConstantValue" Type="ConstantValue" Null="disallow"/>
     <Field Name="IsUnionMatching" Type="bool" PropertyOverrides="true"/>
+  </Node>
+
+  <!--
+    Sharper: a relational or constant pattern whose operand is not a constant (an opaque pattern), such as `> max`.
+    Relation is the comparison (Equal for a constant pattern) with its operand type, as for BoundRelationalPattern.
+    Value is converted to NarrowedType, the input type or, for an input of type object or a type parameter, the
+    operand's own type, which the match tests for first.
+  -->
+  <Node Name="BoundOpaquePattern" Base="BoundPattern">
+    <Field Name="Relation" Type="BinaryOperatorKind"/>
+    <Field Name="Value" Type="BoundExpression" Null="disallow"/>
+    <Field Name="IsConstantPattern" Type="bool"/>
   </Node>
 
   <Node Name="BoundDiscardExpression" Base="BoundExpression">

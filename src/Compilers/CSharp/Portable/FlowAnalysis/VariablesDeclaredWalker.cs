@@ -107,6 +107,10 @@ namespace Microsoft.CodeAnalysis.CSharp
                     VisitRvalue(relationalPattern.Value);
                     break;
 
+                case BoundOpaquePattern:
+                    // Sharper: the base visited the operand before the match.
+                    break;
+
                 case BoundNegatedPattern negatedPattern:
                     NoteDeclaredPatternVariables(negatedPattern.Negated);
                     break;

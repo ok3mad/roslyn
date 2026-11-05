@@ -388,6 +388,14 @@ namespace Microsoft.CodeAnalysis.CSharp
                         Debug.Assert(input.Type.IsValueType);
                         return MakeRelationalTest(d.Syntax, input, d.OperatorKind, d.Value);
 
+                    case BoundDagOpaqueTest d:
+                        // Sharper: the operand is evaluated where the test is (Feature 13).
+                        Debug.Assert(!input.Type.IsNullableType());
+                        Debug.Assert(d.Value.Type is not null && d.Value.Type.Equals(input.Type, TypeCompareKind.AllIgnoreOptions));
+                        BoundExpression value = _localRewriter.VisitExpression(d.Value);
+                        _factory.Syntax = d.Syntax;
+                        return MakeComparison(input, d.OperatorKind, value);
+
                     default:
                         throw ExceptionUtilities.UnexpectedValue(test);
                 }
@@ -437,6 +445,12 @@ namespace Microsoft.CodeAnalysis.CSharp
                 }
 
                 BoundExpression literal = _localRewriter.MakeLiteral(syntax, value, input.Type);
+                return MakeComparison(input, operatorKind, literal);
+            }
+
+            /// <summary>Compares the input with a value of its type, the literal of a constant or a pure operand.</summary>
+            private BoundExpression MakeComparison(BoundExpression input, BinaryOperatorKind operatorKind, BoundExpression literal)
+            {
                 TypeSymbol comparisonType = input.Type.EnumUnderlyingTypeOrSelf();
                 if (operatorKind.OperandTypes() == BinaryOperatorKind.Int && comparisonType.SpecialType != SpecialType.System_Int32)
                 {

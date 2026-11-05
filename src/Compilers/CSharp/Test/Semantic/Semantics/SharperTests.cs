@@ -3742,7 +3742,8 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         public void FunctionType_Pattern_PointerMemberAccess(bool sharper)
         {
             // `e is (p)->F` does not compile in C# (a syntax error), and neither with Sharper, where it is a type pattern
-            // with an unknown type. The C# constant pattern is written `e is p->F`, which keeps its meaning.
+            // with an unknown type. The C# constant pattern is written `e is p->F`, which keeps its meaning: an error, now that of
+            // an opaque pattern (Feature 13) whose operand reads through a pointer.
             var source = """
                 unsafe class C
                 {
@@ -3763,9 +3764,9 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                     // (3,41): error CS0246: The type or namespace name 'F' could not be found (are you missing a using directive or an assembly reference?)
                     //     bool M(object e, S* p) => e is (p)->F;
                     Diagnostic(ErrorCode.ERR_SingleTypeNameNotFound, "F").WithArguments("F").WithLocation(3, 41),
-                    // (4,36): error CS0150: A constant value is expected
+                    // (4,36): error CS20058: The operand of a pattern that is not a constant must be pure, but it is not: 'p' is not allowed in a pure member.
                     //     bool N(object e, S* p) => e is p->F;
-                    Diagnostic(ErrorCode.ERR_ConstantExpected, "p->F").WithLocation(4, 36),
+                    Diagnostic(ErrorCode.ERR_SharperOpaquePatternNotPure, "p").WithArguments("'p' is not allowed in a pure member").WithLocation(4, 36),
                     // (7,23): warning CS0649: Field 'S.F' is never assigned to, and will always have its default value 0
                     // struct S { public int F; }
                     Diagnostic(ErrorCode.WRN_UnassignedInternalField, "F").WithArguments("S.F", "0").WithLocation(7, 23));
