@@ -456,6 +456,9 @@
   <data name="IDS_SharperInferUsePinsNothing" xml:space="preserve">
     <value>no use passes it directly to a call with one candidate</value>
   </data>
+  <data name="IDS_SharperPipeLambdaStage" xml:space="preserve">
+    <value>a lambda that cannot name the value: only a lambda with one parameter and an expression body, without 'async', 'static', attributes or parameter modifiers, can. Use 'it' instead, as in 'x |&gt; it + 1'</value>
+  </data>
   <data name="IDS_SharperInferCandidatesDisagree" xml:space="preserve">
     <value>the candidates of a call to '{0}' take different types there: {1}</value>
   </data>

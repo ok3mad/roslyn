@@ -1239,7 +1239,7 @@ section keeps the decisions and what the implementation taught. Lifting over `Ta
 | IOperation | `OperationKind.None` with the left side as its only child ([#155](https://github.com/ok3mad/roslyn/issues/155)) | The control flow graph has no region for the stage's `it` |
 | Expression trees | CS20049 | The stage's `it` is a variable |
 | Target typing ([#187](https://github.com/ok3mad/roslyn/issues/187), implemented) | A stage with `it` is target-typed, as a switch expression's arms are: `int? r = x \|> (it > 0 ? 1 : null)`, `Func<int, int> f = x \|> (y => y + it)`. An unconverted pipe and a pipe conversion with the stage's conversion inside, at the lowest priority, so a natural type that converts wins. Overload resolution classifies the conversion per candidate with no new betterness rule, and type inference does not look through the pipe | C#'s pattern for `?:`, switch and the Sharper try expression, which already has every site. C# does not infer through `?:` or a switch either; inference through a pipe can come later without breaking anything |
-| Lambda stage (decided, [#186](https://github.com/ok3mad/roslyn/issues/186)) | A stage that is a lambda with one parameter and an expression body names the value: `x \|> (y => y + 1)` is an `it` stage whose variable is `y`, not a delegate. An explicit parameter type converts the left side implicitly. A block body, more parameters, `async`, `static` or attributes stay CS20048. A lambda in a stage with a free `it` is the stage's value (target typing) | Naming the value is the way out where `it` is taken: `x \|> (v => xs.Where(it > v))` (CS20047 with `it`), `xs \|> (ys => ys.Select(it * 2))` (CS20020). An `it` stage costs nothing, while a real lambda would allocate and follow lambda rules for `await`. `\|>` is never valid C#, so no C# code changes meaning |
+| Lambda stage ([#186](https://github.com/ok3mad/roslyn/issues/186), implemented) | A stage that is a lambda with one parameter and an expression body names the value: `x \|> (y => y + 1)` is an `it` stage whose variable is `y`, not a delegate. An explicit parameter type converts the left side implicitly. A block body, more parameters, `async`, `static` or attributes stay CS20048, with a hint to use `it`. A lambda that uses the stage's `it` is the stage's value (target typing); with a free `it` in the body, a trial binding with both names in scope decides, since an inner implicit lambda may claim it | Naming the value is the way out where `it` is taken: `x \|> (v => xs.Where(it > v))` (CS20047 with `it`), `xs \|> (ys => ys.Select(it * 2))` (CS20020). An `it` stage costs nothing, while a real lambda would allocate and follow lambda rules for `await`. `\|>` is never valid C#, so no C# code changes meaning |
 
 ### What it taught
 
@@ -1264,6 +1264,11 @@ section keeps the decisions and what the implementation taught. Lifting over `Ta
   a spill sequence's locals the syntax of the enclosing statement, a `VariableDeclarator` for a local declaration, and
   `SynthesizedClosureEnvironment.AssertIsClosureScopeSyntax` rejects it: `Func<int> f = 3 |> Make(() => it);` asserts
   in Debug builds, as C#'s `Func<int> g = 3 switch { var i => Make(() => i) };` does (upstream code, not changed here).
+- **A lambda that is not a lambda needs the semantic model's help.** A lambda stage's parameter declares a local, so
+  `GetDeclaredSymbol` on it must not look for a lambda symbol (`GetLambdaParameterSymbol` asserts there is one): the
+  member model finds the bound pipe and returns its local, and the typed `GetDeclaredSymbol(ParameterSyntax)`, which
+  returns `IParameterSymbol`, returns null. Whether a lambda with a free `it` is a lambda stage depends on which `it`
+  its body uses, which only binding tells, so the binder tries the body once with both names in scope.
 
 ## Feature 13: patterns on pure functions (design)
 
@@ -1353,7 +1358,7 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 - [ ] Pipe: an IOperation shape, and the stage in the control flow graph. [#155](https://github.com/ok3mad/roslyn/issues/155)
 - [ ] Pipe: `LookupSymbols` and speculative binding inside a stage. [#156](https://github.com/ok3mad/roslyn/issues/156)
 - [x] Pipe: decide target-typed stages and a bare lambda stage. [#157](https://github.com/ok3mad/roslyn/issues/157)
-- [ ] Pipe: a lambda stage names the value. [#186](https://github.com/ok3mad/roslyn/issues/186)
+- [x] Pipe: a lambda stage names the value. [#186](https://github.com/ok3mad/roslyn/issues/186)
 - [x] Pipe: target-typed stage. [#187](https://github.com/ok3mad/roslyn/issues/187)
 - [ ] Pipe: sequence points, Edit and Continue and interceptors. [#158](https://github.com/ok3mad/roslyn/issues/158)
 - [ ] Pipe: IDE support. [#159](https://github.com/ok3mad/roslyn/issues/159)

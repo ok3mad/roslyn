@@ -22,18 +22,19 @@ namespace Microsoft.CodeAnalysis.CSharp
     internal sealed class SharperPipeStageBinder : LocalScopeBinder
     {
         private readonly ExpressionSyntax _stage;
-        private readonly LocalSymbol? _it;
+        private readonly ImmutableArray<LocalSymbol> _locals;
         private SmallDictionary<SyntaxNode, Binder>? _lazyBinderMap;
 
-        internal SharperPipeStageBinder(Binder next, ExpressionSyntax stage, LocalSymbol? it)
+        /// <param name="stage">The stage, or the body of a lambda stage (<c>x |&gt; (y =&gt; body)</c>, #186).</param>
+        /// <param name="locals">The stage's <c>it</c> or the lambda stage's named value, if the stage declares one.</param>
+        internal SharperPipeStageBinder(Binder next, ExpressionSyntax stage, ImmutableArray<LocalSymbol> locals)
             : base(next)
         {
             _stage = stage;
-            _it = it;
+            _locals = locals;
         }
 
-        protected override ImmutableArray<LocalSymbol> BuildLocals()
-            => _it is null ? ImmutableArray<LocalSymbol>.Empty : ImmutableArray.Create(_it);
+        protected override ImmutableArray<LocalSymbol> BuildLocals() => _locals;
 
         internal override Binder? GetBinder(SyntaxNode node)
         {

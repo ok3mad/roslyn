@@ -2173,6 +2173,11 @@ namespace Microsoft.CodeAnalysis.CSharp
             return GetDeclaredNonLambdaParameterSymbol(declarationSyntax, cancellationToken).GetPublicSymbol();
         }
 
+#nullable enable
+        internal override LocalSymbol? GetDeclaredSharperPipeLambdaStageLocal(ParameterSyntax parameter)
+            => this.GetMemberModel(parameter)?.GetDeclaredSharperPipeLambdaStageLocal(parameter);
+#nullable disable
+
         private ParameterSymbol GetDeclaredNonLambdaParameterSymbol(ParameterSyntax declarationSyntax, CancellationToken cancellationToken = default(CancellationToken))
         {
             return

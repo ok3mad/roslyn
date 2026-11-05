@@ -3792,6 +3792,11 @@
         <target state="new">no use passes it directly to a call with one candidate</target>
         <note />
       </trans-unit>
+      <trans-unit id="IDS_SharperPipeLambdaStage">
+        <source>a lambda that cannot name the value: only a lambda with one parameter and an expression body, without 'async', 'static', attributes or parameter modifiers, can. Use 'it' instead, as in 'x |&gt; it + 1'</source>
+        <target state="new">a lambda that cannot name the value: only a lambda with one parameter and an expression body, without 'async', 'static', attributes or parameter modifiers, can. Use 'it' instead, as in 'x |&gt; it + 1'</target>
+        <note />
+      </trans-unit>
       <trans-unit id="IDS_SharperPureReasonCall">
         <source>'{0}' calls '{1}', which is not known to be pure</source>
         <target state="new">'{0}' calls '{1}', which is not known to be pure</target>
