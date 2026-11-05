@@ -1,4 +1,4 @@
----
+﻿---
 name: sharper-feature
 description: "Implement a Sharper language feature (or any new construct) in the C# compiler: gating, binding, a new bound node, flow and nullable analysis, IOperation, lowering, diagnostics, and tests. Use when: adding Sharper syntax, adding a bound node, extending the binder or LocalRewriter for a new construct, or asked to 'implement a Sharper feature'. Also use for: new BoundNodes.xml node, NullableWalker support for a new node, IOperation for a new node, new compiler error or warning code."
 ---
@@ -354,6 +354,20 @@ implementation plan, "Feature 3"):
    tree, and only Debug shows it. Key by syntax, and by the owner of the binding (`Binder.ContainingMemberOrLambda`),
    since a lambda's body is bound once per delegate type, each time with its own lambda symbol; a walker of the final
    tree tracks the owner as it enters lambdas and local functions.
+
+41. **A new pattern or DAG test kind meets a dozen switches, most of them asserts.** The opaque pattern
+   (`BoundOpaquePattern`, `BoundDagOpaqueTest`) needed cases in `DecisionDagBuilder` (`MakeTestsAndBindings`,
+   `SplitValues`, `CheckConsistentDecision`, the `ValueSet.Filter` assert, the temp replacement of
+   `RemoveEvaluationAndUpdateTempReferences`, the debug dump), `BoundDagTest.Equals`,
+   `BoundDecisionDag.SimplifyDecisionDagIfConstantInput`, the `or` reachability visitor
+   (`DecisionDagBuilder_CheckOrReachability.cs`, also `WithInputTypeCheckIfNeeded`), `PatternLocalRewriter.LowerTest`,
+   `NullableWalker.LearnFromDecisionDag`, the pattern switches of `AbstractFlowPass.VisitIsPatternExpression`,
+   `DefiniteAssignment.VisitPattern`, `VariablesDeclaredWalker` and the `PurityWalker` allow list. Grep
+   `BoundDagRelationalTest` and `BoundRelationalPattern`, not the visitors. Walkers skip the decision DAG
+   (`SkipInVisitor`), so an expression a DAG test evaluates is seen by flow analysis only through its pattern: read it
+   in the state before the match (no pattern variable is assigned yet), and let the nullable walker analyze it at the
+   DAG node, as it does a `when` clause. The decision DAG rewriter lowers it (`_localRewriter.VisitExpression`), which
+   can change `_factory.Syntax`.
 
 ## Inferred Types
 

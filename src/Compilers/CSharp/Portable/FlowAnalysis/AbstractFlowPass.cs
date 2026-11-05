@@ -926,7 +926,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             Debug.Assert(node.Pattern is
                 BoundTypePattern or BoundRecursivePattern or BoundITuplePattern or BoundRelationalPattern or
                 BoundDeclarationPattern or BoundConstantPattern or BoundNegatedPattern or BoundBinaryPattern or
-                BoundDeclarationPattern or BoundDiscardPattern or BoundListPattern or BoundSlicePattern);
+                BoundDeclarationPattern or BoundDiscardPattern or BoundListPattern or BoundSlicePattern or BoundOpaquePattern);
 
             bool negated = node.Pattern.IsNegated(out var pattern);
             Debug.Assert(negated == node.IsNegated);
@@ -985,6 +985,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                     case BoundRecursivePattern:
                     case BoundITuplePattern:
                     case BoundRelationalPattern:
+                    case BoundOpaquePattern:
                     case BoundDeclarationPattern { IsVar: false }:
                     case BoundConstantPattern { ConstantValue: { IsNull: false } }:
                     case BoundListPattern:
@@ -1068,6 +1069,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                     case BoundRecursivePattern:
                     case BoundITuplePattern:
                     case BoundRelationalPattern:
+                    case BoundOpaquePattern:
                     case BoundDeclarationPattern:
                     case BoundListPattern:
                     case BoundSlicePattern: // Only occurs in error cases
@@ -1102,7 +1104,72 @@ namespace Microsoft.CodeAnalysis.CSharp
 
         public virtual void VisitPattern(BoundPattern pattern)
         {
+            VisitSharperOpaquePatternOperands(pattern);
             Split();
+        }
+
+        /// <summary>
+        /// Sharper: the operands of opaque patterns (Feature 13) are evaluated while the pattern is matched, before
+        /// any of its variables is assigned, so they are read in the state before the match.
+        /// </summary>
+        private void VisitSharperOpaquePatternOperands(BoundPattern pattern)
+        {
+            if (!pattern.Syntax.IsFeatureEnabled(MessageID.IDS_FeatureSharper))
+            {
+                return;
+            }
+
+            var stack = ArrayBuilder<BoundPattern>.GetInstance();
+            stack.Push(pattern);
+            while (stack.TryPop(out var current))
+            {
+                switch (current)
+                {
+                    case BoundOpaquePattern opaque:
+                        VisitRvalue(opaque.Value);
+                        break;
+                    case BoundBinaryPattern binary:
+                        stack.Push(binary.Right);
+                        stack.Push(binary.Left);
+                        break;
+                    case BoundNegatedPattern negated:
+                        stack.Push(negated.Negated);
+                        break;
+                    case BoundRecursivePattern recursive:
+                        pushReversed(stack, recursive.Properties);
+                        pushReversed(stack, recursive.Deconstruction);
+                        break;
+                    case BoundITuplePattern tuple:
+                        pushReversed(stack, tuple.Subpatterns);
+                        break;
+                    case BoundListPattern list:
+                        pushReversed(stack, list.Subpatterns);
+                        break;
+                    case BoundSlicePattern { Pattern: { } slicePattern }:
+                        stack.Push(slicePattern);
+                        break;
+                }
+            }
+
+            stack.Free();
+
+            static void pushReversed<T>(ArrayBuilder<BoundPattern> stack, ImmutableArray<T> patterns) where T : BoundNode
+            {
+                if (patterns.IsDefault)
+                {
+                    return;
+                }
+
+                for (int i = patterns.Length - 1; i >= 0; i--)
+                {
+                    stack.Push(patterns[i] switch
+                    {
+                        BoundPattern p => p,
+                        BoundSubpattern p => p.Pattern,
+                        var p => throw ExceptionUtilities.UnexpectedValue(p.Kind),
+                    });
+                }
+            }
         }
 
         public override BoundNode VisitConstantPattern(BoundConstantPattern node)

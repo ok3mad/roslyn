@@ -38,6 +38,8 @@ namespace Microsoft.CodeAnalysis.CSharp
                     return x.Value.Equals(y.Value);
                 case (BoundDagRelationalTest x, BoundDagRelationalTest y):
                     return x.Relation == y.Relation && x.Value.Equals(y.Value);
+                case (BoundDagOpaqueTest x, BoundDagOpaqueTest y):
+                    return x.IsSameComparison(y);
                 default:
                     throw ExceptionUtilities.UnexpectedValue(this);
             }
@@ -128,6 +130,8 @@ namespace Microsoft.CodeAnalysis.CSharp
                         _ => "??"
                     };
                     return $"{r.Input.GetDebuggerDisplay()} {operatorName} {r.Value.GetValueToDisplay()}";
+                case BoundDagOpaqueTest o:
+                    return $"{o.Input.GetDebuggerDisplay()} {o.OperatorKind.Operator()} {o.Value.Syntax}";
                 default:
                     return $"{this.Kind}({this.Input.GetDebuggerDisplay()})";
             }

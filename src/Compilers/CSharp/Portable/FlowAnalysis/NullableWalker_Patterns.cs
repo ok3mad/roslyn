@@ -105,6 +105,13 @@ namespace Microsoft.CodeAnalysis.CSharp
             return null;
         }
 
+        public override BoundNode VisitOpaquePattern(BoundOpaquePattern node)
+        {
+            // Sharper: for the semantic model; the operand is analyzed with diagnostics where the DAG tests it.
+            VisitRvalue(node.Value);
+            return null;
+        }
+
         public override BoundNode VisitNegatedPattern(BoundNegatedPattern node)
         {
             Visit(node.Negated);
@@ -180,6 +187,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 case BoundDiscardPattern _:
                 case BoundITuplePattern _:
                 case BoundRelationalPattern _:
+                case BoundOpaquePattern _:
                 case BoundSlicePattern _:
                 case BoundListPattern lp:
                     break; // nothing to learn
@@ -604,6 +612,15 @@ namespace Microsoft.CodeAnalysis.CSharp
                                     {
                                         learnFromNonNullTest(inputSlot, ref this.StateWhenTrue);
                                     }
+                                    gotoNode(p.WhenTrue, this.StateWhenTrue, nodeBelievedReachable, from: p, whenTrueBranch: true);
+                                    gotoNode(p.WhenFalse, this.StateWhenFalse, nodeBelievedReachable, from: p, whenTrueBranch: false);
+                                    break;
+                                case BoundDagOpaqueTest t:
+                                    // Sharper: the operand is evaluated here, as a when clause is.
+                                    Unsplit();
+                                    VisitRvalue(t.Value);
+                                    Unsplit();
+                                    Split();
                                     gotoNode(p.WhenTrue, this.StateWhenTrue, nodeBelievedReachable, from: p, whenTrueBranch: true);
                                     gotoNode(p.WhenFalse, this.StateWhenFalse, nodeBelievedReachable, from: p, whenTrueBranch: false);
                                     break;

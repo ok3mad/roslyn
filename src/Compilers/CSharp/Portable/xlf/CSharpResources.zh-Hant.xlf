@@ -2752,6 +2752,11 @@
         <target state="new">[UnobservableWrite] is only valid on a field that is not readonly, of a class marked [Immutable].</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperOpaquePatternNotPure">
+        <source>The operand of a pattern that is not a constant must be pure, but it is not: {0}.</source>
+        <target state="new">The operand of a pattern that is not a constant must be pure, but it is not: {0}.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperPhantomTypeParameterInState">
         <source>Type parameter '{0}' is marked [Phantom], but '{1}' uses it in the state of the type.</source>
         <target state="new">Type parameter '{0}' is marked [Phantom], but '{1}' uses it in the state of the type.</target>

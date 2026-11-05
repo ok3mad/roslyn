@@ -86,6 +86,24 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             }
         }
 
+        /// <summary>
+        /// Checks the operand of an opaque pattern (Feature 13), such as <c>max</c> in <c>&gt; max</c>, by the rules of a
+        /// <c>[Pure]</c> body, and reports CS20058 if it is not pure. <paramref name="containingMethod"/> is the method or
+        /// lambda the pattern is in, if any.
+        /// </summary>
+        internal static bool CheckOpaquePatternOperand(CSharpCompilation compilation, MethodSymbol? containingMethod, BoundExpression operand, BindingDiagnosticBag diagnostics)
+        {
+            var walker = new PurityWalker(compilation.SharperImmutability, containingMethod, definition: null, localOnly: false, allowsCreation: true, constructorsInProgress: null, isMember: true);
+            walker.Visit(operand);
+            if (walker.Impure is null)
+            {
+                return true;
+            }
+
+            diagnostics.Add(ErrorCode.ERR_SharperOpaquePatternNotPure, walker.Impure.Syntax.Location, GetPureReason(walker));
+            return false;
+        }
+
         /// <summary>Why the expression a pure member's walker stopped at is not pure.</summary>
         private static Reason GetPureReason(PurityWalker walker)
         {
