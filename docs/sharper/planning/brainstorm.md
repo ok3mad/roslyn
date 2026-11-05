@@ -98,7 +98,7 @@ separate feature on ordinary methods, local functions and, where it fits, lambda
 | Inferred parameter types | `public infer Load(infer userId) => ...` in a class implementing `IProfiles` | method with the inferred types | depends on the source, see below | #15 |
 | `readonly` parameters | `void F(readonly int x)` | plain parameter plus the `val` no-reassignment check | nothing | #11 |
 | `pure` and `total` | `total int Fib(int i is >=0) => ...` | erased, plus attributes | the effect checker | #24 |
-| Member declared on another type | `static infer Currency.Parse(string s) => ...` | C# 14 extension block | nothing | #25 |
+| Member declared on another type (deferred) | `static infer Currency.Parse(string s) => ...` | C# 14 extension block | nothing | #25 |
 
 The work breakdown for the two inference rows is in the
 [implementation plan](implementation-plan.md#type-inference-work-breakdown).
@@ -661,11 +661,18 @@ record Money(decimal Amount is >0, Currency Currency)
     };
 }
 
-static infer Currency.Parse(string s) => Enum.TryParse<Currency>(s) switch
+// a C# 14 extension block: the shorthand 'static infer Currency.Parse(...)' is deferred (#37)
+static class CurrencyParsing
 {
-    Currency c => c,
-    _          => new BadInput("Currency", s)
-};
+    extension(Currency)
+    {
+        public static infer Parse(string s) => Enum.TryParse<Currency>(s) switch
+        {
+            Currency c => c,
+            _          => new BadInput("Currency", s)
+        };
+    }
+}
 
 // collect: all parts succeed -> a tuple; otherwise one Invalid with every error
 static infer ParseOrder(RawOrder raw) =>
@@ -813,6 +820,7 @@ What is settled so far, what was tried and dropped, and what waits for a later s
 
 ### Parked
 
+- A member declared on another type, `static infer Currency.Parse(string s) => ...` (#37). C# 14 extension blocks already do it, with `infer` and `[Pure]` on their members, so the shorthand would only save the wrapper class. If it comes back: file level only, where the dotted form is never valid C# (CS0116 or CS9348, plus CS0538), lowered to an extension block in a synthesized static class; inside a type it stays an explicit interface implementation. Open then: the synthesized class's name, instance members and their receiver, and a warning when a member of the type itself shadows it.
 - Discard arguments (`F(x, _)` passes the only fitting local), to be discussed: see [Discard arguments](#discard-arguments-proposed-not-yet-discussed).
 - Exceptions beyond the basics: one "may throw" bit versus typed throws.
 - The boundary with C#: runtime guards on public entry points, and how refined parameter types lower.
