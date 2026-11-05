@@ -1,10 +1,11 @@
 # Inferred parameter type (`infer`)
 
-**Status:** Prototype of steps P1 to P4, merged into `main`; P5 on branch `sharper/infer-parameter-p5`. Requires
+**Status:** Prototype of steps P1 to P5, merged into `main`; P6 on branch `sharper/infer-parameter-p6`. Requires
 `/features:sharper`. Issues: [#72](https://github.com/ok3mad/roslyn/issues/72) (P1),
 [#73](https://github.com/ok3mad/roslyn/issues/73) (P2), [#166](https://github.com/ok3mad/roslyn/issues/166) (P2 for the
 other member kinds), [#74](https://github.com/ok3mad/roslyn/issues/74) (P3),
-[#75](https://github.com/ok3mad/roslyn/issues/75) (P4), [#76](https://github.com/ok3mad/roslyn/issues/76) (P5), under
+[#75](https://github.com/ok3mad/roslyn/issues/75) (P4), [#76](https://github.com/ok3mad/roslyn/issues/76) (P5),
+[#77](https://github.com/ok3mad/roslyn/issues/77) (P6), under
 [#27](https://github.com/ok3mad/roslyn/issues/27).
 
 ## Summary
@@ -35,7 +36,9 @@ metadata all see `int retries = 3`. Step P1 takes the type from the default valu
 be reassigned. Step P4 takes the type from a use in the body (source 4): the parameter passed directly to a call
 with exactly one candidate (`profiles.Load(id)` with one `Load(int)`) gets that candidate's parameter type. Step P5
 extends it to overloaded and generic calls: `Format(n, "N2")` pins `n` when every `Format` that accepts a string second
-takes an `int` first, and `dict.GetValueOrDefault(key)` pins `TKey`. Other uses (P6) are the next step of the
+takes an `int` first, and `dict.GetValueOrDefault(key)` pins `TKey`. Step P6 adds the other uses: an assignment to a
+typed local, field or property (`this.Name = name`), `return x` from a member with a written return type, and `ref`,
+`out` and `in` arguments. A function type the member is converted to (P7) is the next step of the
 [work breakdown](../planning/implementation-plan.md#type-inference-work-breakdown).
 
 ## Rules
@@ -196,23 +199,25 @@ class C(IProfiles profiles)
   type arguments of the candidate's type substituted (`IRepo<User>.Put(T)` pins `User`). An `in` or `ref readonly`
   parameter pins its type. `Ext.Twice(x)` pins, and so does an argument of the extension call `p.Pad(x)`.
 - **What pins nothing.** Shape never pins: member access (`s.Length`, also as the receiver of an extension method,
-  `x.Twice()`), operators, type tests (`is`, `as`, patterns, `switch`) and interpolations. Not yet (P6): `ref` and `out`
-  arguments, assignments, returns, casts and other expressions around the parameter. Calls with more than one
-  candidate, type parameters of the candidate and `params` parameters are step P5 (below).
+  `x.Twice()`), operators, type tests (`is`, `as`, patterns, `switch`), interpolations, casts and other expressions
+  around the parameter. Calls with more than one candidate, type parameters of the candidate and `params` parameters are
+  step P5, and `ref`, `out` and `in` arguments, assignments and returns step P6 (below).
 - **Several uses** must agree: the same type, ignoring nullability and tuple element names (`string?` and `string`
   give `string`, which both accept; `(int a, int b)` and `(int x, int y)` give `(int, int)`). Uses that need different
   types report CS20057, which names two of them with their candidates (`'int' for 'C.Take(int)' and 'long' for
   'C.TakeLong(long)'`) and points at both.
 - **Nothing pins it.** CS20027 says why, from the first use that pins nothing: "a member access pins nothing", "an
   operator pins nothing", "a type test pins nothing", "an interpolation pins nothing", "'Generic' takes a type
-  parameter there, which pins nothing yet", "a params parameter pins nothing yet", "a ref or out argument pins nothing
-  yet", "no use passes it directly to a call with one candidate", or "the body does not use it", and from P5 on the
+  parameter there, which pins nothing yet", "a params parameter pins nothing yet", "an argument whose ref kind its
+  parameter does not take pins nothing" (until P6, "a ref or out argument pins nothing yet"), "no use passes it directly
+  to a call with one candidate", or "the body does not use it", and from P5 on the
   candidates of an overloaded call (below). The use is an additional location of the error. Members whose body is no
   source keep "nothing else gives its type". The parameter never becomes generic
   ([#79](https://github.com/ok3mad/roslyn/issues/79)).
-- **Precedence.** The member that is overridden or implemented (P2), then the default value (P1), then the body. The
-  body is consulted only when neither gives the type; a use that does not accept the type of a higher source reports
-  the C# error of the twin with the type written (CS1503 names both types).
+- **Precedence.** The member that is overridden or implemented (P2), then the default value (P1), then the body (a
+  function type, P7, will come before the body). The body is consulted only when neither gives the type; a use that does
+  not accept the type of a higher source reports the C# error of the twin with the type written (CS1503 names both
+  types).
 - **Lambdas and local functions in the body** count like the rest of it: `xs.Select(x => profiles.Load(id))` pins
   `id`. A lambda or local function parameter with the same name hides the parameter and is not a use of it. A lambda's
   or local function's own `infer` parameter without a default value still reports CS20027.
@@ -275,6 +280,51 @@ class C(Dictionary<string, int> dict)
   with `Overload(string x, int level)` gives `x` the type `string`); the placeholder's own parameters being inferred
   pin nothing.
 
+## From assignments, returns and `ref` arguments (step P6)
+
+The other uses that pin one type:
+
+```csharp
+class C
+{
+    public string Name { get; set; } = "";
+    static void Inc(ref long value) => value++;
+    static void Take(int x) { }
+    static void TakeLong(long x) { }
+
+    void Rename(infer name) { this.Name = name; }      // string, from the property
+    static int Clamp(infer x) { return x; }            // int, from the written return type
+    static double Half(infer x) { double d = x; return d / 2; }   // double, from the local
+    static long Bump(infer x) { Inc(ref x); return x; }           // long: both uses agree
+    void Both(infer x) { Take(x); TakeLong(x); }       // error CS20057: ... 'int' for 'C.Take(int)' and 'long' for 'C.TakeLong(long)'
+}
+```
+
+- **Assignments.** The parameter assigned to a local or a parameter whose type is known (`y = x`, `int y = x;`, also
+  `ref int r = ref x;`), a field, a property or an indexer (`this.Name = name`, `this[i] = x`, also in an object
+  initializer, `new Person { Name = name }`) gets the type of the target, as declared there. A `var` local, an array
+  element, an event, a deconstruction and an assignment to the parameter itself (`x = 1`) pin nothing.
+- **Returns.** `return x;` and an expression body `=> x` pin the written return type of the member, local function or
+  lambda (`int () => x`) they return from: `T` for `async Task<T>`, and the referenced type of a `ref` return. An `infer`
+  return type, a lambda without a written return type (`Func<int> f = () => x;`), `void`, `async Task`, an iterator and
+  `yield return` pin nothing.
+- **`ref`, `out` and `in` arguments** pin the exact type of a parameter that takes their ref kind (`Inc(ref x)`);
+  with several candidates, P5 counts those that take the ref kind. A by-value argument to a `ref` or `out` parameter, or
+  a `ref` argument to a by-value one, pins nothing ("an argument whose ref kind its parameter does not take pins
+  nothing").
+- **Only the parameter itself**, through the target's implicit conversion; a cast (`(int)x`) or any other expression
+  around it pins nothing, as for arguments.
+- **Several uses** must agree with each other and with the calls, as in P4, ignoring nullability and tuple names
+  (`string? a = x; string b = x;` gives `string`). CS20057 names the first two that differ, each with its type and what it
+  is: a call's candidate, an assignment's target (`'C.Name'`, `'y'`), or a return (`'the return of C.Clamp'`, `'the return
+  of L'`, `'the return of a lambda expression'`), and points at both.
+- **Precedence** is unchanged: an overridden member (P2) or a default value (P1) gives the type, and the body is not
+  consulted. A use that disagrees with it reports the error of the twin, which names both types:
+  `string Default(infer x = 1) => x;` reports CS0029 ("Cannot implicitly convert type 'int' to 'string'"), as
+  `string Default(int x = 1) => x;` does.
+- **Lambdas and local functions** in the body count as in P4; a `return` there pins the return type of the lambda or
+  local function it returns from, when it is written.
+
 ## How it works
 
 No syntax, bound node or lowering is added: `infer` parses as a type name, and the binder decides.
@@ -333,7 +383,13 @@ No syntax, bound node or lowering is added: `infer` parses as a type name, and t
    per argument syntax and per lambda, local function or placeholder whose binding made the call, since a lambda is
    bound once per delegate type and bound nodes may be cloned; `UsesCollector` reads those of the binding the bound
    tree holds. No binding changes: the call still fails, and P4's error recovery binds the rest of the body as before.
-9. **Semantic model.** `GetTypeInfo` and `GetSymbolInfo` on a parameter's `infer`, and on a copied `infer` return,
+9. **Other uses** (P6). The same collector reads assignments, local declarations and `return` statements of the
+   placeholder binding: the value is the parameter behind the target's implicit conversion, which the binder creates
+   with an error, and the target is the local, parameter, field, property or indexer, or the written return type of the
+   member, lambda or local function that the collector is walking. `ref`, `out` and `in` arguments take the path of
+   by-value ones, with the parameter's ref kind checked as overload resolution checks it; P5's records already counted
+   only the candidates that take the argument's ref kind.
+10. **Semantic model.** `GetTypeInfo` and `GetSymbolInfo` on a parameter's `infer`, and on a copied `infer` return,
    property, indexer or event type, return the type, with its nullable annotation, like `var`.
 
 ## Follow-ups
@@ -368,6 +424,8 @@ No syntax, bound node or lowering is added: `infer` parses as a type name, and t
   fixed type parameters and the expanded form of `params` now pin; rewording them would change P4's diagnostics.
 - An overloaded call that succeeds with a parameter being inferred (no such case is known: the placeholder type
   converts to nothing) records no candidates and is read as P4 reads a call that binds.
+- P6: a return from a lambda without a written return type, `yield return`, array elements and deconstruction pin
+  nothing. CS20057 names the first two uses that differ, not every use.
 - The IDE does not know `infer` yet (R5, [#71](https://github.com/ok3mad/roslyn/issues/71)).
 
 ## Code
@@ -389,4 +447,6 @@ the `ReplaceOriginal` calls in `OverloadResolution.MethodInvocationOverloadResol
 `InferFromBody_*` in `SharperTests_InferFromBody.cs`. Step P5: `Binder/Semantics/OverloadResolution/OverloadResolution_Sharper.cs`,
 called from `OverloadResolution.MethodInvocationOverloadResolution` and `ObjectCreationOverloadResolution`,
 `SharperPlaceholderMethodSymbol.RecordCandidates` and `GetCandidates`, and `UsesCollector.AddUseFromCandidates`; tests
-`InferFromOverloads_*` in `SharperTests_InferFromOverloads.cs`.
+`InferFromOverloads_*` in `SharperTests_InferFromOverloads.cs`. Step P6: `UsesCollector.VisitAssignmentOperator`,
+`VisitLocalDeclaration` and `VisitReturnStatement` in `SharperInferredParameterType_Body.cs`; tests `InferFromUses_*` in
+`SharperTests_InferFromUses.cs`.

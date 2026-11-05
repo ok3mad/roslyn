@@ -67,14 +67,18 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             }
         }
 
-        /// <summary>One use of a parameter in the body that pins its type: the argument, the candidate and its parameter type.</summary>
+        /// <summary>
+        /// One use of a parameter in the body that pins its type: the parameter's syntax there, what pins it and the type it
+        /// pins. What pins it is the candidate of a call (P4, P5), the local, parameter, field or property it is assigned
+        /// to, or the return of the method, local function or lambda it is returned from (P6, a message fragment).
+        /// </summary>
         private readonly struct PinningUse
         {
             internal readonly SyntaxNode Argument;
-            internal readonly Symbol Candidate;
+            internal readonly object Candidate;
             internal readonly TypeWithAnnotations Type;
 
-            internal PinningUse(SyntaxNode argument, Symbol candidate, TypeWithAnnotations type)
+            internal PinningUse(SyntaxNode argument, object candidate, TypeWithAnnotations type)
             {
                 Argument = argument;
                 Candidate = candidate;
@@ -351,7 +355,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     var info = new CSDiagnosticInfo(
                         ErrorCode.ERR_SharperInferParameterUsesDisagree,
                         args: [parameter.Identifier.ValueText, first.Type, first.Candidate, other.Type, other.Candidate],
-                        symbols: [first.Candidate, other.Candidate],
+                        symbols: getSymbols(first.Candidate, other.Candidate),
                         additionalLocations: [first.Argument.Location, other.Argument.Location]);
                     diagnostics.Add(info, parameter.Type!.Location);
                     type = CreateErrorType(compilation);
@@ -363,6 +367,15 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             }
 
             return new Result(type, diagnostics.ToReadOnlyAndFree());
+
+            static ImmutableArray<Symbol> getSymbols(object first, object other)
+                => (first, other) switch
+                {
+                    (Symbol a, Symbol b) => [a, b],
+                    (Symbol a, _) => [a],
+                    (_, Symbol b) => [b],
+                    _ => ImmutableArray<Symbol>.Empty,
+                };
         }
 
         /// <summary>The ref kind written on a parameter, as the signature reads it: <c>ref</c>, <c>out</c>, <c>in</c>, <c>ref readonly</c>.</summary>
@@ -421,7 +434,10 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         /// parameter that is neither <c>params</c> nor <c>ref</c> or <c>out</c>, whose type does not involve the
         /// candidate's own type parameters (step P4); or, for a call with several candidates, a <c>params</c> parameter or
         /// a type parameter of the candidate, the type that every candidate applicable with the placeholder in place takes
-        /// there, as overload resolution recorded them (step P5). Member access, operators, <c>is</c> tests and
+        /// there, as overload resolution recorded them (step P5). Step P6 adds the other uses that pin one type: the
+        /// parameter as a <c>ref</c>, <c>out</c> or <c>in</c> argument to a parameter of that ref kind (its exact type),
+        /// assigned to (or initializing) a local, parameter, field or property whose type is known, and returned from a
+        /// method, local function or lambda whose return type is written. Member access, operators, <c>is</c> tests and
         /// interpolations pin nothing.
         /// </summary>
         /// <remarks>
@@ -538,6 +554,123 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             }
 
             /// <summary>
+            /// <c>y = x</c>, <c>r = ref x</c> and <c>new C { P = x }</c> (step P6): the parameter assigned to a local, a
+            /// parameter, a field or a property (an indexer too) pins the type of the target.
+            /// </summary>
+            public override BoundNode? VisitAssignmentOperator(BoundAssignmentOperator node)
+            {
+                if (GetConvertedTarget(node.Right) is { } value)
+                {
+                    Symbol? assigned = node.Left switch
+                    {
+                        BoundLocal { LocalSymbol: var local } => local,
+                        BoundParameter { ParameterSymbol: var parameter } => parameter,
+                        BoundFieldAccess { FieldSymbol: var field } => field,
+                        BoundPropertyAccess { PropertySymbol: var property } => property,
+                        BoundIndexerAccess { Indexer: var indexer } => indexer,
+                        BoundObjectInitializerMember { MemberSymbol: (FieldSymbol or PropertySymbol) and var member } => member,
+                        _ => null,
+                    };
+
+                    if (assigned is not null)
+                    {
+                        AddUseFromTarget(value, node.Right.Syntax, assigned, assigned.GetTypeOrReturnType());
+                    }
+                }
+
+                return base.VisitAssignmentOperator(node);
+            }
+
+            /// <summary>
+            /// <c>int y = x;</c> (step P6): the parameter initializing a local whose type is written pins that type; a
+            /// <c>var</c> local takes the placeholder's type and pins nothing.
+            /// </summary>
+            public override BoundNode? VisitLocalDeclaration(BoundLocalDeclaration node)
+            {
+                if (node.InitializerOpt is { } initializer && GetConvertedTarget(initializer) is { } value)
+                {
+                    AddUseFromTarget(value, initializer.Syntax, node.LocalSymbol, node.LocalSymbol.TypeWithAnnotations);
+                }
+
+                return base.VisitLocalDeclaration(node);
+            }
+
+            /// <summary>
+            /// <c>return x;</c> (step P6): the parameter returned from the method, a local function or a lambda whose return
+            /// type is written pins that type (the result type of an <c>async</c> one). A return type inferred from the
+            /// body (<c>infer</c>, a lambda without a written return type) pins nothing.
+            /// </summary>
+            public override BoundNode? VisitReturnStatement(BoundReturnStatement node)
+            {
+                if (node.ExpressionOpt is { } expression &&
+                    GetConvertedTarget(expression) is { } value &&
+                    _owner is MethodSymbol owner &&
+                    GetWrittenReturnType(owner) is { HasType: true } returnType)
+                {
+                    IFormattable description = owner switch
+                    {
+                        LambdaSymbol => MessageID.IDS_SharperInferReturnOfLambda.Localize(),
+                        SharperPlaceholderMethodSymbol placeholder => new MessageFragment(MessageID.IDS_SharperInferReturnOf, [placeholder.Original.ContainingType.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat) + "." + GetMemberName(((BaseMethodDeclarationSyntax)placeholder.Original.SyntaxNode).ParameterList)]),
+                        _ => new MessageFragment(MessageID.IDS_SharperInferReturnOf, [owner.Name]),
+                    };
+
+                    AddUseFromTarget(value, expression.Syntax, description, returnType);
+                }
+
+                return base.VisitReturnStatement(node);
+            }
+
+            /// <summary>
+            /// The return type that a <c>return x</c> in <paramref name="owner"/> converts to, when it is written and does
+            /// not depend on the body: none for <c>void</c>, an iterator, an <c>async</c> method returning <c>Task</c>, an
+            /// <c>infer</c> return type or a lambda without a written return type.
+            /// </summary>
+            private static TypeWithAnnotations GetWrittenReturnType(MethodSymbol owner)
+            {
+                bool written = owner switch
+                {
+                    SharperPlaceholderMethodSymbol placeholder => !placeholder.IsReturnTypeInferred,
+                    LambdaSymbol or LocalFunctionSymbol => owner.GetNonNullSyntaxNode() switch
+                    {
+                        ParenthesizedLambdaExpressionSyntax { ReturnType: { IsInfer: false } } => true,
+                        LocalFunctionStatementSyntax { ReturnType.IsInfer: false } => true,
+                        _ => false,
+                    },
+                    _ => false,
+                };
+
+                if (!written || owner.IsIterator)
+                {
+                    return default;
+                }
+
+                TypeWithAnnotations returnType = owner.ReturnTypeWithAnnotations;
+                if (owner.IsAsync)
+                {
+                    if (returnType.Type is not NamedTypeSymbol { Arity: 1 } taskType || !returnType.Type.IsGenericTaskType(owner.DeclaringCompilation))
+                    {
+                        return default;
+                    }
+
+                    returnType = taskType.TypeArgumentsWithAnnotationsNoUseSiteDiagnostics[0];
+                }
+
+                return returnType.Type is null || returnType.IsVoidType() ? default : returnType;
+            }
+
+            /// <summary>A use that pins the type of what the parameter is assigned or returned to, if that type is known.</summary>
+            private void AddUseFromTarget(BoundParameter value, SyntaxNode syntax, object description, TypeWithAnnotations type)
+            {
+                if (!type.HasType || type.Type.IsErrorType() || (object)type.Type == LambdaSymbol.ReturnTypeIsBeingInferred || InvolvesTypeParametersNotInScope(type.Type))
+                {
+                    return;
+                }
+
+                var uses = Uses[value.ParameterSymbol.Ordinal] ??= ArrayBuilder<PinningUse>.GetInstance();
+                uses.Add(new PinningUse(syntax, description, type));
+            }
+
+            /// <summary>
             /// Every use of a placeholder parameter that no call has pinned or explained: member access, operators, type
             /// tests and interpolations pin nothing.
             /// </summary>
@@ -590,13 +723,16 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     }
 
                     ParameterSymbol target = argument.ParameterSymbol;
-                    if (!argumentRefKinds.IsDefault && argumentRefKinds[i] != RefKind.None)
+                    bool byReference = !argumentRefKinds.IsDefault && argumentRefKinds[i] != RefKind.None;
+                    if (Placeholder.GetCandidates(argument.Syntax, _owner) is { IsDefault: false } candidates &&
+                        !(byReference && candidates.IsEmpty))
+                    {
+                        // A ref, out or in argument counts the candidates whose parameter takes its ref kind (P6).
+                        AddUseFromCandidates(target, arguments[i].Syntax, candidates, name);
+                    }
+                    else if (byReference)
                     {
                         NoteNotPinning(target, argument.Syntax, MessageID.IDS_SharperInferRefArgumentPinsNothing.Localize());
-                    }
-                    else if (Placeholder.GetCandidates(argument.Syntax, _owner) is { IsDefault: false } candidates)
-                    {
-                        AddUseFromCandidates(target, arguments[i].Syntax, candidates, name);
                     }
                     else
                     {
@@ -710,9 +846,15 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                         parameter = last;
                     }
 
-                    if ((!argumentRefKinds.IsDefault && argumentRefKinds[i] != RefKind.None) || parameter is null)
+                    RefKind argumentRefKind = argumentRefKinds.IsDefault ? RefKind.None : argumentRefKinds[i];
+                    if (parameter is null)
                     {
-                        NoteNotPinning(target, syntax, (argumentRefKinds.IsDefault || argumentRefKinds[i] == RefKind.None ? MessageID.IDS_SharperInferUsePinsNothing : MessageID.IDS_SharperInferRefArgumentPinsNothing).Localize());
+                        NoteNotPinning(target, syntax, (argumentRefKind == RefKind.None ? MessageID.IDS_SharperInferUsePinsNothing : MessageID.IDS_SharperInferRefArgumentPinsNothing).Localize());
+                    }
+                    else if (argumentRefKind != RefKind.None && !acceptsRefKind(parameter, argumentRefKind))
+                    {
+                        // A ref, out or in argument pins the exact type of a parameter that takes its ref kind (P6).
+                        NoteNotPinning(target, syntax, MessageID.IDS_SharperInferRefArgumentPinsNothing.Localize());
                     }
                     else if (parameter.IsParams)
                     {
@@ -726,7 +868,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                             NoteNotPinning(target, syntax, MessageID.IDS_SharperInferParamsPinsNothing.Localize());
                         }
                     }
-                    else if (parameter.RefKind is RefKind.Ref or RefKind.Out)
+                    else if (argumentRefKind == RefKind.None && parameter.RefKind is RefKind.Ref or RefKind.Out)
                     {
                         NoteNotPinning(target, syntax, MessageID.IDS_SharperInferRefArgumentPinsNothing.Localize());
                     }
@@ -753,6 +895,11 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                         uses.Add(new PinningUse(syntax, candidate, parameter.TypeWithAnnotations));
                     }
                 }
+
+                // The ref kinds that overload resolution accepts for an argument (OverloadResolution_Sharper.cs).
+                static bool acceptsRefKind(ParameterSymbol parameter, RefKind argumentRefKind)
+                    => argumentRefKind == parameter.RefKind ||
+                        (parameter.RefKind is RefKind.In or RefKind.RefReadOnlyParameter && argumentRefKind is RefKind.In or RefKind.Ref);
             }
 
             /// <summary>The placeholder parameter that the argument is, directly; the binder may wrap it for error recovery.</summary>
@@ -768,6 +915,20 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 }
 
                 return argument is BoundParameter { ParameterSymbol: var parameter } boundParameter && _targets.Contains(parameter) ? boundParameter : null;
+            }
+
+            /// <summary>
+            /// The placeholder parameter that a value assigned or returned is, directly: the binder converts it to the type
+            /// of the target, implicitly, which is no expression around it (P6). A cast is.
+            /// </summary>
+            private BoundParameter? GetConvertedTarget(BoundExpression value)
+            {
+                while (value is BoundConversion { ExplicitCastInCode: false } conversion && conversion.Syntax == conversion.Operand.Syntax)
+                {
+                    value = conversion.Operand;
+                }
+
+                return GetTargetArgument(value);
             }
 
             private SharperPlaceholderMethodSymbol Placeholder => (SharperPlaceholderMethodSymbol)_targets[0].ContainingSymbol;

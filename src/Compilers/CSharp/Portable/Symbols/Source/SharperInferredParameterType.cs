@@ -74,7 +74,10 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             // Step P2: the types copied from the member that a method, property, indexer or operator overrides or implements.
             GetOverriddenSignature(owner);
 
-            // Step P4: the types that the uses in the body give the parameters that have neither source.
+            // PROTOTYPE(sharper): step P7 (#78), a function type the member is converted to, goes here: after P2 and P1,
+            // before the body.
+
+            // Steps P4 to P6: the types that the uses in the body give the parameters that have none of the sources above.
             GetBodyInference(owner);
         }
 
@@ -100,7 +103,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             {
                 // A parameter of a method that overrides or implements a member takes its type from there instead
                 // (GetOverriddenSignature, in ParameterHelpers.MakeParameter). Otherwise the uses in the body may give it
-                // (step P4), or the parameter has no source.
+                // (steps P4 to P6; a function type, P7, will come before them), or the parameter has no source.
                 if (GetResultFromBody(owner, parameter) is { } fromBody)
                 {
                     diagnostics.AddRange(fromBody.Diagnostics, allowMismatchInDependencyAccumulation: true);

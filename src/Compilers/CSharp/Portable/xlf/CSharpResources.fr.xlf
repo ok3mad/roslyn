@@ -3758,8 +3758,18 @@
         <note />
       </trans-unit>
       <trans-unit id="IDS_SharperInferRefArgumentPinsNothing">
-        <source>a ref or out argument pins nothing yet</source>
-        <target state="new">a ref or out argument pins nothing yet</target>
+        <source>an argument whose ref kind its parameter does not take pins nothing</source>
+        <target state="new">an argument whose ref kind its parameter does not take pins nothing</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperInferReturnOf">
+        <source>the return of {0}</source>
+        <target state="new">the return of {0}</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperInferReturnOfLambda">
+        <source>the return of a lambda expression</source>
+        <target state="new">the return of a lambda expression</target>
         <note />
       </trans-unit>
       <trans-unit id="IDS_SharperInferRuledOutByParameter">
