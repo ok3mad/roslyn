@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for more information.
 
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using Microsoft.CodeAnalysis.PooledObjects;
@@ -27,17 +28,30 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         private readonly SourceMemberMethodSymbol _original;
         private readonly ImmutableArray<ParameterSymbol> _parameters;
         private readonly TypeWithAnnotations _returnType;
+        private readonly ImmutableArray<bool> _isBeingInferred;
         private readonly object _methodChecksLock = new object();
 
+        /// <summary>
+        /// Per argument of a call in the body that is a parameter being inferred, the candidates of each overload
+        /// resolution of that call that are applicable with the placeholder in place (step P5), in the order of the
+        /// resolutions: instance methods, then the extension method scopes from the innermost. The key is the argument's
+        /// syntax and the lambda, local function or placeholder that the binding of the call is in: each binding of a
+        /// lambda for a delegate type has its own lambda symbol, and bound nodes can be cloned, so their identity is no key.
+        /// </summary>
+        private readonly Dictionary<SyntaxNode, ArrayBuilder<(Symbol? Owner, ImmutableArray<SharperPlaceholderCandidate> Candidates)>> _candidates = new();
+
         /// <param name="returnType">The written return type, or default when it is <c>infer</c>.</param>
+        /// <param name="isBeingInferred">Per parameter, true if its type is the placeholder type, being inferred.</param>
         internal SharperPlaceholderMethodSymbol(
             SourceMemberMethodSymbol original,
             ImmutableArray<(TypeWithAnnotations Type, RefKind RefKind, string Name)> parameters,
-            TypeWithAnnotations returnType)
+            TypeWithAnnotations returnType,
+            ImmutableArray<bool> isBeingInferred)
             : base(original.ContainingType, original.SyntaxRef, original.GetFirstLocation(), original.IsIterator, GetModifiersAndFlags(original))
         {
             _original = original;
             _returnType = returnType;
+            _isBeingInferred = isBeingInferred;
             var builder = ArrayBuilder<ParameterSymbol>.GetInstance(parameters.Length);
             for (int i = 0; i < parameters.Length; i++)
             {
@@ -69,6 +83,77 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         {
             int index = candidates.IndexOf(_original);
             return index >= 0 ? candidates.SetItem(index, this) : candidates;
+        }
+
+        /// <summary>True if <paramref name="parameter"/> is a parameter of this placeholder whose type is being inferred.</summary>
+        internal bool IsBeingInferred(ParameterSymbol parameter)
+            => (object)parameter.ContainingSymbol == this && _isBeingInferred[parameter.Ordinal];
+
+        /// <summary>
+        /// Records the candidates of one overload resolution that are applicable with the placeholder in place, for an
+        /// argument that is a parameter being inferred (<see cref="OverloadResolution"/>, step P5).
+        /// </summary>
+        /// <param name="owner">The lambda, local function or placeholder whose binding the call is in.</param>
+        internal void RecordCandidates(SyntaxNode argument, Symbol? owner, ImmutableArray<SharperPlaceholderCandidate> candidates)
+        {
+            lock (_candidates)
+            {
+                if (!_candidates.TryGetValue(argument, out var resolutions))
+                {
+                    resolutions = ArrayBuilder<(Symbol?, ImmutableArray<SharperPlaceholderCandidate>)>.GetInstance();
+                    _candidates.Add(argument, resolutions);
+                }
+
+                resolutions.Add((owner, candidates));
+            }
+        }
+
+        /// <summary>
+        /// The candidates applicable with the placeholder in place for <paramref name="argument"/> in the binding of
+        /// <paramref name="owner"/>: those of the first overload resolution of its call that has any, as C# stops at the
+        /// first set of candidates with an applicable one; empty if none has any; default if the call recorded none.
+        /// </summary>
+        internal ImmutableArray<SharperPlaceholderCandidate> GetCandidates(SyntaxNode argument, Symbol? owner)
+        {
+            lock (_candidates)
+            {
+                if (!_candidates.TryGetValue(argument, out var resolutions))
+                {
+                    return default;
+                }
+
+                ImmutableArray<SharperPlaceholderCandidate> result = default;
+                foreach (var (resolutionOwner, candidates) in resolutions)
+                {
+                    if (!ReferenceEquals(resolutionOwner, owner))
+                    {
+                        continue;
+                    }
+
+                    if (!candidates.IsEmpty)
+                    {
+                        return candidates;
+                    }
+
+                    result = candidates;
+                }
+
+                return result;
+            }
+        }
+
+        /// <summary>Frees what the binding recorded.</summary>
+        internal void FreeCandidates()
+        {
+            lock (_candidates)
+            {
+                foreach (var (_, resolutions) in _candidates)
+                {
+                    resolutions.Free();
+                }
+
+                _candidates.Clear();
+            }
         }
 
         public override string Name => _original.Name;
@@ -158,6 +243,33 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             BinderFlags addedFlags = originalBodyBinder.Next!.Flags & ~outer.Flags;
             result = result.WithAdditionalFlags(addedFlags);
             return new ExecutableCodeBinder(SyntaxNode, this, result);
+        }
+    }
+
+    /// <summary>
+    /// A candidate of a call in a body bound with placeholders that is applicable with the placeholder in place, and the
+    /// type it takes for one argument that is a parameter being inferred (step P5).
+    /// </summary>
+    internal readonly struct SharperPlaceholderCandidate
+    {
+        /// <summary>The candidate, constructed with the type arguments inferred from the other arguments.</summary>
+        internal readonly MethodSymbol Candidate;
+
+        /// <summary>The parameter the argument goes to.</summary>
+        internal readonly ParameterSymbol Parameter;
+
+        /// <summary>The type the candidate takes for the argument: the parameter's, or its element type in the expanded form.</summary>
+        internal readonly TypeWithAnnotations Type;
+
+        /// <summary>True for the expanded form of a <c>params</c> candidate.</summary>
+        internal readonly bool IsExpanded;
+
+        internal SharperPlaceholderCandidate(MethodSymbol candidate, ParameterSymbol parameter, TypeWithAnnotations type, bool isExpanded)
+        {
+            Candidate = candidate;
+            Parameter = parameter;
+            Type = type;
+            IsExpanded = isExpanded;
         }
     }
 }

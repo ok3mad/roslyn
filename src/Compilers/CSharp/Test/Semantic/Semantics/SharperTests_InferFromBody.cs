@@ -172,9 +172,9 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (19,32): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and an interpolation pins nothing. Write the parameter type.
                 //     static infer Interpolation(infer x) => $"{x}";
                 Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "an interpolation pins nothing").WithLocation(19, 32),
-                // (20,27): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and a call to 'Over', which has more than one candidate, pins nothing yet. Write the parameter type.
+                // (20,27): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and the candidates of a call to 'Over' take different types there: 'C.Over(int)' takes 'int', 'C.Over(string)' takes 'string'. Write the parameter type.
                 //     static void Overloads(infer x) => Over(x);
-                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "a call to 'Over', which has more than one candidate, pins nothing yet").WithLocation(20, 27),
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "the candidates of a call to 'Over' take different types there: 'C.Over(int)' takes 'int', 'C.Over(string)' takes 'string'").WithLocation(20, 27),
                 // (21,26): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and 'Generic' takes a type parameter there, which pins nothing yet. Write the parameter type.
                 //     static void Inferred(infer x) => Generic(x);
                 Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "'Generic' takes a type parameter there, which pins nothing yet").WithLocation(21, 26),
@@ -373,12 +373,12 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             comp.VerifyDiagnostics(
                 // (9,22): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and no use passes it directly to a call with one candidate. Write the parameter type.
                 //     static void Only(infer x) => Only(x);
-                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "no use passes it directly to a call with one candidate").WithLocation(9, 22),
-                // (10,26): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and a call to 'Overload', which has more than one candidate, pins nothing yet. Write the parameter type.
-                //     static void Overload(infer x) => Overload(x, 0);
-                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "a call to 'Overload', which has more than one candidate, pins nothing yet").WithLocation(10, 26));
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "no use passes it directly to a call with one candidate").WithLocation(9, 22));
             VerifySameSignature(comp, "C.Recursive", "C.RecursiveCSharp");
             VerifySameSignature(comp, "C.Swap", "C.SwapCSharp");
+
+            // An overload of the method that is applicable pins (P5); the placeholder takes too few arguments there.
+            Assert.Equal("void C.Overload(System.String x)", comp.GetMembers("C.Overload").OfType<MethodSymbol>().First().ToTestDisplayString());
             Assert.Equal("C..ctor(System.String a, System.Int64 b, System.String c)", comp.GetMember<NamedTypeSymbol>("C").InstanceConstructors.Last().ToTestDisplayString());
         }
 

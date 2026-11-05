@@ -192,7 +192,7 @@ Parameter types (#15):
 | P2 | Source 1: the overridden or implemented member gives the parameter and return types. Members are matched by name and parameter count before their types are known; more than one candidate is an error | M | Prototype ([#73](https://github.com/ok3mad/roslyn/issues/73)). Decided: explicit implementations copy from the interface they name; several interfaces with different signatures are CS20044; written types narrow the candidates |
 | P3 | `readonly infer x` | S | Prototype ([#74](https://github.com/ok3mad/roslyn/issues/74)). Decided: `readonly` combines with P1 and P2 with no new code; whether `val x` is its shorthand on method parameters is [#178](https://github.com/ok3mad/roslyn/issues/178), not built |
 | P4 | Source 4, first cut: the parameter passed directly as an argument to a call with exactly one candidate (method, constructor, delegate). Needs binding the body with a placeholder type | L | Prototype ([#75](https://github.com/ok3mad/roslyn/issues/75)). Decided: uses in lambdas and local functions in the body count, read from the final binding only; recursion binds to the placeholder and is no cycle; disagreeing uses are CS20057; CS20027 says why nothing pinned |
-| P5 | Source 4 with overloads: every applicable candidate takes the same type at that position, including generic methods whose type arguments come from other arguments | L | |
+| P5 | Source 4 with overloads: every applicable candidate takes the same type at that position, including generic methods whose type arguments come from other arguments | L | Prototype ([#76](https://github.com/ok3mad/roslyn/issues/76)). Decided: applicable means applicable with the parameter in place, the other arguments bound and converted first; the two forms of `params` are two candidates; a group with one member keeps P4's rule; disagreeing candidates are listed in CS20027 |
 | P6 | Source 4, other pinning uses: assignment to a typed local, field or property, `return x` from a method with a written return type, `ref` and `out` arguments. Several uses must agree, and the error names each one | M | |
 | P7 | Source 3: a function type the method is converted to, local functions first, then private methods | L | Conversions that appear after the declaration in the same method |
 | P8 | Source 5: nothing pins the parameter. Decided an error, not a generic method: CS20027 says why nothing pinned (for example "member access pins nothing") and asks for the type. The rewording is part of P4; the IDE fix that writes a type or makes the method generic is part of R5 | S | Decided ([#79](https://github.com/ok3mad/roslyn/issues/79)): a silent generic would change the arity when a pin appears or disappears, a source and binary break, and arity is fixed before any binding. Generic for local functions only may be reconsidered after P6 |
@@ -918,7 +918,7 @@ reading more of the same bound tree, not by changing the binding.
 | `SharperPlaceholderMethodSymbol` | A `SourceMemberMethodSymbol` over the method's syntax, modifiers, flags and type parameters, outside its type's members, reporting no diagnostics. Its parameters are synthesized: written types, P1 types, and the placeholder type (an error type) for the parameters being inferred. Its return type is the written one (`void` for a constructor), or, for `infer`, "being inferred" (`LambdaSymbol.ReturnTypeIsBeingInferred`, and `Binder.IsSharperReturnTypeBeingInferred` is true for it), so `return`, `yield` and `async` never read the method's signature. Its body binder is the method's own chain with the `InMethodBinder` replaced | P6 reads its written return type for `return x` |
 | `SharperPlaceholderMethodSymbol.ReplaceOriginal` | A call in the body whose candidates include the method itself (recursion, or an overload of it) binds to the placeholder instead: in `OverloadResolution.MethodInvocationOverloadResolution` and `Binder.GetAccessibleConstructorsForOverloadResolution`, when the binder's containing member is a placeholder. The placeholder's parameters being inferred pin nothing; its written ones pin | |
 | `SharperInferredParameterType.GetBodyInference` | Binds the body (`Binder.BindMethodBody`, constructor initializers included) with the placeholder's body binder. Runs from `InferBeforeSignature`, after P1 and P2, outside the signature lock, only when an `infer` parameter has no default value and P2 has no member to copy from; the result is kept by the compilation per parameter list (`SharperBodyInferences`) and published once, like P1's and P2's. `GetType` reads it for such a parameter | |
-| `UsesCollector` | Walks the bound body, lambdas and local functions included, and collects every *use* of a placeholder parameter that pins a type: the parameter itself as a by-value argument of a call whose candidate set has one member (`BoundCall.Method` and `OriginalMethodsOpt`, `BoundObjectCreationExpression`, `BoundBadExpression.Symbols` for a constructor that failed), mapped to a parameter by position or name, that is neither `params` nor `ref`/`out`, and whose type involves no type parameter out of the signature's scope. It also records each parameter's first use that pins nothing, and why | P5 widens "one candidate" (overloads, generic inference from the other arguments); P6 adds assignments, returns, `ref` and `out` arguments |
+| `UsesCollector` | Walks the bound body, lambdas and local functions included, and collects every *use* of a placeholder parameter that pins a type: the parameter itself as a by-value argument of a call whose candidate set has one member (`BoundCall.Method` and `OriginalMethodsOpt`, `BoundObjectCreationExpression`, `BoundBadExpression.Symbols` for a constructor that failed), mapped to a parameter by position or name, that is neither `params` nor `ref`/`out`, and whose type involves no type parameter out of the signature's scope. It also records each parameter's first use that pins nothing, and why | P5 widens "one candidate" (overloads, generic inference from the other arguments, `params`) with the candidates overload resolution records (step P5, below); P6 adds assignments, returns, `ref` and `out` arguments |
 | `DecideFromUses` | One type per parameter from its uses: none is CS20027 with the reason of the first use that pins nothing (an additional location) or "the body does not use it"; uses that agree (the same type ignoring nullability and tuple names, merged as inputs: not annotated wins) give that type; uses that disagree are CS20057, which names two uses, their types and candidates | P5 and P6 add uses, not rules |
 | The P1 stack | The body inference is on the thread-static stack of P1 and P2, keyed by the parameter list, so a body that needs the method's signature through other members whose types are inferred is a cycle found from either end: CS20056 on every parameter inferred from that body, decided and published with the rest of the cycle (`PublishCycle`) | |
 | `SharperInferredReturnType.SuspendInference` | Hides R3's frames while the placeholder body is bound: that body is not an R3 frame, so a read of an inferred return type there starts its own frames instead of counting as a use by whichever body R3 is binding below it. That keeps cycles through P4 and R3 independent of the starting member | |
@@ -969,6 +969,85 @@ Follow-ups:
 - Local functions, lambdas and indexers as members whose body is a source (with P7 for local functions).
 - Edit and Continue: a body edit that changes a pinning use changes the signature, as for an inferred return type
   (R4's rude edit) and the copied member ([#169](https://github.com/ok3mad/roslyn/issues/169)).
+
+## Feature 9: inferred parameter type, step P5
+
+`infer Show(infer n) => Format(n, "N2");` gives `n` the type `int` when every `Format` that accepts a string second takes
+an `int` first, and `infer Pick(infer key) => dict.GetValueOrDefault(key);` gives `key` the dictionary's `TKey`, on
+branch `sharper/infer-parameter-p5` ([#76](https://github.com/ok3mad/roslyn/issues/76), feature page
+[inferred-parameter-type.md](../features/inferred-parameter-type.md#from-overloaded-and-generic-calls-step-p5)). P4's
+mechanism, extended: the body is still bound once with the placeholder, and the call still fails there; what is new is
+which candidates count, read from overload resolution. No syntax, bound node, public API or lowering.
+
+**Probe.** With the placeholder type an error type, `MethodTypeInferrer` takes no bound from it (`IsReallyAType`), so a
+type parameter that other arguments fix is fixed (`GetValueOrDefault<string, int>`), and the call then fails on the
+placeholder argument alone: `BadArgumentConversion`, with the bad arguments listed, since a failed call is resolved
+again with complete results. Overload resolution keeps one form per `params` candidate (the normal form, unless the
+expanded form is preferred), and drops the results when the call ends; the bound tree keeps only the candidates
+(`OriginalMethodsOpt`). Bound nodes are no key for what overload resolution saw: the binder clones parameters
+(`WithWasConverted` in Debug, `WithHasErrors`, `WithSuppression`), and a lambda's body is bound once per delegate type.
+
+### What a candidate means
+
+P4's table, row "What a candidate means", is extended; the rows of P4 stay as they were.
+
+| Call | Candidates that count | Pins |
+| --- | --- | --- |
+| A group with one member, non-generic at the position and not `params` | That member, applicable or not (P4) | Its parameter type |
+| A group with one member whose parameter type involves its own type parameters | The member if it is applicable with the placeholder in place, constructed with the type arguments inferred from the other arguments and the receiver | The substituted type; a type parameter that nothing fixes pins nothing |
+| A `params` parameter at the position | The normal and the expanded form, each if applicable with the placeholder in place | The type both forms take; `Sum(x)` (`int[]` and `int`) pins nothing, `Sum(1, x)` (expanded form only) pins `int` |
+| A group with several members (methods, extension methods, constructors, constructor initializers) | Every member and form applicable with the placeholder in place, from the first overload resolution of the call that has any: instance methods, then the extension method scopes from the innermost, as C# stops there | The type every one takes, ignoring nullability and tuple names (merged as P4 merges uses); otherwise nothing, and CS20027 lists them |
+| A delegate invocation | The delegate's `Invoke` (P4) | Its parameter type |
+
+**Applicable with the placeholder in place.** The other arguments are bound and converted as in C#, and a candidate is
+applicable when the placeholder arguments are its only bad arguments, each passed with a ref kind its parameter accepts
+(the ref kind itself, or by value, `in` or `ref` to an `in` or `ref readonly` parameter). Argument count, names and
+optional parameters decide as in C#. A candidate whose type inference failed counts only when a placeholder goes to a
+parameter whose type involves its type parameters, since the placeholder's type could have fixed them; it then takes a
+type parameter there, which pins nothing. Better and worse candidates are not compared: the placeholder has no type to
+compare by, so a candidate that would lose to another for one type of the parameter still counts. When several
+placeholders are arguments of one call, each is assumed to fit, independently. A placeholder that makes a candidate
+applicable is never the question: the placeholder converts to nothing, so it only ever makes candidates inapplicable,
+and the definition puts it back in place.
+
+### The mechanism
+
+| Piece | What it does |
+| --- | --- |
+| `OverloadResolution.RecordSharperPlaceholderCandidates` (`OverloadResolution_Sharper.cs`) | Runs at the end of `MethodInvocationOverloadResolution` (not for method group conversions, function pointers or dynamic calls) and `ObjectCreationOverloadResolution`, when the binder's containing member is a placeholder and an argument is a parameter being inferred (`SharperPlaceholderMethodSymbol.IsBeingInferred`). Skips a call that succeeded. Reads the complete results; for a `params` candidate, evaluates both forms again (`IsMemberApplicableInNormalForm` and `...InExpandedForm`, or the constructor twins). Per placeholder argument, the applicable candidates with the parameter and the type each takes (the element type in the expanded part) |
+| `SharperPlaceholderMethodSymbol.RecordCandidates` and `GetCandidates` | Keep the records per argument syntax and per owner of the binding (`Binder.ContainingMemberOrLambda`: the placeholder, a lambda symbol of one delegate type, or a local function), in the order of the resolutions. `GetCandidates` returns those of the first resolution that has any, empty if none has, default if the call recorded nothing. Freed after the collector ran |
+| `UsesCollector.AddUseFromCandidates` | Tracks the owner while it walks (`VisitLambda`, `VisitLocalFunctionStatement`), so it reads the records of the binding the bound tree holds. A call with several candidates, or a single candidate whose parameter is `params` or involves its type parameters, asks for the records: candidates that agree pin, a type parameter or the forms of one method keep P4's reasons, and candidates that disagree are listed |
+
+### Decisions
+
+| Question | Decision | Why |
+| --- | --- | --- |
+| Which other arguments are bound first | All of them, as C# binds them: their conversions, named arguments, optional parameters and type inference decide applicability; the placeholder arguments are assumed to fit | The issue's definition, and C# already does the work: the complete results list every bad argument |
+| A group with one member | Keeps P4's count rule: it pins whether or not the other arguments fit, except at a type parameter or `params` | Every P4 result stays as it was; the final binding reports the C# error for the other argument |
+| Betterness | Not applied | Without a type for the placeholder, betterness could rule out a candidate that would win for another type; the rule asks that every applicable candidate agree |
+| Extension methods | The first scope with an applicable candidate, after instance methods | C#'s order; the receiver is an argument there and still pins nothing (P4) |
+| `params` | Two candidates, one per form | Both are C# candidates; the issue lists `params` at the position |
+| Candidates that disagree | Pin nothing. CS20027's reason lists every applicable candidate and the type it takes ("'C.Over(int)' takes 'int'", "... in its expanded form"); none applicable is "no candidate of a call to 'Over' accepts the other arguments". The forms of one method keep P4's reasons (type parameter, `params`) | The issue asks for the list; an existing message is extended with a reason, no new code |
+| Several uses | A use in an overloaded call is one use, with the first applicable candidate as its candidate in CS20057 | P4's rule |
+| Recursion | An overload of the method itself counts like any candidate (`Overload(x, 0)` pins `string` from `Overload(string, int)`); the placeholder's parameters being inferred pin nothing | P4's placeholder replacement; this changed one P4 test expectation, which had no candidate rule for overloads yet |
+| P4's reasons | Unchanged wording, also where P5 now pins in other cases ("no use passes it directly to a call with one candidate", "... which pins nothing yet") | P4's diagnostics stay as they were; the only P4 expectation whose text changed is the overloaded call `Over(x)`, which now lists its candidates |
+| What is recorded | Per argument syntax and per binding owner, not per bound node | Bound nodes are cloned, and a lambda is bound once per delegate type; the collector reads only the binding the bound tree holds, as P4 does |
+| IDE cost | One more evaluation of the expanded form of each `params` candidate of a failed call with a placeholder argument, in the placeholder binding only; nothing in compilations without Sharper beyond a containing-member check per constructor resolution | The records reuse the complete results that C# computes for a failed call anyway |
+
+Does not block P6 or P7: P6 adds uses (assignments, returns, `ref` and `out`) to the same collector, and the records'
+ref kind check already rules out `ref` and `out` parameters for by-value placeholders; P7's conversions of a method
+group are not recorded (`IsMethodGroupConversion` is skipped).
+
+Diagnostics: no new code; CS20027 has three new reasons (`IDS_SharperInferCandidatesDisagree`,
+`IDS_SharperInferCandidateTakes` and `...Expanded`, `IDS_SharperInferNoApplicableCandidate`). Tests: 7
+`InferFromOverloads_*` tests in `SharperTests_InferFromOverloads.cs`: the issue's examples with runtime output next to C#
+twins (overloads, `GetValueOrDefault`, generic inference from other arguments, named and optional arguments, the expanded
+form of `params`, constructors and constructor initializers, extension methods, lambdas), applicability (argument count,
+other arguments, names, optional parameters, ref kinds, `in`, the expanded form), generics fixed by arguments, the receiver
+and the containing type, what pins nothing and the listed candidates, lambdas bound for several delegate types and local
+functions, and uses that agree or disagree. Two P4 expectations changed: `Over(x)` lists its candidates, and
+`Overload(x, 0)` now pins.
+RESULTS_PLACEHOLDER
 
 ## Feature 10: immutable types, slice 1 (design)
 

@@ -456,6 +456,18 @@
   <data name="IDS_SharperInferUsePinsNothing" xml:space="preserve">
     <value>no use passes it directly to a call with one candidate</value>
   </data>
+  <data name="IDS_SharperInferCandidatesDisagree" xml:space="preserve">
+    <value>the candidates of a call to '{0}' take different types there: {1}</value>
+  </data>
+  <data name="IDS_SharperInferCandidateTakes" xml:space="preserve">
+    <value>'{0}' takes '{1}'</value>
+  </data>
+  <data name="IDS_SharperInferCandidateTakesExpanded" xml:space="preserve">
+    <value>'{0}' takes '{1}' in its expanded form</value>
+  </data>
+  <data name="IDS_SharperInferNoApplicableCandidate" xml:space="preserve">
+    <value>no candidate of a call to '{0}' accepts the other arguments</value>
+  </data>
   <data name="IDS_SharperInferNoMemberWithParameterCount" xml:space="preserve">
     <value>it could override or implement no member '{0}' with the same number of parameters</value>
   </data>
