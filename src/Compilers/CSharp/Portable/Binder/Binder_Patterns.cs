@@ -692,7 +692,9 @@ namespace Microsoft.CodeAnalysis.CSharp
             // This permits us to match a value of type `IComparable<T>` with a pattern of type `int`.
             if (inputType.ContainsTypeParameter())
             {
-                convertedExpression = expression;
+                // An operand with a type keeps it; a target-typed one (such as 'new()') stays unconverted, and the
+                // caller reports that it is not a constant.
+                convertedExpression = expression.Type is null ? expression : BindToNaturalType(expression, diagnostics);
                 // If the expression does not have a constant value, an error will be reported in the caller
                 if (!hasErrors && expression.ConstantValueOpt is object)
                 {
