@@ -348,6 +348,13 @@ implementation plan, "Feature 3"):
    `BoundCall.OriginalMethodsOpt` or `BoundBadExpression.Symbols`; anything the binding caches by syntax (a lambda's
    inferred parameter type) must not be published from it.
 
+40. **Bound nodes are no key across binding steps.** The binder clones nodes after creating them: `WithWasConverted`
+   (in Debug only, for every local and parameter that is converted), `WithHasErrors`, `WithSuppression`. Something
+   recorded during binding for a node (an argument that overload resolution saw) is not found by reference in the final
+   tree, and only Debug shows it. Key by syntax, and by the owner of the binding (`Binder.ContainingMemberOrLambda`),
+   since a lambda's body is bound once per delegate type, each time with its own lambda symbol; a walker of the final
+   tree tracks the owner as it enters lambdas and local functions.
+
 ## Inferred Types
 
 Inference from a body (`infer` return types, rows 10 and 15) reuses `var`'s rules for the natural type of an
@@ -375,8 +382,11 @@ implementations by complete signatures, which do not exist yet at that point, so
 parameter count and narrows with the types that are written. The design is in the implementation plan, "Feature 9".
 Step P4 shows the shape of a body source: `GetBodyInference` binds the body once with a placeholder method (trap 39),
 on the same stack (keyed by the parameter list), with R3's frames suspended so that reads of inferred return types
-start their own frames, and `UsesCollector` reads the uses that pin a type from the bound tree. A new body source (P5's
-overloads, P6's assignments and returns) is a new kind of use in the collector, not a second binding.
+start their own frames, and `UsesCollector` reads the uses that pin a type from the bound tree. A new body source (P6's
+assignments and returns) is a new kind of use in the collector, not a second binding. What the bound tree does not keep
+is recorded during that binding: P5's overloaded calls have overload resolution record, on the placeholder, the
+candidates that are applicable with the placeholder in place (`OverloadResolution.RecordSharperPlaceholderCandidates`),
+keyed by argument syntax and binding owner (trap 40).
 
 ## Testing
 

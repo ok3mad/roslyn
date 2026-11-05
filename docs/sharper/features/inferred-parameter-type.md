@@ -1,10 +1,11 @@
 # Inferred parameter type (`infer`)
 
-**Status:** Prototype of steps P1 to P3, merged into `main`; P4 on branch `sharper/infer-parameter-p4`. Requires
+**Status:** Prototype of steps P1 to P4, merged into `main`; P5 on branch `sharper/infer-parameter-p5`. Requires
 `/features:sharper`. Issues: [#72](https://github.com/ok3mad/roslyn/issues/72) (P1),
 [#73](https://github.com/ok3mad/roslyn/issues/73) (P2), [#166](https://github.com/ok3mad/roslyn/issues/166) (P2 for the
 other member kinds), [#74](https://github.com/ok3mad/roslyn/issues/74) (P3),
-[#75](https://github.com/ok3mad/roslyn/issues/75) (P4), under [#27](https://github.com/ok3mad/roslyn/issues/27).
+[#75](https://github.com/ok3mad/roslyn/issues/75) (P4), [#76](https://github.com/ok3mad/roslyn/issues/76) (P5), under
+[#27](https://github.com/ok3mad/roslyn/issues/27).
 
 ## Summary
 
@@ -32,8 +33,9 @@ metadata all see `int retries = 3`. Step P1 takes the type from the default valu
 [brainstorm](../planning/brainstorm.md#inferred-parameter-types)), step P2 from the overridden or implemented member
 (source 1). Step P3 combines both with [`readonly`](readonly-parameters.md): `readonly infer x` is inferred and cannot
 be reassigned. Step P4 takes the type from a use in the body (source 4): the parameter passed directly to a call
-with exactly one candidate (`profiles.Load(id)` with one `Load(int)`) gets that candidate's parameter type. Overloads
-and generic calls (P5) and other uses (P6) are the next steps of the
+with exactly one candidate (`profiles.Load(id)` with one `Load(int)`) gets that candidate's parameter type. Step P5
+extends it to overloaded and generic calls: `Format(n, "N2")` pins `n` when every `Format` that accepts a string second
+takes an `int` first, and `dict.GetValueOrDefault(key)` pins `TKey`. Other uses (P6) are the next step of the
 [work breakdown](../planning/implementation-plan.md#type-inference-work-breakdown).
 
 ## Rules
@@ -194,19 +196,18 @@ class C(IProfiles profiles)
   type arguments of the candidate's type substituted (`IRepo<User>.Put(T)` pins `User`). An `in` or `ref readonly`
   parameter pins its type. `Ext.Twice(x)` pins, and so does an argument of the extension call `p.Pad(x)`.
 - **What pins nothing.** Shape never pins: member access (`s.Length`, also as the receiver of an extension method,
-  `x.Twice()`), operators, type tests (`is`, `as`, patterns, `switch`) and interpolations. Not yet (P5 and P6): a call
-  with more than one candidate (`Console.WriteLine(x)`), a parameter whose type is a type parameter of the candidate
-  (`Generic(x)` for `Generic<T>(T t)`; with the type argument written, `Generic<long>(x)` pins `long`), a `params`
-  parameter, `ref` and `out` arguments, assignments, returns, casts and other expressions around the parameter.
+  `x.Twice()`), operators, type tests (`is`, `as`, patterns, `switch`) and interpolations. Not yet (P6): `ref` and `out`
+  arguments, assignments, returns, casts and other expressions around the parameter. Calls with more than one
+  candidate, type parameters of the candidate and `params` parameters are step P5 (below).
 - **Several uses** must agree: the same type, ignoring nullability and tuple element names (`string?` and `string`
   give `string`, which both accept; `(int a, int b)` and `(int x, int y)` give `(int, int)`). Uses that need different
   types report CS20057, which names two of them with their candidates (`'int' for 'C.Take(int)' and 'long' for
   'C.TakeLong(long)'`) and points at both.
 - **Nothing pins it.** CS20027 says why, from the first use that pins nothing: "a member access pins nothing", "an
-  operator pins nothing", "a type test pins nothing", "an interpolation pins nothing", "a call to 'Over', which has more
-  than one candidate, pins nothing yet", "'Generic' takes a type parameter there, which pins nothing yet", "a params
-  parameter pins nothing yet", "a ref or out argument pins nothing yet", "no use passes it directly to a call with one
-  candidate", or "the body does not use it". The use is an additional location of the error. Members whose body is no
+  operator pins nothing", "a type test pins nothing", "an interpolation pins nothing", "'Generic' takes a type
+  parameter there, which pins nothing yet", "a params parameter pins nothing yet", "a ref or out argument pins nothing
+  yet", "no use passes it directly to a call with one candidate", or "the body does not use it", and from P5 on the
+  candidates of an overloaded call (below). The use is an additional location of the error. Members whose body is no
   source keep "nothing else gives its type". The parameter never becomes generic
   ([#79](https://github.com/ok3mad/roslyn/issues/79)).
 - **Precedence.** The member that is overridden or implemented (P2), then the default value (P1), then the body. The
@@ -228,6 +229,51 @@ class C(IProfiles profiles)
   Lambdas, local functions, indexers, primary constructors and delegates have no body source yet (CS20027).
 - **Generics.** The method's own type parameters are in scope (`Owner<T>(IRepo<T> r, infer x) => r.Put(x)` gives `x`
   the type `T`); a type parameter of a local function or a lambda in the body pins nothing.
+
+## From overloaded and generic calls (step P5)
+
+A call with several candidates pins the parameter when every candidate that is applicable with the parameter in place
+takes the same type at its position:
+
+```csharp
+class C(Dictionary<string, int> dict)
+{
+    static string Format(int n, string format) => n.ToString(format);
+    static string Format(double d, int digits) => d.ToString();
+    static string Format(string s) => s;
+    static int Sum(params int[] xs) => xs.Sum();
+
+    infer Show(infer n) => Format(n, "N2");                // string Show(int n)
+    infer Pick(infer key) => dict.GetValueOrDefault(key);  // int Pick(string key): TKey is fixed by dict
+    infer Twice(infer x) => Sum(1, x);                     // int Twice(int x): the expanded form
+    void Log(infer x) => Console.WriteLine(x);             // error CS20027: ... the candidates of a call to 'WriteLine' take different types there: ...
+}
+```
+
+- **Applicable with the parameter in place.** The other arguments are bound and converted as for any call, and the
+  parameter is assumed to fit its position: a candidate is applicable when it would be if the parameter had the type
+  the candidate takes there. Argument count, names, optional parameters and the ref kind still decide (a by-value
+  argument rules out a `ref` or `out` parameter, and fits an `in` one), and the C# rules of the call apply: instance
+  methods first, then the extension method scopes from the innermost, and the first set with an applicable candidate
+  is the one that counts. Better and worse candidates are not compared: the parameter has no type to compare them by.
+- **Generic candidates.** Type inference fixes the candidate's type parameters from the other arguments and the
+  receiver (`list.Add(x, 1)` on a `List<long>`, `First("s", x)` for `First<T>(T a, T b)`, `d.Get(key)` for
+  `Get<TKey, TValue>(this IDictionary<TKey, TValue>, TKey)`), and the parameter gets the substituted type. A type
+  parameter that nothing else fixes pins nothing ("'First' takes a type parameter there, which pins nothing yet"), and
+  a candidate whose inference fails only on other arguments is not applicable.
+- **`params`.** The normal and the expanded form are two candidates: `Sum(1, x)` has only the expanded form and pins
+  `int`; `Sum(x)` has both, `int[]` and `int`, and pins nothing ("a params parameter pins nothing yet").
+- **A group with one member** pins as in P4, whether or not it is applicable, except where its parameter type is one of
+  its type parameters or `params`, which P5 decides as above.
+- **Candidates that disagree** pin nothing. CS20027 lists every applicable candidate and the type it takes: "the
+  candidates of a call to 'Over' take different types there: 'C.Over(int)' takes 'int', 'C.Over(string)' takes
+  'string'", with "in its expanded form" for the expanded form of `params`. With no applicable candidate it says "no
+  candidate of a call to 'Over' accepts the other arguments". Another use can still pin the parameter.
+- **Several uses** must agree, as in P4: a use in an overloaded call is a use like any other, its type merged with the
+  others ignoring nullability and tuple names; CS20057 names the first candidate of an overloaded use.
+- **Recursion.** An overload of the method itself is a candidate like any other (`Overload(infer x) => Overload(x, 0)`
+  with `Overload(string x, int level)` gives `x` the type `string`); the placeholder's own parameters being inferred
+  pin nothing.
 
 ## How it works
 
@@ -277,7 +323,17 @@ No syntax, bound node or lowering is added: `infer` parses as a type name, and t
    return type inference (R3) is suspended, so its reads start their own frames, and the default values of lambdas and
    local functions in that body are not cached. The body is then bound normally, against the real types, when the
    member is compiled, and reports its errors there.
-8. **Semantic model.** `GetTypeInfo` and `GetSymbolInfo` on a parameter's `infer`, and on a copied `infer` return,
+8. **Overloaded and generic calls** (P5). In a body bound with the placeholder, overload resolution of a method call
+   or a constructor call whose arguments include a parameter being inferred records the candidates that are applicable
+   with it in place (`OverloadResolution.RecordSharperPlaceholderCandidates`). The placeholder type converts to nothing,
+   so the call fails and the complete results are at hand: a candidate whose only bad arguments are such parameters,
+   passed with a ref kind their parameter accepts, is applicable with them in place, and type inference has already
+   fixed its type parameters from the other arguments (an error type gives no bound). Overload resolution keeps one
+   form of a `params` candidate, so the other form is computed there again. The candidates are kept on the placeholder
+   per argument syntax and per lambda, local function or placeholder whose binding made the call, since a lambda is
+   bound once per delegate type and bound nodes may be cloned; `UsesCollector` reads those of the binding the bound
+   tree holds. No binding changes: the call still fails, and P4's error recovery binds the rest of the body as before.
+9. **Semantic model.** `GetTypeInfo` and `GetSymbolInfo` on a parameter's `infer`, and on a copied `infer` return,
    property, indexer or event type, return the type, with its nullable annotation, like `var`.
 
 ## Follow-ups
@@ -305,6 +361,13 @@ No syntax, bound node or lowering is added: `infer` parses as a type name, and t
   type, after the cycle error.
 - Edit and Continue does not see a signature change that comes from a body edit that changes a pinning use, as for
   the overridden member ([#169](https://github.com/ok3mad/roslyn/issues/169)).
+- P5 binds the lambda arguments of a failed call to a `params` candidate once more for its other form, in the
+  placeholder binding only.
+- The P4 reasons "no use passes it directly to a call with one candidate", "'Generic' takes a type parameter there,
+  which pins nothing yet" and "a params parameter pins nothing yet" keep their wording, although overloaded calls,
+  fixed type parameters and the expanded form of `params` now pin; rewording them would change P4's diagnostics.
+- An overloaded call that succeeds with a parameter being inferred (no such case is known: the placeholder type
+  converts to nothing) records no candidates and is read as P4 reads a call that binds.
 - The IDE does not know `infer` yet (R5, [#71](https://github.com/ok3mad/roslyn/issues/71)).
 
 ## Code
@@ -323,4 +386,7 @@ and `CSharpSemanticModel.GetSharperInferredPropertyOrEventType` for the semantic
 Step P4: `Symbols/Source/SharperInferredParameterType_Body.cs`, `Symbols/Source/SharperPlaceholderMethodSymbol.cs`,
 the `ReplaceOriginal` calls in `OverloadResolution.MethodInvocationOverloadResolution` and
 `Binder.GetAccessibleConstructorsForOverloadResolution`, and `SharperInferredReturnType.SuspendInference`; tests
-`InferFromBody_*` in `SharperTests_InferFromBody.cs`.
+`InferFromBody_*` in `SharperTests_InferFromBody.cs`. Step P5: `Binder/Semantics/OverloadResolution/OverloadResolution_Sharper.cs`,
+called from `OverloadResolution.MethodInvocationOverloadResolution` and `ObjectCreationOverloadResolution`,
+`SharperPlaceholderMethodSymbol.RecordCandidates` and `GetCandidates`, and `UsesCollector.AddUseFromCandidates`; tests
+`InferFromOverloads_*` in `SharperTests_InferFromOverloads.cs`.

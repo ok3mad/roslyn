@@ -3682,6 +3682,21 @@
         <target state="new">its written types rule out every member '{0}' with the same number of parameters: {1}</target>
         <note />
       </trans-unit>
+      <trans-unit id="IDS_SharperInferCandidateTakes">
+        <source>'{0}' takes '{1}'</source>
+        <target state="new">'{0}' takes '{1}'</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperInferCandidateTakesExpanded">
+        <source>'{0}' takes '{1}' in its expanded form</source>
+        <target state="new">'{0}' takes '{1}' in its expanded form</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperInferCandidatesDisagree">
+        <source>the candidates of a call to '{0}' take different types there: {1}</source>
+        <target state="new">the candidates of a call to '{0}' take different types there: {1}</target>
+        <note />
+      </trans-unit>
       <trans-unit id="IDS_SharperInferInterpolationPinsNothing">
         <source>an interpolation pins nothing</source>
         <target state="new">an interpolation pins nothing</target>
@@ -3690,6 +3705,11 @@
       <trans-unit id="IDS_SharperInferMemberAccessPinsNothing">
         <source>a member access pins nothing</source>
         <target state="new">a member access pins nothing</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperInferNoApplicableCandidate">
+        <source>no candidate of a call to '{0}' accepts the other arguments</source>
+        <target state="new">no candidate of a call to '{0}' accepts the other arguments</target>
         <note />
       </trans-unit>
       <trans-unit id="IDS_SharperInferNoMemberWithParameterCount">

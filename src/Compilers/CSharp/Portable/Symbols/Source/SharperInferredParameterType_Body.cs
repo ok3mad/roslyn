@@ -240,7 +240,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 returnType = signatureBinder.BindTypeOrSharperInferKeyword(returnTypeSyntax.SkipRef(), BindingDiagnosticBag.Discarded, out _);
             }
 
-            var placeholder = new SharperPlaceholderMethodSymbol(method, placeholderParameters.ToImmutableAndFree(), returnType);
+            var placeholder = new SharperPlaceholderMethodSymbol(method, placeholderParameters.ToImmutableAndFree(), returnType, isTarget.ToImmutable());
             var collector = new UsesCollector(ImmutableArray<ParameterSymbol>.Empty, placeholder.ParameterCount);
             var dependencies = BindingDiagnosticBag.GetInstance(withDiagnostics: false, withDependencies: true);
             if (placeholder.TryGetBodyBinder() is { } bodyBinder)
@@ -268,6 +268,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 }
                 finally
                 {
+                    placeholder.FreeCandidates();
                     SharperInferredReturnType.ResumeInference(suspendedReturnTypeInference);
                     Debug.Assert(placeholderBodies[placeholderBodies.Count - 1] == declaration);
                     placeholderBodies.RemoveAt(placeholderBodies.Count - 1);
@@ -418,7 +419,10 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         /// Collects the uses of the placeholder parameters that pin a type: a parameter passed by value, directly, as an
         /// argument of a call (a method, a constructor or a delegate invocation) that has exactly one candidate, to a
         /// parameter that is neither <c>params</c> nor <c>ref</c> or <c>out</c>, whose type does not involve the
-        /// candidate's own type parameters. Member access, operators, <c>is</c> tests and interpolations pin nothing.
+        /// candidate's own type parameters (step P4); or, for a call with several candidates, a <c>params</c> parameter or
+        /// a type parameter of the candidate, the type that every candidate applicable with the placeholder in place takes
+        /// there, as overload resolution recorded them (step P5). Member access, operators, <c>is</c> tests and
+        /// interpolations pin nothing.
         /// </summary>
         /// <remarks>
         /// The bound tree holds the final binding of each lambda, so the trial bindings that overload resolution makes for
@@ -436,11 +440,33 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             /// <summary>Per placeholder parameter, its first use that pins nothing, and why.</summary>
             internal readonly (SyntaxNode Syntax, IFormattable Reason)?[] FirstNotPinning;
 
+            /// <summary>The lambda, local function or placeholder whose body is being walked (the owner of its binding).</summary>
+            private Symbol? _owner;
+
             internal UsesCollector(ImmutableArray<ParameterSymbol> targets, int parameterCount)
             {
                 _targets = targets;
+                _owner = targets.IsEmpty ? null : targets[0].ContainingSymbol;
                 Uses = new ArrayBuilder<PinningUse>?[parameterCount];
                 FirstNotPinning = new (SyntaxNode, IFormattable)?[parameterCount];
+            }
+
+            public override BoundNode? VisitLambda(BoundLambda node)
+            {
+                Symbol? owner = _owner;
+                _owner = node.Symbol;
+                base.VisitLambda(node);
+                _owner = owner;
+                return null;
+            }
+
+            public override BoundNode? VisitLocalFunctionStatement(BoundLocalFunctionStatement node)
+            {
+                Symbol? owner = _owner;
+                _owner = node.Symbol;
+                base.VisitLocalFunctionStatement(node);
+                _owner = owner;
+                return null;
             }
 
             public override BoundNode? VisitCall(BoundCall node)
@@ -464,7 +490,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 }
                 else if (candidates is [var someCandidate, ..])
                 {
-                    NoteSeveralCandidates(node.Arguments, someCandidate.Name);
+                    AddUsesFromApplicableCandidates(node.Arguments, node.ArgumentRefKindsOpt, someCandidate.Name, skipReceiver: node.InvokedAsExtensionMethod);
                 }
 
                 return base.VisitCall(node);
@@ -484,12 +510,6 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     node.ChildBoundNodes.Length >= argumentList.Arguments.Count)
                 {
                     ImmutableArray<BoundExpression> arguments = node.ChildBoundNodes.RemoveRange(argumentList.Arguments.Count, node.ChildBoundNodes.Length - argumentList.Arguments.Count);
-                    if (node.Symbols.Length > 1)
-                    {
-                        NoteSeveralCandidates(arguments, constructor.ContainingType.Name);
-                        return base.VisitBadExpression(node);
-                    }
-
                     var names = ArrayBuilder<string?>.GetInstance(argumentList.Arguments.Count);
                     var refKinds = ArrayBuilder<RefKind>.GetInstance(argumentList.Arguments.Count);
                     foreach (var argument in argumentList.Arguments)
@@ -502,6 +522,13 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                             SyntaxKind.InKeyword => RefKind.In,
                             _ => RefKind.None,
                         });
+                    }
+
+                    if (node.Symbols.Length > 1)
+                    {
+                        names.Free();
+                        AddUsesFromApplicableCandidates(arguments, refKinds.ToImmutableAndFree(), constructor.ContainingType.Name);
+                        return base.VisitBadExpression(node);
                     }
 
                     AddUses(arguments, names.ToImmutableAndFree(), refKinds.ToImmutableAndFree(), constructor, constructor.Parameters);
@@ -548,14 +575,114 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             private void NoteNotPinning(ParameterSymbol target, SyntaxNode syntax, IFormattable reason)
                 => FirstNotPinning[target.Ordinal] ??= (syntax, reason);
 
-            private void NoteSeveralCandidates(ImmutableArray<BoundExpression> arguments, string name)
+            /// <summary>
+            /// The uses in a call with several candidates (step P5): each argument that is a parameter being inferred pins
+            /// the type that every candidate applicable with the placeholder in place takes there
+            /// (<see cref="SharperPlaceholderMethodSymbol.GetCandidates"/>).
+            /// </summary>
+            private void AddUsesFromApplicableCandidates(ImmutableArray<BoundExpression> arguments, ImmutableArray<RefKind> argumentRefKinds, string name, bool skipReceiver = false)
             {
-                foreach (var argument in arguments)
+                for (int i = skipReceiver ? 1 : 0; i < arguments.Length; i++)
                 {
-                    if (GetTarget(argument) is { } target)
+                    if (GetTargetArgument(arguments[i]) is not { } argument)
+                    {
+                        continue;
+                    }
+
+                    ParameterSymbol target = argument.ParameterSymbol;
+                    if (!argumentRefKinds.IsDefault && argumentRefKinds[i] != RefKind.None)
+                    {
+                        NoteNotPinning(target, argument.Syntax, MessageID.IDS_SharperInferRefArgumentPinsNothing.Localize());
+                    }
+                    else if (Placeholder.GetCandidates(argument.Syntax, _owner) is { IsDefault: false } candidates)
+                    {
+                        AddUseFromCandidates(target, arguments[i].Syntax, candidates, name);
+                    }
+                    else
                     {
                         NoteNotPinning(target, argument.Syntax, new MessageFragment(MessageID.IDS_SharperInferSeveralCandidatesPinNothing, [name]));
                     }
+                }
+            }
+
+            /// <summary>
+            /// Pins the type that every candidate in <paramref name="candidates"/> takes for the argument, when they agree
+            /// and none takes a type parameter that the other arguments leave open. Otherwise notes why nothing is pinned:
+            /// P4's reasons when the candidates are the forms of one method (a type parameter, or the two forms of
+            /// <c>params</c>), or else the list of candidates and their types.
+            /// </summary>
+            private void AddUseFromCandidates(ParameterSymbol target, SyntaxNode syntax, ImmutableArray<SharperPlaceholderCandidate> candidates, string name)
+            {
+                if (candidates.IsEmpty)
+                {
+                    NoteNotPinning(target, syntax, new MessageFragment(MessageID.IDS_SharperInferNoApplicableCandidate, [name]));
+                    return;
+                }
+
+                TypeWithAnnotations type = candidates[0].Type;
+                bool agree = true;
+                bool typeParameter = false;
+                foreach (var candidate in candidates)
+                {
+                    if (InvolvesTypeParametersNotInScope(candidate.Type.Type))
+                    {
+                        agree = false;
+                        typeParameter = true;
+                        break;
+                    }
+
+                    if (candidate.Type.Type.IsErrorType() ||
+                        !type.Type.Equals(candidate.Type.Type, TypeCompareKind.AllNullableIgnoreOptions | TypeCompareKind.IgnoreTupleNames))
+                    {
+                        agree = false;
+                    }
+                    else if (agree)
+                    {
+                        type = type.MergeEquivalentTypes(candidate.Type, VarianceKind.In);
+                    }
+                }
+
+                if (agree)
+                {
+                    var uses = Uses[target.Ordinal] ??= ArrayBuilder<PinningUse>.GetInstance();
+                    uses.Add(new PinningUse(syntax, candidates[0].Candidate, type));
+                }
+                else if (isOneMethod(candidates))
+                {
+                    NoteNotPinning(
+                        target,
+                        syntax,
+                        typeParameter ? new MessageFragment(MessageID.IDS_SharperInferTypeParameterPinsNothing, [name]) : MessageID.IDS_SharperInferParamsPinsNothing.Localize());
+                }
+                else
+                {
+                    var list = ArrayBuilder<MessageFragment>.GetInstance(candidates.Length);
+                    var seen = PooledHashSet<string>.GetInstance();
+                    foreach (var candidate in candidates)
+                    {
+                        string member = candidate.Candidate.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat);
+                        string candidateType = candidate.Type.Type.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat);
+                        if (seen.Add(member + "|" + candidateType + "|" + candidate.IsExpanded))
+                        {
+                            list.Add(new MessageFragment(candidate.IsExpanded ? MessageID.IDS_SharperInferCandidateTakesExpanded : MessageID.IDS_SharperInferCandidateTakes, [member, candidateType]));
+                        }
+                    }
+
+                    seen.Free();
+                    NoteNotPinning(target, syntax, new MessageFragment(MessageID.IDS_SharperInferCandidatesDisagree, [name, new MessageFragmentList(list.ToImmutableAndFree())]));
+                }
+
+                static bool isOneMethod(ImmutableArray<SharperPlaceholderCandidate> candidates)
+                {
+                    foreach (var candidate in candidates)
+                    {
+                        if (!candidate.Candidate.OriginalDefinition.Equals(candidates[0].Candidate.OriginalDefinition))
+                        {
+                            return false;
+                        }
+                    }
+
+                    return true;
                 }
             }
 
@@ -569,20 +696,35 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             {
                 for (int i = skipReceiver ? 1 : 0; i < arguments.Length; i++)
                 {
-                    if (GetTarget(arguments[i]) is not { } target)
+                    if (GetTargetArgument(arguments[i]) is not { } argument)
                     {
                         continue;
                     }
 
+                    ParameterSymbol target = argument.ParameterSymbol;
                     SyntaxNode syntax = arguments[i].Syntax;
-                    if ((!argumentRefKinds.IsDefault && argumentRefKinds[i] != RefKind.None) ||
-                        GetParameter(i, argumentNames, parameters) is not { } parameter)
+                    ParameterSymbol? parameter = GetParameter(i, argumentNames, parameters);
+                    if (parameter is null && (argumentNames.IsDefault || argumentNames[i] is null) && parameters is [.., { IsParams: true } last])
+                    {
+                        // An argument of the expanded form.
+                        parameter = last;
+                    }
+
+                    if ((!argumentRefKinds.IsDefault && argumentRefKinds[i] != RefKind.None) || parameter is null)
                     {
                         NoteNotPinning(target, syntax, (argumentRefKinds.IsDefault || argumentRefKinds[i] == RefKind.None ? MessageID.IDS_SharperInferUsePinsNothing : MessageID.IDS_SharperInferRefArgumentPinsNothing).Localize());
                     }
                     else if (parameter.IsParams)
                     {
-                        NoteNotPinning(target, syntax, MessageID.IDS_SharperInferParamsPinsNothing.Localize());
+                        // The normal and the expanded form are two candidates (P5).
+                        if (Placeholder.GetCandidates(argument.Syntax, _owner) is { IsDefault: false } candidates)
+                        {
+                            AddUseFromCandidates(target, syntax, candidates, candidate.Name);
+                        }
+                        else
+                        {
+                            NoteNotPinning(target, syntax, MessageID.IDS_SharperInferParamsPinsNothing.Localize());
+                        }
                     }
                     else if (parameter.RefKind is RefKind.Ref or RefKind.Out)
                     {
@@ -590,7 +732,15 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     }
                     else if (InvolvesTypeParametersNotInScope(parameter.Type))
                     {
-                        NoteNotPinning(target, syntax, new MessageFragment(MessageID.IDS_SharperInferTypeParameterPinsNothing, [candidate.Name]));
+                        // The type arguments that type inference fixes from the other arguments (P5).
+                        if (Placeholder.GetCandidates(argument.Syntax, _owner) is { IsDefault: false } candidates)
+                        {
+                            AddUseFromCandidates(target, syntax, candidates, candidate.Name);
+                        }
+                        else
+                        {
+                            NoteNotPinning(target, syntax, new MessageFragment(MessageID.IDS_SharperInferTypeParameterPinsNothing, [candidate.Name]));
+                        }
                     }
                     else if (parameter.Type.IsErrorType())
                     {
@@ -607,14 +757,20 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
             /// <summary>The placeholder parameter that the argument is, directly; the binder may wrap it for error recovery.</summary>
             private ParameterSymbol? GetTarget(BoundExpression argument)
+                => GetTargetArgument(argument)?.ParameterSymbol;
+
+            /// <summary>The argument as overload resolution saw it, if it is a placeholder parameter.</summary>
+            private BoundParameter? GetTargetArgument(BoundExpression argument)
             {
                 if (argument is BoundConversion { WasCompilerGenerated: true, ExplicitCastInCode: false } conversion)
                 {
                     argument = conversion.Operand;
                 }
 
-                return argument is BoundParameter { ParameterSymbol: var parameter } && _targets.Contains(parameter) ? parameter : null;
+                return argument is BoundParameter { ParameterSymbol: var parameter } boundParameter && _targets.Contains(parameter) ? boundParameter : null;
             }
+
+            private SharperPlaceholderMethodSymbol Placeholder => (SharperPlaceholderMethodSymbol)_targets[0].ContainingSymbol;
 
             /// <summary>The parameter an argument goes to: by name if it is named, otherwise by position.</summary>
             private static ParameterSymbol? GetParameter(int argumentIndex, ImmutableArray<string?> argumentNames, ImmutableArray<ParameterSymbol> parameters)
@@ -642,11 +798,10 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             /// </summary>
             private bool InvolvesTypeParametersNotInScope(TypeSymbol type)
             {
-                MethodSymbol owner = (MethodSymbol)_targets[0].ContainingSymbol;
                 return type.VisitType(
-                    static (t, owner, _) => t is TypeParameterSymbol { ContainingSymbol: MethodSymbol typeParameterOwner } &&
-                        (object)typeParameterOwner != ((SharperPlaceholderMethodSymbol)owner).Original,
-                    owner) is not null;
+                    static (t, placeholder, _) => t is TypeParameterSymbol { ContainingSymbol: MethodSymbol typeParameterOwner } &&
+                        (object)typeParameterOwner != placeholder.Original,
+                    Placeholder) is not null;
             }
         }
     }

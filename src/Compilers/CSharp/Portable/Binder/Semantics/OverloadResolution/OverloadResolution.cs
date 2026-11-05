@@ -113,6 +113,12 @@ namespace Microsoft.CodeAnalysis.CSharp
                 result.Clear();
                 PerformObjectCreationOverloadResolution(results, constructors, arguments, completeResults: true, dynamicResolution: dynamicResolution, isEarlyAttributeBinding, ref useSiteInfo);
             }
+
+            // Sharper: the candidates that are applicable with the placeholder in place (step P5).
+            if (!dynamicResolution && _binder.ContainingMember() is SharperPlaceholderMethodSymbol placeholder)
+            {
+                RecordSharperPlaceholderCandidates(placeholder, typeArguments: null, arguments, result, Options.None, isConstructor: true);
+            }
         }
 
         [Flags]
@@ -153,16 +159,20 @@ namespace Microsoft.CodeAnalysis.CSharp
             Debug.Assert((options & Options.InferWithDynamic) == 0 || (options & Options.IsMethodGroupConversion) != 0);
 
             // Sharper: a body bound with placeholders for its parameter types calls the placeholder, not its own method.
-            if (_binder.ContainingMember() is SharperPlaceholderMethodSymbol placeholder)
-            {
-                placeholder.ReplaceOriginal(methods);
-            }
+            var placeholder = _binder.ContainingMember() as SharperPlaceholderMethodSymbol;
+            placeholder?.ReplaceOriginal(methods);
 
             MethodOrPropertyOverloadResolution(
                 methods, typeArguments, receiver, arguments, result,
                 ref useSiteInfo, options,
                 returnRefKind, returnType,
                 in callingConventionInfo);
+
+            // Sharper: the candidates that are applicable with the placeholder in place (step P5).
+            if (placeholder is not null && (options & (Options.DynamicResolution | Options.IsMethodGroupConversion | Options.IsFunctionPointerResolution)) == 0)
+            {
+                RecordSharperPlaceholderCandidates(placeholder, typeArguments, arguments, result, options, isConstructor: false);
+            }
         }
 
         // Perform overload resolution on the given property group, with the given arguments and
