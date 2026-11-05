@@ -2667,6 +2667,10 @@ namespace Microsoft.CodeAnalysis.CSharp
                 or ErrorCode.ERR_SharperInferEventNoOverriddenMember
                 or ErrorCode.ERR_SharperInferParameterBodyCycle
                 or ErrorCode.ERR_SharperInferParameterUsesDisagree
+                or ErrorCode.ERR_SharperRefinementNotClosed
+                or ErrorCode.ERR_SharperRefinementTypeNotSupported
+                or ErrorCode.ERR_SharperRefinementDefaultValueDisproven
+                or ErrorCode.ERR_SharperRefinementNotSupportedYet
                     => false,
             };
 #pragma warning restore CS8524 // The switch expression does not handle some values of its input type (it is not exhaustive) involving an unnamed enum value.

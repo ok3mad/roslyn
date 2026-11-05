@@ -354,6 +354,17 @@ implementation plan, "Feature 3"):
    tree, and only Debug shows it. Key by syntax, and by the owner of the binding (`Binder.ContainingMemberOrLambda`),
    since a lambda's body is bound once per delegate type, each time with its own lambda symbol; a walker of the final
    tree tracks the owner as it enters lambdas and local functions.
+41. **A new field on an existing node changes shipped API.** A node's fields are its children in source order, so a new
+   one goes where its tokens are (the refinement sits between `Identifier` and `Default` of `ParameterSyntax`), and the
+   generated `Update` and `SyntaxFactory` overloads take one more argument. Keep the old overloads by hand
+   (`Syntax/ParameterSyntax.cs`, the end of `Syntax/SyntaxFactory.cs`; the old `Update` keeps the new field of the node
+   it updates), update every internal factory call in the parser, and check that the analyzer build reports RS0016 for
+   the new members and no RS0017. A node that can now end in an expression or a pattern must not be reused by the
+   incremental parser (`CanReuseParameter`).
+42. **Binding a pattern outside a body asserts on designations.** `BindPattern` with `permitDesignations: false` still
+   looks up a `var x` designation's local, and finds none outside a body (`designation.SyntaxTree.Options.Kind`
+   assert). A construct that allows only some patterns (refinements: constant, relational, `and`, `or`, `not`) checks
+   the syntax before binding and the bound pattern after it, since a constant pattern can bind to a type.
 
 ## Inferred Types
 

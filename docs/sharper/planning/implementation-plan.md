@@ -1210,7 +1210,8 @@ needs member mutation inference.
 `static int Page(int i is >=0) => ...;` and, later, `record Money(decimal Amount is >0, Currency Currency);` (issue
 [#33](https://github.com/ok3mad/roslyn/issues/33)). A refinement is a closed pattern over constants attached to a
 declaration; a value reaches it only through a door that proves the pattern, and a runtime guard covers every door the
-compiler cannot see. This section is the design; nothing is implemented yet.
+compiler cannot see. This section is the design; steps 1 and 2 are a prototype (see [Progress](#progress-of-slice-1)),
+and feature page [refined-types.md](../features/refined-types.md).
 
 **Probe.** What the compiler does today, and what the design reuses:
 
@@ -1268,6 +1269,32 @@ tests and `assume` (slice 3).
 
 **Size:** L, about 3.5k lines with tests. The parser and the guard are S; most of the work is binding, the call-site
 rules and return inference.
+
+### Progress of slice 1
+
+- [x] **Step 1, syntax** (`sharper/refined-parameters-syntax`). `RefinementClauseSyntax` (kind 9905) is the optional
+  `Refinement` field of `ParameterSyntax`. The design said "last field", but a node's fields are its children in source
+  order, so the field sits between `Identifier` and `Default`; the generated `Update` and `SyntaxFactory.Parameter` take
+  one more argument, and the five-argument overloads are kept by hand (`Syntax/ParameterSyntax.cs`,
+  `Syntax/SyntaxFactory.cs`), so the analyzer build reports no RS0017. `ParseParameter` reads `is` and a pattern after
+  the name, behind the flag; `CanReuseParameter` does not reuse a refined parameter, which may end in a pattern. A
+  lambda's parameter list is scanned before it is parsed, and the scan is unchanged, so a refinement on a lambda
+  parameter stays a syntax error; anonymous methods parse it and report CS20061.
+- [x] **Step 2, binding.** `SharperRefinement.Bind` (`Symbols/Source/SharperRefinement.cs`), once per parameter symbol
+  (`SourceComplexParameterSymbolBase.SharperRefinement`, forced by `ForceComplete`). Patterns that are not closed are
+  rejected on syntax before binding, because a designation outside a body asserts in the binder, and on the bound
+  pattern after it (a constant pattern that binds to a type). The value set is built from `ValueSetFactory.ForType`
+  with the relations the DAG uses; `MatchesNull` records whether `null` matches (`string s is not "x"`). The default
+  value is checked by evaluating the pattern on the constant. The flag `SharperReadOnly` makes the parameter readonly,
+  with the readonly parameter machinery of Feature 5. CS20058 to CS20061.
+  Beyond the design: `ref`, `out` and `in` parameters (a write through the ref would break the fact), explicit interface
+  implementations, delegates, extension block receivers and positional record parameters (the records exclusion) are
+  CS20061 too.
+  Left for step 3: the error on recursive `infer` returns, which only matters once returns have refinements. Open
+  points, as `PROTOTYPE(sharper)` comments: implicit interface implementations, `[DefaultParameterValue]` defaults.
+- [ ] Step 3, return refinements.
+- [ ] Step 4, call sites and switches.
+- [ ] Step 5, guard and metadata.
 
 ## Feature 12: pipe, without lifting
 
