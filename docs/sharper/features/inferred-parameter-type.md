@@ -1,11 +1,11 @@
 # Inferred parameter type (`infer`)
 
-**Status:** Prototype of steps P1 to P5, merged into `main`; P6 on branch `sharper/infer-parameter-p6`. Requires
+**Status:** Prototype of steps P1 to P6, merged into `main`; P7 on branch `sharper/infer-parameter-p7`. Requires
 `/features:sharper`. Issues: [#72](https://github.com/ok3mad/roslyn/issues/72) (P1),
 [#73](https://github.com/ok3mad/roslyn/issues/73) (P2), [#166](https://github.com/ok3mad/roslyn/issues/166) (P2 for the
 other member kinds), [#74](https://github.com/ok3mad/roslyn/issues/74) (P3),
 [#75](https://github.com/ok3mad/roslyn/issues/75) (P4), [#76](https://github.com/ok3mad/roslyn/issues/76) (P5),
-[#77](https://github.com/ok3mad/roslyn/issues/77) (P6), under
+[#77](https://github.com/ok3mad/roslyn/issues/77) (P6), [#78](https://github.com/ok3mad/roslyn/issues/78) (P7), under
 [#27](https://github.com/ok3mad/roslyn/issues/27).
 
 ## Summary
@@ -38,8 +38,9 @@ with exactly one candidate (`profiles.Load(id)` with one `Load(int)`) gets that 
 extends it to overloaded and generic calls: `Format(n, "N2")` pins `n` when every `Format` that accepts a string second
 takes an `int` first, and `dict.GetValueOrDefault(key)` pins `TKey`. Step P6 adds the other uses: an assignment to a
 typed local, field or property (`this.Name = name`), `return x` from a member with a written return type, and `ref`,
-`out` and `in` arguments. A function type the member is converted to (P7) is the next step of the
-[work breakdown](../planning/implementation-plan.md#type-inference-work-breakdown).
+`out` and `in` arguments. Step P7 gives a local function's parameters the types of the delegate it is converted to, as
+for a lambda: `xs.Select(Format)` gives `Format(infer x)` the type `int` from `Func<int, TResult>`. The same for private
+members is [#207](https://github.com/ok3mad/roslyn/issues/207).
 
 ## Rules
 
@@ -214,8 +215,8 @@ class C(IProfiles profiles)
   candidates of an overloaded call (below). The use is an additional location of the error. Members whose body is no
   source keep "nothing else gives its type". The parameter never becomes generic
   ([#79](https://github.com/ok3mad/roslyn/issues/79)).
-- **Precedence.** The member that is overridden or implemented (P2), then the default value (P1), then the body (a
-  function type, P7, will come before the body). The body is consulted only when neither gives the type; a use that does
+- **Precedence.** The member that is overridden or implemented (P2), then the default value (P1), then the delegate
+  types a local function is converted to (P7, below), then the body. The body is consulted only when neither gives the type; a use that does
   not accept the type of a higher source reports the C# error of the twin with the type written (CS1503 names both
   types).
 - **Lambdas and local functions in the body** count like the rest of it: `xs.Select(x => profiles.Load(id))` pins
@@ -231,7 +232,7 @@ class C(IProfiles profiles)
   candidate's signature, so two constructors with `infer` parameters whose initializers call the other overloads are a
   cycle too.
 - **Members.** Methods of any accessibility, also extension methods, constructors, operators and conversion operators.
-  Lambdas, local functions, indexers, primary constructors and delegates have no body source yet (CS20027).
+  Lambdas, local functions, indexers, primary constructors and delegates have no body source yet (CS20027); a local function takes its types from its conversions (P7).
 - **Generics.** The method's own type parameters are in scope (`Owner<T>(IRepo<T> r, infer x) => r.Put(x)` gives `x`
   the type `T`); a type parameter of a local function or a lambda in the body pins nothing.
 
@@ -325,6 +326,49 @@ class C
 - **Lambdas and local functions** in the body count as in P4; a `return` there pins the return type of the lambda or
   local function it returns from, when it is written.
 
+## From conversions to a function type (step P7)
+
+A local function converted to a delegate type takes the delegate's parameter types, as a lambda in its place would:
+
+```csharp
+void Run(int[] xs)
+{
+    infer Format(infer x) => $"<{x}>";
+    var labels = xs.Select(Format);               // string Format(int x): TSource is int, TResult comes from Format
+
+    Func<double, double> half = Half;             // double Half(double d)
+    double Half(infer d) => d / 2;
+
+    Func<int, string> f = F; Func<long, string> g = F;
+    string F(infer x) => "";                      // error CS20057: ... 'int' for 'the conversion to System.Func<int, string>' and 'long' for 'the conversion to System.Func<long, string>'
+}
+```
+
+- **What converts.** A method group conversion to any delegate type: `Func`, `Action`, a `->` [function type](function-types.md),
+  another delegate, as an initializer, an assignment, a cast or an argument. The delegate's parameter types are copied
+  with their nullable annotations. A conversion counts when it fits the rest of the local function's signature: the
+  parameter count, the ref kinds as written (`ref infer x` takes a `ref` parameter's type), and the written parameter
+  types.
+- **Generic calls.** A conversion inside a call whose type arguments are inferred counts once the delegate's input types
+  are fixed: in `xs.Select(Format)`, `TSource` comes from `xs`, so `Format` is converted to `Func<int, TResult>` and `x`
+  is `int`; `TResult` then comes from `Format`'s inferred return type. A delegate type whose parameter types are not
+  fixed (`Apply(F)` with `Apply<T>(Func<T, string> f)`) pins nothing, and C# reports CS0411.
+- **Where.** Every conversion in the body that declares the local function counts, before or after the declaration,
+  also in lambdas and other local functions in that body. Methods, constructors, accessors, operators and top-level
+  statements.
+- **Every conversion must agree**, ignoring tuple element names. The delegate passes its arguments to the parameter, so
+  a maybe-null one makes it annotated (`Func<string?, int>` and `Func<string, int>` give `string?`), as for a lambda.
+  Conversions that need different types report CS20057, which names two delegate types ("the conversion to
+  System.Func<int, string>") and points at both conversions. So do the overloads of one call (`Run(G)` with
+  `Run(Func<int, string>)` and `Run(Func<long, string>)`): the parameter has no type to choose between them.
+- **What pins nothing.** A call to the local function (inference from callers is dropped), a conversion to a type with
+  no parameter types (`var f = F;`, `Delegate d = F;`), and a conversion that does not fit the signature. With no
+  conversion that pins, CS20027 keeps "nothing else gives its type".
+- **Precedence.** A default value (P1) comes first; a conversion that disagrees with it reports C#'s error for the
+  twin (CS0123). Local functions have no other source.
+- **Members.** Local functions only. Private methods are [#207](https://github.com/ok3mad/roslyn/issues/207); other
+  members would infer from their callers. A lambda's `infer` parameter without a default value keeps CS20027.
+
 ## How it works
 
 No syntax, bound node or lowering is added: `infer` parses as a type name, and the binder decides.
@@ -389,7 +433,18 @@ No syntax, bound node or lowering is added: `infer` parses as a type name, and t
    member, lambda or local function that the collector is walking. `ref`, `out` and `in` arguments take the path of
    by-value ones, with the parameter's ref kind checked as overload resolution checks it; P5's records already counted
    only the candidates that take the argument's ref kind.
-10. **Semantic model.** `GetTypeInfo` and `GetSymbolInfo` on a parameter's `infer`, and on a copied `infer` return,
+10. **Conversions** (P7). A local function's `infer` parameter without a default value asks
+   `GetResultFromConversions`, which binds the body of the member that declares it once more, with a body binder of its
+   own, so that its local functions are new symbols. There the local function's parameter has an error type, which
+   converts to nothing, and overload resolution of a method group conversion (`MethodInvocationOverloadResolution` with
+   `IsMethodGroupConversion`, which method type inference also uses for a method group once the delegate's input types
+   are fixed) records the delegate's parameter types (`RecordMethodGroupConversion`). Only conversions at method groups
+   that the final bound tree holds count, with the error recovery binding of a lambda that stays unbound. The other local
+   functions of that body with such parameters are placeholders in that binding too, unless already inferred, so the
+   body is bound once per local function. The result is kept by the compilation per parameter list, on the stack of the
+   other inferences, and published once. A body bound with placeholders for its member's own parameters (P4) does not
+   infer its local functions.
+11. **Semantic model.** `GetTypeInfo` and `GetSymbolInfo` on a parameter's `infer`, and on a copied `infer` return,
    property, indexer or event type, return the type, with its nullable annotation, like `var`.
 
 ## Follow-ups
@@ -426,6 +481,11 @@ No syntax, bound node or lowering is added: `infer` parses as a type name, and t
   converts to nothing) records no candidates and is read as P4 reads a call that binds.
 - P6: a return from a lambda without a written return type, `yield return`, array elements and deconstruction pin
   nothing. CS20057 names the first two uses that differ, not every use.
+- P7: private members ([#207](https://github.com/ok3mad/roslyn/issues/207)). The overloads of one call that take
+  different delegate types report CS20057 rather than pinning nothing, and the conversions of a lambda's trial binding
+  for another delegate type count when they are at the same method group as the final binding. After CS20057, C#
+  reports its own errors for the conversions to the error type (CS0123, CS1503). The body is bound once more per local
+  function with such a parameter, once per compilation.
 - The IDE does not know `infer` yet (R5, [#71](https://github.com/ok3mad/roslyn/issues/71)).
 
 ## Code
@@ -449,4 +509,6 @@ called from `OverloadResolution.MethodInvocationOverloadResolution` and `ObjectC
 `SharperPlaceholderMethodSymbol.RecordCandidates` and `GetCandidates`, and `UsesCollector.AddUseFromCandidates`; tests
 `InferFromOverloads_*` in `SharperTests_InferFromOverloads.cs`. Step P6: `UsesCollector.VisitAssignmentOperator`,
 `VisitLocalDeclaration` and `VisitReturnStatement` in `SharperInferredParameterType_Body.cs`; tests `InferFromUses_*` in
-`SharperTests_InferFromUses.cs`.
+`SharperTests_InferFromUses.cs`. Step P7: `Symbols/Source/SharperInferredParameterType_Conversions.cs`, called from
+`OverloadResolution.MethodInvocationOverloadResolution` and `SharperInferredParameterType.GetType`; tests
+`InferFromConversions_*` in `SharperTests_InferFromConversions.cs`.

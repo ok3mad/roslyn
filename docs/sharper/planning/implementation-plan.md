@@ -188,7 +188,7 @@ Parameter types (#15):
 | P4 | Source 4, first cut: the parameter passed directly as an argument to a call with exactly one candidate (method, constructor, delegate). Needs binding the body with a placeholder type | L | Prototype ([#75](https://github.com/ok3mad/roslyn/issues/75)). Decided: uses in lambdas and local functions in the body count, read from the final binding only; recursion binds to the placeholder and is no cycle; disagreeing uses are CS20057; CS20027 says why nothing pinned |
 | P5 | Source 4 with overloads: every applicable candidate takes the same type at that position, including generic methods whose type arguments come from other arguments | L | Prototype ([#76](https://github.com/ok3mad/roslyn/issues/76)). Decided: applicable means applicable with the parameter in place, the other arguments bound and converted first; the two forms of `params` are two candidates; a group with one member keeps P4's rule; disagreeing candidates are listed in CS20027 |
 | P6 | Source 4, other pinning uses: assignment to a typed local, field or property, `return x` from a method with a written return type, `ref` and `out` arguments. Several uses must agree, and the error names each one | M | Prototype ([#77](https://github.com/ok3mad/roslyn/issues/77)). Decided: `ref`, `out` and `in` arguments pin the type of a parameter that takes their ref kind; a return pins only a written return type (a lambda's delegate type can come from error recovery); higher sources still win, and a use that disagrees with one reports the C# error of the twin, which names both types; CS20057 keeps its shape and names assignment targets and returns |
-| P7 | Source 3: a function type the method is converted to, local functions first, then private methods | L | Conversions that appear after the declaration in the same method |
+| P7 | Source 3: a function type the method is converted to, local functions first, then private methods | L | Prototype for local functions ([#78](https://github.com/ok3mad/roslyn/issues/78)). Decided: every conversion in the declaring body counts, also after the declaration; a conversion inside a generic call counts once the delegate's input types are fixed (`xs.Select(Format)`); conversions that disagree, also the overloads of one call, are CS20057; private members are [#207](https://github.com/ok3mad/roslyn/issues/207) |
 | P8 | Source 5: nothing pins the parameter. Decided an error, not a generic method: CS20027 says why nothing pinned (for example "member access pins nothing") and asks for the type. The rewording is part of P4; the IDE fix that writes a type or makes the method generic is part of R5 | S | Decided ([#79](https://github.com/ok3mad/roslyn/issues/79)): a silent generic would change the arity when a pin appears or disappears, a source and binary break, and arity is fixed before any binding. Generic for local functions only may be reconsidered after P6 |
 
 Suggested order: R1, P1, P2, P3, R2, R3, P4, P5, P6, P7, R4, R5. P8 needs no step of its own: P4 rewords CS20027 and R5 adds the fix. P4 to P6 are the
@@ -1104,6 +1104,52 @@ Follow-ups:
 
 - A return from a lambda without a written return type, `yield return`, array elements and deconstruction pin nothing.
 - CS20057 names the first two uses that differ, not every use.
+
+## Feature 9: inferred parameter type, step P7
+
+`xs.Select(Format)` gives `infer Format(infer x)` the type `int` from `Func<int, TResult>`, on branch
+`sharper/infer-parameter-p7` ([#78](https://github.com/ok3mad/roslyn/issues/78), feature page
+[inferred-parameter-type.md](../features/inferred-parameter-type.md#from-conversions-to-a-function-type-step-p7)). Source 3
+of the brainstorm, for local functions. No syntax, bound node, public API, lowering or new diagnostic code.
+
+**Probe.** Every method group conversion to a delegate type goes through `OverloadResolution.MethodInvocationOverloadResolution`
+with `Options.IsMethodGroupConversion` and the delegate's parameters as the arguments: the conversion itself
+(`Conversions.MethodGroupConversion`), its diagnostics, and method type inference's output type inference from a method
+group (`MethodTypeInferrer.MethodGroupReturnType`), which runs in the second phase once the delegate's input types are
+fixed. So one hook sees `Func<int, string> f = Format;`, `Run(Format)` and `xs.Select(Format)`. A local function holds no
+signature lock and computes its parameters on demand, while the body that declares it is bound; that body can be bound
+again with a body binder of its own (`TryGetBodyBinder`, a new `CreateBodyBinder` for top-level statements), whose
+local functions are new symbols. A lambda whose body has errors stays unbound in the tree (`BoundUnboundLambda`).
+
+### Decisions
+
+| Question | Decision | Why |
+| --- | --- | --- |
+| Which members | Local functions. Private methods are [#207](https://github.com/ok3mad/roslyn/issues/207) | A local function's conversions are all in one body. A private method's are in every member body of its type, which would have to be bound with a stand-in for the method in every lookup, with the cycles of P4 and R3 across those bodies |
+| Mechanism | Bind the declaring body once more with an error type for the local function's parameters; overload resolution of a method group conversion records the delegate's parameter types for the local function (`RecordMethodGroupConversion`); only method groups that the final bound tree holds count | P4's placeholder binding, applied to the declaring body. Recording in overload resolution sees the delegate types that method type inference fixes, which the bound tree of a failed call does not hold |
+| Conversions after the declaration (open point) | Count: every conversion in the declaring body, before or after the declaration, also in lambdas and other local functions there | A local function is in scope in its whole block, and the body is bound as a whole anyway |
+| Generic calls that also infer from the method group (open point) | Count once the delegate's input types are fixed: `xs.Select(Format)` records `int` from `Func<int, TResult>`, and `TResult` then comes from `Format`'s inferred return type. A delegate whose parameter types involve a type parameter that is not fixed records nothing (`Apply<T>(Func<T, string>)`, CS0411 as in C#) | Method type inference resolves the method group only after fixing its input types, so the hook gets them for free. No error of its own is needed |
+| Fit | The parameter count, the written ref kinds and the written parameter types (identity or implicit reference conversion from the delegate's) must fit; otherwise the conversion records nothing, and C# reports CS0123 | As a lambda: an explicitly typed part must match, and the rest is copied |
+| Several conversions | Must agree, as in P4; CS20057 names two delegate types with a new fragment, "the conversion to System.Func<int, string>" (`IDS_SharperInferConversionTo`). The overloads of one call that take different delegate types are CS20057 too | Extends the existing message. Choosing among overloads would need the type being inferred; an error that asks for it is the small first slice |
+| Nullability | Merged with annotated winning (`Func<string?, int>` and `Func<string, int>` give `string?`) | The delegate passes its arguments to the parameter, the reverse of P4 to P6's uses, so the parameter must accept every one |
+| Precedence | P1 (a default value) first; local functions have no P2 and no body source. A conversion that disagrees with a default value reports the twin's CS0123 | P6's rule: the twin's error names the types |
+| Nothing pins | CS20027 keeps "nothing else gives its type", as before P7: calls to the local function, `var f = F;`, `Delegate d = F;` and conversions that do not fit | Keeps every earlier expectation; inference from callers is dropped |
+| Bodies bound with placeholders | A local function in a body that P4 binds with placeholders for its member's parameters is not inferred there (its result would depend on them, and that binding reports nothing); the other local functions of a body being bound for P7 are placeholders too, unless already inferred | Keeps P4 to P6 results unchanged, and binds the body once per local function instead of once per combination |
+
+Diagnostics: no new code; CS20057 takes the new fragment. Tests: 6 `InferFromConversions_*` tests in
+`SharperTests_InferFromConversions.cs`: every kind of conversion with runtime output next to C# twins (the issue's
+example, a conversion before the declaration, a cast, a generic call, a custom delegate, a function type, a written
+parameter, `ref`, local functions in a lambda, in a local function and in an accessor), top-level statements, the
+semantic model, conversions that disagree, what pins nothing, precedence and P4 together, and nullability. No earlier
+expectation changed. RESULTS
+
+Follow-ups:
+
+- Private members ([#207](https://github.com/ok3mad/roslyn/issues/207)).
+- The overloads of one call that take different delegate types are CS20057; the conversions of a lambda's trial binding
+  for another delegate type count when they are at a method group of the final binding.
+- After CS20057 or CS20027, C# reports its own errors for the conversions to the error type (CS0123, CS1503).
+- The declaring body is bound once more per local function with such a parameter, once per compilation.
 
 ## Feature 10: immutable types, slice 1 (design)
 

@@ -26,10 +26,10 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             internal readonly CSharpSyntaxNode Body;
 
             /// <summary>
-            /// Per method group syntax, the conversions of the local function there: the lambda, local function or member
-            /// whose binding made the conversion, the delegate type, and the delegate's parameter types.
+            /// Per method group syntax, the conversions of the local function there: the delegate type and the delegate's
+            /// parameter types.
             /// </summary>
-            internal readonly Dictionary<SyntaxNode, ArrayBuilder<(Symbol? Owner, TypeSymbol? DelegateType, ImmutableArray<TypeWithAnnotations> Types)>> Conversions = new();
+            internal readonly Dictionary<SyntaxNode, ArrayBuilder<(TypeSymbol? DelegateType, ImmutableArray<TypeWithAnnotations> Types)>> Conversions = new();
 
             internal ConversionFrame(LocalFunctionStatementSyntax declaration, CSharpSyntaxNode body)
             {
@@ -109,11 +109,11 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
                 if (!frame.Conversions.TryGetValue(syntax, out var conversions))
                 {
-                    conversions = ArrayBuilder<(Symbol?, TypeSymbol?, ImmutableArray<TypeWithAnnotations>)>.GetInstance();
+                    conversions = ArrayBuilder<(TypeSymbol?, ImmutableArray<TypeWithAnnotations>)>.GetInstance();
                     frame.Conversions.Add(syntax, conversions);
                 }
 
-                conversions.Add((binder.ContainingMember(), delegateType, types));
+                conversions.Add((delegateType, types));
             }
         }
 
@@ -276,14 +276,13 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
             var frames = s_conversionFrames ??= new List<ConversionFrame>();
 
-            // Bound inside the placeholder binding of another local function of the same body, the result may depend on
-            // that placeholder, and is not published.
-            bool publish = true;
+            // In the placeholder binding of another local function of the same body, this one is a placeholder too:
+            // inferring it there would depend on the other placeholder, and bind the body once more per local function.
             foreach (var other in frames)
             {
                 if (other.Body == body)
                 {
-                    publish = false;
+                    return CreatePlaceholderInference(parameterList, compilation);
                 }
             }
 
@@ -300,7 +299,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 var dependencies = BindingDiagnosticBag.GetInstance(withDiagnostics: false, withDependencies: true);
                 dependencies.AddDependencies(bodyDiagnostics);
                 bodyDiagnostics.Free();
-                result = DecideFromConversions(localFunction, declaration, frame, boundBody, member!, dependencies, compilation);
+                result = DecideFromConversions(localFunction, declaration, frame, boundBody, dependencies, compilation);
                 dependencies.Free();
             }
             finally
@@ -315,19 +314,25 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 inProgress.RemoveAt(inProgress.Count - 1);
             }
 
-            if (!publish)
-            {
-                return results.TryGetValue(parameterList, out BodyInference? published) ? published : result;
-            }
-
             // A local function found to be in a cycle while the body was bound already has its result.
             return Publish(results, compilation, parameterList, result);
         }
 
+        /// <summary>An error type, with no diagnostics, for each <c>infer</c> parameter without a default value.</summary>
+        private static BodyInference CreatePlaceholderInference(ParameterListSyntax parameterList, CSharpCompilation compilation)
+        {
+            var results = ArrayBuilder<Result?>.GetInstance(parameterList.Parameters.Count);
+            foreach (var parameter in parameterList.Parameters)
+            {
+                results.Add(IsInferredFromConversions(parameter) ? new Result(CreateErrorType(compilation), ReadOnlyBindingDiagnostic<AssemblySymbol>.Empty) : null);
+            }
+
+            return new BodyInference(results.ToImmutableAndFree());
+        }
+
         /// <summary>
-        /// The type of each <c>infer</c> parameter without a default value from the conversions recorded in the final
-        /// binding: the conversions of a lambda that was bound for other delegate types too count only from the binding
-        /// the bound tree holds. Every conversion must agree (CS20057, which names two delegate types); none is CS20027
+        /// The type of each <c>infer</c> parameter without a default value from the conversions recorded at the method
+        /// groups that the final bound tree holds, with the binding for error recovery of a lambda that stays unbound. Every conversion must agree (CS20057, which names two delegate types); none is CS20027
         /// with "nothing else gives its type", as before step P7.
         /// </summary>
         private static BodyInference DecideFromConversions(
@@ -335,7 +340,6 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             LocalFunctionStatementSyntax declaration,
             ConversionFrame frame,
             BoundNode? boundBody,
-            Symbol member,
             BindingDiagnosticBag dependencies,
             CSharpCompilation compilation)
         {
@@ -343,17 +347,12 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             var uses = new ArrayBuilder<PinningUse>?[parameters.Count];
             if (boundBody is not null && frame.Conversions.Count > 0)
             {
-                var walker = new ConversionSitesWalker(frame, member);
+                var walker = new ConversionSitesWalker(frame);
                 walker.Visit(boundBody);
-                foreach (var (syntax, owner) in walker.Sites)
+                foreach (var syntax in walker.Sites)
                 {
-                    foreach (var (conversionOwner, delegateType, types) in frame.Conversions[syntax])
+                    foreach (var (delegateType, types) in frame.Conversions[syntax])
                     {
-                        if (!ReferenceEquals(conversionOwner, owner))
-                        {
-                            continue;
-                        }
-
                         object description = new MessageFragment(
                             MessageID.IDS_SharperInferConversionTo,
                             [delegateType?.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat) ?? localFunction.Name]);
@@ -396,48 +395,35 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             return new BodyInference(results.ToImmutableAndFree());
         }
 
-        /// <summary>
-        /// Finds the method group syntax nodes with recorded conversions that the final bound tree holds, each with the
-        /// lambda, local function or member whose binding it is part of.
-        /// </summary>
+        /// <summary>Finds the method group syntax nodes with recorded conversions that the final bound tree holds.</summary>
         private sealed class ConversionSitesWalker : BoundTreeWalkerWithStackGuardWithoutRecursionOnTheLeftOfBinaryOperator
         {
             private readonly ConversionFrame _frame;
-            private Symbol? _owner;
 
-            internal readonly List<(SyntaxNode Syntax, Symbol? Owner)> Sites = new();
+            internal readonly List<SyntaxNode> Sites = new();
 
-            internal ConversionSitesWalker(ConversionFrame frame, Symbol? member)
+            internal ConversionSitesWalker(ConversionFrame frame)
             {
                 _frame = frame;
-                _owner = member;
             }
 
             public override BoundNode? Visit(BoundNode? node)
             {
-                if (node is not null && node.Syntax is { } syntax && _frame.Conversions.ContainsKey(syntax) && !Sites.Contains((syntax, _owner)))
+                if (node is not null && _frame.Conversions.ContainsKey(node.Syntax) && !Sites.Contains(node.Syntax))
                 {
-                    Sites.Add((syntax, _owner));
+                    Sites.Add(node.Syntax);
                 }
 
                 return base.Visit(node);
             }
 
-            public override BoundNode? VisitLambda(BoundLambda node)
+            /// <summary>
+            /// A lambda whose conversion failed stays unbound in the tree, as most do in this binding: the placeholder
+            /// converts to nothing. Its body is the binding for error recovery.
+            /// </summary>
+            public override BoundNode? VisitUnboundLambda(UnboundLambda node)
             {
-                Symbol? owner = _owner;
-                _owner = node.Symbol;
-                base.VisitLambda(node);
-                _owner = owner;
-                return null;
-            }
-
-            public override BoundNode? VisitLocalFunctionStatement(BoundLocalFunctionStatement node)
-            {
-                Symbol? owner = _owner;
-                _owner = node.Symbol;
-                base.VisitLocalFunctionStatement(node);
-                _owner = owner;
+                Visit(node.BindForErrorRecovery());
                 return null;
             }
         }

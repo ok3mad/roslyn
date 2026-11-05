@@ -3,6 +3,7 @@
 // See the LICENSE file in the project root for more information.
 
 using System.Linq;
+using Microsoft.CodeAnalysis.CSharp.Symbols;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.CSharp.Test.Utilities;
 using Microsoft.CodeAnalysis.Test.Utilities;
@@ -170,7 +171,22 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
-            comp.VerifyDiagnostics();
+            comp.VerifyDiagnostics(
+                // (10,31): error CS0123: No overload for 'F' matches delegate 'Func<int, string>'
+                //         Func<int, string> f = F;
+                Diagnostic(ErrorCode.ERR_MethDelegateMismatch, "F").WithArguments("F", "System.Func<int, string>").WithLocation(10, 31),
+                // (11,32): error CS0123: No overload for 'F' matches delegate 'Func<long, string>'
+                //         Func<long, string> g = F;
+                Diagnostic(ErrorCode.ERR_MethDelegateMismatch, "F").WithArguments("F", "System.Func<long, string>").WithLocation(11, 32),
+                // (12,18): error CS20057: Cannot infer the type of parameter 'x', because its uses need different types: 'int' for 'the conversion to System.Func<int, string>' and 'long' for 'the conversion to System.Func<long, string>'. Write the parameter type.
+                //         string F(infer x) => "";
+                Diagnostic(ErrorCode.ERR_SharperInferParameterUsesDisagree, "infer").WithArguments("x", "int", "the conversion to System.Func<int, string>", "long", "the conversion to System.Func<long, string>").WithLocation(12, 18),
+                // (17,13): error CS1503: Argument 1: cannot convert from 'method group' to 'System.Func<int, string>'
+                //         Run(G);
+                Diagnostic(ErrorCode.ERR_BadArgType, "G").WithArguments("1", "method group", "System.Func<int, string>").WithLocation(17, 13),
+                // (18,18): error CS20057: Cannot infer the type of parameter 'x', because its uses need different types: 'int' for 'the conversion to System.Func<int, string>' and 'long' for 'the conversion to System.Func<long, string>'. Write the parameter type.
+                //         string G(infer x) => "";
+                Diagnostic(ErrorCode.ERR_SharperInferParameterUsesDisagree, "infer").WithArguments("x", "int", "the conversion to System.Func<int, string>", "long", "the conversion to System.Func<long, string>").WithLocation(18, 18));
         }
 
         [Fact]
@@ -199,7 +215,52 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
-            comp.VerifyDiagnostics();
+            comp.VerifyDiagnostics(
+                // (7,42): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and nothing else gives its type. Write the parameter type.
+                //     void Natural() { var f = F; string F(infer x) => ""; }
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "nothing else gives its type").WithLocation(7, 42),
+                // (8,50): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and nothing else gives its type. Write the parameter type.
+                //     void ToDelegate() { Delegate d = F; string F(infer x) => ""; }
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "nothing else gives its type").WithLocation(8, 50),
+                // (9,23): error CS1503: Argument 1: cannot convert from 'int' to 'infer'
+                //     void Called() { F(1); string F(infer x) => ""; }
+                Diagnostic(ErrorCode.ERR_BadArgType, "1").WithArguments("1", "int", "infer").WithLocation(9, 23),
+                // (9,36): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and nothing else gives its type. Write the parameter type.
+                //     void Called() { F(1); string F(infer x) => ""; }
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "nothing else gives its type").WithLocation(9, 36),
+                // (10,47): error CS0123: No overload for 'F' matches delegate 'Func<int, int, string>'
+                //     void Count() { Func<int, int, string> f = F; string F(infer x) => ""; }
+                Diagnostic(ErrorCode.ERR_MethDelegateMismatch, "F").WithArguments("F", "System.Func<int, int, string>").WithLocation(10, 47),
+                // (10,59): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and nothing else gives its type. Write the parameter type.
+                //     void Count() { Func<int, int, string> f = F; string F(infer x) => ""; }
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "nothing else gives its type").WithLocation(10, 59),
+                // (11,44): error CS0123: No overload for 'F' matches delegate 'Func<int, string>'
+                //     void RefKind() { Func<int, string> f = F; string F(ref infer x) => ""; }
+                Diagnostic(ErrorCode.ERR_MethDelegateMismatch, "F").WithArguments("F", "System.Func<int, string>").WithLocation(11, 44),
+                // (11,60): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and nothing else gives its type. Write the parameter type.
+                //     void RefKind() { Func<int, string> f = F; string F(ref infer x) => ""; }
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "nothing else gives its type").WithLocation(11, 60),
+                // (12,52): error CS0123: No overload for 'F' matches delegate 'Func<int, string, string>'
+                //     void Written() { Func<int, string, string> f = F; string F(string s, infer x) => ""; }
+                Diagnostic(ErrorCode.ERR_MethDelegateMismatch, "F").WithArguments("F", "System.Func<int, string, string>").WithLocation(12, 52),
+                // (12,74): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and nothing else gives its type. Write the parameter type.
+                //     void Written() { Func<int, string, string> f = F; string F(string s, infer x) => ""; }
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "nothing else gives its type").WithLocation(12, 74),
+                // (13,22): error CS0411: The type arguments for method 'C.Apply<T>(Func<T, string>)' cannot be inferred from the usage. Try specifying the type arguments explicitly.
+                //     void Unfixed() { Apply(F); string F(infer x) => ""; }
+                Diagnostic(ErrorCode.ERR_CantInferMethTypeArgs, "Apply").WithArguments("C.Apply<T>(System.Func<T, string>)").WithLocation(13, 22),
+                // (13,41): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and nothing else gives its type. Write the parameter type.
+                //     void Unfixed() { Apply(F); string F(infer x) => ""; }
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "nothing else gives its type").WithLocation(13, 41),
+                // (14,44): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and nothing else gives its type. Write the parameter type.
+                //     void Lambda() { Func<int, string> f = (infer x) => ""; }
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "nothing else gives its type").WithLocation(14, 44),
+                // (16,26): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and the body does not use it. Write the parameter type.
+                //     static string Member(infer x) => "";
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "the body does not use it").WithLocation(16, 26),
+                // (17,47): error CS0123: No overload for 'Member' matches delegate 'Func<int, string>'
+                //     void UsesMember() { Func<int, string> f = Member; }
+                Diagnostic(ErrorCode.ERR_MethDelegateMismatch, "Member").WithArguments("Member", "System.Func<int, string>").WithLocation(17, 47));
         }
 
         [Fact]
@@ -229,7 +290,12 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
-            comp.VerifyDiagnostics();
+            comp.VerifyDiagnostics(
+                // (9,32): error CS0123: No overload for 'F' matches delegate 'Func<long, string>'
+                //         Func<long, string> f = F;
+                Diagnostic(ErrorCode.ERR_MethDelegateMismatch, "F").WithArguments("F", "System.Func<long, string>").WithLocation(9, 32));
+            VerifyLocalFunctionParameterTypes(comp, ("F", "System.Int32"), ("L", "System.String"));
+            Assert.Equal("System.Int32", comp.GetMember<MethodSymbol>("C.Outer").Parameters[0].Type.ToTestDisplayString());
         }
 
         [Fact]
@@ -261,7 +327,18 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
-            comp.VerifyDiagnostics();
+            comp.VerifyDiagnostics(
+                // (10,27): warning CS8602: Dereference of a possibly null reference.
+                //         int L(infer s) => s.Length;
+                Diagnostic(ErrorCode.WRN_NullReferenceReceiver, "s").WithLocation(10, 27),
+                // (20,29): warning CS8602: Dereference of a possibly null reference.
+                //         int L(string? s) => s.Length;
+                Diagnostic(ErrorCode.WRN_NullReferenceReceiver, "s").WithLocation(20, 29));
+            var tree = comp.SyntaxTrees.Single();
+            var model = comp.GetSemanticModel(tree);
+            var functions = tree.GetRoot().DescendantNodes().OfType<LocalFunctionStatementSyntax>().ToArray();
+            Assert.Equal("System.String?", ((IMethodSymbol)model.GetDeclaredSymbol(functions[0])!).Parameters[0].Type.ToTestDisplayString(includeNonNullable: true));
+            Assert.Equal("System.String!", ((IMethodSymbol)model.GetDeclaredSymbol(functions[1])!).Parameters[0].Type.ToTestDisplayString(includeNonNullable: true));
         }
     }
 }
