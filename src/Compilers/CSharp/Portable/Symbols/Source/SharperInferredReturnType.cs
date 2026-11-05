@@ -141,6 +141,25 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             => method is SourceOrdinaryMethodOrUserDefinedOperatorSymbol { IsSharperInferredReturnType: true } or LocalFunctionSymbol { IsSharperInferredReturnType: true } &&
                 method.ReturnType.IsErrorType();
 
+        /// <summary>
+        /// Hides the inferences in progress on this thread while a body is bound with placeholders for its parameter types
+        /// (step P4, <see cref="SharperInferredParameterType.GetBodyInference"/>). That body is not one of the frames, so a
+        /// read of an inferred return type there must not count as a use by the frame below it; it starts its own frames.
+        /// Returns what <see cref="ResumeInference"/> restores.
+        /// </summary>
+        internal static object? SuspendInference()
+        {
+            Context? context = s_context;
+            s_context = null;
+            return context;
+        }
+
+        internal static void ResumeInference(object? suspended)
+        {
+            Debug.Assert(s_context is null or { Binding.Count: 0 });
+            s_context = (Context?)suspended;
+        }
+
         internal virtual TypeWithAnnotations GetReturnType()
         {
             Debug.Assert(_body is not null);

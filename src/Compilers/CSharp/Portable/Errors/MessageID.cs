@@ -348,6 +348,17 @@ namespace Microsoft.CodeAnalysis.CSharp
         IDS_SharperInferRuledOutByParameter = MessageBase + 12900,
         IDS_SharperInferRuledOutByReturnType = MessageBase + 12901,
         IDS_SharperImplicitItParameter = MessageBase + 12902,
+        IDS_SharperInferNothingElseGivesType = MessageBase + 12903,
+        IDS_SharperInferNotUsedInBody = MessageBase + 12904,
+        IDS_SharperInferMemberAccessPinsNothing = MessageBase + 12905,
+        IDS_SharperInferOperatorPinsNothing = MessageBase + 12906,
+        IDS_SharperInferTypeTestPinsNothing = MessageBase + 12907,
+        IDS_SharperInferInterpolationPinsNothing = MessageBase + 12908,
+        IDS_SharperInferSeveralCandidatesPinNothing = MessageBase + 12909,
+        IDS_SharperInferTypeParameterPinsNothing = MessageBase + 12910,
+        IDS_SharperInferParamsPinsNothing = MessageBase + 12911,
+        IDS_SharperInferRefArgumentPinsNothing = MessageBase + 12912,
+        IDS_SharperInferUsePinsNothing = MessageBase + 12913,
     }
 
     // Message IDs may refer to strings that need to be localized.

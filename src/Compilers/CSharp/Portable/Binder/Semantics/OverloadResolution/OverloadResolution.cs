@@ -152,6 +152,12 @@ namespace Microsoft.CodeAnalysis.CSharp
             Debug.Assert((options & Options.IsMethodGroupConversion) == 0 || (options & Options.DynamicResolution) == 0);
             Debug.Assert((options & Options.InferWithDynamic) == 0 || (options & Options.IsMethodGroupConversion) != 0);
 
+            // Sharper: a body bound with placeholders for its parameter types calls the placeholder, not its own method.
+            if (_binder.ContainingMember() is SharperPlaceholderMethodSymbol placeholder)
+            {
+                placeholder.ReplaceOriginal(methods);
+            }
+
             MethodOrPropertyOverloadResolution(
                 methods, typeArguments, receiver, arguments, result,
                 ref useSiteInfo, options,

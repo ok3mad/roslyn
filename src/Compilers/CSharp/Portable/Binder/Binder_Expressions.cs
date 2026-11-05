@@ -7569,6 +7569,12 @@ namespace Microsoft.CodeAnalysis.CSharp
             }
 
             allInstanceConstructors = type.InstanceConstructors;
+            if (ContainingMember() is SharperPlaceholderMethodSymbol placeholder)
+            {
+                // Sharper: a body bound with placeholders for its parameter types calls the placeholder, not its own constructor.
+                allInstanceConstructors = placeholder.ReplaceOriginal(allInstanceConstructors);
+            }
+
             return FilterInaccessibleConstructors(allInstanceConstructors, allowProtectedConstructorsOfBaseType, ref useSiteInfo);
         }
 

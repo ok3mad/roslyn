@@ -73,6 +73,9 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
             // Step P2: the types copied from the member that a method, property, indexer or operator overrides or implements.
             GetOverriddenSignature(owner);
+
+            // Step P4: the types that the uses in the body give the parameters that have neither source.
+            GetBodyInference(owner);
         }
 
         /// <summary>
@@ -96,8 +99,15 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             if (parameter.Default is null)
             {
                 // A parameter of a method that overrides or implements a member takes its type from there instead
-                // (GetOverriddenSignature, in ParameterHelpers.MakeParameter); this is a parameter with no source.
-                diagnostics.Add(ErrorCode.ERR_SharperInferParameterNoDefault, parameter.Type.Location, parameter.Identifier.ValueText);
+                // (GetOverriddenSignature, in ParameterHelpers.MakeParameter). Otherwise the uses in the body may give it
+                // (step P4), or the parameter has no source.
+                if (GetResultFromBody(owner, parameter) is { } fromBody)
+                {
+                    diagnostics.AddRange(fromBody.Diagnostics, allowMismatchInDependencyAccumulation: true);
+                    return fromBody.Type;
+                }
+
+                diagnostics.Add(ErrorCode.ERR_SharperInferParameterNoDefault, parameter.Type.Location, parameter.Identifier.ValueText, MessageID.IDS_SharperInferNothingElseGivesType.Localize());
                 return TypeWithAnnotations.Create(binder.CreateErrorType("infer"));
             }
 
@@ -161,6 +171,12 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 inProgress.RemoveAt(inProgress.Count - 1);
             }
 
+            if (IsInPlaceholderBody(parameter))
+            {
+                // A lambda or local function in a body bound with placeholders (step P4): its default value may read them.
+                return results.TryGetValue(parameter, out Result? published) ? published : result;
+            }
+
             // A parameter found to be in a cycle while its default value was bound already has its result.
             return Publish(results, binder.Compilation, parameter, result);
         }
@@ -184,6 +200,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 decided.GetValue(inProgress[i], node => node switch
                 {
                     ParameterSyntax parameter => CreateCycleResult(parameter, compilation),
+                    ParameterListSyntax parameterList => BodyInference.CreateCycle(parameterList, compilation),
                     CSharpSyntaxNode member => OverriddenSignature.CreateCycle(member),
                     _ => throw ExceptionUtilities.UnexpectedValue(node),
                 });
@@ -195,6 +212,9 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 {
                     case ParameterSyntax parameter:
                         Publish(compilation.SharperInferredParameterTypes, compilation, parameter, (Result)decided.GetValue(parameter, _ => throw ExceptionUtilities.Unreachable()));
+                        break;
+                    case ParameterListSyntax parameterList:
+                        Publish(compilation.SharperBodyInferences, compilation, parameterList, (BodyInference)decided.GetValue(parameterList, _ => throw ExceptionUtilities.Unreachable()));
                         break;
                     case CSharpSyntaxNode member:
                         Publish(compilation.SharperOverriddenSignatures, compilation, member, (OverriddenSignature)decided.GetValue(member, _ => throw ExceptionUtilities.Unreachable()));

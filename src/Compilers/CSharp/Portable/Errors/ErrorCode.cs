@@ -2570,6 +2570,8 @@ namespace Microsoft.CodeAnalysis.CSharp
         WRN_SharperPureOutArgumentNotFresh = SharperErrorCodes.Base + 53,
         ERR_SharperItClaimedByInnerCall = SharperErrorCodes.Base + 54,
         ERR_SharperInferEventNoOverriddenMember = SharperErrorCodes.Base + 55,
+        ERR_SharperInferParameterBodyCycle = SharperErrorCodes.Base + 56,
+        ERR_SharperInferParameterUsesDisagree = SharperErrorCodes.Base + 57,
 
         // Note: you will need to do the following after adding errors:
         //  1) Update ErrorFacts.IsBuildOnlyDiagnostic (src/Compilers/CSharp/Portable/Errors/ErrorFacts.cs)
