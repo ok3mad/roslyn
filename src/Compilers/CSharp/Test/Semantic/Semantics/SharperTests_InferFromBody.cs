@@ -144,8 +144,8 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                     static void Overloads(infer x) => Over(x);
                     static void Inferred(infer x) => Generic(x);
                     static void InParams(infer x) => Params(x);
-                    static void RefArgument(infer x) => Ref(ref x);
-                    static void OutArgument(infer x) => Out(out x);
+                    static void RefArgument(infer x) => Ref(ref x);   // pins int since P6
+                    static void OutArgument(infer x) => Out(out x);   // pins int since P6
                     static infer Receiver(infer x) => x.Twice();
                     static void Expression(infer x) => Take((int)x);
                     static void Shadowed(infer x) { Func<int, int> f = x => { Take(x); return x; }; }
@@ -181,12 +181,6 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (22,26): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and a params parameter pins nothing yet. Write the parameter type.
                 //     static void InParams(infer x) => Params(x);
                 Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "a params parameter pins nothing yet").WithLocation(22, 26),
-                // (23,29): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and a ref or out argument pins nothing yet. Write the parameter type.
-                //     static void RefArgument(infer x) => Ref(ref x);
-                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "a ref or out argument pins nothing yet").WithLocation(23, 29),
-                // (24,29): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and a ref or out argument pins nothing yet. Write the parameter type.
-                //     static void OutArgument(infer x) => Out(out x);
-                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "a ref or out argument pins nothing yet").WithLocation(24, 29),
                 // (25,27): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and a member access pins nothing. Write the parameter type.
                 //     static infer Receiver(infer x) => x.Twice();
                 Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "a member access pins nothing").WithLocation(25, 27),

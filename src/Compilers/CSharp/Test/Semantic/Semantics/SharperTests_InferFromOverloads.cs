@@ -160,9 +160,9 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (16,27): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and a params parameter pins nothing yet. Write the parameter type.
                 //     static void BothForms(infer x) => Params(x);
                 Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "a params parameter pins nothing yet").WithLocation(16, 27),
-                // (17,29): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and a ref or out argument pins nothing yet. Write the parameter type.
+                // (17,29): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and an argument whose ref kind its parameter does not take pins nothing. Write the parameter type.
                 //     static void RefArgument(infer x) => Over(ref x);
-                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "a ref or out argument pins nothing yet").WithLocation(17, 29),
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "an argument whose ref kind its parameter does not take pins nothing").WithLocation(17, 29),
                 // (18,30): error CS20027: Cannot infer the type of parameter 'a', because it has no default value, and the candidates of a call to 'Two' take different types there: 'C.Two(int, string)' takes 'int', 'C.Two(string, int)' takes 'string'. Write the parameter type.
                 //     static void Placeholders(infer a, infer b) => Two(a, b);
                 Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("a", "the candidates of a call to 'Two' take different types there: 'C.Two(int, string)' takes 'int', 'C.Two(string, int)' takes 'string'").WithLocation(18, 30),

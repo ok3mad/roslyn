@@ -382,8 +382,10 @@ implementations by complete signatures, which do not exist yet at that point, so
 parameter count and narrows with the types that are written. The design is in the implementation plan, "Feature 9".
 Step P4 shows the shape of a body source: `GetBodyInference` binds the body once with a placeholder method (trap 39),
 on the same stack (keyed by the parameter list), with R3's frames suspended so that reads of inferred return types
-start their own frames, and `UsesCollector` reads the uses that pin a type from the bound tree. A new body source (P6's
-assignments and returns) is a new kind of use in the collector, not a second binding. What the bound tree does not keep
+start their own frames, and `UsesCollector` reads the uses that pin a type from the bound tree. A new body source is a
+new kind of use in the collector, not a second binding (P6's assignments, returns and `ref` arguments). A value converted
+to a target (an assignment, an initializer, a `return`) sits under a `BoundConversion` with an error, not marked
+compiler-generated, that has the parameter's syntax; look through it, not through casts. What the bound tree does not keep
 is recorded during that binding: P5's overloaded calls have overload resolution record, on the placeholder, the
 candidates that are applicable with the placeholder in place (`OverloadResolution.RecordSharperPlaceholderCandidates`),
 keyed by argument syntax and binding owner (trap 40).

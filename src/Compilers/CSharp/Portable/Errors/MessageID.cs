@@ -364,6 +364,8 @@ namespace Microsoft.CodeAnalysis.CSharp
         IDS_SharperInferCandidateTakes = MessageBase + 12916,
         IDS_SharperInferCandidateTakesExpanded = MessageBase + 12917,
         IDS_SharperInferNoApplicableCandidate = MessageBase + 12918,
+        IDS_SharperInferReturnOf = MessageBase + 12919,
+        IDS_SharperInferReturnOfLambda = MessageBase + 12920,
     }
 
     // Message IDs may refer to strings that need to be localized.

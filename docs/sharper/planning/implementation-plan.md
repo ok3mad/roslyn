@@ -193,7 +193,7 @@ Parameter types (#15):
 | P3 | `readonly infer x` | S | Prototype ([#74](https://github.com/ok3mad/roslyn/issues/74)). Decided: `readonly` combines with P1 and P2 with no new code; whether `val x` is its shorthand on method parameters is [#178](https://github.com/ok3mad/roslyn/issues/178), not built |
 | P4 | Source 4, first cut: the parameter passed directly as an argument to a call with exactly one candidate (method, constructor, delegate). Needs binding the body with a placeholder type | L | Prototype ([#75](https://github.com/ok3mad/roslyn/issues/75)). Decided: uses in lambdas and local functions in the body count, read from the final binding only; recursion binds to the placeholder and is no cycle; disagreeing uses are CS20057; CS20027 says why nothing pinned |
 | P5 | Source 4 with overloads: every applicable candidate takes the same type at that position, including generic methods whose type arguments come from other arguments | L | Prototype ([#76](https://github.com/ok3mad/roslyn/issues/76)). Decided: applicable means applicable with the parameter in place, the other arguments bound and converted first; the two forms of `params` are two candidates; a group with one member keeps P4's rule; disagreeing candidates are listed in CS20027 |
-| P6 | Source 4, other pinning uses: assignment to a typed local, field or property, `return x` from a method with a written return type, `ref` and `out` arguments. Several uses must agree, and the error names each one | M | |
+| P6 | Source 4, other pinning uses: assignment to a typed local, field or property, `return x` from a method with a written return type, `ref` and `out` arguments. Several uses must agree, and the error names each one | M | Prototype ([#77](https://github.com/ok3mad/roslyn/issues/77)). Decided: `ref`, `out` and `in` arguments pin the type of a parameter that takes their ref kind; a return pins only a written return type (a lambda's delegate type can come from error recovery); higher sources still win, and a use that disagrees with one reports the C# error of the twin, which names both types; CS20057 keeps its shape and names assignment targets and returns |
 | P7 | Source 3: a function type the method is converted to, local functions first, then private methods | L | Conversions that appear after the declaration in the same method |
 | P8 | Source 5: nothing pins the parameter. Decided an error, not a generic method: CS20027 says why nothing pinned (for example "member access pins nothing") and asks for the type. The rewording is part of P4; the IDE fix that writes a type or makes the method generic is part of R5 | S | Decided ([#79](https://github.com/ok3mad/roslyn/issues/79)): a silent generic would change the arity when a pin appears or disappears, a source and binary break, and arity is fixed before any binding. Generic for local functions only may be reconsidered after P6 |
 
@@ -1051,6 +1051,63 @@ All 448 Sharper test cases pass, also with `ROSLYN_TEST_IOPERATION=1`. Regressio
 20,270 passed, Symbol 13,923 and Emit 7,312, none failed; the Semantic test project builds with `-warnaserror`; the
 analyzer build reports no error (its three RS0062 warnings are in P2's `SharperInferredParameterType_OverriddenMember.cs`,
 as on `main`).
+
+## Feature 9: inferred parameter type, step P6
+
+`void Rename(infer name) { this.Name = name; }` gives `name` the type of the property, and `int Clamp(infer x) { return x; }`
+the written return type, on branch `sharper/infer-parameter-p6` ([#77](https://github.com/ok3mad/roslyn/issues/77), feature
+page [inferred-parameter-type.md](../features/inferred-parameter-type.md#from-assignments-returns-and-ref-arguments-step-p6)).
+P4's mechanism, extended as P4 and P5 planned it: new kinds of use in `UsesCollector`, read from the same placeholder
+binding. No syntax, bound node, public API, lowering or new diagnostic code.
+
+**Probe.** In the placeholder binding, `ref`, `out` and `in` arguments already reach the collector like by-value ones: a
+call with one candidate fails and keeps it, and P5's records already list the candidates whose parameter takes the
+argument's ref kind. An assignment, a local's initializer and a returned value are converted to the target type; the
+conversion from the placeholder type is an error, a `BoundConversion` over the parameter with the parameter's syntax and
+no cast in code, but not marked compiler-generated, so P4's argument check (which strips only compiler-generated
+conversions) does not see through it. A `var` local initialized with the parameter gets the placeholder type. An
+expression body is a `return`.
+
+### What pins
+
+| Use | Pins | Notes |
+| --- | --- | --- |
+| `y = x`, `T y = x;`, `r = ref x`, `ref T r = ref x;` | The type of the local or parameter | A `var` local and a parameter being inferred have the placeholder type and pin nothing |
+| `F = x`, `P = x`, `this[i] = x`, `new C { P = x, F = x }` | The type of the field, property or indexer, as declared there, with the containing type's type arguments substituted | |
+| `return x;`, `=> x` | The written return type of the method, local function or lambda (`int () => x`) it returns from; `T` for `async Task<T>`, the referenced type of a `ref` return | Not an `infer` return type, a lambda without a written return type, `void`, `async Task` or an iterator. A `yield return` pins nothing |
+| `M(ref x)`, `M(out x)`, `M(in x)` | The candidate's parameter type, exactly | The parameter must take the ref kind, as overload resolution accepts it (`ref` and `in` to an `in` or `ref readonly` parameter). Overloads and generic candidates follow P5's records |
+
+A type that involves a type parameter out of the signature's scope (a local function's own) pins nothing, as for calls.
+The value must be the parameter itself, through the target's implicit conversion; a cast or any other expression around it
+pins nothing.
+
+### Decisions
+
+| Question | Decision | Why |
+| --- | --- | --- |
+| Which assignments | Locals and parameters with a known type, fields, properties and indexers, also in object initializers; not array elements, events, pointers or deconstructions | The issue's list; an indexer is a property; an object initializer member is an assignment to one |
+| Returns from lambdas | Pin only with a written return type (`int () => x`); `Func<int> f = () => x` pins nothing | A lambda's delegate type can come from overload resolution's error recovery in the placeholder binding (`Run(() => x)` with two `Run` overloads), and the issue asks for a written return type. A local function's return type is written unless it is `infer` |
+| `ref`, `out` and `in` arguments | Pin the parameter type of a candidate that takes the ref kind; one by value to a `ref` or `out` parameter, or by reference to a by-value one, pins nothing ("an argument whose ref kind its parameter does not take pins nothing", the reworded P4 reason) | "Exact type": no conversion applies, so the type is the parameter's. The agreement rule is the same as for other uses |
+| Several uses | Must agree, as in P4: CS20057 keeps its arguments (two uses, each with its type and what it is) and names an assignment target (`'C.Name'`, `'y'`) or a return (`'the return of C.Clamp'`, `'the return of L'`, `'the return of a lambda expression'`) where a call names its candidate | Extends the existing message; every P4 and P5 expectation stays as it was. Naming two uses that differ is enough to fix either |
+| Precedence across sources | Unchanged: P2, then P1, then P7 (a slot left for #78 in `InferBeforeSignature`), then the body. The body is bound only when no higher source gives the type, and a use that disagrees with that type reports the C# error of the twin, which names both types (CS0029 `int` to `string`, CS1503 `ref int` to `ref long`); P1 against P2 is CS20043, which names the member and the type it takes | P4's decision: an error of its own would need the body bound for every member with a default value or an overridden member. The twin's error already names both types |
+| Lambdas and local functions | Uses in them count like any other (P4), and a return pins the return type of the lambda or local function it returns from | P4's rule |
+| Nullability | Merged as for calls: not annotated wins (`string? a = x; string b = x;` gives `string`), also for `ref` uses | One rule for every use; nullable analysis then warns as for the twin |
+
+Diagnostics: no new code. CS20027's reason "a ref or out argument pins nothing yet" is now "an argument whose ref kind its
+parameter does not take pins nothing" (`IDS_SharperInferRefArgumentPinsNothing`); CS20057's use slots take two new
+fragments (`IDS_SharperInferReturnOf`, `IDS_SharperInferReturnOfLambda`). Tests: 5 `InferFromUses_*` tests in
+`SharperTests_InferFromUses.cs`: every kind of use with runtime output next to C# twins (the issue's examples, fields,
+locals, parameters, `out`, `ref`, `in`, `ref` returns, object initializers, indexers, `async`, lambdas and local functions
+with written return types, the method's type parameters), the semantic model, uses that disagree with where each error
+points, what pins nothing, precedence over P1 and P2, and nullability. Two expectations of earlier steps changed, both
+for `ref` arguments: `Ref(ref x)` and `Out(out x)` in `InferFromBody_PinsNothing` now pin, and `Over(ref x)` in
+`InferFromOverloads_PinsNothing` has the reworded reason. All 461 Sharper test cases pass, also with
+`ROSLYN_TEST_IOPERATION=1`.
+
+Follow-ups:
+
+- A return from a lambda without a written return type, `yield return`, array elements and deconstruction pin nothing.
+- CS20057 names the first two uses that differ, not every use.
 
 ## Feature 10: immutable types, slice 1 (design)
 

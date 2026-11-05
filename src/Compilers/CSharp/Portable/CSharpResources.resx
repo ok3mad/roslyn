@@ -451,7 +451,7 @@
     <value>a params parameter pins nothing yet</value>
   </data>
   <data name="IDS_SharperInferRefArgumentPinsNothing" xml:space="preserve">
-    <value>a ref or out argument pins nothing yet</value>
+    <value>an argument whose ref kind its parameter does not take pins nothing</value>
   </data>
   <data name="IDS_SharperInferUsePinsNothing" xml:space="preserve">
     <value>no use passes it directly to a call with one candidate</value>
@@ -470,6 +470,12 @@
   </data>
   <data name="IDS_SharperInferNoApplicableCandidate" xml:space="preserve">
     <value>no candidate of a call to '{0}' accepts the other arguments</value>
+  </data>
+  <data name="IDS_SharperInferReturnOf" xml:space="preserve">
+    <value>the return of {0}</value>
+  </data>
+  <data name="IDS_SharperInferReturnOfLambda" xml:space="preserve">
+    <value>the return of a lambda expression</value>
   </data>
   <data name="IDS_SharperInferNoMemberWithParameterCount" xml:space="preserve">
     <value>it could override or implement no member '{0}' with the same number of parameters</value>
