@@ -268,11 +268,9 @@ namespace Microsoft.CodeAnalysis.CSharp
                     if (isRangeOverDynamic(argument))
                     {
                         // A dynamic operand converts to Index at runtime, so `..d` is valid C# and stays a range
-                        // even when d holds a sequence, which then fails at runtime. Point that out.
-                        // PROTOTYPE(sharper): Decide between the range and the spread at runtime instead, from the
-                        // value in d: try the C# conversion to Index first, as the compile-time rule does, and
-                        // spread if d holds a sequence. That changes what currently valid C# does at runtime
-                        // (an exception today), so it needs a decision under the sharpening rules. Tracked in #42.
+                        // even when d holds a sequence, which then fails at runtime. Point that out. Deciding at
+                        // runtime would change what valid C# does, so the range stays (#42). `(..d)` is not matched
+                        // above, so it is the way to keep the range without the warning.
                         Error(csharpDiagnostics, ErrorCode.WRN_SharperDynamicRangeNotSpread, spreadOperand, spreadOperand);
                     }
 
