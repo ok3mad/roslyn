@@ -115,6 +115,7 @@ var methodDecl = generator.MethodDeclaration("MyMethod", ...);
 - **Immutability**: All `Document`, `Solution`, `Project` instances are immutable — use `With*` methods
 - **Cancellation**: Always thread `CancellationToken` through async operations
 - **Performance**: Avoid LINQ in hot paths, prefer `for` loops or `.AsSpan()`, use `ObjectPool<T>`
+- **Sharper IDE features** (this fork): gate each on `SharperFacts.IsSharperEnabled(SyntaxTree)` (`src/Workspaces/CSharp/Portable/Sharper/`), which covers `.cx` documents and `<Features>sharper</Features>` projects, so plain C# documents do not change. The IDE layers have no `InternalsVisibleTo` from the C# compiler: read Sharper semantics through public API (the semantic model, declared symbols, parse options), as `SharperFacts` does for `infer`; see `docs/sharper/README.md` ("Not covered yet").
 - **LanguageServer request context**: Handlers should use the asynchronous `RequestContext.Get*Async` methods for workspace, solution, and document access. Obsolete synchronous members remain only for compatibility with existing external-access consumers and forward to the asynchronous accessors.
 
 ## Common Gotchas

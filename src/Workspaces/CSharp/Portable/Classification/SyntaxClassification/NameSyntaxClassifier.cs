@@ -11,6 +11,7 @@ using Microsoft.CodeAnalysis.Classification;
 using Microsoft.CodeAnalysis.Classification.Classifiers;
 using Microsoft.CodeAnalysis.Collections;
 using Microsoft.CodeAnalysis.CSharp.Extensions;
+using Microsoft.CodeAnalysis.CSharp.Sharper;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.PooledObjects;
 using Microsoft.CodeAnalysis.Shared.Extensions;
@@ -150,6 +151,13 @@ internal sealed class NameSyntaxClassifier : AbstractNameSyntaxClassifier
         {
             // Don't do anything further to check if `var` is the contextual keyword here. We do not support code
             // squatting on typenames that are all lowercase.
+            classifiedSpan = new ClassifiedSpan(name.Span, ClassificationTypeNames.Keyword);
+            return true;
+        }
+
+        // Sharper: 'infer' where the compiler infers the type, unless a type named 'infer' is in scope.
+        if (SharperFacts.IsInferKeyword(name, symbol))
+        {
             classifiedSpan = new ClassifiedSpan(name.Span, ClassificationTypeNames.Keyword);
             return true;
         }

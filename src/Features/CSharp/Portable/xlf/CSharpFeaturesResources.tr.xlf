@@ -302,6 +302,11 @@
         <target state="translated">Seçim en üst düzey deyimleri içeremez</target>
         <note />
       </trans-unit>
+      <trans-unit id="Use_infer">
+        <source>Use 'infer'</source>
+        <target state="new">Use 'infer'</target>
+        <note>Sharper: replaces a written return or parameter type with 'infer', which the compiler infers to the same type. 'infer' is a keyword and should not be localized.</note>
+      </trans-unit>
       <trans-unit id="Use_recursive_patterns">
         <source>Use recursive patterns</source>
         <target state="translated">Özyinelemeli desenler kullan</target>
@@ -321,6 +326,11 @@
         <source>Warning: AI suggestions might be inaccurate.</source>
         <target state="translated">Uyarı: Yapay zeka önerileri yanlış olabilir.</target>
         <note />
+      </trans-unit>
+      <trans-unit id="Write_the_type_0">
+        <source>Write the type '{0}'</source>
+        <target state="new">Write the type '{0}'</target>
+        <note>Sharper: replaces 'infer' with the type it stands for. {0} is a type.</note>
       </trans-unit>
       <trans-unit id="asynchronous_foreach_statement">
         <source>asynchronous foreach statement</source>

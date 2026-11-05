@@ -60,7 +60,8 @@ typed local, field or property (`this.Name = name`), `return x` from a member wi
   CS20027, which says why nothing pinned it. It never becomes a generic type parameter
   (decided in [#79](https://github.com/ok3mad/roslyn/issues/79)): write the type, or make the method generic in
   source (`(TA, TB) Pair<TA, TB>(TA a, TB b)`). Once uses in the body are a source (P4), CS20027 says why nothing
-  pinned the parameter, and the IDE (R5) offers both fixes.
+  pinned the parameter, and the IDE (R5) offers to write the type: the types the error lists, or `object`
+  ([IDE](inferred-return-type.md#ide-step-r5)). Making the method generic is not offered yet.
 - **Nullable.** In a `#nullable enable` context, a default value that is a null constant gives an annotated type
   (`infer s = default(string)` is `string?`), and any other default value a type that is not annotated (`infer s = "a"`
   is `string`, so `M(null)` warns). Where nullable annotations are disabled at `infer`, the type is oblivious, as a
@@ -426,7 +427,9 @@ No syntax, bound node or lowering is added: `infer` parses as a type name, and t
   converts to nothing) records no candidates and is read as P4 reads a call that binds.
 - P6: a return from a lambda without a written return type, `yield return`, array elements and deconstruction pin
   nothing. CS20057 names the first two uses that differ, not every use.
-- The IDE does not know `infer` yet (R5, [#71](https://github.com/ok3mad/roslyn/issues/71)).
+- The IDE (R5, [#71](https://github.com/ok3mad/roslyn/issues/71)) shows, writes and fixes `infer` parameter types as it
+  does return types; see [IDE](inferred-return-type.md#ide-step-r5) on the return type page, which also has its
+  follow-ups.
 
 ## Code
 
