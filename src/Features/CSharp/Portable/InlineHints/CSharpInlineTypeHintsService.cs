@@ -6,6 +6,7 @@ using System;
 using System.Composition;
 using System.Diagnostics.CodeAnalysis;
 using System.Threading;
+using Microsoft.CodeAnalysis.CSharp.Sharper;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Host.Mef;
 using Microsoft.CodeAnalysis.InlineHints;
@@ -65,6 +66,14 @@ internal sealed class CSharpInlineTypeHintsService() : AbstractInlineTypeHintsSe
                 var type = info.ElementType;
                 if (IsValidType(type))
                     return CreateTypeHint(type, forEachStatement.Type, forEachStatement.Identifier);
+            }
+            else if (node is IdentifierNameSyntax inferType && SharperFacts.IsInferPosition(inferType))
+            {
+                // Sharper: 'infer' as a return, parameter or member type shows the inferred type, as 'var' does, before
+                // the name that follows it.
+                var type = SharperFacts.GetInferredType(inferType, semanticModel, cancellationToken);
+                if (IsValidType(type))
+                    return CreateTypeHint(type, inferType, inferType.GetLastToken().GetNextToken());
             }
         }
 
