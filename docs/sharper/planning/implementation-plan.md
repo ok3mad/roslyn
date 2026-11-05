@@ -1047,7 +1047,10 @@ other arguments, names, optional parameters, ref kinds, `in`, the expanded form)
 and the containing type, what pins nothing and the listed candidates, lambdas bound for several delegate types and local
 functions, and uses that agree or disagree. Two P4 expectations changed: `Over(x)` lists its candidates, and
 `Overload(x, 0)` now pins.
-RESULTS_PLACEHOLDER
+All 448 Sharper test cases pass, also with `ROSLYN_TEST_IOPERATION=1`. Regression run (net10.0, Debug): Semantic
+20,270 passed, Symbol 13,923 and Emit 7,312, none failed; the Semantic test project builds with `-warnaserror`; the
+analyzer build reports no error (its three RS0062 warnings are in P2's `SharperInferredParameterType_OverriddenMember.cs`,
+as on `main`).
 
 ## Feature 10: immutable types, slice 1 (design)
 
