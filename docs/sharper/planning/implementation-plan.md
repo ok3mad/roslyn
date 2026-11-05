@@ -136,8 +136,8 @@ The brainstorm proposes 26 pieces of syntax (#28, discard arguments, is still to
 | 19 | Inferred or structural unions | `(Profile \| Unavailable)~` | not decided | yes | XL | Low | Spelling never discussed; CLR representation open (nominal, tagged or erased to `object`) | [#31](https://github.com/ok3mad/roslyn/issues/31) |
 | 20 | Lifting in pipes and arguments | `users.Find(id) \|> Render(it, p)` | await, `Select` or union passthrough | none | XL | Low | Implicit versus an explicit marker; breaks down at generic and `object` parameters | [#32](https://github.com/ok3mad/roslyn/issues/32) |
 | 21 | Refined types and members | `decimal Amount is >0`, `int is >=0` | plain type plus boundary checks | yes (pattern in a type position) | XL | Low–Med | Proof obligations at call sites; runtime guards for C# callers | [#33](https://github.com/ok3mad/roslyn/issues/33) |
-| 22 | Opaque patterns | `is > 0 and <= max` | pattern plus a `when` guard | none (relational patterns already parse any expression) | M, plus purity | Med | Sound only with purity (#24) | [#34](https://github.com/ok3mad/roslyn/issues/34) |
-| 23 | Extractor patterns | `s is Parse(val n and >0)` | call plus a sub-pattern | none | M–L | Low | Clashes with a positional pattern on a type named `Parse` | [#35](https://github.com/ok3mad/roslyn/issues/35) |
+| 22 | Opaque patterns | `is > 0 and <= max` | an opaque test in the decision DAG | none (relational patterns already parse any expression) | M, plus purity | Med; slice 1 designed | Decided: any pure non-constant operand of a relational or constant pattern, in every pattern context except refinements; pure is enough, as for `Deconstruct` in C#. See [Feature 13](#feature-13-patterns-on-pure-functions-design) | [#34](https://github.com/ok3mad/roslyn/issues/34) |
+| 23 | Extractor patterns | `s is Parse(val n and >0)` | call plus a sub-pattern, an evaluation in the decision DAG | none | M–L | Low; designed | Decided: a method only where type lookup fails (a type named `Parse` wins); the predicate form first, then `bool TryX(T, out U)`, then `U F(T)`, unions last. See [Feature 13](#feature-13-patterns-on-pure-functions-design) | [#35](https://github.com/ok3mad/roslyn/issues/35) |
 | 24 | `pure` and `total` modifiers | `total int Fib(...)`, `pure(provider)` | erased, plus attributes | small | XL (syntax alone S) | Low | Needs the whole effect checker and bindings for existing .NET code | [#36](https://github.com/ok3mad/roslyn/issues/36) |
 | 25 | Member declared on another type | `static infer Currency.Parse(string s)` | C# 14 extension block | yes | M | Low | Appears only in an example; without `fun` it is spelled like an explicit interface implementation | [#37](https://github.com/ok3mad/roslyn/issues/37) |
 | 27 | `assume` escape hatch | `assume x is >0` | runtime check | yes | S–M | Low | Only an open question so far | [#39](https://github.com/ok3mad/roslyn/issues/39) |
@@ -158,7 +158,7 @@ Not listed: `union Name(A, B)` comes from C# 15, and `collect`, `Retry` and `Une
 4. `readonly` parameters (#11), done.
 5. Type inference (#10 and #15), the first real inference work, in the steps of the
    [work breakdown](#type-inference-work-breakdown).
-6. Immutable types (#29), slice 1 (prototype, [#139](https://github.com/ok3mad/roslyn/issues/139)), which purity (#24) and the patterns that need it (#22, #23) build on.
+6. Immutable types (#29), slice 1 (prototype, [#139](https://github.com/ok3mad/roslyn/issues/139)), which purity (#24) and the patterns that need it (#22, #23) build on. Of those patterns, opaque patterns ship first, then the predicate form, then extractors ([Feature 13](#feature-13-patterns-on-pure-functions-design)).
 7. Rows 19 onward wait for the union representation and the purity design.
 
 Decided before the type-syntax rows: `->` is not a lambda arrow, only the arrow of function types (see Decisions).
@@ -1182,6 +1182,53 @@ section keeps the decisions and what the implementation taught. Lifting over `Ta
   a spill sequence's locals the syntax of the enclosing statement, a `VariableDeclarator` for a local declaration, and
   `SynthesizedClosureEnvironment.AssertIsClosureScopeSyntax` rejects it: `Func<int> f = 3 |> Make(() => it);` asserts
   in Debug builds, as C#'s `Func<int> g = 3 switch { var i => Make(() => i) };` does (upstream code, not changed here).
+
+## Feature 13: patterns on pure functions (design)
+
+`amount switch { > 0 and <= max => Accept(amount), _ => Reject(amount) }` with a non-constant `max` (opaque patterns,
+[#34](https://github.com/ok3mad/roslyn/issues/34)), and `s is Parse(val n and > 0)` (extractor patterns,
+[#35](https://github.com/ok3mad/roslyn/issues/35)). Both need purity, whose slice 1 ([#173](https://github.com/ok3mad/roslyn/issues/173))
+checks declared `[Pure]` members only. This section is the design for both and the plan for the first slice.
+
+**Probe.** What the compiler does today:
+
+| Area | What the code shows |
+| --- | --- |
+| Flag off, opaque | A relational operand is any expression; a non-constant one fails in `BindExpressionForPatternContinued` (`Binder_Patterns.cs`) with CS9135 "A constant value of type 'int' is expected", or CS0150 when the input is `object` or a type parameter. A constant pattern `x is max` fails the same way. No valid C# changes meaning |
+| Flag off, extractor | `s is Parse(...)` is a positional pattern: `BindRecursivePattern` → `BindTypeForPattern` looks up types only, so with no type named `Parse` it is CS0246, and with a method `Parse` in scope CS0118 (`LookupResult.NotTypeOrNamespace`, `Binder_Lookup.cs`). With a type named `Parse` it is valid C# (a `Deconstruct` call). `x is IsEven` is an error: a method group is neither a constant nor a type |
+| Guards in the DAG | A `when` clause is a `BoundWhenDecisionDagNode` after all of an arm's tests (`DecisionDagBuilder.cs`); a guarded arm counts for neither exhaustiveness nor subsumption, so a switch expression without a catch-all gets CS8509 |
+| Purity | `PurityWalker` in member mode (`SharperImmutability.cs`), which `CheckPureBody` uses, accepts locals and parameters, constants, fields reached through any object, `static readonly` fields of immutable types, and calls of `[Pure]`, attested and observer members. Its reason text comes from `GetPureReason` (`SharperImmutability_Pure.cs`) |
+| Order of tests | C# leaves the order of pattern tests unspecified and lets the DAG skip or share `Deconstruct` calls and property reads, which C# assumes have no side effects |
+
+### Decisions
+
+| Question | Decision | Why |
+| --- | --- | --- |
+| Lowering of an opaque test | A new DAG test, `BoundDagOpaqueTest`: a boolean evaluated on a DAG temp whose outcome the value sets know nothing about. Not a rewrite into a `when` guard | A trailing guard only covers `and` chains: `not (<= max)` and `<= max or 5` cannot become one guard. In the DAG the test sits where it is written, under `and`, `or`, `not`, property and list patterns, and the same machinery later evaluates an extractor's call |
+| Pure or total | Pure is enough. The DAG may evaluate an opaque test in a different order than written, skip it when the outcome is already decided, and share two identical tests on the same input. It never hoists a test ahead of the arms | C# gives `Deconstruct` and property reads the same contract. Reordering a pure test can only change which deterministic exception surfaces, or skip it. Hoisting and speculative evaluation need `total` ([#36](https://github.com/ok3mad/roslyn/issues/36)) |
+| Where opaque patterns are allowed | Every pattern context: `is`, switch statements and switch expressions, at any depth. Not in refinements (Feature 11) | The issue's "match arms only" is about declared domains, which must stay closed so that call sites can prove them |
+| Which patterns can be opaque | Slice 1: a relational pattern (`<`, `<=`, `>`, `>=`) or a constant pattern (`== max`) whose operand is not a constant, in Sharper files, where C# reports CS9135 or CS0150 | Both are errors in C# today. The operand converts to the input type as a constant would, and the comparison is the one C# would use for `input op operand` with that type |
+| Purity of an operand | Checked by the member-mode `PurityWalker` over the bound operand. An impure one is a new error (CS20056, the next free code), with `GetPureReason`'s reason | The same rules as a `[Pure]` body, so the two cannot drift. Reading a mutable instance field is fine: nothing in a pure match can write it while the match runs. Mutable statics stay rejected, as in `[Pure]` bodies |
+| Exhaustiveness and subsumption | An opaque test never narrows a value set, so an arm with one counts as a guarded arm: no help for exhaustiveness (CS8509 without a catch-all), never subsumes a later arm. Two identical opaque tests on the same input are one test | Best effort, as in the brainstorm. Symbolic reasoning over the same `val` (such as `<= max` then `> max`) can come later without breaking anything |
+| Extractor lookup | `Parse(...)` in a positional pattern is an extractor only when type lookup fails; a type named `Parse` always wins, silently. Simple names and `Type.Method` | Design rule 2: with a type in scope it is valid C#. With no type it is CS0246 or CS0118 today |
+| Extractor shapes, in order | 1. The predicate form `x is IsEven` (a `bool M(T)`), which is an opaque test. 2. `bool TryX(T, out U…)`: matches when it returns `true`, sub-patterns on the `out` values, like `Deconstruct`. 3. `U F(T)`, the sub-pattern on the result as it is (`Parse({ } n)` for a nullable result; no special meaning for `null`). 4. C# 15 unions, after Sharper's union story ([#31](https://github.com/ok3mad/roslyn/issues/31)) | Each shape adds one rule; the predicate form needs nothing beyond slice 1, and the `Try` shape is what the BCL has. A `U?` that means "no match" would hide a legitimate `null` |
+| `out` arguments in extractors | A pattern's temporaries are fresh, so a `[Pure]` `TryX` or `Deconstruct` called by a pattern never gets CS20053 ([#177](https://github.com/ok3mad/roslyn/issues/177)) | The aliasing that CS20053 guards against needs an `out` argument the caller can also reach |
+| Slices | One DAG infrastructure, shipped in steps: opaque patterns (slice 1), the predicate form (slice 2), extractors (slice 3) | Opaque patterns need no lookup rule and no shape choices, and are the most certain |
+
+### Plan for slice 1
+
+1. **Binder.** In `BindExpressionForPatternContinued`, in Sharper files and when C# reports CS9135 or CS0150 for a
+   relational or constant pattern, bind an opaque pattern instead (a new `BoundOpaquePattern` node: the operand, the
+   operator and the comparison's operator kind), and check the operand's purity. With the flag off nothing changes.
+2. **DAG.** `DecisionDagBuilder` makes a `BoundDagOpaqueTest` for it; only an identical test (same input, operator and
+   operand) implies it, and it leaves the value sets alone.
+3. **Lowering and the rest.** The decision DAG rewriter emits the comparison; flow, nullable and definite-assignment
+   visits; IOperation as `IRelationalPatternOperation` (or `IConstantPatternOperation`) with a non-constant value.
+4. **Tests** next to the C# with a `when` guard: runtime results, `and`, `or`, `not`, nesting in property and list
+   patterns, CS8509 without a catch-all, no subsumption, a shared test, an impure call, a mutable static, a `[Pure]`
+   call, refinements still rejecting it, and the flag off.
+
+**Size:** M, about 800 to 1,200 lines with tests; most of the risk is in the DAG builder's state handling.
 
 ## Follow-ups
 
