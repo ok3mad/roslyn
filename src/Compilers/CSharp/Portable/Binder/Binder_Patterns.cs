@@ -509,7 +509,11 @@ namespace Microsoft.CodeAnalysis.CSharp
 
                 ConstantValue? constantValueOpt;
                 Conversion patternConversion;
-                BoundExpression convertedExpression = BindExpressionForPatternContinued(originalExpression, unionType, inputType, innerExpression, ref hasErrors, diagnostics, out constantValueOpt, out patternConversion);
+                BoundExpression convertedExpression = BindExpressionForPatternContinued(originalExpression, unionType, inputType, innerExpression, ref hasErrors, diagnostics, out constantValueOpt, out patternConversion, out bool isSharperOpaque, isRelational: false);
+                if (isSharperOpaque)
+                {
+                    return MakeSharperOpaquePattern(node, BinaryOperatorKind.Equal, convertedExpression, inputType, hasErrors);
+                }
 
                 var convertedType = convertedExpression.Type ?? inputType;
                 if (convertedType.SpecialType == SpecialType.System_String && inputType.IsSpanOrReadOnlySpanChar())
@@ -620,14 +624,17 @@ namespace Microsoft.CodeAnalysis.CSharp
             out ConstantValue? constantValueOpt,
             out bool wasExpression,
             out Conversion patternExpressionConversion,
-            out BoundExpression originalExpression)
+            out BoundExpression originalExpression,
+            out bool isSharperOpaque,
+            bool isRelational = false)
         {
             constantValueOpt = null;
+            isSharperOpaque = false;
             originalExpression = BindExpression(patternExpression, diagnostics: diagnostics, invoked: false, indexed: false);
             originalExpression = CheckValue(originalExpression, BindValueKind.RValue, diagnostics);
             wasExpression = originalExpression.Kind switch { BoundKind.BadExpression => false, BoundKind.TypeExpression => false, _ => true };
             patternExpressionConversion = Conversion.NoConversion;
-            return wasExpression ? BindExpressionForPatternContinued(originalExpression, unionType, inputType, patternExpression, ref hasErrors, diagnostics, out constantValueOpt, out patternExpressionConversion) : originalExpression;
+            return wasExpression ? BindExpressionForPatternContinued(originalExpression, unionType, inputType, patternExpression, ref hasErrors, diagnostics, out constantValueOpt, out patternExpressionConversion, out isSharperOpaque, isRelational) : originalExpression;
         }
 
         private BoundExpression BindExpressionForPatternContinued(
@@ -638,16 +645,26 @@ namespace Microsoft.CodeAnalysis.CSharp
             ref bool hasErrors,
             BindingDiagnosticBag diagnostics,
             out ConstantValue? constantValueOpt,
-            out Conversion patternExpressionConversion)
+            out Conversion patternExpressionConversion,
+            out bool isSharperOpaque,
+            bool isRelational)
         {
             BoundExpression convertedExpression = ConvertPatternExpression(
                 unionType, inputType, patternExpression, expression, out constantValueOpt, hasErrors, diagnostics, out patternExpressionConversion);
 
             ConstantValueUtils.CheckLangVersionForConstantValue(convertedExpression, diagnostics);
 
+            isSharperOpaque = false;
             if (!convertedExpression.HasErrors && !hasErrors)
             {
-                if (constantValueOpt == null)
+                if (constantValueOpt == null && IsSharperOpaquePatternOperand(convertedExpression, unionType, inputType, patternExpression, isRelational))
+                {
+                    // Sharper opaque pattern (#34): where C# requires a constant, a pure expression is a test the
+                    // decision DAG evaluates.
+                    isSharperOpaque = true;
+                    Compilation.SharperImmutability.CheckOpaquePatternOperand(convertedExpression, diagnostics);
+                }
+                else if (constantValueOpt == null)
                 {
                     var strippedInputType = inputType.StrippedType();
                     if (strippedInputType.Kind is not SymbolKind.ErrorType and not SymbolKind.DynamicType and not SymbolKind.TypeParameter &&
@@ -1972,7 +1989,7 @@ namespace Microsoft.CodeAnalysis.CSharp
 
             MessageID.IDS_FeatureRelationalPattern.CheckFeatureAvailability(diagnostics, node.OperatorToken);
 
-            BoundExpression value = BindExpressionForPattern(unionType, inputType, node.Expression, ref hasErrors, diagnostics, out var constantValueOpt, out _, out Conversion patternConversion, originalExpression: out _);
+            BoundExpression value = BindExpressionForPattern(unionType, inputType, node.Expression, ref hasErrors, diagnostics, out var constantValueOpt, out _, out Conversion patternConversion, originalExpression: out _, out bool isSharperOpaque, isRelational: true);
             ExpressionSyntax innerExpression = SkipParensAndNullSuppressions(node.Expression, diagnostics, ref hasErrors);
             var type = value.Type ?? inputType;
             Debug.Assert(type is { });
@@ -1981,6 +1998,12 @@ namespace Microsoft.CodeAnalysis.CSharp
             {
                 diagnostics.Add(ErrorCode.ERR_InvalidExprTerm, node.OperatorToken.GetLocation(), node.OperatorToken.Text);
                 hasErrors = true;
+            }
+
+            if (isSharperOpaque)
+            {
+                Debug.Assert(!hasUnionMatching);
+                return MakeSharperOpaquePattern(node, operation, value, inputType, hasErrors);
             }
 
             BinaryOperatorKind opType = RelationalOperatorType(type.EnumUnderlyingTypeOrSelf());

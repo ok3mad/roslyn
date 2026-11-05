@@ -2040,6 +2040,12 @@ namespace Microsoft.CodeAnalysis.CSharp
                             this.VisitRvalue(pat.Value);
                             break;
                         }
+                    case BoundKind.SharperOpaquePattern:
+                        {
+                            var pat = (BoundSharperOpaquePattern)pattern;
+                            this.VisitRvalue(pat.Value);
+                            break;
+                        }
                     case BoundKind.NegatedPattern:
                         {
                             var pat = (BoundNegatedPattern)pattern;

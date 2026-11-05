@@ -57,11 +57,11 @@ namespace Microsoft.CodeAnalysis.CSharp
                     BoundDagIndexEvaluation e => e.Property,
                     BoundDagSliceEvaluation e => getSymbolFromIndexerAccess(e.IndexerAccess),
                     BoundDagIndexerEvaluation e => getSymbolFromIndexerAccess(e.IndexerAccess),
-                    BoundDagAssignmentEvaluation or BoundDagPassThroughEvaluation => null,
+                    BoundDagAssignmentEvaluation or BoundDagPassThroughEvaluation or BoundDagSharperOpaqueEvaluation => null,
                     _ => throw ExceptionUtilities.UnexpectedValue(this.Kind)
                 };
 
-                Debug.Assert(result is not null || this is BoundDagAssignmentEvaluation or BoundDagPassThroughEvaluation);
+                Debug.Assert(result is not null || this is BoundDagAssignmentEvaluation or BoundDagPassThroughEvaluation or BoundDagSharperOpaqueEvaluation);
                 return result;
 
                 static Symbol? getSymbolFromIndexerAccess(BoundExpression indexerAccess)
@@ -180,6 +180,58 @@ namespace Microsoft.CodeAnalysis.CSharp
         public new BoundDagPropertyEvaluation Update(BoundDagTemp input)
         {
             return Update(Property, IsLengthOrCount, input);
+        }
+    }
+
+    partial class BoundDagSharperOpaqueEvaluation
+    {
+        public override int GetHashCode() => Hash.Combine(base.GetHashCode(), (int)Relation);
+
+        /// <summary>
+        /// Two opaque tests are one test when they compare with the same operator against the same local, parameter or
+        /// bound node. The operand is pure, so it cannot change while the match runs.
+        /// </summary>
+        public override bool IsEquivalentTo(BoundDagEvaluation obj)
+        {
+            if (this == obj)
+            {
+                return true;
+            }
+
+            return obj is BoundDagSharperOpaqueEvaluation other &&
+                Relation == other.Relation &&
+                isSameValue(Value, other.Value);
+
+            static bool isSameValue(BoundExpression x, BoundExpression y)
+            {
+                if (x == y)
+                {
+                    return true;
+                }
+
+                return (x, y) switch
+                {
+                    (BoundLocal a, BoundLocal b) => a.LocalSymbol.Equals(b.LocalSymbol),
+                    (BoundParameter a, BoundParameter b) => a.ParameterSymbol.Equals(b.ParameterSymbol),
+                    (BoundConversion a, BoundConversion b) =>
+                        a.ConversionKind == b.ConversionKind &&
+                        a.Checked == b.Checked &&
+                        TypeSymbol.Equals(a.Type, b.Type, TypeCompareKind.ConsiderEverything) &&
+                        isSameValue(a.Operand, b.Operand),
+                    _ => false,
+                };
+            }
+        }
+
+        public override BoundDagTemp MakeResultTemp()
+        {
+            return new BoundDagTemp(Syntax, BooleanType, this);
+        }
+
+        public override BoundDagEvaluation UpdateEvaluationImpl(BoundDagTemp input) => Update(input);
+        public new BoundDagSharperOpaqueEvaluation Update(BoundDagTemp input)
+        {
+            return Update(Relation, Value, BooleanType, input);
         }
     }
 

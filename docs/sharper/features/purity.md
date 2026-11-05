@@ -86,6 +86,9 @@ It reports the first expression that does anything else (CS20050), with the reas
 A constructor may also write the fields and auto-properties of its own `this`, and its instance initializers are
 checked with it.
 
+The operand of an [opaque pattern](opaque-patterns.md) (`x is <= max`) is checked by the same rules, as an expression
+with no locals of its own (CS20058).
+
 There is no inference: a call of an unmarked helper is an error naming the helper, even when its body is pure. A
 local function is `[Pure]` only when marked, and is checked on its own.
 

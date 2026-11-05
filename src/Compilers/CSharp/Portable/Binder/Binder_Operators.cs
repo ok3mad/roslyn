@@ -4975,7 +4975,18 @@ namespace Microsoft.CodeAnalysis.CSharp
                 }
 
                 bool hasErrors = node.Right.HasErrors;
-                var convertedExpression = BindExpressionForPattern(unionType, inputType, node.Right, ref hasErrors, diagnostics, out var constantValueOpt, out var wasExpression, patternExpressionConversion: out _, out BoundExpression originalExpression);
+                var convertedExpression = BindExpressionForPattern(unionType, inputType, node.Right, ref hasErrors, diagnostics, out var constantValueOpt, out var wasExpression, patternExpressionConversion: out _, out BoundExpression originalExpression, out bool isSharperOpaque);
+                if (isSharperOpaque)
+                {
+                    // Sharper opaque pattern (#34): `x is max` with a pure, non-constant `max`.
+                    BoundPattern opaquePattern = MakeSharperOpaquePattern(node.Right, BinaryOperatorKind.Equal, convertedExpression, inputType, hasErrors).MakeCompilerGenerated();
+                    return MakeIsPatternExpression(
+                        node, operand, opaquePattern,
+                        hasUnionMatching: false,
+                        boolType: GetSpecialType(SpecialType.System_Boolean, diagnostics, node),
+                        operandHasErrors, diagnostics);
+                }
+
                 if (wasExpression)
                 {
                     hasErrors |= constantValueOpt is null;

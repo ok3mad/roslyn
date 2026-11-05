@@ -86,8 +86,27 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             }
         }
 
+        /// <summary>
+        /// Checks the operand of a Sharper opaque pattern (#34) with the rules of a <c>[Pure]</c> body, as if it were the
+        /// body of a member with no locals of its own, and reports CS20056 at the first expression that is not pure.
+        /// </summary>
+        internal void CheckOpaquePatternOperand(BoundExpression operand, BindingDiagnosticBag diagnostics)
+        {
+            if (operand.HasAnyErrors)
+            {
+                return;
+            }
+
+            var walker = new PurityWalker(this, observer: null, definition: null, localOnly: false, allowsCreation: true, constructorsInProgress: null, isMember: true, isPatternOperand: true);
+            walker.Visit(operand);
+            if (walker.Impure is { } impure)
+            {
+                diagnostics.Add(ErrorCode.ERR_SharperOpaquePatternNotPure, impure.Syntax.Location, GetPureReason(walker, isPattern: true));
+            }
+        }
+
         /// <summary>Why the expression a pure member's walker stopped at is not pure.</summary>
-        private static Reason GetPureReason(PurityWalker walker)
+        private static Reason GetPureReason(PurityWalker walker, bool isPattern = false)
         {
             var node = walker.Impure!;
             string text = node.Syntax.ToString();
@@ -107,9 +126,10 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 return new Reason(MessageID.IDS_SharperPureReasonCulture, [text]);
             }
 
+            MessageID write = isPattern ? MessageID.IDS_SharperPatternReasonWrite : MessageID.IDS_SharperPureReasonWrite;
             if (walker.ImpureIsWrite)
             {
-                return new Reason(MessageID.IDS_SharperPureReasonWrite, [text]);
+                return new Reason(write, [text]);
             }
 
             Symbol? callee = node switch
@@ -135,10 +155,10 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             return node switch
             {
                 BoundAssignmentOperator or BoundCompoundAssignmentOperator or BoundNullCoalescingAssignmentOperator or BoundIncrementOperator
-                    => new Reason(MessageID.IDS_SharperPureReasonWrite, [text]),
+                    => new Reason(write, [text]),
                 BoundFieldAccess { FieldSymbol.IsStatic: true }
                     => new Reason(MessageID.IDS_SharperPureReasonStatic, [text]),
-                _ => new Reason(MessageID.IDS_SharperPureReasonOther, [text]),
+                _ => new Reason(isPattern ? MessageID.IDS_SharperPatternReasonOther : MessageID.IDS_SharperPureReasonOther, [text]),
             };
         }
 

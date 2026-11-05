@@ -347,6 +347,14 @@ implementation plan, "Feature 3"):
    from the final bound tree, where an error-typed placeholder argument leaves the single candidate in
    `BoundCall.OriginalMethodsOpt` or `BoundBadExpression.Symbols`; anything the binding caches by syntax (a lambda's
    inferred parameter type) must not be published from it.
+39. **A new pattern test is cheapest as a DAG evaluation.** `DecisionDagBuilder` switches over test kinds in its
+   implication, value-set and state-merging code, but treats evaluations generically. Opaque patterns compute
+   `input op operand` into a `bool` temp (`BoundDagSharperOpaqueEvaluation`) and test it with a `BoundDagValueTest`, the
+   shape of `{ P: true }`; sharing, subsumption, exhaustiveness and the pattern explainer then work unchanged. An
+   evaluation's equality (`IsEquivalentTo`, `GetHashCode`) decides which tests are shared, and its kind must join the
+   evaluation switches (`removeEvaluation`, `UpdateDagTempReferences`, the nullable walker's two). A new pattern node
+   also joins the pattern kind lists in `AbstractFlowPass`, `DefiniteAssignment`, `VariablesDeclaredWalker` and
+   `DecisionDagBuilder_CheckOrReachability`.
 
 ## Inferred Types
 

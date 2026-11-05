@@ -471,6 +471,10 @@ namespace Microsoft.CodeAnalysis.CSharp
                     {
                         return MakeTestsAndBindingsForRelationalPattern(input, rel, out output);
                     }
+                case BoundSharperOpaquePattern opaque:
+                    {
+                        return MakeTestsForSharperOpaquePattern(input, opaque, out output);
+                    }
                 case BoundNegatedPattern neg:
                     output = input;
                     return MakeTestsAndBindingsForNegatedPattern(input, neg, bindings);
@@ -1262,6 +1266,26 @@ namespace Microsoft.CodeAnalysis.CSharp
                 tests.Add(new Tests.One(new BoundDagRelationalTest(rel.Syntax, rel.Relation, rel.ConstantValue, output, rel.HasErrors)));
             }
 
+            return Tests.AndSequence.Create(tests);
+        }
+
+        /// <summary>
+        /// A Sharper opaque pattern (#34): convert the input to the operand's type as a relational pattern does, evaluate
+        /// <c>input op value</c> into a temp, and test that temp for <see langword="true"/>. The value sets learn nothing
+        /// about the input, and two identical evaluations on the same input are shared.
+        /// </summary>
+        private Tests MakeTestsForSharperOpaquePattern(
+            TestInputOutputInfo inputInfo,
+            BoundSharperOpaquePattern opaque,
+            out TestInputOutputInfo outputInfo)
+        {
+            Debug.Assert(inputInfo.UnionValue is null);
+            var tests = ArrayBuilder<Tests>.GetInstance(3);
+            outputInfo = MakeConvertToType(inputInfo, opaque.Syntax, opaque.NarrowedType, isExplicitTest: false, tests);
+            var evaluation = new BoundDagSharperOpaqueEvaluation(
+                opaque.Syntax, opaque.Relation, opaque.Value, _compilation.GetSpecialType(SpecialType.System_Boolean), outputInfo.DagTemp, opaque.HasErrors);
+            tests.Add(new Tests.One(evaluation));
+            tests.Add(new Tests.One(new BoundDagValueTest(opaque.Syntax, ConstantValue.True, evaluation.MakeResultTemp(), opaque.HasErrors)));
             return Tests.AndSequence.Create(tests);
         }
 
@@ -3741,6 +3765,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                             case BoundDagPropertyEvaluation:
                             case BoundDagIndexEvaluation:
                             case BoundDagSliceEvaluation:
+                            case BoundDagSharperOpaqueEvaluation:
                                 {
                                     condition = null;
                                     return RemoveSimpleEvaluationWithResultTemp(tests, ref tempMap, e);
@@ -4003,6 +4028,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                                     case BoundDagTypeEvaluation:
                                     case BoundDagFieldEvaluation:
                                     case BoundDagPropertyEvaluation:
+                                    case BoundDagSharperOpaqueEvaluation:
                                         {
                                             if (!TryGetTempReplacement(tempMap, eval.Input, out BoundDagTemp? replacement))
                                             {

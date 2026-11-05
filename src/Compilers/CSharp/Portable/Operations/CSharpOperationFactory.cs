@@ -236,6 +236,8 @@ namespace Microsoft.CodeAnalysis.Operations
                     return CreateBoundNegatedPatternOperation((BoundNegatedPattern)boundNode);
                 case BoundKind.RelationalPattern:
                     return CreateBoundRelationalPatternOperation((BoundRelationalPattern)boundNode);
+                case BoundKind.SharperOpaquePattern:
+                    return CreateBoundSharperOpaquePatternOperation((BoundSharperOpaquePattern)boundNode);
                 case BoundKind.TypePattern:
                     return CreateBoundTypePatternOperation((BoundTypePattern)boundNode);
                 case BoundKind.SlicePattern:
@@ -2629,6 +2631,26 @@ namespace Microsoft.CodeAnalysis.Operations
             TypeSymbol inputType = boundRelationalPattern.InputType;
             TypeSymbol narrowedType = boundRelationalPattern.NarrowedType;
             return new RelationalPatternOperation(operatorKind, value, inputType.GetPublicSymbol(), narrowedType.GetPublicSymbol(), _semanticModel, syntax, isImplicit);
+        }
+
+        /// <summary>
+        /// A Sharper opaque pattern (#34) is the relational or constant pattern it was written as, with a value that is
+        /// not a constant.
+        /// </summary>
+        private IOperation CreateBoundSharperOpaquePatternOperation(BoundSharperOpaquePattern boundOpaquePattern)
+        {
+            IOperation value = Create(boundOpaquePattern.Value);
+            SyntaxNode syntax = boundOpaquePattern.Syntax;
+            bool isImplicit = boundOpaquePattern.WasCompilerGenerated;
+            ITypeSymbol inputType = boundOpaquePattern.InputType.GetPublicSymbol();
+            ITypeSymbol narrowedType = boundOpaquePattern.NarrowedType.GetPublicSymbol();
+            if (boundOpaquePattern.Relation.Operator() == CSharp.BinaryOperatorKind.Equal)
+            {
+                return new ConstantPatternOperation(value, inputType, narrowedType, _semanticModel, syntax, isImplicit);
+            }
+
+            BinaryOperatorKind operatorKind = Helper.DeriveBinaryOperatorKind(boundOpaquePattern.Relation);
+            return new RelationalPatternOperation(operatorKind, value, inputType, narrowedType, _semanticModel, syntax, isImplicit);
         }
 
         private IDeclarationPatternOperation CreateBoundDeclarationPatternOperation(BoundDeclarationPattern boundDeclarationPattern)

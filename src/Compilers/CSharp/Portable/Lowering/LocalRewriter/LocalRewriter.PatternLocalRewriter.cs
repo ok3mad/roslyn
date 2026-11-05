@@ -147,6 +147,15 @@ namespace Microsoft.CodeAnalysis.CSharp
                             return _factory.AssignmentExpression(output, access);
                         }
 
+                    case BoundDagSharperOpaqueEvaluation o:
+                        {
+                            // Sharper opaque pattern (#34): the operand is pure, so evaluating it here, in the order
+                            // the DAG chose, is not observable.
+                            BoundExpression output = _tempAllocator.GetTemp(o.MakeResultTemp());
+                            BoundExpression operand = _localRewriter.VisitExpression(o.Value);
+                            return _factory.AssignmentExpression(output, MakeRelationalTest(o.Syntax, input, o.Relation, operand));
+                        }
+
                     case BoundDagPropertyEvaluation p:
                         {
                             PropertySymbol property = p.Property;
@@ -437,6 +446,16 @@ namespace Microsoft.CodeAnalysis.CSharp
                 }
 
                 BoundExpression literal = _localRewriter.MakeLiteral(syntax, value, input.Type);
+                return MakeRelationalTest(syntax, input, operatorKind, literal);
+            }
+
+            /// <summary>
+            /// Compare <paramref name="input"/> with <paramref name="operand"/>, an expression of the input's type: a
+            /// literal, or the lowered operand of a Sharper opaque pattern.
+            /// </summary>
+            protected BoundExpression MakeRelationalTest(SyntaxNode syntax, BoundExpression input, BinaryOperatorKind operatorKind, BoundExpression operand)
+            {
+                BoundExpression literal = operand;
                 TypeSymbol comparisonType = input.Type.EnumUnderlyingTypeOrSelf();
                 if (operatorKind.OperandTypes() == BinaryOperatorKind.Int && comparisonType.SpecialType != SpecialType.System_Int32)
                 {

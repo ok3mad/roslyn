@@ -105,6 +105,12 @@ namespace Microsoft.CodeAnalysis.CSharp
             return null;
         }
 
+        public override BoundNode VisitSharperOpaquePattern(BoundSharperOpaquePattern node)
+        {
+            VisitRvalue(node.Value);
+            return null;
+        }
+
         public override BoundNode VisitNegatedPattern(BoundNegatedPattern node)
         {
             Visit(node.Negated);
@@ -180,6 +186,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 case BoundDiscardPattern _:
                 case BoundITuplePattern _:
                 case BoundRelationalPattern _:
+                case BoundSharperOpaquePattern _:
                 case BoundSlicePattern _:
                 case BoundListPattern lp:
                     break; // nothing to learn
@@ -498,6 +505,14 @@ namespace Microsoft.CodeAnalysis.CSharp
                                         Debug.Assert(outputSlot > 0);
                                         break;
                                     }
+                                case BoundDagSharperOpaqueEvaluation e:
+                                    {
+                                        var output = e.MakeResultTemp();
+                                        int outputSlot = getOrMakeAndRegisterDagTempSlot(output);
+                                        Debug.Assert(outputSlot > 0);
+                                        SetState(ref this.State, outputSlot, NullableFlowState.NotNull);
+                                        break;
+                                    }
                                 case BoundDagIndexerEvaluation e:
                                     {
                                         // tDest = tSource[index]
@@ -791,6 +806,14 @@ namespace Microsoft.CodeAnalysis.CSharp
                     case BoundDagIndexEvaluation e:
                         {
                             var type = TypeWithAnnotations.Create(e.Property.Type, NullableAnnotation.Annotated);
+                            int outputSlot = makeDagTempSlot(type, output);
+                            Debug.Assert(outputSlot > 0);
+                            addToTempMap(output, outputSlot, type.Type);
+                            return outputSlot;
+                        }
+                    case BoundDagSharperOpaqueEvaluation e:
+                        {
+                            var type = TypeWithAnnotations.Create(e.BooleanType, NullableAnnotation.NotAnnotated);
                             int outputSlot = makeDagTempSlot(type, output);
                             Debug.Assert(outputSlot > 0);
                             addToTempMap(output, outputSlot, type.Type);

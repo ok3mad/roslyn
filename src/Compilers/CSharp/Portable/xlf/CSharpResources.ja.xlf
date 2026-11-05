@@ -2752,6 +2752,11 @@
         <target state="new">[UnobservableWrite] is only valid on a field that is not readonly, of a class marked [Immutable].</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperOpaquePatternNotPure">
+        <source>A pattern operand that is not a constant must be pure, because the order of pattern tests is not specified: {0}.</source>
+        <target state="new">A pattern operand that is not a constant must be pure, because the order of pattern tests is not specified: {0}.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperPhantomTypeParameterInState">
         <source>Type parameter '{0}' is marked [Phantom], but '{1}' uses it in the state of the type.</source>
         <target state="new">Type parameter '{0}' is marked [Phantom], but '{1}' uses it in the state of the type.</target>
@@ -3770,6 +3775,16 @@
       <trans-unit id="IDS_SharperInferUsePinsNothing">
         <source>no use passes it directly to a call with one candidate</source>
         <target state="new">no use passes it directly to a call with one candidate</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperPatternReasonOther">
+        <source>'{0}' is not allowed in a pattern</source>
+        <target state="new">'{0}' is not allowed in a pattern</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperPatternReasonWrite">
+        <source>'{0}' writes state</source>
+        <target state="new">'{0}' writes state</target>
         <note />
       </trans-unit>
       <trans-unit id="IDS_SharperPureReasonCall">

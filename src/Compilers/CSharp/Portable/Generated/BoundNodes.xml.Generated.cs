@@ -174,6 +174,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         DagIndexEvaluation,
         DagIndexerEvaluation,
         DagSliceEvaluation,
+        DagSharperOpaqueEvaluation,
         DagAssignmentEvaluation,
         DagPassThroughEvaluation,
         SwitchSection,
@@ -252,6 +253,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         BinaryPattern,
         NegatedPattern,
         RelationalPattern,
+        SharperOpaquePattern,
         DiscardExpression,
         ThrowExpression,
         OutVariablePendingInference,
@@ -5883,6 +5885,40 @@ namespace Microsoft.CodeAnalysis.CSharp
         }
     }
 
+    internal sealed partial class BoundDagSharperOpaqueEvaluation : BoundDagEvaluation
+    {
+        public BoundDagSharperOpaqueEvaluation(SyntaxNode syntax, BinaryOperatorKind relation, BoundExpression value, TypeSymbol booleanType, BoundDagTemp input, bool hasErrors = false)
+            : base(BoundKind.DagSharperOpaqueEvaluation, syntax, input, hasErrors || value.HasErrors() || input.HasErrors())
+        {
+
+            RoslynDebug.Assert(value is object, "Field 'value' cannot be null (make the type nullable in BoundNodes.xml to remove this check)");
+            RoslynDebug.Assert(booleanType is object, "Field 'booleanType' cannot be null (make the type nullable in BoundNodes.xml to remove this check)");
+            RoslynDebug.Assert(input is object, "Field 'input' cannot be null (make the type nullable in BoundNodes.xml to remove this check)");
+
+            this.Relation = relation;
+            this.Value = value;
+            this.BooleanType = booleanType;
+        }
+
+        public BinaryOperatorKind Relation { get; }
+        public BoundExpression Value { get; }
+        public TypeSymbol BooleanType { get; }
+
+        [DebuggerStepThrough]
+        public override BoundNode? Accept(BoundTreeVisitor visitor) => visitor.VisitDagSharperOpaqueEvaluation(this);
+
+        public BoundDagSharperOpaqueEvaluation Update(BinaryOperatorKind relation, BoundExpression value, TypeSymbol booleanType, BoundDagTemp input)
+        {
+            if (relation != this.Relation || value != this.Value || !TypeSymbol.Equals(booleanType, this.BooleanType, TypeCompareKind.ConsiderEverything) || input != this.Input)
+            {
+                var result = new BoundDagSharperOpaqueEvaluation(this.Syntax, relation, value, booleanType, input, this.HasErrors);
+                result.CopyAttributes(this);
+                return result;
+            }
+            return this;
+        }
+    }
+
     internal sealed partial class BoundDagAssignmentEvaluation : BoundDagEvaluation
     {
         public BoundDagAssignmentEvaluation(SyntaxNode syntax, BoundDagTemp target, BoundDagTemp input, bool hasErrors = false)
@@ -8957,6 +8993,42 @@ namespace Microsoft.CodeAnalysis.CSharp
         }
     }
 
+    internal sealed partial class BoundSharperOpaquePattern : BoundPattern
+    {
+        public BoundSharperOpaquePattern(SyntaxNode syntax, BinaryOperatorKind relation, BoundExpression value, TypeSymbol inputType, TypeSymbol narrowedType, bool hasErrors = false)
+            : base(BoundKind.SharperOpaquePattern, syntax, inputType, narrowedType, hasErrors || value.HasErrors())
+        {
+
+            RoslynDebug.Assert(value is object, "Field 'value' cannot be null (make the type nullable in BoundNodes.xml to remove this check)");
+            RoslynDebug.Assert(inputType is object, "Field 'inputType' cannot be null (make the type nullable in BoundNodes.xml to remove this check)");
+            RoslynDebug.Assert(narrowedType is object, "Field 'narrowedType' cannot be null (make the type nullable in BoundNodes.xml to remove this check)");
+
+            this.Relation = relation;
+            this.Value = value;
+            Validate();
+        }
+
+        [Conditional("DEBUG")]
+        private partial void Validate();
+
+        public BinaryOperatorKind Relation { get; }
+        public BoundExpression Value { get; }
+
+        [DebuggerStepThrough]
+        public override BoundNode? Accept(BoundTreeVisitor visitor) => visitor.VisitSharperOpaquePattern(this);
+
+        public BoundSharperOpaquePattern Update(BinaryOperatorKind relation, BoundExpression value, TypeSymbol inputType, TypeSymbol narrowedType)
+        {
+            if (relation != this.Relation || value != this.Value || !TypeSymbol.Equals(inputType, this.InputType, TypeCompareKind.ConsiderEverything) || !TypeSymbol.Equals(narrowedType, this.NarrowedType, TypeCompareKind.ConsiderEverything))
+            {
+                var result = new BoundSharperOpaquePattern(this.Syntax, relation, value, inputType, narrowedType, this.HasErrors);
+                result.CopyAttributes(this);
+                return result;
+            }
+            return this;
+        }
+    }
+
     internal sealed partial class BoundDiscardExpression : BoundExpression
     {
         public BoundDiscardExpression(SyntaxNode syntax, NullableAnnotation nullableAnnotation, bool isInferred, TypeSymbol? type, bool hasErrors)
@@ -9597,6 +9669,8 @@ namespace Microsoft.CodeAnalysis.CSharp
                     return VisitDagIndexerEvaluation((BoundDagIndexerEvaluation)node, arg);
                 case BoundKind.DagSliceEvaluation:
                     return VisitDagSliceEvaluation((BoundDagSliceEvaluation)node, arg);
+                case BoundKind.DagSharperOpaqueEvaluation:
+                    return VisitDagSharperOpaqueEvaluation((BoundDagSharperOpaqueEvaluation)node, arg);
                 case BoundKind.DagAssignmentEvaluation:
                     return VisitDagAssignmentEvaluation((BoundDagAssignmentEvaluation)node, arg);
                 case BoundKind.DagPassThroughEvaluation:
@@ -9753,6 +9827,8 @@ namespace Microsoft.CodeAnalysis.CSharp
                     return VisitNegatedPattern((BoundNegatedPattern)node, arg);
                 case BoundKind.RelationalPattern:
                     return VisitRelationalPattern((BoundRelationalPattern)node, arg);
+                case BoundKind.SharperOpaquePattern:
+                    return VisitSharperOpaquePattern((BoundSharperOpaquePattern)node, arg);
                 case BoundKind.DiscardExpression:
                     return VisitDiscardExpression((BoundDiscardExpression)node, arg);
                 case BoundKind.ThrowExpression:
@@ -9935,6 +10011,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         public virtual R VisitDagIndexEvaluation(BoundDagIndexEvaluation node, A arg) => this.DefaultVisit(node, arg);
         public virtual R VisitDagIndexerEvaluation(BoundDagIndexerEvaluation node, A arg) => this.DefaultVisit(node, arg);
         public virtual R VisitDagSliceEvaluation(BoundDagSliceEvaluation node, A arg) => this.DefaultVisit(node, arg);
+        public virtual R VisitDagSharperOpaqueEvaluation(BoundDagSharperOpaqueEvaluation node, A arg) => this.DefaultVisit(node, arg);
         public virtual R VisitDagAssignmentEvaluation(BoundDagAssignmentEvaluation node, A arg) => this.DefaultVisit(node, arg);
         public virtual R VisitDagPassThroughEvaluation(BoundDagPassThroughEvaluation node, A arg) => this.DefaultVisit(node, arg);
         public virtual R VisitSwitchSection(BoundSwitchSection node, A arg) => this.DefaultVisit(node, arg);
@@ -10013,6 +10090,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         public virtual R VisitBinaryPattern(BoundBinaryPattern node, A arg) => this.DefaultVisit(node, arg);
         public virtual R VisitNegatedPattern(BoundNegatedPattern node, A arg) => this.DefaultVisit(node, arg);
         public virtual R VisitRelationalPattern(BoundRelationalPattern node, A arg) => this.DefaultVisit(node, arg);
+        public virtual R VisitSharperOpaquePattern(BoundSharperOpaquePattern node, A arg) => this.DefaultVisit(node, arg);
         public virtual R VisitDiscardExpression(BoundDiscardExpression node, A arg) => this.DefaultVisit(node, arg);
         public virtual R VisitThrowExpression(BoundThrowExpression node, A arg) => this.DefaultVisit(node, arg);
         public virtual R VisitOutVariablePendingInference(OutVariablePendingInference node, A arg) => this.DefaultVisit(node, arg);
@@ -10181,6 +10259,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         public virtual BoundNode? VisitDagIndexEvaluation(BoundDagIndexEvaluation node) => this.DefaultVisit(node);
         public virtual BoundNode? VisitDagIndexerEvaluation(BoundDagIndexerEvaluation node) => this.DefaultVisit(node);
         public virtual BoundNode? VisitDagSliceEvaluation(BoundDagSliceEvaluation node) => this.DefaultVisit(node);
+        public virtual BoundNode? VisitDagSharperOpaqueEvaluation(BoundDagSharperOpaqueEvaluation node) => this.DefaultVisit(node);
         public virtual BoundNode? VisitDagAssignmentEvaluation(BoundDagAssignmentEvaluation node) => this.DefaultVisit(node);
         public virtual BoundNode? VisitDagPassThroughEvaluation(BoundDagPassThroughEvaluation node) => this.DefaultVisit(node);
         public virtual BoundNode? VisitSwitchSection(BoundSwitchSection node) => this.DefaultVisit(node);
@@ -10259,6 +10338,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         public virtual BoundNode? VisitBinaryPattern(BoundBinaryPattern node) => this.DefaultVisit(node);
         public virtual BoundNode? VisitNegatedPattern(BoundNegatedPattern node) => this.DefaultVisit(node);
         public virtual BoundNode? VisitRelationalPattern(BoundRelationalPattern node) => this.DefaultVisit(node);
+        public virtual BoundNode? VisitSharperOpaquePattern(BoundSharperOpaquePattern node) => this.DefaultVisit(node);
         public virtual BoundNode? VisitDiscardExpression(BoundDiscardExpression node) => this.DefaultVisit(node);
         public virtual BoundNode? VisitThrowExpression(BoundThrowExpression node) => this.DefaultVisit(node);
         public virtual BoundNode? VisitOutVariablePendingInference(OutVariablePendingInference node) => this.DefaultVisit(node);
@@ -10922,6 +11002,12 @@ namespace Microsoft.CodeAnalysis.CSharp
             this.Visit(node.Input);
             return null;
         }
+        public override BoundNode? VisitDagSharperOpaqueEvaluation(BoundDagSharperOpaqueEvaluation node)
+        {
+            this.Visit(node.Value);
+            this.Visit(node.Input);
+            return null;
+        }
         public override BoundNode? VisitDagAssignmentEvaluation(BoundDagAssignmentEvaluation node)
         {
             this.Visit(node.Target);
@@ -11309,6 +11395,11 @@ namespace Microsoft.CodeAnalysis.CSharp
             return null;
         }
         public override BoundNode? VisitRelationalPattern(BoundRelationalPattern node)
+        {
+            this.Visit(node.Value);
+            return null;
+        }
+        public override BoundNode? VisitSharperOpaquePattern(BoundSharperOpaquePattern node)
         {
             this.Visit(node.Value);
             return null;
@@ -12368,6 +12459,13 @@ namespace Microsoft.CodeAnalysis.CSharp
             TypeSymbol? sliceType = this.VisitType(node.SliceType);
             return node.Update(sliceType, lengthTemp, node.StartIndex, node.EndIndex, indexerAccess, receiverPlaceholder, argumentPlaceholder, input);
         }
+        public override BoundNode? VisitDagSharperOpaqueEvaluation(BoundDagSharperOpaqueEvaluation node)
+        {
+            BoundExpression value = (BoundExpression)this.Visit(node.Value);
+            BoundDagTemp input = (BoundDagTemp)this.Visit(node.Input);
+            TypeSymbol? booleanType = this.VisitType(node.BooleanType);
+            return node.Update(node.Relation, value, booleanType, input);
+        }
         public override BoundNode? VisitDagAssignmentEvaluation(BoundDagAssignmentEvaluation node)
         {
             BoundDagTemp target = (BoundDagTemp)this.Visit(node.Target);
@@ -12943,6 +13041,13 @@ namespace Microsoft.CodeAnalysis.CSharp
             TypeSymbol? inputType = this.VisitType(node.InputType);
             TypeSymbol? narrowedType = this.VisitType(node.NarrowedType);
             return node.Update(node.Relation, value, node.ConstantValue, node.IsUnionMatching, inputType, narrowedType);
+        }
+        public override BoundNode? VisitSharperOpaquePattern(BoundSharperOpaquePattern node)
+        {
+            BoundExpression value = (BoundExpression)this.Visit(node.Value);
+            TypeSymbol? inputType = this.VisitType(node.InputType);
+            TypeSymbol? narrowedType = this.VisitType(node.NarrowedType);
+            return node.Update(node.Relation, value, inputType, narrowedType);
         }
         public override BoundNode? VisitDiscardExpression(BoundDiscardExpression node)
         {
@@ -14608,6 +14713,14 @@ namespace Microsoft.CodeAnalysis.CSharp
             return node.Update(sliceType, lengthTemp, node.StartIndex, node.EndIndex, indexerAccess, receiverPlaceholder, argumentPlaceholder, input);
         }
 
+        public override BoundNode? VisitDagSharperOpaqueEvaluation(BoundDagSharperOpaqueEvaluation node)
+        {
+            TypeSymbol booleanType = GetUpdatedSymbol(node, node.BooleanType);
+            BoundExpression value = (BoundExpression)this.Visit(node.Value);
+            BoundDagTemp input = (BoundDagTemp)this.Visit(node.Input);
+            return node.Update(node.Relation, value, booleanType, input);
+        }
+
         public override BoundNode? VisitSwitchSection(BoundSwitchSection node)
         {
             ImmutableArray<LocalSymbol> locals = GetUpdatedArray(node, node.Locals);
@@ -15715,6 +15828,14 @@ namespace Microsoft.CodeAnalysis.CSharp
             TypeSymbol narrowedType = GetUpdatedSymbol(node, node.NarrowedType);
             BoundExpression value = (BoundExpression)this.Visit(node.Value);
             return node.Update(node.Relation, value, node.ConstantValue, node.IsUnionMatching, inputType, narrowedType);
+        }
+
+        public override BoundNode? VisitSharperOpaquePattern(BoundSharperOpaquePattern node)
+        {
+            TypeSymbol inputType = GetUpdatedSymbol(node, node.InputType);
+            TypeSymbol narrowedType = GetUpdatedSymbol(node, node.NarrowedType);
+            BoundExpression value = (BoundExpression)this.Visit(node.Value);
+            return node.Update(node.Relation, value, inputType, narrowedType);
         }
 
         public override BoundNode? VisitDiscardExpression(BoundDiscardExpression node)
@@ -17222,6 +17343,15 @@ namespace Microsoft.CodeAnalysis.CSharp
             new TreeDumperNode("hasErrors", node.HasErrors, null)
         }
         );
+        public override TreeDumperNode VisitDagSharperOpaqueEvaluation(BoundDagSharperOpaqueEvaluation node, object? arg) => new TreeDumperNode("dagSharperOpaqueEvaluation", null, new TreeDumperNode[]
+        {
+            new TreeDumperNode("relation", node.Relation, null),
+            new TreeDumperNode("value", null, new TreeDumperNode[] { Visit(node.Value, null) }),
+            new TreeDumperNode("booleanType", node.BooleanType, null),
+            new TreeDumperNode("input", null, new TreeDumperNode[] { Visit(node.Input, null) }),
+            new TreeDumperNode("hasErrors", node.HasErrors, null)
+        }
+        );
         public override TreeDumperNode VisitDagAssignmentEvaluation(BoundDagAssignmentEvaluation node, object? arg) => new TreeDumperNode("dagAssignmentEvaluation", null, new TreeDumperNode[]
         {
             new TreeDumperNode("target", null, new TreeDumperNode[] { Visit(node.Target, null) }),
@@ -18051,6 +18181,15 @@ namespace Microsoft.CodeAnalysis.CSharp
             new TreeDumperNode("value", null, new TreeDumperNode[] { Visit(node.Value, null) }),
             new TreeDumperNode("constantValue", node.ConstantValue, null),
             new TreeDumperNode("isUnionMatching", node.IsUnionMatching, null),
+            new TreeDumperNode("inputType", node.InputType, null),
+            new TreeDumperNode("narrowedType", node.NarrowedType, null),
+            new TreeDumperNode("hasErrors", node.HasErrors, null)
+        }
+        );
+        public override TreeDumperNode VisitSharperOpaquePattern(BoundSharperOpaquePattern node, object? arg) => new TreeDumperNode("sharperOpaquePattern", null, new TreeDumperNode[]
+        {
+            new TreeDumperNode("relation", node.Relation, null),
+            new TreeDumperNode("value", null, new TreeDumperNode[] { Visit(node.Value, null) }),
             new TreeDumperNode("inputType", node.InputType, null),
             new TreeDumperNode("narrowedType", node.NarrowedType, null),
             new TreeDumperNode("hasErrors", node.HasErrors, null)

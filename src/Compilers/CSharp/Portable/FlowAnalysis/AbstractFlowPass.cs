@@ -924,7 +924,7 @@ namespace Microsoft.CodeAnalysis.CSharp
 
             // Local functions below need to handle all patterns that come through here
             Debug.Assert(node.Pattern is
-                BoundTypePattern or BoundRecursivePattern or BoundITuplePattern or BoundRelationalPattern or
+                BoundTypePattern or BoundRecursivePattern or BoundITuplePattern or BoundRelationalPattern or BoundSharperOpaquePattern or
                 BoundDeclarationPattern or BoundConstantPattern or BoundNegatedPattern or BoundBinaryPattern or
                 BoundDeclarationPattern or BoundDiscardPattern or BoundListPattern or BoundSlicePattern);
 
@@ -985,6 +985,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                     case BoundRecursivePattern:
                     case BoundITuplePattern:
                     case BoundRelationalPattern:
+                    case BoundSharperOpaquePattern:
                     case BoundDeclarationPattern { IsVar: false }:
                     case BoundConstantPattern { ConstantValue: { IsNull: false } }:
                     case BoundListPattern:
@@ -1068,6 +1069,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                     case BoundRecursivePattern:
                     case BoundITuplePattern:
                     case BoundRelationalPattern:
+                    case BoundSharperOpaquePattern:
                     case BoundDeclarationPattern:
                     case BoundListPattern:
                     case BoundSlicePattern: // Only occurs in error cases

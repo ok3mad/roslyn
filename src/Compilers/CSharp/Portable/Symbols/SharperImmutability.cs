@@ -979,7 +979,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         private sealed class PurityWalker : BoundTreeWalkerWithStackGuard
         {
             private readonly SharperImmutability _owner;
-            private readonly MethodSymbol _observer;
+            private readonly MethodSymbol? _observer;
             private readonly NamedTypeSymbol? _definition;
             private readonly bool _localOnly;
             private readonly bool _allowsCreation;
@@ -1009,8 +1009,17 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             internal bool ImpureIsCulture;
             internal BoundStatement? Skipped;
 
-            internal PurityWalker(SharperImmutability owner, MethodSymbol observer, NamedTypeSymbol? definition, bool localOnly, bool allowsCreation, ArrayBuilder<MethodSymbol>? constructorsInProgress, bool isMember)
+            /// <summary>
+            /// Checks the operand of a Sharper opaque pattern (#34) with the member rules, but with no state of its own:
+            /// it may not write the enclosing member's locals either. There is no observer then.
+            /// </summary>
+            private readonly bool _isPatternOperand;
+
+            internal PurityWalker(SharperImmutability owner, MethodSymbol? observer, NamedTypeSymbol? definition, bool localOnly, bool allowsCreation, ArrayBuilder<MethodSymbol>? constructorsInProgress, bool isMember, bool isPatternOperand = false)
             {
+                Debug.Assert(observer is not null || isPatternOperand);
+                Debug.Assert(!isPatternOperand || isMember);
+                _isPatternOperand = isPatternOperand;
                 _owner = owner;
                 _observer = observer;
                 _definition = definition;
@@ -1133,6 +1142,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     case BoundDeclarationPattern:
                     case BoundDiscardPattern:
                     case BoundRelationalPattern:
+                    case BoundSharperOpaquePattern:
                     case BoundBinaryPattern:
                     case BoundNegatedPattern:
                     case BoundPropertySubpattern:
@@ -1365,6 +1375,11 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             /// </summary>
             private bool IsWritableLocalState(BoundExpression target)
             {
+                if (_isPatternOperand)
+                {
+                    return target is BoundDiscardExpression;
+                }
+
                 return target switch
                 {
                     // Not through a ref local; a pure member writes only its own locals, not captured ones.
@@ -1391,7 +1406,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                    (conversion.UnderlyingConversions.IsDefault || conversion.UnderlyingConversions.All(IsBuiltInDeconstruction));
 
             private bool IsOwnMember(Symbol member)
-                => member.ContainingType.OriginalDefinition == (object)_observer.ContainingType.OriginalDefinition;
+                => member.ContainingType.OriginalDefinition == (object)_observer!.ContainingType.OriginalDefinition;
 
             private bool IsPureGetter(PropertySymbol property, BoundExpression? receiver)
             {

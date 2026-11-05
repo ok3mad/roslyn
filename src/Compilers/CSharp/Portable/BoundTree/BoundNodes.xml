@@ -1764,6 +1764,16 @@
     <Field Name="ArgumentPlaceholder" Type="BoundSlicePatternRangePlaceholder"/>
   </Node>
 
+  <!--
+    Sharper opaque pattern (#34): evaluates 'Input Relation Value' to a bool, which a value test then checks.
+    Value is a pure, non-constant expression bound in the enclosing member; the value sets know nothing about it.
+  -->
+  <Node Name="BoundDagSharperOpaqueEvaluation" Base="BoundDagEvaluation">
+    <Field Name="Relation" Type="BinaryOperatorKind"/>
+    <Field Name="Value" Type="BoundExpression"/>
+    <Field Name="BooleanType" Type="TypeSymbol" Null="disallow"/>
+  </Node>
+
   <Node Name="BoundDagAssignmentEvaluation" Base="BoundDagEvaluation">
     <Field Name="Target" Type="BoundDagTemp"/>
   </Node>
@@ -2709,6 +2719,16 @@
     <Field Name="Value" Type="BoundExpression"/>
     <Field Name="ConstantValue" Type="ConstantValue" Null="disallow"/>
     <Field Name="IsUnionMatching" Type="bool" PropertyOverrides="true"/>
+  </Node>
+
+  <!--
+    Sharper opaque pattern (#34): a relational or constant pattern whose operand is a pure expression that is not a
+    constant. Relation is the full operator kind (such as IntLessThanOrEqual, or IntEqual for a constant pattern), and
+    Value is converted to NarrowedType.
+  -->
+  <Node Name="BoundSharperOpaquePattern" Base="BoundPattern" HasValidate="true">
+    <Field Name="Relation" Type="BinaryOperatorKind"/>
+    <Field Name="Value" Type="BoundExpression"/>
   </Node>
 
   <Node Name="BoundDiscardExpression" Base="BoundExpression">
