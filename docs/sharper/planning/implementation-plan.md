@@ -1102,7 +1102,9 @@ with written return types, the method's type parameters), the semantic model, us
 points, what pins nothing, precedence over P1 and P2, and nullability. Two expectations of earlier steps changed, both
 for `ref` arguments: `Ref(ref x)` and `Out(out x)` in `InferFromBody_PinsNothing` now pin, and `Over(ref x)` in
 `InferFromOverloads_PinsNothing` has the reworded reason. All 461 Sharper test cases pass, also with
-`ROSLYN_TEST_IOPERATION=1`.
+`ROSLYN_TEST_IOPERATION=1`. Regression run (net10.0, Debug): Semantic 20,283 passed, Symbol 13,923 and Emit 7,312, none
+failed; the Semantic test project builds with `-warnaserror`; the analyzer build reports no error (its warnings are the
+three RS0062 in P2's `SharperInferredParameterType_OverriddenMember.cs`, as on `main`).
 
 Follow-ups:
 
