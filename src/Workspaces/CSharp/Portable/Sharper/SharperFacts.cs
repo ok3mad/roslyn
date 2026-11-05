@@ -29,18 +29,22 @@ internal static class SharperFacts
         => tree?.Options is CSharpParseOptions options && options.Features.ContainsKey(FeatureName);
 
     /// <summary>
-    /// Whether <paramref name="type"/> is an <c>infer</c> written where the compiler infers a type: the return type of a
-    /// method, local function, operator or conversion operator, the type of a parameter, a property, an indexer or an
-    /// event, in a Sharper tree. This is syntax only: like <c>var</c>, the <c>infer</c> is still a type name when a type
-    /// named <c>infer</c> is in scope, which <see cref="IsInferKeyword"/> also checks.
+    /// Whether <paramref name="type"/> is an <c>infer</c> written where the compiler infers a type (see
+    /// <see cref="IsInferablePosition"/>), in a Sharper tree. This is syntax only: like <c>var</c>, the <c>infer</c> is
+    /// still a type name when a type named <c>infer</c> is in scope, which <see cref="IsInferKeyword(TypeSyntax?,
+    /// SemanticModel, CancellationToken)"/> also checks.
     /// </summary>
     public static bool IsInferPosition([NotNullWhen(true)] TypeSyntax? type)
-    {
         // '@infer' is always the type name.
-        if (type is not IdentifierNameSyntax { Identifier.Text: InferKeyword } || !IsSharperEnabled(type.SyntaxTree))
-            return false;
+        => type is IdentifierNameSyntax { Identifier.Text: InferKeyword } && IsSharperEnabled(type.SyntaxTree) && IsInferablePosition(type);
 
-        return type.Parent switch
+    /// <summary>
+    /// Whether <paramref name="type"/>, whatever it names, is in a position where Sharper can infer the type from
+    /// <c>infer</c>: the return type of a method, local function, operator or conversion operator, or the type of a
+    /// parameter, a property, an indexer or an event.
+    /// </summary>
+    public static bool IsInferablePosition(TypeSyntax type)
+        => type.Parent switch
         {
             MethodDeclarationSyntax method => method.ReturnType == type,
             LocalFunctionStatementSyntax localFunction => localFunction.ReturnType == type,
@@ -51,7 +55,28 @@ internal static class SharperFacts
             VariableDeclarationSyntax { Parent: EventFieldDeclarationSyntax } declaration => declaration.Type == type,
             _ => false,
         };
-    }
+
+    /// <summary>
+    /// The type of the member or parameter declared with <paramref name="type"/> in an inferable position (see
+    /// <see cref="IsInferablePosition"/>): the return type of the method, or the type of the parameter, property or
+    /// event, with its nullable annotation. Null elsewhere.
+    /// </summary>
+    public static ITypeSymbol? GetDeclaredType(TypeSyntax type, SemanticModel semanticModel, CancellationToken cancellationToken)
+        => type.Parent switch
+        {
+            MethodDeclarationSyntax or LocalFunctionStatementSyntax or OperatorDeclarationSyntax or ConversionOperatorDeclarationSyntax
+                when IsInferablePosition(type) => (semanticModel.GetDeclaredSymbol(type.Parent, cancellationToken) as IMethodSymbol)?.ReturnType,
+            ParameterSyntax parameter when parameter.Type == type => semanticModel.GetDeclaredSymbol(parameter, cancellationToken)?.Type,
+            BasePropertyDeclarationSyntax property when property.Type == type => semanticModel.GetDeclaredSymbol(property, cancellationToken) switch
+            {
+                IPropertySymbol propertySymbol => propertySymbol.Type,
+                IEventSymbol eventSymbol => eventSymbol.Type,
+                _ => null,
+            },
+            VariableDeclarationSyntax { Parent: EventFieldDeclarationSyntax, Variables: [var first, ..] } declaration when declaration.Type == type
+                => (semanticModel.GetDeclaredSymbol(first, cancellationToken) as IEventSymbol)?.Type,
+            _ => null,
+        };
 
     /// <summary>
     /// Whether <paramref name="type"/> is the Sharper <c>infer</c> keyword: an <c>infer</c> in a position where the
@@ -85,7 +110,8 @@ internal static class SharperFacts
         if (!IsInferKeyword(type, semanticModel, cancellationToken))
             return null;
 
-        var inferred = semanticModel.GetTypeInfo(type, cancellationToken).Type;
+        // The declared symbol's type carries the inferred nullable annotation.
+        var inferred = GetDeclaredType(type, semanticModel, cancellationToken);
         return inferred is null or IErrorTypeSymbol ? null : inferred;
     }
 }

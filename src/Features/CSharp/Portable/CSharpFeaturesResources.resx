@@ -641,4 +641,12 @@
   <data name="unsafe_block" xml:space="preserve">
     <value>unsafe block</value>
   </data>
+  <data name="Write_the_type_0" xml:space="preserve">
+    <value>Write the type '{0}'</value>
+    <comment>Sharper: replaces 'infer' with the type it stands for. {0} is a type.</comment>
+  </data>
+  <data name="Use_infer" xml:space="preserve">
+    <value>Use 'infer'</value>
+    <comment>Sharper: replaces a written return or parameter type with 'infer', which the compiler infers to the same type. 'infer' is a keyword and should not be localized.</comment>
+  </data>
 </root>
