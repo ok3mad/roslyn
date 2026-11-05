@@ -182,8 +182,11 @@ already names, in this order, and two sources that disagree are an error that na
 - **The strict scope:** the ladder applies per file or project (`.cx` files), never per declaration.
 - **`pure` and `total`** are modifiers on any method, and **sidecar bindings** get their own declaration syntax,
   not designed yet.
-- **Member declared on another type** keeps its own row. `static infer Currency.Parse(...)` reads like an explicit
-  interface implementation, which C# spells the same way, so the spelling needs another look.
+- **Member declared on another type** is deferred. `static infer Currency.Parse(...)` reads like an explicit
+  interface implementation, which C# spells the same way, and C# 14 extension blocks
+  (`static class CurrencyParsing { extension(Currency) { public static infer Parse(string s) => ...; } }`) already
+  do the job, with `infer` and `[Pure]`. If it comes back, it is allowed only at file level, where the dotted form is
+  never valid C# ([#37](https://github.com/ok3mad/roslyn/issues/37)).
 
 ### `fun`, parked
 
