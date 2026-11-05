@@ -1246,8 +1246,10 @@ checks declared `[Pure]` members only. This section is the design for both and t
   `VariablesDeclaredWalker`, `NullableWalker_Patterns`, the `or` reachability normalizer
   (`DecisionDagBuilder_CheckOrReachability`) and the purity walker's whitelist; the evaluation joined the evaluation
   switches of `DecisionDagBuilder` and `NullableWalker_Patterns`.
-- **Found on the way.** `x is y` and `x is > y` with `T x, y` crash definite assignment ("expressions should have been
-  converted") with the flag off too; a bug outside this feature.
+- **Found on the way.** `x is y`, `x is > y` and `x is k` (a `const` local) with an input of type `T` tripped a Debug
+  assert in definite assignment ("expressions should have been converted"), in upstream Roslyn too. Fixed in
+  [#200](https://github.com/ok3mad/roslyn/pull/200); sending it upstream is
+  [#205](https://github.com/ok3mad/roslyn/issues/205).
 
 ## Follow-ups
 
