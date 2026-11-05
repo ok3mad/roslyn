@@ -28,9 +28,19 @@ namespace Microsoft.CodeAnalysis.CSharp
 
         private void VisitSharperPipeCore(BoundSharperPipeBase node, bool targetTyped)
         {
-            TypeWithState leftType = VisitRvalueWithState(node.Left);
             var local = node.Local;
             TypeWithAnnotations localType = local.TypeWithAnnotations;
+            if (local is SharperPipeItLocalSymbol { IsExplicitlyTyped: true })
+            {
+                // A lambda stage's typed parameter, 'x |> ((string s) => ...)' (#186), is declared like 'string s = x;'.
+                TypeWithState valueType = VisitOptionalImplicitConversion(node.Left, localType, useLegacyWarnings: true, trackMembers: true, AssignmentKind.Assignment);
+                Unsplit();
+                TrackNullableStateForAssignment(node.Left, localType, GetOrCreateSlot(local), valueType, MakeSlot(node.Left));
+                VisitSharperPipeStage(node, targetTyped);
+                return;
+            }
+
+            TypeWithState leftType = VisitRvalueWithState(node.Left);
             if (leftType.HasNullType)
             {
                 leftType = localType.ToTypeWithState();
@@ -43,7 +53,11 @@ namespace Microsoft.CodeAnalysis.CSharp
             _variables.SetType(local, localType);
             int slot = GetOrCreateSlot(local);
             TrackNullableStateForAssignment(node.Left, localType, slot, leftType, MakeSlot(node.Left));
+            VisitSharperPipeStage(node, targetTyped);
+        }
 
+        private void VisitSharperPipeStage(BoundSharperPipeBase node, bool targetTyped)
+        {
             if (!targetTyped)
             {
                 TypeWithState stageType = VisitRvalueWithState(node.Stage);

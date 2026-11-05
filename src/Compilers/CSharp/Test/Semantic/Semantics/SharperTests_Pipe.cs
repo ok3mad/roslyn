@@ -265,7 +265,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                         _ = "a" |> F;                       // 7: an ordinary error, at the left side
                         _ = 1 |> (it = 2);                  // 8: read-only
                         1 |> it + 1;                        // 9: not a statement
-                        _ = 1 |> (y => y);                  // 10: a lambda has no type
+                        _ = 1 |> (y => { return y; });      // 10: a lambda that cannot name the value (#186)
                         _ = xs |> G(F(it));                 // 11: G takes a function, and the innermost argument claims 'it'
                         System.Linq.Expressions.Expression<Func<int, int>> e = x => x |> F;  // 12: expression tree
                     }
@@ -299,9 +299,9 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (21,9): error CS0201: Only assignment, call, increment, decrement, await, and new object expressions can be used as a statement
                 //         1 |> it + 1;                        // 9: not a statement
                 Diagnostic(ErrorCode.ERR_IllegalStatement, "1 |> it + 1").WithLocation(21, 9),
-                // (22,18): error CS20048: The stage after '|>' must be a function, such as a method group or a delegate, or an expression that uses 'it', but it is lambda expression.
-                //         _ = 1 |> (y => y);                  // 10: a lambda has no type
-                Diagnostic(ErrorCode.ERR_SharperPipeStageNotFunction, "(y => y)").WithArguments("lambda expression").WithLocation(22, 18),
+                // (22,18): error CS20048: The stage after '|>' must be a function, such as a method group or a delegate, or an expression that uses 'it', but it is a lambda that cannot name the value: only a lambda with one parameter and an expression body, without 'async', 'static', attributes or parameter modifiers, can. Use 'it' instead, as in 'x |> it + 1'.
+                //         _ = 1 |> (y => { return y; });      // 10: a lambda that cannot name the value (#186)
+                Diagnostic(ErrorCode.ERR_SharperPipeStageNotFunction, "(y => { return y; })").WithArguments("a lambda that cannot name the value: only a lambda with one parameter and an expression body, without 'async', 'static', attributes or parameter modifiers, can. Use 'it' instead, as in 'x |> it + 1'").WithLocation(22, 18),
                 // (23,23): error CS20047: This stage does not use the value piped into it: its 'it' belongs to an inner lambda, the argument of 'G'. Name that lambda's parameter, as in 'x => ...', or use the piped 'it' outside it.
                 //         _ = xs |> G(F(it));                 // 11: G takes a function, and the innermost argument claims 'it'
                 Diagnostic(ErrorCode.ERR_SharperPipeStageItNotUsed, "it").WithArguments("G").WithLocation(23, 23),
@@ -812,7 +812,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                         int i = x |> (it > 0 ? 1 : null);
                         var f = x |> (y => y + it);
                         Func<int, int> g = x |> (y => it + xs.Count(it > y));
-                        Func<int, int> h = x |> (y => xs.Count(it > y));
+                        Func<int, int> h = x |> (y => xs.Count(it > y));  // a lambda stage (#186): the int that Count returns
                         string t = x |> it + 1;
                     }
                 }
@@ -836,9 +836,9 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (14,53): error CS20020: 'it' has two meanings here: the parameter of an outer lambda and of this inner one. Name one of them, as in 'x => ...'.
                 //         Func<int, int> g = x |> (y => it + xs.Count(it > y));
                 Diagnostic(ErrorCode.ERR_SharperItTwoMeanings, "it").WithLocation(14, 53),
-                // (15,48): error CS20047: This stage does not use the value piped into it: its 'it' belongs to an inner lambda, the argument of 'xs.Count'. Name that lambda's parameter, as in 'x => ...', or use the piped 'it' outside it.
-                //         Func<int, int> h = x |> (y => xs.Count(it > y));
-                Diagnostic(ErrorCode.ERR_SharperPipeStageItNotUsed, "it").WithArguments("xs.Count").WithLocation(15, 48),
+                // (15,28): error CS0029: Cannot implicitly convert type 'int' to 'System.Func<int, int>'
+                //         Func<int, int> h = x |> (y => xs.Count(it > y));  // a lambda stage (#186): the int that Count returns
+                Diagnostic(ErrorCode.ERR_NoImplicitConv, "x |> (y => xs.Count(it > y))").WithArguments("int", "System.Func<int, int>").WithLocation(15, 28),
                 // (16,20): error CS0029: Cannot implicitly convert type 'int' to 'string'
                 //         string t = x |> it + 1;
                 Diagnostic(ErrorCode.ERR_NoImplicitConv, "x |> it + 1").WithArguments("int", "string").WithLocation(16, 20));

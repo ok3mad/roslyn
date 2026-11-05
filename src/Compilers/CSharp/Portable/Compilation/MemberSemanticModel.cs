@@ -824,8 +824,39 @@ namespace Microsoft.CodeAnalysis.CSharp
             // Could be parameter of a lambda or a local function.
             CheckSyntaxNode(declarationSyntax);
 
+            if (GetDeclaredSharperPipeLambdaStageLocal(declarationSyntax) is not null)
+            {
+                // A lambda stage's parameter declares a local, not a parameter (#186).
+                return null;
+            }
+
             return GetLambdaOrLocalFunctionParameterSymbol(declarationSyntax, cancellationToken).GetPublicSymbol();
         }
+
+#nullable enable
+        /// <summary>
+        /// The local that the parameter of a Sharper lambda stage declares, <c>y</c> in <c>x |&gt; (y =&gt; y + 1)</c> (#186),
+        /// a discard included, or null when the parameter is not one, including when the lambda is the value of a stage with
+        /// <c>it</c>.
+        /// </summary>
+        internal override LocalSymbol? GetDeclaredSharperPipeLambdaStageLocal(ParameterSyntax parameter)
+        {
+            if (Binder.GetSharperPipeOfLambdaStageParameter(parameter) is not { } pipe)
+            {
+                return null;
+            }
+
+            foreach (BoundNode boundNode in GetBoundNodes(pipe))
+            {
+                if (boundNode is BoundSharperPipeBase { Local: SharperPipeItLocalSymbol local } && local.LambdaParameter == parameter)
+                {
+                    return local;
+                }
+            }
+
+            return null;
+        }
+#nullable disable
 
         internal override ImmutableArray<ISymbol> GetDeclaredSymbols(BaseFieldDeclarationSyntax declarationSyntax, CancellationToken cancellationToken = default(CancellationToken))
         {
