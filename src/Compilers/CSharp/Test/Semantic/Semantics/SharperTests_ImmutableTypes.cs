@@ -481,6 +481,77 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         }
 
         [Fact]
+        public void Immutable_Observers_IdentityOfImmutableArray()
+        {
+            // ImmutableArray<T> is attested immutable, but its Equals, GetHashCode, == and != compare the underlying array by
+            // reference (#185), and so do those of the attested types that compare an ImmutableArray<T> they hold. Its other
+            // observers and the other attested collections, which do not override Equals, are unaffected.
+            var source = """
+                #nullable enable
+                using System.Collections.Immutable;
+                [Immutable] sealed class Tag { }
+                [Immutable] sealed class Ok(ImmutableArray<int> a, ImmutableList<int> l)
+                {
+                    public readonly ImmutableArray<int> A = a;
+                    public readonly ImmutableList<int> L = l;
+                    public bool Empty => A.IsDefaultOrEmpty || A.Length == 0 || A[0] == 1 || A.IsDefault;
+                }
+                [Immutable] sealed class ListEquals(ImmutableList<int> l) { public readonly ImmutableList<int> L = l; public bool Same => L.Equals(L); }
+                [Immutable] sealed class TypedEquals(ImmutableArray<int> a) { public readonly ImmutableArray<int> A = a; public bool Same => A.Equals(A); }
+                [Immutable] sealed class Hash(ImmutableArray<int> a) { public readonly ImmutableArray<int> A = a; public override int GetHashCode() => A.GetHashCode(); }
+                [Immutable] sealed class Operator(ImmutableArray<int> a) { public readonly ImmutableArray<int> A = a; public bool Same => A == A; }
+                [Immutable] sealed class NotEqual(ImmutableArray<int> a) { public readonly ImmutableArray<int> A = a; public bool Differ => A != A; }
+                [Immutable] sealed class NullableHash(ImmutableArray<int>? a) { public readonly ImmutableArray<int>? A = a; public int Hash => A.GetHashCode(); }
+                [Immutable] sealed class TupleEquals(ImmutableArray<int> a) { public readonly (ImmutableArray<int>, int) T = (a, 1); public bool Same => T.Equals(T); }
+                [Immutable] sealed class TupleHash(ImmutableArray<int> a) { public readonly (int, ImmutableArray<int>) T = (1, a); public int Hash => T.GetHashCode(); }
+                [Immutable] sealed class TupleOfClass(Tag t) { public readonly (Tag, int) T = (t, 1); public bool Same => T.Equals(T); }
+                [Immutable] sealed class Combine(ImmutableArray<int> a) { public readonly ImmutableArray<int> A = a; public override int GetHashCode() => System.HashCode.Combine(A, 1); }
+                [Immutable] sealed class PairHash(ImmutableArray<int> a) { public readonly System.Collections.Generic.KeyValuePair<int, ImmutableArray<int>> P = new(1, a); public int Hash => P.GetHashCode(); }
+                [Immutable] sealed class IntTuple { public readonly (int, string) T = (1, ""); public bool Same => T.Equals(T) && T.GetHashCode() == System.HashCode.Combine(T.Item1, T.Item2); }
+                """;
+            CreateImmutableCompilation(source).VerifyDiagnostics(
+                // (10,26): error CS20035: 'ListEquals' is marked [Immutable], but it cannot be proven immutable: the observer 'ListEquals.Same' observes object identity: 'L.Equals(L)'.
+                // [Immutable] sealed class ListEquals(ImmutableList<int> l) { public readonly ImmutableList<int> L = l; public bool Same => L.Equals(L); }
+                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "ListEquals").WithArguments("ListEquals", "the observer 'ListEquals.Same' observes object identity: 'L.Equals(L)'").WithLocation(10, 26),
+                // (11,26): error CS20035: 'TypedEquals' is marked [Immutable], but it cannot be proven immutable: the observer 'TypedEquals.Same' observes object identity: 'A.Equals(A)'.
+                // [Immutable] sealed class TypedEquals(ImmutableArray<int> a) { public readonly ImmutableArray<int> A = a; public bool Same => A.Equals(A); }
+                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "TypedEquals").WithArguments("TypedEquals", "the observer 'TypedEquals.Same' observes object identity: 'A.Equals(A)'").WithLocation(11, 26),
+                // (12,26): error CS20035: 'Hash' is marked [Immutable], but it cannot be proven immutable: the observer 'Hash.GetHashCode()' observes object identity: 'A.GetHashCode()'.
+                // [Immutable] sealed class Hash(ImmutableArray<int> a) { public readonly ImmutableArray<int> A = a; public override int GetHashCode() => A.GetHashCode(); }
+                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "Hash").WithArguments("Hash", "the observer 'Hash.GetHashCode()' observes object identity: 'A.GetHashCode()'").WithLocation(12, 26),
+                // (13,26): error CS20035: 'Operator' is marked [Immutable], but it cannot be proven immutable: the observer 'Operator.Same' observes object identity: 'A == A'.
+                // [Immutable] sealed class Operator(ImmutableArray<int> a) { public readonly ImmutableArray<int> A = a; public bool Same => A == A; }
+                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "Operator").WithArguments("Operator", "the observer 'Operator.Same' observes object identity: 'A == A'").WithLocation(13, 26),
+                // (13,123): warning CS1718: Comparison made to same variable; did you mean to compare something else?
+                // [Immutable] sealed class Operator(ImmutableArray<int> a) { public readonly ImmutableArray<int> A = a; public bool Same => A == A; }
+                Diagnostic(ErrorCode.WRN_ComparisonToSelf, "A == A").WithLocation(13, 123),
+                // (14,26): error CS20035: 'NotEqual' is marked [Immutable], but it cannot be proven immutable: the observer 'NotEqual.Differ' observes object identity: 'A != A'.
+                // [Immutable] sealed class NotEqual(ImmutableArray<int> a) { public readonly ImmutableArray<int> A = a; public bool Differ => A != A; }
+                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "NotEqual").WithArguments("NotEqual", "the observer 'NotEqual.Differ' observes object identity: 'A != A'").WithLocation(14, 26),
+                // (14,125): warning CS1718: Comparison made to same variable; did you mean to compare something else?
+                // [Immutable] sealed class NotEqual(ImmutableArray<int> a) { public readonly ImmutableArray<int> A = a; public bool Differ => A != A; }
+                Diagnostic(ErrorCode.WRN_ComparisonToSelf, "A != A").WithLocation(14, 125),
+                // (15,26): error CS20035: 'NullableHash' is marked [Immutable], but it cannot be proven immutable: the observer 'NullableHash.Hash' observes object identity: 'A.GetHashCode()'.
+                // [Immutable] sealed class NullableHash(ImmutableArray<int>? a) { public readonly ImmutableArray<int>? A = a; public int Hash => A.GetHashCode(); }
+                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "NullableHash").WithArguments("NullableHash", "the observer 'NullableHash.Hash' observes object identity: 'A.GetHashCode()'").WithLocation(15, 26),
+                // (16,26): error CS20035: 'TupleEquals' is marked [Immutable], but it cannot be proven immutable: the observer 'TupleEquals.Same' observes object identity: 'T.Equals(T)'.
+                // [Immutable] sealed class TupleEquals(ImmutableArray<int> a) { public readonly (ImmutableArray<int>, int) T = (a, 1); public bool Same => T.Equals(T); }
+                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "TupleEquals").WithArguments("TupleEquals", "the observer 'TupleEquals.Same' observes object identity: 'T.Equals(T)'").WithLocation(16, 26),
+                // (17,26): error CS20035: 'TupleHash' is marked [Immutable], but it cannot be proven immutable: the observer 'TupleHash.Hash' observes object identity: 'T.GetHashCode()'.
+                // [Immutable] sealed class TupleHash(ImmutableArray<int> a) { public readonly (int, ImmutableArray<int>) T = (1, a); public int Hash => T.GetHashCode(); }
+                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "TupleHash").WithArguments("TupleHash", "the observer 'TupleHash.Hash' observes object identity: 'T.GetHashCode()'").WithLocation(17, 26),
+                // (18,26): error CS20035: 'TupleOfClass' is marked [Immutable], but it cannot be proven immutable: the observer 'TupleOfClass.Same' observes object identity: 'T.Equals(T)'.
+                // [Immutable] sealed class TupleOfClass(Tag t) { public readonly (Tag, int) T = (t, 1); public bool Same => T.Equals(T); }
+                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "TupleOfClass").WithArguments("TupleOfClass", "the observer 'TupleOfClass.Same' observes object identity: 'T.Equals(T)'").WithLocation(18, 26),
+                // (19,26): error CS20035: 'Combine' is marked [Immutable], but it cannot be proven immutable: the observer 'Combine.GetHashCode()' observes object identity: 'System.HashCode.Combine(A, 1)'.
+                // [Immutable] sealed class Combine(ImmutableArray<int> a) { public readonly ImmutableArray<int> A = a; public override int GetHashCode() => System.HashCode.Combine(A, 1); }
+                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "Combine").WithArguments("Combine", "the observer 'Combine.GetHashCode()' observes object identity: 'System.HashCode.Combine(A, 1)'").WithLocation(19, 26),
+                // (20,26): error CS20035: 'PairHash' is marked [Immutable], but it cannot be proven immutable: the observer 'PairHash.Hash' observes object identity: 'P.GetHashCode()'.
+                // [Immutable] sealed class PairHash(ImmutableArray<int> a) { public readonly System.Collections.Generic.KeyValuePair<int, ImmutableArray<int>> P = new(1, a); public int Hash => P.GetHashCode(); }
+                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "PairHash").WithArguments("PairHash", "the observer 'PairHash.Hash' observes object identity: 'P.GetHashCode()'").WithLocation(20, 26));
+        }
+
+        [Fact]
         public void Immutable_Observers_EqualsFastPath()
         {
             // Identical values are always equivalent, so a hand-written Equals may start with the identity fast path.

@@ -208,6 +208,39 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             [("System.Collections.Frozen", "FrozenSet`1")] = true,
         };
 
+        /// <summary>
+        /// The attested types whose <c>Equals</c>, <c>GetHashCode</c> and equality operators are still identity-based:
+        /// <c>ImmutableArray&lt;T&gt;</c> compares its underlying array by reference (#185). The other attested types
+        /// either compare by value or do not override <c>Equals</c> (see <see cref="ComparesByIdentity"/>).
+        /// </summary>
+        private static readonly HashSet<(string Namespace, string Name)> s_identityEqualityTypes =
+        [
+            ("System.Collections.Immutable", "ImmutableArray`1"),
+        ];
+
+        /// <summary>
+        /// The attested types whose <c>Equals</c> and <c>GetHashCode</c> combine those of their type arguments
+        /// (<c>EqualityComparer&lt;T&gt;.Default</c>, or <c>ValueType</c>'s for <c>KeyValuePair</c>), as
+        /// <c>Nullable&lt;T&gt;</c> does: they observe identity when a type argument's do.
+        /// </summary>
+        private static readonly HashSet<(string Namespace, string Name)> s_elementwiseEqualityTypes =
+        [
+            ("System", "ValueTuple`1"),
+            ("System", "ValueTuple`2"),
+            ("System", "ValueTuple`3"),
+            ("System", "ValueTuple`4"),
+            ("System", "ValueTuple`5"),
+            ("System", "ValueTuple`6"),
+            ("System", "ValueTuple`7"),
+            ("System", "ValueTuple`8"),
+            ("System.Collections.Generic", "KeyValuePair`2"),
+        ];
+
+        private static bool IsListed(HashSet<(string Namespace, string Name)> list, NamedTypeSymbol definition)
+            => definition.ContainingType is null &&
+               definition.ContainingNamespace is { } ns &&
+               list.Contains((ns.ToDisplayString(SymbolDisplayFormat.QualifiedNameOnlyFormat), definition.MetadataName));
+
         private static bool IsAttested(NamedTypeSymbol definition, out bool hierarchy)
         {
             hierarchy = false;
@@ -871,6 +904,66 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     candidate.Parameters.All(static parameter => parameter.Type.IsObjectType()));
         }
 
+        /// <summary>
+        /// Whether a call of <c>Equals</c> or <c>GetHashCode</c> (<paramref name="method"/>) runs the identity-based
+        /// implementation of an attested type: one in <see cref="s_identityEqualityTypes"/>, or one that combines the
+        /// identity-based implementations of its type arguments. <c>object</c>'s own is <see cref="IsObjectIdentityMember"/>.
+        /// </summary>
+        private static bool IsAttestedIdentityMember(MethodSymbol method, BoundExpression? receiver)
+        {
+            if (method.IsStatic || !IsObserverMethod(method))
+            {
+                return false;
+            }
+
+            // A call of an override binds to object's declaration; the receiver's type says which implementation runs.
+            var declaring = method.ContainingType.OriginalDefinition;
+            bool declaredByObject = declaring.SpecialType is SpecialType.System_Object or SpecialType.System_ValueType;
+            if (!declaredByObject && !IsAttested(declaring, out _))
+            {
+                return false;
+            }
+
+            return (declaredByObject ? receiver?.Type : method.ContainingType) is NamedTypeSymbol type &&
+                IsAttested(type.OriginalDefinition, out _) &&
+                ComparesByIdentity(type, method.Name);
+        }
+
+        /// <summary>
+        /// Whether <c>EqualityComparer&lt;T&gt;.Default</c>'s <c>Equals</c> or <c>GetHashCode</c>
+        /// (<paramref name="memberName"/>) observes identity for values of the type: an array or a reference type that does
+        /// not override it, a type in <see cref="s_identityEqualityTypes"/>, or one that combines its type arguments' (see
+        /// <see cref="s_elementwiseEqualityTypes"/>) when one of them does.
+        /// </summary>
+        private static bool ComparesByIdentity(TypeSymbol type, string memberName)
+        {
+            switch (type)
+            {
+                case TypeParameterSymbol typeParameter:
+                    return ComparesByIdentity(typeParameter.EffectiveBaseClassNoUseSiteDiagnostics, memberName);
+
+                case NamedTypeSymbol named:
+                    var definition = named.OriginalDefinition;
+                    if (IsListed(s_identityEqualityTypes, definition))
+                    {
+                        return true;
+                    }
+
+                    if (definition.SpecialType == SpecialType.System_Nullable_T || IsListed(s_elementwiseEqualityTypes, definition))
+                    {
+                        return named.TypeArgumentsWithAnnotationsNoUseSiteDiagnostics.Any(argument => ComparesByIdentity(argument.Type, memberName));
+                    }
+
+                    return !BaseTypesBelowObject(named)
+                        .SelectMany(baseType => baseType.GetMembers(memberName))
+                        .Any(static member => member is MethodSymbol { IsOverride: true, IsStatic: false } candidate && IsObserverMethod(candidate) &&
+                            candidate.Parameters.All(static parameter => parameter.Type.IsObjectType()));
+
+                default:
+                    return type.IsReferenceType;
+            }
+        }
+
         /// <summary>A type and its base types, up to but not including <c>object</c>.</summary>
         private static IEnumerable<NamedTypeSymbol> BaseTypesBelowObject(NamedTypeSymbol? type)
         {
@@ -1125,6 +1218,9 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
                     case BoundCall call:
                         if (IsObjectIdentityMember(call.Method, call.ReceiverOpt) ||
+                            IsAttestedIdentityMember(call.Method, call.ReceiverOpt) ||
+                            (IsSystemHashCode(call.Method.ContainingType) &&
+                                call.Method.TypeArgumentsWithAnnotations.Any(static argument => ComparesByIdentity(argument.Type, WellKnownMemberNames.ObjectGetHashCode))) ||
                             call.Method is { IsStatic: true, Name: "ReferenceEquals", ContainingType.SpecialType: SpecialType.System_Object })
                         {
                             return ObservesIdentity();
@@ -1177,6 +1273,13 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 var kind = binary.OperatorKind;
                 if (kind.IsUserDefined())
                 {
+                    if (binary.BinaryOperatorMethod is { ContainingType: var containingType } &&
+                        IsListed(s_identityEqualityTypes, containingType.OriginalDefinition) &&
+                        kind.Operator() is BinaryOperatorKind.Equal or BinaryOperatorKind.NotEqual)
+                    {
+                        return ObservesIdentity();
+                    }
+
                     return binary.BinaryOperatorMethod is { } method && IsPureOperator(method);
                 }
 
