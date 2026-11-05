@@ -6131,5 +6131,58 @@ forLowering: false);
             CompileAndVerify(comp, expectedOutput: "1230");
         }
 
+        [Fact]
+        public void ConstantPattern_ConstLocal_OpenInputType()
+        {
+            var source = """
+                using System;
+
+                Console.Write(C<int>.M(1));
+                Console.Write(C<object>.M(2));
+
+                class C<T>
+                {
+                    public static bool M(T x)
+                    {
+                        const int k = 1;
+                        return x is k;
+                    }
+                }
+                """;
+            var comp = CreateCompilation(source, options: TestOptions.DebugExe);
+            comp.VerifyDiagnostics();
+            CompileAndVerify(comp, expectedOutput: "TrueFalse");
+        }
+
+        [Fact]
+        public void PatternOperand_NotConstant_OpenInputType()
+        {
+            var source = """
+                class C<T>
+                {
+                    void M(T x, T y)
+                    {
+                        T z = x;
+                        _ = x is y;
+                        _ = x is > y;
+                        _ = x is (z);
+                        switch (x) { case { } when x is z: break; }
+                    }
+                }
+                """;
+            CreateCompilation(source).VerifyDiagnostics(
+                // (6,18): error CS0150: A constant value is expected
+                //         _ = x is y;
+                Diagnostic(ErrorCode.ERR_ConstantExpected, "y").WithLocation(6, 18),
+                // (7,20): error CS0150: A constant value is expected
+                //         _ = x is > y;
+                Diagnostic(ErrorCode.ERR_ConstantExpected, "y").WithLocation(7, 20),
+                // (8,19): error CS0150: A constant value is expected
+                //         _ = x is (z);
+                Diagnostic(ErrorCode.ERR_ConstantExpected, "z").WithLocation(8, 19),
+                // (9,41): error CS0150: A constant value is expected
+                //         switch (x) { case { } when x is z: break; }
+                Diagnostic(ErrorCode.ERR_ConstantExpected, "z").WithLocation(9, 41));
+        }
     }
 }
