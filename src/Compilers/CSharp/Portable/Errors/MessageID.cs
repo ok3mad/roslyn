@@ -359,6 +359,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         IDS_SharperInferParamsPinsNothing = MessageBase + 12911,
         IDS_SharperInferRefArgumentPinsNothing = MessageBase + 12912,
         IDS_SharperInferUsePinsNothing = MessageBase + 12913,
+        IDS_SharperPipeLambdaStage = MessageBase + 12914,
     }
 
     // Message IDs may refer to strings that need to be localized.

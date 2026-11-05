@@ -15,12 +15,15 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
     /// The value of a Sharper pipe, <c>x |&gt; stage</c> (#25): a read-only local holding <c>x</c>. A stage that uses
     /// <c>it</c> finds it by name; a bare stage passes it as the argument. Codegen and closures treat it as a user
     /// variable named <c>it</c>, declared at its first use, so the debugger shows it and a lambda can capture it.
+    /// A lambda stage, <c>x |&gt; (y =&gt; y + 1)</c> (#186), names the value: the local is then named after the lambda's
+    /// parameter and declared by it.
     /// </summary>
     internal sealed class SharperPipeItLocalSymbol : LocalSymbol
     {
         private readonly Symbol _containingSymbol;
         private readonly TypeWithAnnotations _type;
         private readonly SyntaxNode _syntax;
+        private readonly ParameterSyntax? _lambdaParameter;
 
         /// <param name="syntax">The first <c>it</c> of the stage, or the stage itself when it is bare.</param>
         internal SharperPipeItLocalSymbol(Symbol containingSymbol, TypeWithAnnotations type, SyntaxNode syntax)
@@ -30,7 +33,24 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             _syntax = syntax;
         }
 
-        public override string Name => Binder.SharperItName;
+        /// <param name="lambdaParameter">The parameter of a lambda stage, which names the value.</param>
+        internal SharperPipeItLocalSymbol(Symbol containingSymbol, TypeWithAnnotations type, ParameterSyntax lambdaParameter, bool isExplicitlyTyped)
+            : this(containingSymbol, type, lambdaParameter)
+        {
+            _lambdaParameter = lambdaParameter;
+            IsExplicitlyTyped = isExplicitlyTyped;
+        }
+
+        /// <summary>The parameter of a lambda stage (<c>x |&gt; (y =&gt; y + 1)</c>) that names the value, if any.</summary>
+        internal ParameterSyntax? LambdaParameter => _lambdaParameter;
+
+        /// <summary>
+        /// The lambda stage's parameter has a type, to which the left side converts; the nullable walker keeps that type
+        /// instead of inferring one.
+        /// </summary>
+        internal bool IsExplicitlyTyped { get; }
+
+        public override string Name => _lambdaParameter?.Identifier.ValueText ?? Binder.SharperItName;
 
         public override Symbol ContainingSymbol => _containingSymbol;
 
@@ -58,7 +78,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
         internal override bool IsImportedFromMetadata => false;
 
-        internal override SyntaxToken IdentifierToken => default;
+        internal override SyntaxToken IdentifierToken => _lambdaParameter?.Identifier ?? default;
 
         internal override bool IsPinned => false;
 
@@ -75,11 +95,13 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
         internal override bool IsCompilerGenerated => false;
 
-        public override bool IsImplicitlyDeclared => true;
+        public override bool IsImplicitlyDeclared => _lambdaParameter is null;
 
-        public override ImmutableArray<Location> Locations => ImmutableArray.Create(_syntax.Location);
+        public override ImmutableArray<Location> Locations
+            => ImmutableArray.Create(_lambdaParameter is null ? _syntax.Location : _lambdaParameter.Identifier.GetLocation());
 
-        public override ImmutableArray<SyntaxReference> DeclaringSyntaxReferences => ImmutableArray<SyntaxReference>.Empty;
+        public override ImmutableArray<SyntaxReference> DeclaringSyntaxReferences
+            => _lambdaParameter is null ? ImmutableArray<SyntaxReference>.Empty : ImmutableArray.Create(_lambdaParameter.GetReference());
 
         internal override ConstantValue? GetConstantValue(SyntaxNode node, LocalSymbol inProgress, BindingDiagnosticBag? diagnostics = null) => null;
 

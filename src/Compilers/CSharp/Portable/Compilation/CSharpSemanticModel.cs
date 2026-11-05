@@ -3403,6 +3403,14 @@ namespace Microsoft.CodeAnalysis.CSharp
         /// <returns>The parameter that was declared.</returns>
         public abstract IParameterSymbol GetDeclaredSymbol(ParameterSyntax declarationSyntax, CancellationToken cancellationToken = default(CancellationToken));
 
+#nullable enable
+        /// <summary>
+        /// The local that the parameter of a Sharper lambda stage declares, <c>y</c> in <c>x |&gt; (y =&gt; y + 1)</c> (#186),
+        /// named <c>_</c> for a discard.
+        /// </summary>
+        internal virtual LocalSymbol? GetDeclaredSharperPipeLambdaStageLocal(ParameterSyntax parameter) => null;
+#nullable disable
+
         /// <summary>
         /// Given a base field declaration syntax, get the corresponding symbols.
         /// </summary>
@@ -5358,6 +5366,12 @@ namespace Microsoft.CodeAnalysis.CSharp
                 case SyntaxKind.FileScopedNamespaceDeclaration:
                     return this.GetDeclaredSymbol((FileScopedNamespaceDeclarationSyntax)node, cancellationToken);
                 case SyntaxKind.Parameter:
+                    if (GetDeclaredSharperPipeLambdaStageLocal((ParameterSyntax)node) is { } sharperPipeLocal)
+                    {
+                        // The parameter of a Sharper lambda stage declares a local (#186); '_' is a discard.
+                        return sharperPipeLocal.Name == "_" ? null : sharperPipeLocal.GetPublicSymbol();
+                    }
+
                     return this.GetDeclaredSymbol((ParameterSyntax)node, cancellationToken);
                 case SyntaxKind.TypeParameter:
                     return this.GetDeclaredSymbol((TypeParameterSyntax)node, cancellationToken);

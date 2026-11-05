@@ -59,10 +59,30 @@ The design is in the implementation plan, [Feature 12](../planning/implementatio
   `F(int?)` over `F(long?)`, as `F(c ? 1 : null)` does. Type inference does not look through the pipe, as C# does not
   look through `?:` or a switch: `Id(x |> (it > 0 ? 1 : null))` is CS0411, while `Id(x |> it + 1)` infers `int` from
   the natural type. A bare stage is a call and has the call's type.
+- **A lambda stage names the value** ([#186](https://github.com/ok3mad/roslyn/issues/186)). A stage that is a lambda with
+  one parameter and an expression body is a stage with `it` whose variable has the parameter's name:
+  `x |> (y => y + 1)` is `x |> it + 1`. No delegate is made and nothing is allocated. It names the value where `it` is
+  taken: `x |> (v => xs.Where(it > v))` and `xs |> (ys => ys.Select(it * 2))`, which with `it` are CS20047 and CS20020.
+  - An explicit parameter type converts the left side implicitly, as `long y = x;` would:
+    `x |> ((long y) => y * 2)`; a conversion that is not implicit is the C# error (CS0029, CS0266). `(val y) => ...` is
+    implicitly typed, as for a lambda.
+  - The stage is not a lambda: `await` works in it (`id |> (n => await Load(n))`), the parameter is read-only like `it`
+    (CS1656), and closures capture it as a variable, one per evaluation of the pipe. It is target-typed as any stage with
+    `it`: `int? r = x |> (y => y > 0 ? 1 : null)`.
+  - The name follows lambda parameter rules: it shadows an outer local, as a lambda's parameter does, and a clash with a
+    variable declared in the stage is the C# error (`x |> (y => y is int y)` is CS0136, as for the lambda). `_` is a
+    discard: the left side is evaluated and the value is unused, so `x |> (_ => _)` is CS0103. A parameter named `it`
+    is a name the user wrote, not an implicit `it`.
+  - A block body, no or several parameters, `async`, `static`, attributes, an explicit return type, a parameter
+    modifier or a default value is CS20048, with a hint to use `it`; so is an anonymous method.
+  - A lambda that uses the stage's `it` is not a lambda stage: `Func<int, int> f = x |> (y => y + it)` is a stage
+    whose value is the lambda (target typing). Which `it` a lambda's body uses is decided by binding, as for any stage:
+    in `x |> (v => xs.Where(it > v))` the `it` is `Where`'s.
 - **A bare stage.** Any other stage is a function: a method group (`x |> Parse`, `x |> list.Add`, `x |> F<int>`), a
   delegate value, or an expression of delegate type such as `x |> MakeParser(culture)`. It is called with the value as
   its only argument, with C#'s overload resolution, type inference and extension methods (`x |> Enumerable.Sum`).
-  `dynamic` binds at runtime. Anything else is CS20048: `x |> y.Length` instead of `x |> it.Length`.
+  `dynamic` binds at runtime. Anything else is CS20048: `x |> y.Length` instead of `x |> it.Length`, or a lambda that
+  cannot name the value.
 - **Evaluation order.** The left side is evaluated once, before anything in the stage, including a bare stage's
   receiver (`x |> GetPrinter().Print` evaluates `x` first) and a delegate expression (`x |> MakeParser(culture)`).
 - **The innermost `it` wins.** A stage is the outermost slot for `it`, as the implicit `it` decisions say: an `it` in
@@ -94,8 +114,6 @@ The design is in the implementation plan, [Feature 12](../planning/implementatio
 ## Not supported yet
 
 - No lifting over `Task`, sequences and unions ([#32](https://github.com/ok3mad/roslyn/issues/32)).
-- A bare lambda stage is CS20048. Decided: `x |> (y => y + 1)`, one parameter and an expression body, will name the
-  value, as `x |> it + 1` with `y` for `it` ([#186](https://github.com/ok3mad/roslyn/issues/186)).
 - IOperation: an `OperationKind.None` node whose only child is the left side; the stage is not in the control flow
   graph ([#155](https://github.com/ok3mad/roslyn/issues/155)).
 - The semantic model finds `it` by `GetSymbolInfo`, but `LookupSymbols` and speculative binding inside a stage do not
@@ -116,6 +134,15 @@ The design is in the implementation plan, [Feature 12](../planning/implementatio
   the member's map leaves stages out (`LocalBinderFactory`, `ExpressionVariableFinder`). A bare stage binds as a method
   group or value, then as an invocation with the local as its argument (`BindInvocationExpression`), whose syntax is
   the stage. For implicit lambdas, the pipe's `it` counts as an outer `it` (`IsSharperImplicitItSymbol`).
+- **Lambda stages** (`BindSharperPipeLambdaStage`). `GetSharperPipeLambdaStage` recognizes the lambda by syntax; its
+  body binds as a stage with `it` under a `SharperPipeStageBinder` rooted at the body, whose local is a
+  `SharperPipeItLocalSymbol` named and declared by the parameter (`LambdaParameter`, `IsExplicitlyTyped`). When the
+  body has a free `it`, a trial binding with both the named value and the stage's `it` in scope decides whether the
+  body uses the stage's `it` (`SharperPipeLambdaStageUsesIt`); if so, the lambda is the stage's value. The stage's
+  `it` rules (CS20047, CS20020) do not apply to a lambda stage. The semantic model returns the local for
+  `GetDeclaredSymbol` on the parameter (`GetDeclaredSharperPipeLambdaStageLocal`), and the typed
+  `GetDeclaredSymbol(ParameterSyntax)` returns null, since the symbol is not a parameter. The nullable walker treats an
+  explicitly typed parameter as a declaration with that type (`string s = x;`).
 - **Target typing**, as for the Sharper try expression. A stage with `it` binds to a `BoundUnconvertedSharperPipe`
   whose type is the stage's natural type, if any. `ConversionKind.SharperPipe`, with the stage's conversion as its only
   underlying conversion, comes last in `ClassifyImplicitConversionFromExpression`, after the switch and try conversions.
@@ -142,4 +169,4 @@ The design is in the implementation plan, [Feature 12](../planning/implementatio
 | Binder | `Binder/Binder_SharperPipe.cs`, `Binder/SharperPipeStageBinder.cs`, `Symbols/SharperPipeItLocalSymbol.cs`; implicit `it` in `Binder_SharperImplicitIt.cs` |
 | Analysis | `FlowAnalysis/AbstractFlowPass_SharperPipe.cs`, `DefiniteAssignment_SharperPipe.cs`, `NullableWalker_SharperPipe.cs`, `Binder/RefSafetyAnalysis.cs` |
 | Lowering | `Lowering/LocalRewriter/LocalRewriter_SharperPipe.cs` |
-| Tests | `SharperTests_Pipe.cs` (`SharperTests.Pipe_*`) |
+| Tests | `SharperTests_Pipe.cs`, `SharperTests_PipeLambdaStage.cs` (`SharperTests.Pipe_*`) |

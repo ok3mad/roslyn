@@ -148,10 +148,11 @@ namespace Microsoft.CodeAnalysis.CSharp
 
         /// <summary>
         /// Whether the symbol is an <c>it</c> that Sharper declared: the parameter of an implicit lambda, or the value of a
-        /// pipe stage.
+        /// pipe stage. A lambda stage's value named <c>it</c>, <c>x |&gt; (it =&gt; F(it))</c>, is a name the user wrote, as a
+        /// lambda's parameter is.
         /// </summary>
         private static bool IsSharperImplicitItSymbol(Symbol? symbol)
-            => symbol is LambdaParameterSymbol { IsSharperImplicitIt: true } or SharperPipeItLocalSymbol;
+            => symbol is LambdaParameterSymbol { IsSharperImplicitIt: true } or SharperPipeItLocalSymbol { LambdaParameter: null };
 
         /// <summary>
         /// Looks up <c>it</c> as C# would: null when nothing named <c>it</c> is in scope.
