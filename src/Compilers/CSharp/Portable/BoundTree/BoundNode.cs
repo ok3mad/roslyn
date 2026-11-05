@@ -679,6 +679,15 @@ namespace Microsoft.CodeAnalysis.CSharp
                 return null;
             }
 
+            public override BoundNode? VisitUnconvertedSharperPipe(BoundUnconvertedSharperPipe node)
+            {
+                var locals = node.Locals.Insert(0, node.Local);
+                AddAll(locals);
+                base.VisitUnconvertedSharperPipe(node);
+                RemoveAll(locals);
+                return null;
+            }
+
             public override BoundNode? VisitSwitchExpressionArm(BoundSwitchExpressionArm node)
             {
                 AddAll(node.Locals);

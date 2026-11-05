@@ -13,6 +13,19 @@ namespace Microsoft.CodeAnalysis.CSharp
         /// </summary>
         public override BoundNode VisitSharperPipe(BoundSharperPipe node)
         {
+            return VisitSharperPipeBase(node);
+        }
+
+        /// <summary>
+        /// A pipe whose stage is not converted yet is analyzed as the converted one (lambda return type inference).
+        /// </summary>
+        public override BoundNode VisitUnconvertedSharperPipe(BoundUnconvertedSharperPipe node)
+        {
+            return VisitSharperPipeBase(node);
+        }
+
+        protected virtual BoundNode VisitSharperPipeBase(BoundSharperPipeBase node)
+        {
             VisitRvalue(node.Left);
             VisitSharperPipeLocal(node);
             VisitRvalue(node.Stage);
@@ -22,7 +35,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         /// <summary>
         /// Called after the left side of a pipe is visited, when its value is assigned to the stage's <c>it</c>.
         /// </summary>
-        protected virtual void VisitSharperPipeLocal(BoundSharperPipe node)
+        protected virtual void VisitSharperPipeLocal(BoundSharperPipeBase node)
         {
         }
     }

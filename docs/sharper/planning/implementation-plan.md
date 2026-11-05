@@ -1156,7 +1156,7 @@ section keeps the decisions and what the implementation taught. Lifting over `Ta
 | Lowering | A spill sequence: `it = x;` before the enclosing statement and the stage in place, as a switch expression lowers. No new runtime type; in optimized builds a local read once stays on the stack, which leaves the nested call | `it` and the stage's variables are user variables (the debugger shows them, closures capture them), and codegen keeps those out of an expression's sequence: it records a sequence's locals as expression temps and frees them, which named locals cannot be. Closure conversion has no field name for a captured lowering temp |
 | IOperation | `OperationKind.None` with the left side as its only child ([#155](https://github.com/ok3mad/roslyn/issues/155)) | The control flow graph has no region for the stage's `it` |
 | Expression trees | CS20049 | The stage's `it` is a variable |
-| Target typing (decided, [#187](https://github.com/ok3mad/roslyn/issues/187)) | A stage with `it` is target-typed, as a switch expression's arms are: `int? r = x \|> (it > 0 ? 1 : null)`, `Func<int, int> f = x \|> (y => y + it)`. An unconverted pipe and a pipe conversion with the stage's conversion inside, at the lowest priority, so a natural type that converts wins. Overload resolution classifies the conversion per candidate with no new betterness rule, and type inference does not look through the pipe | C#'s pattern for `?:`, switch and the Sharper try expression, which already has every site. C# does not infer through `?:` or a switch either; inference through a pipe can come later without breaking anything |
+| Target typing ([#187](https://github.com/ok3mad/roslyn/issues/187), implemented) | A stage with `it` is target-typed, as a switch expression's arms are: `int? r = x \|> (it > 0 ? 1 : null)`, `Func<int, int> f = x \|> (y => y + it)`. An unconverted pipe and a pipe conversion with the stage's conversion inside, at the lowest priority, so a natural type that converts wins. Overload resolution classifies the conversion per candidate with no new betterness rule, and type inference does not look through the pipe | C#'s pattern for `?:`, switch and the Sharper try expression, which already has every site. C# does not infer through `?:` or a switch either; inference through a pipe can come later without breaking anything |
 | Lambda stage (decided, [#186](https://github.com/ok3mad/roslyn/issues/186)) | A stage that is a lambda with one parameter and an expression body names the value: `x \|> (y => y + 1)` is an `it` stage whose variable is `y`, not a delegate. An explicit parameter type converts the left side implicitly. A block body, more parameters, `async`, `static` or attributes stay CS20048. A lambda in a stage with a free `it` is the stage's value (target typing) | Naming the value is the way out where `it` is taken: `x \|> (v => xs.Where(it > v))` (CS20047 with `it`), `xs \|> (ys => ys.Select(it * 2))` (CS20020). An `it` stage costs nothing, while a real lambda would allocate and follow lambda rules for `await`. `\|>` is never valid C#, so no C# code changes meaning |
 
 ### What it taught
@@ -1173,6 +1173,15 @@ section keeps the decisions and what the implementation taught. Lifting over `Ta
 - **A new syntax for a `BoundCall` meets the interceptor check.** `BoundExpression.InterceptableNameSyntax` asserts on
   call syntax it does not know; a bare stage's call is not interceptable for now ([#158](https://github.com/ok3mad/roslyn/issues/158)).
 - **User variables cannot live in an expression's sequence.** See Lowering above; a spill sequence is the precedent.
+- **A check on a target-typed expression waits for its conversion.** A lambda in a target-typed stage is unbound until
+  the pipe converts, so the stage's `it` rules (CS20047, CS20020) run in `ConvertSharperPipe`, and the unconverted node
+  needs the flow and nullable visitors too: a lambda's return type inference visits returns before they convert
+  (`VisitUnconvertedSharperPipe`). With no natural type, the conversion error is the stage's (`GenerateImplicitConversionError`
+  on the stage), and `Display` falls back to the stage's.
+- **Spilled locals captured in a declaration's initializer trip a Debug check.** The spiller gives the block that holds
+  a spill sequence's locals the syntax of the enclosing statement, a `VariableDeclarator` for a local declaration, and
+  `SynthesizedClosureEnvironment.AssertIsClosureScopeSyntax` rejects it: `Func<int> f = 3 |> Make(() => it);` asserts
+  in Debug builds, as C#'s `Func<int> g = 3 switch { var i => Make(() => i) };` does (upstream code, not changed here).
 
 ## Follow-ups
 
@@ -1216,7 +1225,7 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 - [ ] Pipe: `LookupSymbols` and speculative binding inside a stage. [#156](https://github.com/ok3mad/roslyn/issues/156)
 - [x] Pipe: decide target-typed stages and a bare lambda stage. [#157](https://github.com/ok3mad/roslyn/issues/157)
 - [ ] Pipe: a lambda stage names the value. [#186](https://github.com/ok3mad/roslyn/issues/186)
-- [ ] Pipe: target-typed stage. [#187](https://github.com/ok3mad/roslyn/issues/187)
+- [x] Pipe: target-typed stage. [#187](https://github.com/ok3mad/roslyn/issues/187)
 - [ ] Pipe: sequence points, Edit and Continue and interceptors. [#158](https://github.com/ok3mad/roslyn/issues/158)
 - [ ] Pipe: IDE support. [#159](https://github.com/ok3mad/roslyn/issues/159)
 - [x] `try` expression: test a target-typed switch and `?:` into a C# 15 union before slice 1's binding. [#137](https://github.com/ok3mad/roslyn/issues/137)

@@ -46,6 +46,10 @@ namespace Microsoft.CodeAnalysis.CSharp
                     // Skip through target-typed try expressions
                     Debug.Assert(node.Operand is BoundConvertedTryExpression { WasTargetTyped: true });
                     return Visit(node.Operand)!;
+                case ConversionKind.SharperPipe:
+                    // Skip through target-typed pipes
+                    Debug.Assert(node.Operand is BoundSharperPipe { WasTargetTyped: true });
+                    return Visit(node.Operand)!;
                 case ConversionKind.ObjectCreation:
                     // Skip through target-typed new
                     Debug.Assert(node.Operand is not null);

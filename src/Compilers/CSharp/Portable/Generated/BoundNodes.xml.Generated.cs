@@ -154,6 +154,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         ConvertedSwitchExpression,
         UnconvertedTryExpression,
         ConvertedTryExpression,
+        UnconvertedSharperPipe,
         SharperPipe,
         DecisionDag,
         EvaluationDecisionDagNode,
@@ -5168,10 +5169,10 @@ namespace Microsoft.CodeAnalysis.CSharp
         }
     }
 
-    internal sealed partial class BoundSharperPipe : BoundExpression
+    internal abstract partial class BoundSharperPipeBase : BoundExpression
     {
-        public BoundSharperPipe(SyntaxNode syntax, LocalSymbol local, BoundExpression left, ImmutableArray<LocalSymbol> locals, BoundExpression stage, bool isBareStage, TypeSymbol? type, bool hasErrors = false)
-            : base(BoundKind.SharperPipe, syntax, type, hasErrors || left.HasErrors() || stage.HasErrors())
+        protected BoundSharperPipeBase(BoundKind kind, SyntaxNode syntax, LocalSymbol local, BoundExpression left, ImmutableArray<LocalSymbol> locals, BoundExpression stage, TypeSymbol? type, bool hasErrors = false)
+            : base(kind, syntax, type, hasErrors)
         {
 
             RoslynDebug.Assert(local is object, "Field 'local' cannot be null (make the type nullable in BoundNodes.xml to remove this check)");
@@ -5183,23 +5184,71 @@ namespace Microsoft.CodeAnalysis.CSharp
             this.Left = left;
             this.Locals = locals;
             this.Stage = stage;
-            this.IsBareStage = isBareStage;
         }
 
         public LocalSymbol Local { get; }
         public BoundExpression Left { get; }
         public ImmutableArray<LocalSymbol> Locals { get; }
         public BoundExpression Stage { get; }
+    }
+
+    internal sealed partial class BoundUnconvertedSharperPipe : BoundSharperPipeBase
+    {
+        public BoundUnconvertedSharperPipe(SyntaxNode syntax, LocalSymbol local, BoundExpression left, ImmutableArray<LocalSymbol> locals, BoundExpression stage, TypeSymbol? type, bool hasErrors = false)
+            : base(BoundKind.UnconvertedSharperPipe, syntax, local, left, locals, stage, type, hasErrors || left.HasErrors() || stage.HasErrors())
+        {
+
+            RoslynDebug.Assert(local is object, "Field 'local' cannot be null (make the type nullable in BoundNodes.xml to remove this check)");
+            RoslynDebug.Assert(left is object, "Field 'left' cannot be null (make the type nullable in BoundNodes.xml to remove this check)");
+            RoslynDebug.Assert(!locals.IsDefault, "Field 'locals' cannot be null (use Null=\"allow\" in BoundNodes.xml to remove this check)");
+            RoslynDebug.Assert(stage is object, "Field 'stage' cannot be null (make the type nullable in BoundNodes.xml to remove this check)");
+
+        }
+
+
+        [DebuggerStepThrough]
+        public override BoundNode? Accept(BoundTreeVisitor visitor) => visitor.VisitUnconvertedSharperPipe(this);
+
+        public BoundUnconvertedSharperPipe Update(LocalSymbol local, BoundExpression left, ImmutableArray<LocalSymbol> locals, BoundExpression stage, TypeSymbol? type)
+        {
+            if (!Symbols.SymbolEqualityComparer.ConsiderEverything.Equals(local, this.Local) || left != this.Left || locals != this.Locals || stage != this.Stage || !TypeSymbol.Equals(type, this.Type, TypeCompareKind.ConsiderEverything))
+            {
+                var result = new BoundUnconvertedSharperPipe(this.Syntax, local, left, locals, stage, type, this.HasErrors);
+                result.CopyAttributes(this);
+                return result;
+            }
+            return this;
+        }
+    }
+
+    internal sealed partial class BoundSharperPipe : BoundSharperPipeBase
+    {
+        public BoundSharperPipe(SyntaxNode syntax, bool isBareStage, TypeSymbol? naturalTypeOpt, bool wasTargetTyped, LocalSymbol local, BoundExpression left, ImmutableArray<LocalSymbol> locals, BoundExpression stage, TypeSymbol? type, bool hasErrors = false)
+            : base(BoundKind.SharperPipe, syntax, local, left, locals, stage, type, hasErrors || left.HasErrors() || stage.HasErrors())
+        {
+
+            RoslynDebug.Assert(local is object, "Field 'local' cannot be null (make the type nullable in BoundNodes.xml to remove this check)");
+            RoslynDebug.Assert(left is object, "Field 'left' cannot be null (make the type nullable in BoundNodes.xml to remove this check)");
+            RoslynDebug.Assert(!locals.IsDefault, "Field 'locals' cannot be null (use Null=\"allow\" in BoundNodes.xml to remove this check)");
+            RoslynDebug.Assert(stage is object, "Field 'stage' cannot be null (make the type nullable in BoundNodes.xml to remove this check)");
+
+            this.IsBareStage = isBareStage;
+            this.NaturalTypeOpt = naturalTypeOpt;
+            this.WasTargetTyped = wasTargetTyped;
+        }
+
         public bool IsBareStage { get; }
+        public TypeSymbol? NaturalTypeOpt { get; }
+        public bool WasTargetTyped { get; }
 
         [DebuggerStepThrough]
         public override BoundNode? Accept(BoundTreeVisitor visitor) => visitor.VisitSharperPipe(this);
 
-        public BoundSharperPipe Update(LocalSymbol local, BoundExpression left, ImmutableArray<LocalSymbol> locals, BoundExpression stage, bool isBareStage, TypeSymbol? type)
+        public BoundSharperPipe Update(bool isBareStage, TypeSymbol? naturalTypeOpt, bool wasTargetTyped, LocalSymbol local, BoundExpression left, ImmutableArray<LocalSymbol> locals, BoundExpression stage, TypeSymbol? type)
         {
-            if (!Symbols.SymbolEqualityComparer.ConsiderEverything.Equals(local, this.Local) || left != this.Left || locals != this.Locals || stage != this.Stage || isBareStage != this.IsBareStage || !TypeSymbol.Equals(type, this.Type, TypeCompareKind.ConsiderEverything))
+            if (isBareStage != this.IsBareStage || !TypeSymbol.Equals(naturalTypeOpt, this.NaturalTypeOpt, TypeCompareKind.ConsiderEverything) || wasTargetTyped != this.WasTargetTyped || !Symbols.SymbolEqualityComparer.ConsiderEverything.Equals(local, this.Local) || left != this.Left || locals != this.Locals || stage != this.Stage || !TypeSymbol.Equals(type, this.Type, TypeCompareKind.ConsiderEverything))
             {
-                var result = new BoundSharperPipe(this.Syntax, local, left, locals, stage, isBareStage, type, this.HasErrors);
+                var result = new BoundSharperPipe(this.Syntax, isBareStage, naturalTypeOpt, wasTargetTyped, local, left, locals, stage, type, this.HasErrors);
                 result.CopyAttributes(this);
                 return result;
             }
@@ -9508,6 +9557,8 @@ namespace Microsoft.CodeAnalysis.CSharp
                     return VisitUnconvertedTryExpression((BoundUnconvertedTryExpression)node, arg);
                 case BoundKind.ConvertedTryExpression:
                     return VisitConvertedTryExpression((BoundConvertedTryExpression)node, arg);
+                case BoundKind.UnconvertedSharperPipe:
+                    return VisitUnconvertedSharperPipe((BoundUnconvertedSharperPipe)node, arg);
                 case BoundKind.SharperPipe:
                     return VisitSharperPipe((BoundSharperPipe)node, arg);
                 case BoundKind.DecisionDag:
@@ -9864,6 +9915,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         public virtual R VisitConvertedSwitchExpression(BoundConvertedSwitchExpression node, A arg) => this.DefaultVisit(node, arg);
         public virtual R VisitUnconvertedTryExpression(BoundUnconvertedTryExpression node, A arg) => this.DefaultVisit(node, arg);
         public virtual R VisitConvertedTryExpression(BoundConvertedTryExpression node, A arg) => this.DefaultVisit(node, arg);
+        public virtual R VisitUnconvertedSharperPipe(BoundUnconvertedSharperPipe node, A arg) => this.DefaultVisit(node, arg);
         public virtual R VisitSharperPipe(BoundSharperPipe node, A arg) => this.DefaultVisit(node, arg);
         public virtual R VisitDecisionDag(BoundDecisionDag node, A arg) => this.DefaultVisit(node, arg);
         public virtual R VisitEvaluationDecisionDagNode(BoundEvaluationDecisionDagNode node, A arg) => this.DefaultVisit(node, arg);
@@ -10109,6 +10161,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         public virtual BoundNode? VisitConvertedSwitchExpression(BoundConvertedSwitchExpression node) => this.DefaultVisit(node);
         public virtual BoundNode? VisitUnconvertedTryExpression(BoundUnconvertedTryExpression node) => this.DefaultVisit(node);
         public virtual BoundNode? VisitConvertedTryExpression(BoundConvertedTryExpression node) => this.DefaultVisit(node);
+        public virtual BoundNode? VisitUnconvertedSharperPipe(BoundUnconvertedSharperPipe node) => this.DefaultVisit(node);
         public virtual BoundNode? VisitSharperPipe(BoundSharperPipe node) => this.DefaultVisit(node);
         public virtual BoundNode? VisitDecisionDag(BoundDecisionDag node) => this.DefaultVisit(node);
         public virtual BoundNode? VisitEvaluationDecisionDagNode(BoundEvaluationDecisionDagNode node) => this.DefaultVisit(node);
@@ -10756,6 +10809,12 @@ namespace Microsoft.CodeAnalysis.CSharp
         {
             this.Visit(node.Body);
             this.VisitList(node.Arms);
+            return null;
+        }
+        public override BoundNode? VisitUnconvertedSharperPipe(BoundUnconvertedSharperPipe node)
+        {
+            this.Visit(node.Left);
+            this.Visit(node.Stage);
             return null;
         }
         public override BoundNode? VisitSharperPipe(BoundSharperPipe node)
@@ -12178,14 +12237,24 @@ namespace Microsoft.CodeAnalysis.CSharp
             TypeSymbol? type = this.VisitType(node.Type);
             return node.Update(naturalTypeOpt, node.WasTargetTyped, body, arms, exceptionPlaceholder, reachabilityDecisionDag, defaultLabel, type);
         }
-        public override BoundNode? VisitSharperPipe(BoundSharperPipe node)
+        public override BoundNode? VisitUnconvertedSharperPipe(BoundUnconvertedSharperPipe node)
         {
             LocalSymbol local = this.VisitLocalSymbol(node.Local);
             ImmutableArray<LocalSymbol> locals = this.VisitLocals(node.Locals);
             BoundExpression left = (BoundExpression)this.Visit(node.Left);
             BoundExpression stage = (BoundExpression)this.Visit(node.Stage);
             TypeSymbol? type = this.VisitType(node.Type);
-            return node.Update(local, left, locals, stage, node.IsBareStage, type);
+            return node.Update(local, left, locals, stage, type);
+        }
+        public override BoundNode? VisitSharperPipe(BoundSharperPipe node)
+        {
+            LocalSymbol local = this.VisitLocalSymbol(node.Local);
+            ImmutableArray<LocalSymbol> locals = this.VisitLocals(node.Locals);
+            BoundExpression left = (BoundExpression)this.Visit(node.Left);
+            BoundExpression stage = (BoundExpression)this.Visit(node.Stage);
+            TypeSymbol? naturalTypeOpt = this.VisitType(node.NaturalTypeOpt);
+            TypeSymbol? type = this.VisitType(node.Type);
+            return node.Update(node.IsBareStage, naturalTypeOpt, node.WasTargetTyped, local, left, locals, stage, type);
         }
         public override BoundNode? VisitDecisionDag(BoundDecisionDag node)
         {
@@ -14448,8 +14517,29 @@ namespace Microsoft.CodeAnalysis.CSharp
             return updatedNode;
         }
 
+        public override BoundNode? VisitUnconvertedSharperPipe(BoundUnconvertedSharperPipe node)
+        {
+            LocalSymbol local = GetUpdatedSymbol(node, node.Local);
+            ImmutableArray<LocalSymbol> locals = GetUpdatedArray(node, node.Locals);
+            BoundExpression left = (BoundExpression)this.Visit(node.Left);
+            BoundExpression stage = (BoundExpression)this.Visit(node.Stage);
+            BoundUnconvertedSharperPipe updatedNode;
+
+            if (_updatedNullabilities.TryGetValue(node, out (NullabilityInfo Info, TypeSymbol? Type) infoAndType))
+            {
+                updatedNode = node.Update(local, left, locals, stage, infoAndType.Type);
+                updatedNode.TopLevelNullability = infoAndType.Info;
+            }
+            else
+            {
+                updatedNode = node.Update(local, left, locals, stage, node.Type);
+            }
+            return updatedNode;
+        }
+
         public override BoundNode? VisitSharperPipe(BoundSharperPipe node)
         {
+            TypeSymbol? naturalTypeOpt = GetUpdatedSymbol(node, node.NaturalTypeOpt);
             LocalSymbol local = GetUpdatedSymbol(node, node.Local);
             ImmutableArray<LocalSymbol> locals = GetUpdatedArray(node, node.Locals);
             BoundExpression left = (BoundExpression)this.Visit(node.Left);
@@ -14458,12 +14548,12 @@ namespace Microsoft.CodeAnalysis.CSharp
 
             if (_updatedNullabilities.TryGetValue(node, out (NullabilityInfo Info, TypeSymbol? Type) infoAndType))
             {
-                updatedNode = node.Update(local, left, locals, stage, node.IsBareStage, infoAndType.Type);
+                updatedNode = node.Update(node.IsBareStage, naturalTypeOpt, node.WasTargetTyped, local, left, locals, stage, infoAndType.Type);
                 updatedNode.TopLevelNullability = infoAndType.Info;
             }
             else
             {
-                updatedNode = node.Update(local, left, locals, stage, node.IsBareStage, node.Type);
+                updatedNode = node.Update(node.IsBareStage, naturalTypeOpt, node.WasTargetTyped, local, left, locals, stage, node.Type);
             }
             return updatedNode;
         }
@@ -16965,13 +17055,26 @@ namespace Microsoft.CodeAnalysis.CSharp
             new TreeDumperNode("hasErrors", node.HasErrors, null)
         }
         );
-        public override TreeDumperNode VisitSharperPipe(BoundSharperPipe node, object? arg) => new TreeDumperNode("sharperPipe", null, new TreeDumperNode[]
+        public override TreeDumperNode VisitUnconvertedSharperPipe(BoundUnconvertedSharperPipe node, object? arg) => new TreeDumperNode("unconvertedSharperPipe", null, new TreeDumperNode[]
         {
             new TreeDumperNode("local", node.Local, null),
             new TreeDumperNode("left", null, new TreeDumperNode[] { Visit(node.Left, null) }),
             new TreeDumperNode("locals", node.Locals, null),
             new TreeDumperNode("stage", null, new TreeDumperNode[] { Visit(node.Stage, null) }),
+            new TreeDumperNode("type", node.Type, null),
+            new TreeDumperNode("isSuppressed", node.IsSuppressed, null),
+            new TreeDumperNode("hasErrors", node.HasErrors, null)
+        }
+        );
+        public override TreeDumperNode VisitSharperPipe(BoundSharperPipe node, object? arg) => new TreeDumperNode("sharperPipe", null, new TreeDumperNode[]
+        {
             new TreeDumperNode("isBareStage", node.IsBareStage, null),
+            new TreeDumperNode("naturalTypeOpt", node.NaturalTypeOpt, null),
+            new TreeDumperNode("wasTargetTyped", node.WasTargetTyped, null),
+            new TreeDumperNode("local", node.Local, null),
+            new TreeDumperNode("left", null, new TreeDumperNode[] { Visit(node.Left, null) }),
+            new TreeDumperNode("locals", node.Locals, null),
+            new TreeDumperNode("stage", null, new TreeDumperNode[] { Visit(node.Stage, null) }),
             new TreeDumperNode("type", node.Type, null),
             new TreeDumperNode("isSuppressed", node.IsSuppressed, null),
             new TreeDumperNode("hasErrors", node.HasErrors, null)
@@ -18076,6 +18179,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 BoundKind.UnconvertedSwitchExpression => PipelinePhase.InitialBinding,
                 BoundKind.UnconvertedTryExpression => PipelinePhase.InitialBinding,
                 BoundKind.ConvertedTryExpression => PipelinePhase.LocalRewriting,
+                BoundKind.UnconvertedSharperPipe => PipelinePhase.InitialBinding,
                 BoundKind.SharperPipe => PipelinePhase.LocalRewriting,
                 BoundKind.SpillSequence => PipelinePhase.Spilling,
                 BoundKind.UnconvertedObjectCreationExpression => PipelinePhase.InitialBinding,

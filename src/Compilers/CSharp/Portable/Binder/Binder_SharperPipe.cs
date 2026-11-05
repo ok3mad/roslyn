@@ -5,6 +5,7 @@
 #nullable enable
 
 using System.Collections.Immutable;
+using System.Diagnostics;
 using Microsoft.CodeAnalysis.CSharp.Symbols;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
@@ -43,26 +44,64 @@ namespace Microsoft.CodeAnalysis.CSharp
             var stageScopeBinder = new SharperPipeStageBinder(this, node.Stage, firstIt is null ? null : local);
             Binder stageBinder = stageScopeBinder.GetBinder(node.Stage)!;
 
-            BoundExpression stage = firstIt is null
-                ? stageBinder.BindSharperPipeBareStage(node, local, diagnostics)
-                : stageBinder.BindSharperPipeItStage(node, local, firstIt, diagnostics);
+            if (firstIt is null)
+            {
+                BoundExpression call = stageBinder.BindSharperPipeBareStage(node, local, diagnostics);
+                return new BoundSharperPipe(
+                    node, isBareStage: true, naturalTypeOpt: call.Type, wasTargetTyped: false, local, left, stageBinder.GetDeclaredLocalsForScope(node.Stage), call, call.Type, hasErrors);
+            }
 
-            ImmutableArray<LocalSymbol> locals = stageBinder.GetDeclaredLocalsForScope(node.Stage);
-            return new BoundSharperPipe(node, local, left, locals, stage, isBareStage: firstIt is null, stage.Type, hasErrors);
+            // A stage with 'it' is target-typed, as a switch expression's arms are (#187): the pipe stays unconverted, with
+            // the stage's natural type if it has one, until its target type is known (ConvertSharperPipe).
+            BoundExpression stage = stageBinder.BindValue(node.Stage, diagnostics, BindValueKind.RValue);
+            return new BoundUnconvertedSharperPipe(node, local, left, stageBinder.GetDeclaredLocalsForScope(node.Stage), stage, stage.Type, hasErrors);
         }
 
-        private BoundExpression BindSharperPipeItStage(PipeExpressionSyntax node, LocalSymbol local, IdentifierNameSyntax firstIt, BindingDiagnosticBag diagnostics)
+        /// <summary>
+        /// Converts the stage of a pipe that uses <c>it</c>: with <paramref name="conversionIfTargetTyped"/>, to
+        /// <paramref name="destination"/> (the pipe conversion, #187); with no <paramref name="destination"/>, to its natural
+        /// type, reporting why it has none; otherwise to the error type <paramref name="destination"/>, after a conversion
+        /// error was reported.
+        /// </summary>
+        private BoundExpression ConvertSharperPipe(BoundUnconvertedSharperPipe source, TypeSymbol? destination, Conversion? conversionIfTargetTyped, BindingDiagnosticBag diagnostics, bool hasErrors = false)
         {
-            // PROTOTYPE(sharper): the stage is not target-typed, so 'x |> it > 0 ? 1 : null' has no type, as a 'var'
-            // initializer has none (#157).
-            BoundExpression stage = BindValue(node.Stage, diagnostics, BindValueKind.RValue);
-            stage = BindToNaturalType(stage, diagnostics);
+            BoundExpression stage = source.Stage;
+            if (conversionIfTargetTyped is { } conversion)
+            {
+                Debug.Assert(destination is not null);
+                stage = CreateConversion(stage.Syntax, stage, conversion.UnderlyingConversions[0], isCast: false, conversionGroupOpt: null, InConversionGroupFlags.Unspecified, destination, diagnostics);
+                conversion.MarkUnderlyingConversionsChecked();
+            }
+            else if (destination is null)
+            {
+                // 'var r = x |> (it > 0 ? 1 : null)' reports what a 'var' initializer with the stage would, and a lambda
+                // stage has its function type, as it would there.
+                stage = stage.Kind is BoundKind.UnboundLambda or BoundKind.MethodGroup
+                    ? BindToInferredDelegateType(stage, diagnostics)
+                    : BindToNaturalType(stage, diagnostics);
+            }
+            else
+            {
+                Debug.Assert(destination.IsErrorType());
+                stage = GenerateConversionForAssignment(destination, stage, diagnostics);
+            }
 
+            stage = CheckSharperPipeStageItUses(source.Local, stage, diagnostics);
+            return new BoundSharperPipe(
+                source.Syntax, isBareStage: false, naturalTypeOpt: source.Type, wasTargetTyped: conversionIfTargetTyped is not null,
+                source.Local, source.Left, source.Locals, stage, stage.Type, hasErrors || source.HasErrors).WithSuppression(source.IsSuppressed);
+        }
+
+        /// <summary>
+        /// The <c>it</c> rules of a stage, checked once the stage is converted: its lambdas are bound only then.
+        /// </summary>
+        private static BoundExpression CheckSharperPipeStageItUses(LocalSymbol local, BoundExpression stage, BindingDiagnosticBag diagnostics)
+        {
             var (usesIt, innerLambda) = SharperItUseFinder.Find(stage, local);
             if (!usesIt && innerLambda is not null && !stage.HasAnyErrors)
             {
                 // 'x |> xs.Where(it > 0)': the innermost function argument claims 'it', as anywhere else.
-                Error(diagnostics, ErrorCode.ERR_SharperPipeStageItNotUsed, firstIt, sharperImplicitLambdaCallName(innerLambda));
+                Error(diagnostics, ErrorCode.ERR_SharperPipeStageItNotUsed, local.GetDeclaratorSyntax(), sharperImplicitLambdaCallName(innerLambda));
                 stage = stage.WithHasErrors();
             }
             else if (usesIt && innerLambda is not null)

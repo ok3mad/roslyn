@@ -1619,12 +1619,26 @@
   is an expression that reads Local; a bare stage is an invocation whose argument reads Local. Locals are the variables
   declared in the stage, which is its own scope. Lowered to a spill sequence.
   -->
-  <Node Name="BoundSharperPipe" Base="BoundExpression" DoesNotSurvive="LocalRewriting">
+  <AbstractNode Name="BoundSharperPipeBase" Base="BoundExpression">
     <Field Name="Local" Type="LocalSymbol"/>
     <Field Name="Left" Type="BoundExpression" Null="disallow"/>
     <Field Name="Locals" Type="ImmutableArray&lt;LocalSymbol&gt;"/>
     <Field Name="Stage" Type="BoundExpression" Null="disallow"/>
+  </AbstractNode>
+
+  <!--
+  A pipe whose stage uses 'it' and is not converted yet (#187): the stage is target-typed, as a switch expression's arms
+  are. The Type is the stage's natural type, if any.
+  -->
+  <Node Name="BoundUnconvertedSharperPipe" Base="BoundSharperPipeBase" DoesNotSurvive="InitialBinding">
+  </Node>
+
+  <Node Name="BoundSharperPipe" Base="BoundSharperPipeBase" DoesNotSurvive="LocalRewriting">
     <Field Name="IsBareStage" Type="bool"/>
+    <!-- The stage's natural type, kept for the semantic model. Can be `null`. -->
+    <Field Name="NaturalTypeOpt" Type="TypeSymbol?" Null="allow"/>
+    <!-- The stage was converted to the pipe's target type (ConversionKind.SharperPipe). -->
+    <Field Name="WasTargetTyped" Type="bool"/>
   </Node>
 
   <Node Name="BoundDecisionDag" Base="BoundNode">

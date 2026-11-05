@@ -213,6 +213,22 @@ namespace Microsoft.CodeAnalysis.CSharp
                         hasErrors);
                 }
 
+                if (conversion.Kind == ConversionKind.SharperPipe)
+                {
+                    var convertedPipe = ConvertSharperPipe((BoundUnconvertedSharperPipe)source, destination, conversionIfTargetTyped: conversion, diagnostics);
+                    return new BoundConversion(
+                        syntax,
+                        convertedPipe,
+                        conversion,
+                        CheckOverflowAtRuntime,
+                        explicitCastInCode: isCast && !wasCompilerGenerated,
+                        conversionGroupOpt,
+                        inConversionGroupFlags,
+                        constantValueOpt: null,
+                        destination,
+                        hasErrors);
+                }
+
                 if (conversion.Kind == ConversionKind.SharperTryExpression)
                 {
                     var convertedTry = ConvertSharperTryExpression((BoundUnconvertedTryExpression)source, destination, conversionIfTargetTyped: conversion, diagnostics);
@@ -278,6 +294,23 @@ namespace Microsoft.CodeAnalysis.CSharp
 
                     source = ConvertSwitchExpression((BoundUnconvertedSwitchExpression)source, type, conversionIfTargetTyped: null, diagnostics, hasErrors);
                     if (destination.Equals(type, TypeCompareKind.ConsiderEverything) && wasCompilerGenerated)
+                    {
+                        return source;
+                    }
+                }
+
+                if (source.Kind == BoundKind.UnconvertedSharperPipe)
+                {
+                    // The stage's natural type; with none, the conversion error was reported for the stage.
+                    TypeSymbol? type = source.Type;
+                    if (type is null)
+                    {
+                        Debug.Assert(!conversion.Exists);
+                        hasErrors = true;
+                    }
+
+                    source = ConvertSharperPipe((BoundUnconvertedSharperPipe)source, type is null ? CreateErrorType() : null, conversionIfTargetTyped: null, diagnostics, hasErrors);
+                    if (type is not null && destination.Equals(type, TypeCompareKind.ConsiderEverything) && wasCompilerGenerated)
                     {
                         return source;
                     }
