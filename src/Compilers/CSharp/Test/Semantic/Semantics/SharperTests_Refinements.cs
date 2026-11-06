@@ -564,7 +564,8 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             var parameter = tree.GetRoot().DescendantNodes().OfType<ParameterSyntax>().Single();
             Assert.Equal("System.Int32 i", model.GetDeclaredSymbol(parameter).ToTestDisplayString());
             var max = tree.GetRoot().DescendantNodes().OfType<IdentifierNameSyntax>().Single(n => n.Identifier.ValueText == "Max");
-            _ = model.GetSymbolInfo(max);
+            // PROTOTYPE(sharper): the semantic model does not bind a refinement's pattern yet.
+            Assert.Null(model.GetSymbolInfo(max).Symbol);
         }
     }
 }

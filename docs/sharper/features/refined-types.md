@@ -62,7 +62,7 @@ The value set of a refinement is computed once per parameter symbol (`SharperRef
   reported yet; it needs the interface map.
 - A default value from `[DefaultParameterValue]` is not checked.
 - Recursive `infer` returns (an error in the design) wait for return refinements, step 3.
-- The semantic model has no binding for the constants of a refinement.
+- The semantic model does not bind a refinement's pattern yet: `GetSymbolInfo` on a constant in it finds nothing.
 
 ## Tests
 

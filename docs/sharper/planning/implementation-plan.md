@@ -1291,7 +1291,10 @@ rules and return inference.
   implementations, delegates, extension block receivers and positional record parameters (the records exclusion) are
   CS20061 too.
   Left for step 3: the error on recursive `infer` returns, which only matters once returns have refinements. Open
-  points, as `PROTOTYPE(sharper)` comments: implicit interface implementations, `[DefaultParameterValue]` defaults.
+  points, as `PROTOTYPE(sharper)` comments: implicit interface implementations, `[DefaultParameterValue]` defaults, the
+  semantic model inside a refinement.
+  Tests: 14 `Refinement_*` tests (`SharperTests_Refinements.cs`). The Syntax project with `ROSLYN_TEST_SHARPER=1` has
+  the same 37 expected failures as the last run below, and none new.
 - [ ] Step 3, return refinements.
 - [ ] Step 4, call sites and switches.
 - [ ] Step 5, guard and metadata.
