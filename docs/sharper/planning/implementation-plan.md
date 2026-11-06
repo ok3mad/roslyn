@@ -1141,7 +1141,10 @@ Diagnostics: no new code; CS20057 takes the new fragment. Tests: 6 `InferFromCon
 example, a conversion before the declaration, a cast, a generic call, a custom delegate, a function type, a written
 parameter, `ref`, local functions in a lambda, in a local function and in an accessor), top-level statements, the
 semantic model, conversions that disagree, what pins nothing, precedence and P4 together, and nullability. No earlier
-expectation changed. RESULTS
+expectation changed. All 467 Sharper test cases pass, also with `ROSLYN_TEST_IOPERATION=1`. Regression run (net10.0,
+Debug): Semantic 20,289 passed, Symbol 13,923 and Emit 7,312, none failed; the Semantic test project builds with
+`-warnaserror`; the analyzer build reports no error (its warnings are the three RS0062 in P2's
+`SharperInferredParameterType_OverriddenMember.cs`, as on `main`).
 
 Follow-ups:
 
