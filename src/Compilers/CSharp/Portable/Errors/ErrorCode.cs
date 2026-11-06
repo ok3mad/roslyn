@@ -2572,6 +2572,10 @@ namespace Microsoft.CodeAnalysis.CSharp
         ERR_SharperInferEventNoOverriddenMember = SharperErrorCodes.Base + 55,
         ERR_SharperInferParameterBodyCycle = SharperErrorCodes.Base + 56,
         ERR_SharperInferParameterUsesDisagree = SharperErrorCodes.Base + 57,
+        ERR_SharperRefinementNotClosed = SharperErrorCodes.Base + 58,
+        ERR_SharperRefinementTypeNotSupported = SharperErrorCodes.Base + 59,
+        ERR_SharperRefinementDefaultValueDisproven = SharperErrorCodes.Base + 60,
+        ERR_SharperRefinementNotSupportedYet = SharperErrorCodes.Base + 61,
 
         // Note: you will need to do the following after adding errors:
         //  1) Update ErrorFacts.IsBuildOnlyDiagnostic (src/Compilers/CSharp/Portable/Errors/ErrorFacts.cs)

@@ -366,6 +366,16 @@ namespace Microsoft.CodeAnalysis.CSharp
         IDS_SharperInferNoApplicableCandidate = MessageBase + 12918,
         IDS_SharperInferReturnOf = MessageBase + 12919,
         IDS_SharperInferReturnOfLambda = MessageBase + 12920,
+        IDS_SharperRefinementOnRefParameter = MessageBase + 12921,
+        IDS_SharperRefinementOnDelegate = MessageBase + 12922,
+        IDS_SharperRefinementOnInterfaceMember = MessageBase + 12923,
+        IDS_SharperRefinementOnVirtualMember = MessageBase + 12924,
+        IDS_SharperRefinementOnExplicitImplementation = MessageBase + 12925,
+        IDS_SharperRefinementOnPartialMember = MessageBase + 12926,
+        IDS_SharperRefinementOnExternMember = MessageBase + 12927,
+        IDS_SharperRefinementOnLambda = MessageBase + 12928,
+        IDS_SharperRefinementOnRecordParameter = MessageBase + 12929,
+        IDS_SharperRefinementOnExtensionReceiver = MessageBase + 12930,
     }
 
     // Message IDs may refer to strings that need to be localized.

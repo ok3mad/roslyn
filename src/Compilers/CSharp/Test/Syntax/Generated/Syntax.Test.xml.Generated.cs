@@ -629,7 +629,10 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             => InternalSyntaxFactory.BracketedParameterList(InternalSyntaxFactory.Token(SyntaxKind.OpenBracketToken), new Microsoft.CodeAnalysis.Syntax.InternalSyntax.SeparatedSyntaxList<Syntax.InternalSyntax.ParameterSyntax>(), InternalSyntaxFactory.Token(SyntaxKind.CloseBracketToken));
 
         private static Syntax.InternalSyntax.ParameterSyntax GenerateParameter()
-            => InternalSyntaxFactory.Parameter(new Microsoft.CodeAnalysis.Syntax.InternalSyntax.SyntaxList<Syntax.InternalSyntax.AttributeListSyntax>(), new Microsoft.CodeAnalysis.Syntax.InternalSyntax.SyntaxList<Syntax.InternalSyntax.SyntaxToken>(), GenerateIdentifierName(), null, null);
+            => InternalSyntaxFactory.Parameter(new Microsoft.CodeAnalysis.Syntax.InternalSyntax.SyntaxList<Syntax.InternalSyntax.AttributeListSyntax>(), new Microsoft.CodeAnalysis.Syntax.InternalSyntax.SyntaxList<Syntax.InternalSyntax.SyntaxToken>(), GenerateIdentifierName(), null, null, null);
+
+        private static Syntax.InternalSyntax.RefinementClauseSyntax GenerateRefinementClause()
+            => InternalSyntaxFactory.RefinementClause(InternalSyntaxFactory.Token(SyntaxKind.IsKeyword), GenerateDiscardPattern());
 
         private static Syntax.InternalSyntax.FunctionPointerParameterSyntax GenerateFunctionPointerParameter()
             => InternalSyntaxFactory.FunctionPointerParameter(new Microsoft.CodeAnalysis.Syntax.InternalSyntax.SyntaxList<Syntax.InternalSyntax.AttributeListSyntax>(), new Microsoft.CodeAnalysis.Syntax.InternalSyntax.SyntaxList<Syntax.InternalSyntax.SyntaxToken>(), GenerateIdentifierName());
@@ -3432,7 +3435,19 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             Assert.Equal(default, node.Modifiers);
             Assert.NotNull(node.Type);
             Assert.Null(node.Identifier);
+            Assert.Null(node.Refinement);
             Assert.Null(node.Default);
+
+            AttachAndCheckDiagnostics(node);
+        }
+
+        [Fact]
+        public void TestRefinementClauseFactoryAndProperties()
+        {
+            var node = GenerateRefinementClause();
+
+            Assert.Equal(SyntaxKind.IsKeyword, node.IsKeyword.Kind);
+            Assert.NotNull(node.Pattern);
 
             AttachAndCheckDiagnostics(node);
         }
@@ -9451,6 +9466,32 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         }
 
         [Fact]
+        public void TestRefinementClauseTokenDeleteRewriter()
+        {
+            var oldNode = GenerateRefinementClause();
+            var rewriter = new TokenDeleteRewriter();
+            var newNode = rewriter.Visit(oldNode);
+
+            if(!oldNode.IsMissing)
+            {
+                Assert.NotEqual(oldNode, newNode);
+            }
+
+            Assert.NotNull(newNode);
+            Assert.True(newNode.IsMissing, "No tokens => missing");
+        }
+
+        [Fact]
+        public void TestRefinementClauseIdentityRewriter()
+        {
+            var oldNode = GenerateRefinementClause();
+            var rewriter = new IdentityRewriter();
+            var newNode = rewriter.Visit(oldNode);
+
+            Assert.Same(oldNode, newNode);
+        }
+
+        [Fact]
         public void TestFunctionPointerParameterTokenDeleteRewriter()
         {
             var oldNode = GenerateFunctionPointerParameter();
@@ -11322,7 +11363,10 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             => SyntaxFactory.BracketedParameterList(SyntaxFactory.Token(SyntaxKind.OpenBracketToken), new SeparatedSyntaxList<ParameterSyntax>(), SyntaxFactory.Token(SyntaxKind.CloseBracketToken));
 
         private static ParameterSyntax GenerateParameter()
-            => SyntaxFactory.Parameter(new SyntaxList<AttributeListSyntax>(), new SyntaxTokenList(), GenerateIdentifierName(), default(SyntaxToken), default(EqualsValueClauseSyntax));
+            => SyntaxFactory.Parameter(new SyntaxList<AttributeListSyntax>(), new SyntaxTokenList(), GenerateIdentifierName(), default(SyntaxToken), default(RefinementClauseSyntax), default(EqualsValueClauseSyntax));
+
+        private static RefinementClauseSyntax GenerateRefinementClause()
+            => SyntaxFactory.RefinementClause(SyntaxFactory.Token(SyntaxKind.IsKeyword), GenerateDiscardPattern());
 
         private static FunctionPointerParameterSyntax GenerateFunctionPointerParameter()
             => SyntaxFactory.FunctionPointerParameter(new SyntaxList<AttributeListSyntax>(), new SyntaxTokenList(), GenerateIdentifierName());
@@ -14125,8 +14169,20 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             Assert.Equal(default, node.Modifiers);
             Assert.NotNull(node.Type);
             Assert.Equal(SyntaxKind.None, node.Identifier.Kind());
+            Assert.Null(node.Refinement);
             Assert.Null(node.Default);
-            var newNode = node.WithAttributeLists(node.AttributeLists).WithModifiers(node.Modifiers).WithType(node.Type).WithIdentifier(node.Identifier).WithDefault(node.Default);
+            var newNode = node.WithAttributeLists(node.AttributeLists).WithModifiers(node.Modifiers).WithType(node.Type).WithIdentifier(node.Identifier).WithRefinement(node.Refinement).WithDefault(node.Default);
+            Assert.Equal(node, newNode);
+        }
+
+        [Fact]
+        public void TestRefinementClauseFactoryAndProperties()
+        {
+            var node = GenerateRefinementClause();
+
+            Assert.Equal(SyntaxKind.IsKeyword, node.IsKeyword.Kind());
+            Assert.NotNull(node.Pattern);
+            var newNode = node.WithIsKeyword(node.IsKeyword).WithPattern(node.Pattern);
             Assert.Equal(node, newNode);
         }
 
@@ -20137,6 +20193,32 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         public void TestParameterIdentityRewriter()
         {
             var oldNode = GenerateParameter();
+            var rewriter = new IdentityRewriter();
+            var newNode = rewriter.Visit(oldNode);
+
+            Assert.Same(oldNode, newNode);
+        }
+
+        [Fact]
+        public void TestRefinementClauseTokenDeleteRewriter()
+        {
+            var oldNode = GenerateRefinementClause();
+            var rewriter = new TokenDeleteRewriter();
+            var newNode = rewriter.Visit(oldNode);
+
+            if(!oldNode.IsMissing)
+            {
+                Assert.NotEqual(oldNode, newNode);
+            }
+
+            Assert.NotNull(newNode);
+            Assert.True(newNode.IsMissing, "No tokens => missing");
+        }
+
+        [Fact]
+        public void TestRefinementClauseIdentityRewriter()
+        {
+            var oldNode = GenerateRefinementClause();
             var rewriter = new IdentityRewriter();
             var newNode = rewriter.Visit(oldNode);
 
