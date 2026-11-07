@@ -74,7 +74,11 @@ internal sealed class SharperWriteInferredTypeCodeFixProvider() : CodeFixProvide
         foreach (var location in diagnostic.AdditionalLocations)
         {
             if (location.IsInSource && location.SourceTree == root.SyntaxTree)
-                AddTypesFromUse(root.FindNode(location.SourceSpan, getInnermostNodeForTie: true), semanticModel, types, cancellationToken);
+            {
+                var use = root.FindNode(location.SourceSpan, getInnermostNodeForTie: true);
+                if (!TryAddTypeFromConversion(use, semanticModel, inferType, types, cancellationToken))
+                    AddTypesFromUse(use, semanticModel, types, cancellationToken);
+            }
         }
 
         var result = types
@@ -83,6 +87,37 @@ internal sealed class SharperWriteInferredTypeCodeFixProvider() : CodeFixProvide
             .ToImmutableArray();
 
         return result.IsEmpty ? [semanticModel.Compilation.GetSpecialType(SpecialType.System_Object)] : result;
+    }
+
+    /// <summary>
+    /// A use of CS20057 that converts the local function declaring <paramref name="inferType"/> to a delegate type (step
+    /// P7): the delegate's parameter type at the parameter's position, when the conversion has a delegate type. Returns
+    /// false for any other use.
+    /// </summary>
+    private static bool TryAddTypeFromConversion(
+        SyntaxNode use, SemanticModel semanticModel, TypeSyntax inferType, ArrayBuilder<ITypeSymbol> types, CancellationToken cancellationToken)
+    {
+        if (inferType.Parent is not ParameterSyntax { Parent: ParameterListSyntax { Parent: LocalFunctionStatementSyntax localFunction } parameterList } parameter ||
+            use is not ExpressionSyntax expression ||
+            semanticModel.GetDeclaredSymbol(localFunction, cancellationToken) is not { } declared)
+        {
+            return false;
+        }
+
+        var symbolInfo = semanticModel.GetSymbolInfo(expression, cancellationToken);
+        IEnumerable<ISymbol> methods = symbolInfo.Symbol is { } symbol ? [symbol] : symbolInfo.CandidateSymbols;
+        if (!methods.Any(s => s.OriginalDefinition.Equals(declared)))
+            return false;
+
+        var ordinal = parameterList.Parameters.IndexOf(parameter);
+        if (semanticModel.GetTypeInfo(expression, cancellationToken).ConvertedType is INamedTypeSymbol { DelegateInvokeMethod.Parameters: var delegateParameters } &&
+            ordinal < delegateParameters.Length &&
+            !delegateParameters[ordinal].Type.IsErrorType())
+        {
+            types.Add(delegateParameters[ordinal].Type);
+        }
+
+        return true;
     }
 
     /// <summary>
