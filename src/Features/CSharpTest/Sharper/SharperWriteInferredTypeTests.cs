@@ -516,6 +516,21 @@ public sealed class SharperWriteInferredTypeCodeFixTests(ITestOutputHelper logge
             """, s_sharper.WithIndex(1));
 
     [Fact]
+    public Task CS20057_ConversionsDisagree_OffersEachParameterType()
+        => TestExactActionSetOfferedAsync("""
+            using System;
+            class C
+            {
+                void M()
+                {
+                    Func<int, string> f = F;
+                    Func<long, string> g = F;
+                    string F([|infer|] x) => "";
+                }
+            }
+            """, [SharperTestOptions.Title("int"), SharperTestOptions.Title("long")], s_sharper);
+
+    [Fact]
     public Task CxDocument()
         => TestAsync(SharperTestOptions.InCxDocument("""
             class C
