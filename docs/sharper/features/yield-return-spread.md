@@ -61,8 +61,10 @@ IEnumerable<T> Walk(Node<T> node)
   `[EnumeratorCancellation]` token; the source's enumerator is disposed when the consumer stops early
   (`break` in `await foreach`, `DisposeAsync`).
 - **`dynamic` operands:** `..d` converts `d` to `Index` at runtime, so it is valid C# and stays a range. The compiler
-  warns (CS20002); convert `d` to a sequence type to spread it. Where a range is not valid (for example an iterator of
-  `int`), `..d` spreads and enumerates `d` dynamically. Deciding at runtime instead is [#42](https://github.com/ok3mad/roslyn/issues/42).
+  warns (CS20002); convert `d` to a sequence type to spread it (`yield return ..(IEnumerable)d;`), or write
+  `yield return (..d);` to keep the range without the warning. Where a range is not valid (for example an iterator of
+  `int`), `..d` spreads and enumerates `d` dynamically. This is final: deciding at runtime would change what valid C#
+  does ([#42](https://github.com/ok3mad/roslyn/issues/42)).
 - **Ref struct enumerators:** a spread keeps the source's enumerator across its yields, so sources enumerated by a
   ref struct are rejected (CS20012): spans, `ReadOnlySpan<T>`, inline arrays (enumerated through a span) and
   collections whose `GetEnumerator` returns a ref struct. A ref struct source whose enumerator is a class spreads

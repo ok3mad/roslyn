@@ -82,6 +82,7 @@ internal sealed class KeywordCompletionProvider() : AbstractKeywordCompletionPro
         new HiddenKeywordRecommender(),
         new IfKeywordRecommender(),
         new ImplicitKeywordRecommender(),
+        new InferKeywordRecommender(),
         new InitKeywordRecommender(),
         new InKeywordRecommender(),
         new InterfaceKeywordRecommender(),

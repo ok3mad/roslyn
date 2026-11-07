@@ -42,3 +42,16 @@ public class MyTests
   `LanguageServerTestComposition.GetSharedExportProvider`. A controllable
   `PartNotDiscoverable` project loader can provide deterministic design-time
   build timing and results without invoking MSBuild.
+
+## Where IDE tests run
+
+- `src/EditorFeatures/{CSharpTest,Test,Test2}` (Quick Info, classification and inlay hint suites among them) target
+  `net472` and use WPF, so they build on Windows only. On Linux, use `src/Features/CSharpTest` (`net10.0`; it has
+  `TestWorkspace` and the code action bases), `src/EditorFeatures/CSharpTest2` (keyword recommenders) and
+  `src/LanguageServer/ProtocolUnitTests`, and call the services (`QuickInfoService`, `IInlineTypeHintsService`,
+  `Classifier`) directly.
+- A `TestWorkspace` built from `<Workspace>` XML has Windows line breaks in its documents: take offsets from the
+  document's text, not from the markup.
+- Sharper IDE tests: `Features="sharper"` on `<Project>` turns Sharper on for the project, and
+  `<Document FilePath="Test.cx">` for one document of a plain C# project; test both, and a plain `.cs` document that
+  must not change. Examples: `src/Features/CSharpTest/Sharper/`.

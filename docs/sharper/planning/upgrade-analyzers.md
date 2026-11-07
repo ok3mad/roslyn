@@ -426,7 +426,7 @@ Not upgrades, but the same infrastructure, and cheap next to it:
 | CS20030 (try expression over a task) | Insert `await` after `try`. |
 | CS20011 (`readonly` local without initializer) | Remove `readonly`. |
 | CS20003, CS20010, CS20013 (member runs on a copy) | Change `val`/`readonly` back to `var` or the type, or remove `readonly` from the parameter. |
-| CS20014, CS20024, CS20026, CS20027 (nothing to infer) | Write the type (the type the error message lists, or the best guess). |
+| CS20014, CS20024, CS20026, CS20027 (nothing to infer) | Write the type (the type the error message lists, or the best guess). Built for CS20027 and CS20057 in step R5, without the upgrade infrastructure ([IDE](../features/inferred-return-type.md#ide-step-r5)); the others are [#201](https://github.com/ok3mad/roslyn/issues/201). |
 | CS20019 (`it` with no lambda) | Turn the enclosing argument into `x => ...` where one call is close. |
 | CS20004, CS20005 (`val` refers to a type) | Escape it as `@val`. |
 

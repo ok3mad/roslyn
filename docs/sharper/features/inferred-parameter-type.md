@@ -61,7 +61,8 @@ members is [#207](https://github.com/ok3mad/roslyn/issues/207).
   CS20027, which says why nothing pinned it. It never becomes a generic type parameter
   (decided in [#79](https://github.com/ok3mad/roslyn/issues/79)): write the type, or make the method generic in
   source (`(TA, TB) Pair<TA, TB>(TA a, TB b)`). Once uses in the body are a source (P4), CS20027 says why nothing
-  pinned the parameter, and the IDE (R5) offers both fixes.
+  pinned the parameter, and the IDE (R5) offers to write the type: the types the error lists, or `object`
+  ([IDE](inferred-return-type.md#ide-step-r5)). Making the method generic is not offered yet.
 - **Nullable.** In a `#nullable enable` context, a default value that is a null constant gives an annotated type
   (`infer s = default(string)` is `string?`), and any other default value a type that is not annotated (`infer s = "a"`
   is `string`, so `M(null)` warns). Where nullable annotations are disabled at `infer`, the type is oblivious, as a
@@ -486,7 +487,9 @@ No syntax, bound node or lowering is added: `infer` parses as a type name, and t
   for another delegate type count when they are at the same method group as the final binding. After CS20057, C#
   reports its own errors for the conversions to the error type (CS0123, CS1503). The body is bound once more per local
   function with such a parameter, once per compilation.
-- The IDE does not know `infer` yet (R5, [#71](https://github.com/ok3mad/roslyn/issues/71)).
+- The IDE (R5, [#71](https://github.com/ok3mad/roslyn/issues/71)) shows, writes and fixes `infer` parameter types as it
+  does return types; see [IDE](inferred-return-type.md#ide-step-r5) on the return type page, which also has its
+  follow-ups.
 
 ## Code
 
