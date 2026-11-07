@@ -1144,7 +1144,11 @@ semantic model, conversions that disagree, what pins nothing, precedence and P4 
 expectation changed. All 467 Sharper test cases pass, also with `ROSLYN_TEST_IOPERATION=1`. Regression run (net10.0,
 Debug): Semantic 20,289 passed, Symbol 13,923 and Emit 7,312, none failed; the Semantic test project builds with
 `-warnaserror`; the analyzer build reports no error (its warnings are the three RS0062 in P2's
-`SharperInferredParameterType_OverriddenMember.cs`, as on `main`).
+`SharperInferredParameterType_OverriddenMember.cs`, as on `main`). After merging `main` (R5's IDE), the Sharper tests
+pass again, also with `ROSLYN_TEST_IOPERATION=1`, and both analyzer builds (compiler, C# Features) report no error. R5's
+fix for CS20057 offers, at a conversion, the delegate's parameter type instead of the candidates of the call around it
+(`SharperWriteInferredTypeCodeFixProvider.TryAddTypeFromConversion`, test
+`CS20057_ConversionsDisagree_OffersEachParameterType`); the 76 Sharper tests of the C# Features project pass.
 
 Follow-ups:
 
