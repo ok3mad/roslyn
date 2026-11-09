@@ -3697,6 +3697,11 @@
         <target state="new">the candidates of a call to '{0}' take different types there: {1}</target>
         <note />
       </trans-unit>
+      <trans-unit id="IDS_SharperInferConversionTo">
+        <source>the conversion to {0}</source>
+        <target state="new">the conversion to {0}</target>
+        <note />
+      </trans-unit>
       <trans-unit id="IDS_SharperInferInterpolationPinsNothing">
         <source>an interpolation pins nothing</source>
         <target state="new">an interpolation pins nothing</target>

@@ -74,8 +74,10 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             // Step P2: the types copied from the member that a method, property, indexer or operator overrides or implements.
             GetOverriddenSignature(owner);
 
-            // PROTOTYPE(sharper): step P7 (#78), a function type the member is converted to, goes here: after P2 and P1,
-            // before the body.
+            // Step P7 infers a local function's parameters from the delegate types it is converted to
+            // (GetResultFromConversions); local functions hold no signature lock and infer on demand.
+            // PROTOTYPE(sharper): P7 for private members (#207), the delegate types a member is converted to, goes here:
+            // after P2 and P1, before the body.
 
             // Steps P4 to P6: the types that the uses in the body give the parameters that have none of the sources above.
             GetBodyInference(owner);
@@ -103,11 +105,12 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             {
                 // A parameter of a method that overrides or implements a member takes its type from there instead
                 // (GetOverriddenSignature, in ParameterHelpers.MakeParameter). Otherwise the uses in the body may give it
-                // (steps P4 to P6; a function type, P7, will come before them), or the parameter has no source.
-                if (GetResultFromBody(owner, parameter) is { } fromBody)
+                // (steps P4 to P6), the delegate types a local function is converted to (step P7), or the parameter has no
+                // source. A local function has no body source, and a member no conversion source yet.
+                if ((GetResultFromConversions(owner, parameter) ?? GetResultFromBody(owner, parameter)) is { } inferred)
                 {
-                    diagnostics.AddRange(fromBody.Diagnostics, allowMismatchInDependencyAccumulation: true);
-                    return fromBody.Type;
+                    diagnostics.AddRange(inferred.Diagnostics, allowMismatchInDependencyAccumulation: true);
+                    return inferred.Type;
                 }
 
                 diagnostics.Add(ErrorCode.ERR_SharperInferParameterNoDefault, parameter.Type.Location, parameter.Identifier.ValueText, MessageID.IDS_SharperInferNothingElseGivesType.Localize());
