@@ -477,6 +477,9 @@
   <data name="IDS_SharperInferReturnOfLambda" xml:space="preserve">
     <value>the return of a lambda expression</value>
   </data>
+  <data name="IDS_SharperInferConversionTo" xml:space="preserve">
+    <value>the conversion to {0}</value>
+  </data>
   <data name="IDS_SharperInferNoMemberWithParameterCount" xml:space="preserve">
     <value>it could override or implement no member '{0}' with the same number of parameters</value>
   </data>

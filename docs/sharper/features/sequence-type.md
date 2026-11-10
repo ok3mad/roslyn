@@ -55,8 +55,10 @@ IEnumerable<int> Evens(IEnumerable<int> xs) => xs.Where(x => x % 2 == 0);
 ## Limitations
 
 - **Array creation keeps its C# meaning.** `new int[..]` is CS0029, and `new int[3][..]` CS0178. Write
-  `new IEnumerable<int>[3]` for an array of sequences. Whether to change that is
-  [#64](https://github.com/ok3mad/roslyn/issues/64).
+  `new IEnumerable<int>[3]` for an array of sequences, or a collection expression such as
+  `int[..][] a = [xs, ys];`. Decided in [#64](https://github.com/ok3mad/roslyn/issues/64): `new int[3][..]` would
+  break the stacking rule (`int[3][..]` reads as `IEnumerable<int[]>`), and `new int[..][3]` puts a size after the
+  first rank, which C# rejects with CS0178. Neither is worth the exception for a rare case.
 - **A cast of a parenthesized expression to a named sequence type** is read as an element access: `(A[..])(b)`
   invokes `A[..]`, as C# does. Write `(A[..])b` or `(IEnumerable<A>)(b)`. The same holds for `int?[..]`.
 - **Accepted break:** `F<a[..]>(x)` is a generic call, as `F<a>(x)` already is in C#. In C# it is two comparisons,
