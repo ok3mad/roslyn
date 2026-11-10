@@ -246,8 +246,9 @@ The design for the later steps, and why, is in the implementation plan:
   function). Skipping local function bodies during inference would remove it, but the nullable analysis of the body
   visits them.
 - Values with no best common type are an error; an inferred union of their types waits for unions
-  ([#31](https://github.com/ok3mad/roslyn/issues/31), parked). The issue's proposed exception, an inferred anonymous
-  union on a member visible outside the assembly as an error, waits with it (`PROTOTYPE(sharper)` in
+  ([#31](https://github.com/ok3mad/roslyn/issues/31), parked). The rule that an inferred anonymous union on a member
+  visible outside the assembly is an error is decided (see the
+  [decisions](../planning/implementation-plan.md#decisions)) and waits with it (`PROTOTYPE(sharper)` in
   `SourceOrdinaryMethodSymbol.InferredReturnType.CheckInferredType`).
 - A conversion operator in a cycle with itself also reports CS0029 where its body converts, since its error type
   converts to nothing.

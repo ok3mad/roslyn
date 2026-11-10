@@ -8,7 +8,8 @@ that is being turned into the Sharper compiler. This folder is the home of Sharp
 
 - Make common C# patterns shorter and stricter, without changing what existing C# code means.
 - Stay a small, mergeable layer on top of Roslyn, so that upstream compiler and IDE improvements keep flowing in.
-- Produce ordinary .NET assemblies. Sharper code needs no new runtime, library or metadata to run.
+- Produce ordinary .NET assemblies. Sharper code needs no new runtime or metadata to run, and a runtime library only
+  for the few types that two assemblies must agree on (see [Runtime library](#runtime-library)).
 
 Sharper is not a fork of the language specification, a replacement for C#, or a supported product.
 
@@ -44,9 +45,31 @@ has the full implementation checklist.
 3. **Reuse the C# syntax.** Features reinterpret existing syntax in the binder where possible, instead of adding
    syntax nodes and public API.
 4. **Lower to C#.** Each feature lowers to constructs the compiler already emits, so debugging, PDBs and the runtime
-   need no changes.
+   need no changes. A feature uses a type of the [runtime library](#runtime-library) only where that section allows
+   it.
 5. **Tested against C#.** Each Sharper test sits next to the plain C# it stands for, so the diagnostics and
    behavior can be compared (`src/Compilers/CSharp/Test/Semantic/Semantics/SharperTests.cs`).
+
+## Runtime library
+
+Sharper will have a small runtime library, for the cases where a sound design cannot do without one. It is decided
+but not built yet, and nothing implemented so far depends on it.
+
+What a feature needs decides where it lives:
+
+| A feature needs | Where it lives |
+| --- | --- |
+| Behavior: a guard, a helper, a comparer, a state machine | Lowered to C#, or synthesized into each assembly |
+| A fact for other assemblies: purity, immutability, a refinement | An embedded attribute that other assemblies match by namespace and name, as [`[Immutable]`](features/immutable-types.md#the-attributes) is |
+| A type that two assemblies must agree on | A BCL type where one fits (`Func`, `Task`, `IEnumerable<T>`), or a type the user declares (a named `union`); otherwise the runtime library |
+
+Only the last row needs a library. A type that the compiler copies into each assembly is a different type in each
+one, so a value of it cannot cross a public boundary and keep its meaning.
+
+The first such type is `Fail<T>`, which tags the failure side of a result: `(Profile | Fail<Unavailable>)`. The
+[decisions](planning/implementation-plan.md#decisions) have the reasons. The library's name, package and target
+frameworks, and what else goes into it, are open (see the
+[follow-ups](planning/implementation-plan.md#follow-ups)).
 
 ## File extension
 

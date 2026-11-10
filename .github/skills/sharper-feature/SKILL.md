@@ -36,6 +36,11 @@ BCL type; `sharper/sequence-type`). See `SharperTests.cs` for all of them.
 4. **Follow-ups are `// PROTOTYPE(sharper): ...` comments.** Plain `TODO` is banned in this repo;
    `eng/todo-check.ps1` blocks merging `PROTOTYPE` comments into `main`, so none are forgotten.
 5. **Test each Sharper line next to its plain C# twin** (the C# it stands for) so diagnostics can be compared.
+6. **A helper lives in the assembly, a shared type in the runtime library.** Lower to constructs the compiler already
+   emits, or synthesize the helper into the assembly, and carry a fact for other assemblies in an embedded attribute
+   matched by name (see the trap on attributes that users write). Only a type that two assemblies must agree on, and
+   that the BCL does not have, may come from the Sharper runtime library (`docs/sharper/README.md`, "Runtime
+   library"). `Fail<T>` is the first; the library is not built yet.
 
 ## Workflow
 
