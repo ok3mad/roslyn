@@ -78,8 +78,13 @@ var name = o switch { () -> void => "action", (int) -> int f => "f" + f(1), _ =>
 - **`ref`, `out` and `in` parameters, and more than 16 parameters,** have no `Func` or `Action` (CS20008, CS20009).
   The lambda's natural type would synthesize an anonymous delegate, but that type is internal to one compilation and
   cannot appear in a public signature. What to do instead is [#56](https://github.com/ok3mad/roslyn/issues/56).
-- **Parameter names** such as `(int width, int height) -> int` are not supported (CS20007), because `Func` cannot
-  carry them ([#57](https://github.com/ok3mad/roslyn/issues/57)).
+- **Parameter names** such as `(int width, int height) -> int` are not supported yet (CS20007), because `Func` cannot
+  carry them. They are planned the way tuples carry their element names, in four steps under
+  [#57](https://github.com/ok3mad/roslyn/issues/57): names in the syntax, ignored by the binder
+  ([#212](https://github.com/ok3mad/roslyn/issues/212)); names on the `Func` or `Action` type symbol within a compilation
+  ([#213](https://github.com/ok3mad/roslyn/issues/213)); signature help, Quick Info and inline hints
+  ([#214](https://github.com/ok3mad/roslyn/issues/214)); and names in metadata through a synthesized attribute
+  ([#215](https://github.com/ok3mad/roslyn/issues/215)). Names will never change conversions or overload resolution.
 - **IDE:** the editor knows nothing about Sharper yet, so completion and formatting may not handle function types.
 
 ## Implementation
