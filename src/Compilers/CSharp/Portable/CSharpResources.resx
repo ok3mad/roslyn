@@ -477,6 +477,9 @@
   <data name="IDS_SharperInferReturnOfLambda" xml:space="preserve">
     <value>the return of a lambda expression</value>
   </data>
+  <data name="IDS_SharperInferConversionTo" xml:space="preserve">
+    <value>the conversion to {0}</value>
+  </data>
   <data name="IDS_SharperInferNoMemberWithParameterCount" xml:space="preserve">
     <value>it could override or implement no member '{0}' with the same number of parameters</value>
   </data>
@@ -8574,6 +8577,48 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
   </data>
   <data name="ERR_SharperInferParameterUsesDisagree" xml:space="preserve">
     <value>Cannot infer the type of parameter '{0}', because its uses need different types: '{1}' for '{2}' and '{3}' for '{4}'. Write the parameter type.</value>
+  </data>
+  <data name="ERR_SharperRefinementNotClosed" xml:space="preserve">
+    <value>A refinement must be a closed pattern over constants, made of constant and relational patterns, 'and', 'or', 'not' and parentheses, such as 'is &gt;=0' or 'is 1 or 2'; '{0}' is not.</value>
+  </data>
+  <data name="ERR_SharperRefinementTypeNotSupported" xml:space="preserve">
+    <value>Cannot refine parameter '{0}' of type '{1}'. A refinement needs a type whose constants can be compared: an integer, floating-point, 'decimal', 'char', 'bool', 'string' or enum type.</value>
+  </data>
+  <data name="ERR_SharperRefinementDefaultValueDisproven" xml:space="preserve">
+    <value>The default value of parameter '{0}' ({1}) does not satisfy its refinement '{2}'.</value>
+  </data>
+  <data name="ERR_SharperRefinementNotSupportedYet" xml:space="preserve">
+    <value>A refinement is not supported {0} yet.</value>
+  </data>
+  <data name="IDS_SharperRefinementOnRefParameter" xml:space="preserve">
+    <value>on a 'ref', 'out' or 'in' parameter</value>
+  </data>
+  <data name="IDS_SharperRefinementOnDelegate" xml:space="preserve">
+    <value>on a delegate parameter</value>
+  </data>
+  <data name="IDS_SharperRefinementOnInterfaceMember" xml:space="preserve">
+    <value>on an interface member</value>
+  </data>
+  <data name="IDS_SharperRefinementOnVirtualMember" xml:space="preserve">
+    <value>on a virtual, abstract or override member</value>
+  </data>
+  <data name="IDS_SharperRefinementOnExplicitImplementation" xml:space="preserve">
+    <value>on an explicit interface implementation</value>
+  </data>
+  <data name="IDS_SharperRefinementOnPartialMember" xml:space="preserve">
+    <value>on a partial member</value>
+  </data>
+  <data name="IDS_SharperRefinementOnExternMember" xml:space="preserve">
+    <value>on an extern member</value>
+  </data>
+  <data name="IDS_SharperRefinementOnLambda" xml:space="preserve">
+    <value>on a lambda or anonymous method parameter</value>
+  </data>
+  <data name="IDS_SharperRefinementOnRecordParameter" xml:space="preserve">
+    <value>on a positional parameter of a record</value>
+  </data>
+  <data name="IDS_SharperRefinementOnExtensionReceiver" xml:space="preserve">
+    <value>on an extension block receiver</value>
   </data>
   <data name="ERR_SharperOpaquePatternNotPure" xml:space="preserve">
     <value>The operand of a pattern that is not a constant must be pure, but it is not: {0}.</value>

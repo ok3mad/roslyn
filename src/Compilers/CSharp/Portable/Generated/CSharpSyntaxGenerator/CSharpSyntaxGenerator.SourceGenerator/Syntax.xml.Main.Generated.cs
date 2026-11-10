@@ -638,6 +638,9 @@ public partial class CSharpSyntaxVisitor<TResult>
     /// <summary>Called when the visitor visits a ParameterSyntax node.</summary>
     public virtual TResult? VisitParameter(ParameterSyntax node) => this.DefaultVisit(node);
 
+    /// <summary>Called when the visitor visits a RefinementClauseSyntax node.</summary>
+    public virtual TResult? VisitRefinementClause(RefinementClauseSyntax node) => this.DefaultVisit(node);
+
     /// <summary>Called when the visitor visits a FunctionPointerParameterSyntax node.</summary>
     public virtual TResult? VisitFunctionPointerParameter(FunctionPointerParameterSyntax node) => this.DefaultVisit(node);
 
@@ -1407,6 +1410,9 @@ public partial class CSharpSyntaxVisitor
     /// <summary>Called when the visitor visits a ParameterSyntax node.</summary>
     public virtual void VisitParameter(ParameterSyntax node) => this.DefaultVisit(node);
 
+    /// <summary>Called when the visitor visits a RefinementClauseSyntax node.</summary>
+    public virtual void VisitRefinementClause(RefinementClauseSyntax node) => this.DefaultVisit(node);
+
     /// <summary>Called when the visitor visits a FunctionPointerParameterSyntax node.</summary>
     public virtual void VisitFunctionPointerParameter(FunctionPointerParameterSyntax node) => this.DefaultVisit(node);
 
@@ -2174,7 +2180,10 @@ public partial class CSharpSyntaxRewriter : CSharpSyntaxVisitor<SyntaxNode?>
         => node.Update(VisitToken(node.OpenBracketToken), VisitList(node.Parameters), VisitToken(node.CloseBracketToken));
 
     public override SyntaxNode? VisitParameter(ParameterSyntax node)
-        => node.Update(VisitList(node.AttributeLists), VisitList(node.Modifiers), (TypeSyntax?)Visit(node.Type), VisitToken(node.Identifier), (EqualsValueClauseSyntax?)Visit(node.Default));
+        => node.Update(VisitList(node.AttributeLists), VisitList(node.Modifiers), (TypeSyntax?)Visit(node.Type), VisitToken(node.Identifier), (RefinementClauseSyntax?)Visit(node.Refinement), (EqualsValueClauseSyntax?)Visit(node.Default));
+
+    public override SyntaxNode? VisitRefinementClause(RefinementClauseSyntax node)
+        => node.Update(VisitToken(node.IsKeyword), (PatternSyntax?)Visit(node.Pattern) ?? throw new ArgumentNullException("pattern"));
 
     public override SyntaxNode? VisitFunctionPointerParameter(FunctionPointerParameterSyntax node)
         => node.Update(VisitList(node.AttributeLists), VisitList(node.Modifiers), (TypeSyntax?)Visit(node.Type) ?? throw new ArgumentNullException("type"));
@@ -5986,7 +5995,7 @@ public static partial class SyntaxFactory
         => SyntaxFactory.BracketedParameterList(SyntaxFactory.Token(SyntaxKind.OpenBracketToken), parameters, SyntaxFactory.Token(SyntaxKind.CloseBracketToken));
 
     /// <summary>Creates a new ParameterSyntax instance.</summary>
-    public static ParameterSyntax Parameter(SyntaxList<AttributeListSyntax> attributeLists, SyntaxTokenList modifiers, TypeSyntax? type, SyntaxToken identifier, EqualsValueClauseSyntax? @default)
+    public static ParameterSyntax Parameter(SyntaxList<AttributeListSyntax> attributeLists, SyntaxTokenList modifiers, TypeSyntax? type, SyntaxToken identifier, RefinementClauseSyntax? refinement, EqualsValueClauseSyntax? @default)
     {
         switch (identifier.Kind())
         {
@@ -5995,8 +6004,20 @@ public static partial class SyntaxFactory
             case SyntaxKind.None: break;
             default: throw new ArgumentException(nameof(identifier));
         }
-        return (ParameterSyntax)Syntax.InternalSyntax.SyntaxFactory.Parameter(attributeLists.Node.ToGreenList<Syntax.InternalSyntax.AttributeListSyntax>(), modifiers.Node.ToGreenList<Syntax.InternalSyntax.SyntaxToken>(), type == null ? null : (Syntax.InternalSyntax.TypeSyntax)type.Green, (Syntax.InternalSyntax.SyntaxToken?)identifier.Node, @default == null ? null : (Syntax.InternalSyntax.EqualsValueClauseSyntax)@default.Green).CreateRed();
+        return (ParameterSyntax)Syntax.InternalSyntax.SyntaxFactory.Parameter(attributeLists.Node.ToGreenList<Syntax.InternalSyntax.AttributeListSyntax>(), modifiers.Node.ToGreenList<Syntax.InternalSyntax.SyntaxToken>(), type == null ? null : (Syntax.InternalSyntax.TypeSyntax)type.Green, (Syntax.InternalSyntax.SyntaxToken?)identifier.Node, refinement == null ? null : (Syntax.InternalSyntax.RefinementClauseSyntax)refinement.Green, @default == null ? null : (Syntax.InternalSyntax.EqualsValueClauseSyntax)@default.Green).CreateRed();
     }
+
+    /// <summary>Creates a new RefinementClauseSyntax instance.</summary>
+    public static RefinementClauseSyntax RefinementClause(SyntaxToken isKeyword, PatternSyntax pattern)
+    {
+        if (isKeyword.Kind() != SyntaxKind.IsKeyword) throw new ArgumentException(nameof(isKeyword));
+        if (pattern == null) throw new ArgumentNullException(nameof(pattern));
+        return (RefinementClauseSyntax)Syntax.InternalSyntax.SyntaxFactory.RefinementClause((Syntax.InternalSyntax.SyntaxToken)isKeyword.Node!, (Syntax.InternalSyntax.PatternSyntax)pattern.Green).CreateRed();
+    }
+
+    /// <summary>Creates a new RefinementClauseSyntax instance.</summary>
+    public static RefinementClauseSyntax RefinementClause(PatternSyntax pattern)
+        => SyntaxFactory.RefinementClause(SyntaxFactory.Token(SyntaxKind.IsKeyword), pattern);
 
     /// <summary>Creates a new FunctionPointerParameterSyntax instance.</summary>
     public static FunctionPointerParameterSyntax FunctionPointerParameter(SyntaxList<AttributeListSyntax> attributeLists, SyntaxTokenList modifiers, TypeSyntax type)

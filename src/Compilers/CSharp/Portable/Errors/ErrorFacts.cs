@@ -2667,6 +2667,10 @@ namespace Microsoft.CodeAnalysis.CSharp
                 or ErrorCode.ERR_SharperInferEventNoOverriddenMember
                 or ErrorCode.ERR_SharperInferParameterBodyCycle
                 or ErrorCode.ERR_SharperInferParameterUsesDisagree
+                or ErrorCode.ERR_SharperRefinementNotClosed
+                or ErrorCode.ERR_SharperRefinementTypeNotSupported
+                or ErrorCode.ERR_SharperRefinementDefaultValueDisproven
+                or ErrorCode.ERR_SharperRefinementNotSupportedYet
                 or ErrorCode.ERR_SharperOpaquePatternNotPure
                     => false,
             };

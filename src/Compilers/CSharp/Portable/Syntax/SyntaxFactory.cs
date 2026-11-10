@@ -2993,5 +2993,14 @@ namespace Microsoft.CodeAnalysis.CSharp
         /// </remarks>
         public static VarPatternSyntax VarPattern(VariableDesignationSyntax designation)
             => SyntaxFactory.VarPattern(SyntaxFactory.Token(SyntaxKind.VarKeyword), designation);
+
+        /// <summary>Creates a new ParameterSyntax instance.</summary>
+        /// <remarks>
+        /// Sharper: <see cref="ParameterSyntax.Refinement"/> is a new field, so the syntax generator's factory takes one
+        /// more argument. This overload is kept by hand because it is shipped public API; it creates a parameter with no
+        /// refinement, as in upstream Roslyn.
+        /// </remarks>
+        public static ParameterSyntax Parameter(SyntaxList<AttributeListSyntax> attributeLists, SyntaxTokenList modifiers, TypeSyntax? type, SyntaxToken identifier, EqualsValueClauseSyntax? @default)
+            => SyntaxFactory.Parameter(attributeLists, modifiers, type, identifier, refinement: null, @default);
     }
 }

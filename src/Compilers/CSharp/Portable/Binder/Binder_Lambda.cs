@@ -186,6 +186,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                     var isParams = paramsKeyword.Kind() != SyntaxKind.None;
 
                     ParameterHelpers.CheckParameterModifiers(p, diagnostics, isAnonymousMethod ? ParameterContext.AnonymousMethod : ParameterContext.Lambda);
+                    ParameterHelpers.CheckSharperRefinementContext(p, diagnostics, isAnonymousMethod ? ParameterContext.AnonymousMethod : ParameterContext.Lambda);
 
                     if (isParams && IsSharperValParameter(sharperValsOpt, i))
                     {

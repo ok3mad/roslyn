@@ -35,11 +35,11 @@ list patterns, in `is`, switch statements (`case < max:`) and switch expressions
   types keep C#'s error.
 - The operand must be pure, by the rules of a [`[Pure]`](purity.md) body: it may read locals, parameters, fields reached
   through any object, constants and `static readonly` fields of immutable types, and call `[Pure]`, `[AssumePure]` and
-  attested members. Anything else is CS20058, with the reason:
+  attested members. Anything else is CS20062, with the reason:
 
   ```csharp
   bool M(int x) => x is > Next();
-  // error CS20058: The operand of a pattern that is not a constant must be pure, but it is not: 'Next()' calls 'C.Next()', which is not known to be pure.
+  // error CS20062: The operand of a pattern that is not a constant must be pure, but it is not: 'Next()' calls 'C.Next()', which is not known to be pure.
   ```
 
   Reading a mutable instance field is fine: nothing in a pure match can write it while the match runs. A mutable static
@@ -74,12 +74,13 @@ shows an `IRelationalPatternOperation` or `IConstantPatternOperation` whose valu
 
 | Code | Severity | When |
 | --- | --- | --- |
-| CS20058 | Error | The operand of an opaque pattern is not pure, with the first expression that is not and why. |
+| CS20062 | Error | The operand of an opaque pattern is not pure, with the first expression that is not and why. |
 
 ## Not covered
 
 - Union matching: a pattern on a union's value keeps C#'s error.
-- Refinements (Feature 11) will reject opaque patterns, since a declared domain must stay closed.
+- Refinements: a [refined parameter](refined-types.md) `int i is > max` is CS20058, since a declared domain must stay
+  closed over constants; the operand's purity is not checked there.
 - Symbolic reasoning over the same operand, such as `<= max` then `> max` being exhaustive.
 - The predicate form `x is IsEven` and extractors `s is Parse(val n)` (slices 2 and 3,
   [#35](https://github.com/ok3mad/roslyn/issues/35)).

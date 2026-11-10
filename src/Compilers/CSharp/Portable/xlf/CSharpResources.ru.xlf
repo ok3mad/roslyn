@@ -2802,6 +2802,26 @@
         <target state="new">A readonly local must be initialized in its declaration, because it cannot be assigned later.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperRefinementDefaultValueDisproven">
+        <source>The default value of parameter '{0}' ({1}) does not satisfy its refinement '{2}'.</source>
+        <target state="new">The default value of parameter '{0}' ({1}) does not satisfy its refinement '{2}'.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperRefinementNotClosed">
+        <source>A refinement must be a closed pattern over constants, made of constant and relational patterns, 'and', 'or', 'not' and parentheses, such as 'is &gt;=0' or 'is 1 or 2'; '{0}' is not.</source>
+        <target state="new">A refinement must be a closed pattern over constants, made of constant and relational patterns, 'and', 'or', 'not' and parentheses, such as 'is &gt;=0' or 'is 1 or 2'; '{0}' is not.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperRefinementNotSupportedYet">
+        <source>A refinement is not supported {0} yet.</source>
+        <target state="new">A refinement is not supported {0} yet.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperRefinementTypeNotSupported">
+        <source>Cannot refine parameter '{0}' of type '{1}'. A refinement needs a type whose constants can be compared: an integer, floating-point, 'decimal', 'char', 'bool', 'string' or enum type.</source>
+        <target state="new">Cannot refine parameter '{0}' of type '{1}'. A refinement needs a type whose constants can be compared: an integer, floating-point, 'decimal', 'char', 'bool', 'string' or enum type.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperSpreadOfAsyncSequence">
         <source>A spread 'yield return ..' cannot enumerate the asynchronous sequence '{0}', because that would need an 'await' that is not written. Use 'await foreach' with 'yield return' instead.</source>
         <target state="new">A spread 'yield return ..' cannot enumerate the asynchronous sequence '{0}', because that would need an 'await' that is not written. Use 'await foreach' with 'yield return' instead.</target>
@@ -3702,6 +3722,11 @@
         <target state="new">the candidates of a call to '{0}' take different types there: {1}</target>
         <note />
       </trans-unit>
+      <trans-unit id="IDS_SharperInferConversionTo">
+        <source>the conversion to {0}</source>
+        <target state="new">the conversion to {0}</target>
+        <note />
+      </trans-unit>
       <trans-unit id="IDS_SharperInferInterpolationPinsNothing">
         <source>an interpolation pins nothing</source>
         <target state="new">an interpolation pins nothing</target>
@@ -3840,6 +3865,56 @@
       <trans-unit id="IDS_SharperPureReasonWrite">
         <source>'{0}' writes state outside the member</source>
         <target state="new">'{0}' writes state outside the member</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperRefinementOnDelegate">
+        <source>on a delegate parameter</source>
+        <target state="new">on a delegate parameter</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperRefinementOnExplicitImplementation">
+        <source>on an explicit interface implementation</source>
+        <target state="new">on an explicit interface implementation</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperRefinementOnExtensionReceiver">
+        <source>on an extension block receiver</source>
+        <target state="new">on an extension block receiver</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperRefinementOnExternMember">
+        <source>on an extern member</source>
+        <target state="new">on an extern member</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperRefinementOnInterfaceMember">
+        <source>on an interface member</source>
+        <target state="new">on an interface member</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperRefinementOnLambda">
+        <source>on a lambda or anonymous method parameter</source>
+        <target state="new">on a lambda or anonymous method parameter</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperRefinementOnPartialMember">
+        <source>on a partial member</source>
+        <target state="new">on a partial member</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperRefinementOnRecordParameter">
+        <source>on a positional parameter of a record</source>
+        <target state="new">on a positional parameter of a record</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperRefinementOnRefParameter">
+        <source>on a 'ref', 'out' or 'in' parameter</source>
+        <target state="new">on a 'ref', 'out' or 'in' parameter</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="IDS_SharperRefinementOnVirtualMember">
+        <source>on a virtual, abstract or override member</source>
+        <target state="new">on a virtual, abstract or override member</target>
         <note />
       </trans-unit>
       <trans-unit id="IDS_SharperTryExpression">

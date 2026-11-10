@@ -188,7 +188,7 @@ Parameter types (#15):
 | P4 | Source 4, first cut: the parameter passed directly as an argument to a call with exactly one candidate (method, constructor, delegate). Needs binding the body with a placeholder type | L | Prototype ([#75](https://github.com/ok3mad/roslyn/issues/75)). Decided: uses in lambdas and local functions in the body count, read from the final binding only; recursion binds to the placeholder and is no cycle; disagreeing uses are CS20057; CS20027 says why nothing pinned |
 | P5 | Source 4 with overloads: every applicable candidate takes the same type at that position, including generic methods whose type arguments come from other arguments | L | Prototype ([#76](https://github.com/ok3mad/roslyn/issues/76)). Decided: applicable means applicable with the parameter in place, the other arguments bound and converted first; the two forms of `params` are two candidates; a group with one member keeps P4's rule; disagreeing candidates are listed in CS20027 |
 | P6 | Source 4, other pinning uses: assignment to a typed local, field or property, `return x` from a method with a written return type, `ref` and `out` arguments. Several uses must agree, and the error names each one | M | Prototype ([#77](https://github.com/ok3mad/roslyn/issues/77)). Decided: `ref`, `out` and `in` arguments pin the type of a parameter that takes their ref kind; a return pins only a written return type (a lambda's delegate type can come from error recovery); higher sources still win, and a use that disagrees with one reports the C# error of the twin, which names both types; CS20057 keeps its shape and names assignment targets and returns |
-| P7 | Source 3: a function type the method is converted to, local functions first, then private methods | L | Conversions that appear after the declaration in the same method |
+| P7 | Source 3: a function type the method is converted to, local functions first, then private methods | L | Prototype for local functions ([#78](https://github.com/ok3mad/roslyn/issues/78)). Decided: every conversion in the declaring body counts, also after the declaration; a conversion inside a generic call counts once the delegate's input types are fixed (`xs.Select(Format)`); conversions that disagree, also the overloads of one call, are CS20057; private members are [#207](https://github.com/ok3mad/roslyn/issues/207) |
 | P8 | Source 5: nothing pins the parameter. Decided an error, not a generic method: CS20027 says why nothing pinned (for example "member access pins nothing") and asks for the type. The rewording is part of P4; the IDE fix that writes a type or makes the method generic is part of R5 | S | Decided ([#79](https://github.com/ok3mad/roslyn/issues/79)): a silent generic would change the arity when a pin appears or disappears, a source and binary break, and arity is fixed before any binding. Generic for local functions only may be reconsidered after P6 |
 
 Suggested order: R1, P1, P2, P3, R2, R3, P4, P5, P6, P7, R4, R5. P8 needs no step of its own: P4 rewords CS20027 and R5 adds the fix. P4 to P6 are the
@@ -1105,6 +1105,59 @@ Follow-ups:
 - A return from a lambda without a written return type, `yield return`, array elements and deconstruction pin nothing.
 - CS20057 names the first two uses that differ, not every use.
 
+## Feature 9: inferred parameter type, step P7
+
+`xs.Select(Format)` gives `infer Format(infer x)` the type `int` from `Func<int, TResult>`, on branch
+`sharper/infer-parameter-p7` ([#78](https://github.com/ok3mad/roslyn/issues/78), feature page
+[inferred-parameter-type.md](../features/inferred-parameter-type.md#from-conversions-to-a-function-type-step-p7)). Source 3
+of the brainstorm, for local functions. No syntax, bound node, public API, lowering or new diagnostic code.
+
+**Probe.** Every method group conversion to a delegate type goes through `OverloadResolution.MethodInvocationOverloadResolution`
+with `Options.IsMethodGroupConversion` and the delegate's parameters as the arguments: the conversion itself
+(`Conversions.MethodGroupConversion`), its diagnostics, and method type inference's output type inference from a method
+group (`MethodTypeInferrer.MethodGroupReturnType`), which runs in the second phase once the delegate's input types are
+fixed. So one hook sees `Func<int, string> f = Format;`, `Run(Format)` and `xs.Select(Format)`. A local function holds no
+signature lock and computes its parameters on demand, while the body that declares it is bound; that body can be bound
+again with a body binder of its own (`TryGetBodyBinder`, a new `CreateBodyBinder` for top-level statements), whose
+local functions are new symbols. A lambda whose body has errors stays unbound in the tree (`BoundUnboundLambda`).
+
+### Decisions
+
+| Question | Decision | Why |
+| --- | --- | --- |
+| Which members | Local functions. Private methods are [#207](https://github.com/ok3mad/roslyn/issues/207) | A local function's conversions are all in one body. A private method's are in every member body of its type, which would have to be bound with a stand-in for the method in every lookup, with the cycles of P4 and R3 across those bodies |
+| Mechanism | Bind the declaring body once more with an error type for the local function's parameters; overload resolution of a method group conversion records the delegate's parameter types for the local function (`RecordMethodGroupConversion`); only method groups that the final bound tree holds count | P4's placeholder binding, applied to the declaring body. Recording in overload resolution sees the delegate types that method type inference fixes, which the bound tree of a failed call does not hold |
+| Conversions after the declaration (open point) | Count: every conversion in the declaring body, before or after the declaration, also in lambdas and other local functions there | A local function is in scope in its whole block, and the body is bound as a whole anyway |
+| Generic calls that also infer from the method group (open point) | Count once the delegate's input types are fixed: `xs.Select(Format)` records `int` from `Func<int, TResult>`, and `TResult` then comes from `Format`'s inferred return type. A delegate whose parameter types involve a type parameter that is not fixed records nothing (`Apply<T>(Func<T, string>)`, CS0411 as in C#) | Method type inference resolves the method group only after fixing its input types, so the hook gets them for free. No error of its own is needed |
+| Fit | The parameter count, the written ref kinds and the written parameter types (identity or implicit reference conversion from the delegate's) must fit; otherwise the conversion records nothing, and C# reports CS0123 | As a lambda: an explicitly typed part must match, and the rest is copied |
+| Several conversions | Must agree, as in P4; CS20057 names two delegate types with a new fragment, "the conversion to System.Func<int, string>" (`IDS_SharperInferConversionTo`). The overloads of one call that take different delegate types are CS20057 too | Extends the existing message. Choosing among overloads would need the type being inferred; an error that asks for it is the small first slice |
+| Nullability | Merged with annotated winning (`Func<string?, int>` and `Func<string, int>` give `string?`) | The delegate passes its arguments to the parameter, the reverse of P4 to P6's uses, so the parameter must accept every one |
+| Precedence | P1 (a default value) first; local functions have no P2 and no body source. A conversion that disagrees with a default value reports the twin's CS0123 | P6's rule: the twin's error names the types |
+| Nothing pins | CS20027 keeps "nothing else gives its type", as before P7: calls to the local function, `var f = F;`, `Delegate d = F;` and conversions that do not fit | Keeps every earlier expectation; inference from callers is dropped |
+| Bodies bound with placeholders | A local function in a body that P4 binds with placeholders for its member's parameters is not inferred there (its result would depend on them, and that binding reports nothing); the other local functions of a body being bound for P7 are placeholders too, unless already inferred | Keeps P4 to P6 results unchanged, and binds the body once per local function instead of once per combination |
+
+Diagnostics: no new code; CS20057 takes the new fragment. Tests: 6 `InferFromConversions_*` tests in
+`SharperTests_InferFromConversions.cs`: every kind of conversion with runtime output next to C# twins (the issue's
+example, a conversion before the declaration, a cast, a generic call, a custom delegate, a function type, a written
+parameter, `ref`, local functions in a lambda, in a local function and in an accessor), top-level statements, the
+semantic model, conversions that disagree, what pins nothing, precedence and P4 together, and nullability. No earlier
+expectation changed. All 467 Sharper test cases pass, also with `ROSLYN_TEST_IOPERATION=1`. Regression run (net10.0,
+Debug): Semantic 20,289 passed, Symbol 13,923 and Emit 7,312, none failed; the Semantic test project builds with
+`-warnaserror`; the analyzer build reports no error (its warnings are the three RS0062 in P2's
+`SharperInferredParameterType_OverriddenMember.cs`, as on `main`). After merging `main` (R5's IDE), the Sharper tests
+pass again, also with `ROSLYN_TEST_IOPERATION=1`, and both analyzer builds (compiler, C# Features) report no error. R5's
+fix for CS20057 offers, at a conversion, the delegate's parameter type instead of the candidates of the call around it
+(`SharperWriteInferredTypeCodeFixProvider.TryAddTypeFromConversion`, test
+`CS20057_ConversionsDisagree_OffersEachParameterType`); the 76 Sharper tests of the C# Features project pass.
+
+Follow-ups:
+
+- Private members ([#207](https://github.com/ok3mad/roslyn/issues/207)).
+- The overloads of one call that take different delegate types are CS20057; the conversions of a lambda's trial binding
+  for another delegate type count when they are at a method group of the final binding.
+- After CS20057 or CS20027, C# reports its own errors for the conversions to the error type (CS0123, CS1503).
+- The declaring body is bound once more per local function with such a parameter, once per compilation.
+
 ## Feature 10: immutable types, slice 1 (design)
 
 `[Immutable] sealed record Money(decimal Amount, string Currency);` (issue [#139](https://github.com/ok3mad/roslyn/issues/139),
@@ -1210,7 +1263,8 @@ needs member mutation inference.
 `static int Page(int i is >=0) => ...;` and, later, `record Money(decimal Amount is >0, Currency Currency);` (issue
 [#33](https://github.com/ok3mad/roslyn/issues/33)). A refinement is a closed pattern over constants attached to a
 declaration; a value reaches it only through a door that proves the pattern, and a runtime guard covers every door the
-compiler cannot see. This section is the design; nothing is implemented yet.
+compiler cannot see. This section is the design; steps 1 and 2 are a prototype (see [Progress](#progress-of-slice-1)),
+and feature page [refined-types.md](../features/refined-types.md).
 
 **Probe.** What the compiler does today, and what the design reuses:
 
@@ -1268,6 +1322,35 @@ tests and `assume` (slice 3).
 
 **Size:** L, about 3.5k lines with tests. The parser and the guard are S; most of the work is binding, the call-site
 rules and return inference.
+
+### Progress of slice 1
+
+- [x] **Step 1, syntax** (`sharper/refined-parameters-syntax`). `RefinementClauseSyntax` (kind 9905) is the optional
+  `Refinement` field of `ParameterSyntax`. The design said "last field", but a node's fields are its children in source
+  order, so the field sits between `Identifier` and `Default`; the generated `Update` and `SyntaxFactory.Parameter` take
+  one more argument, and the five-argument overloads are kept by hand (`Syntax/ParameterSyntax.cs`,
+  `Syntax/SyntaxFactory.cs`), so the analyzer build reports no RS0017. `ParseParameter` reads `is` and a pattern after
+  the name, behind the flag; `CanReuseParameter` does not reuse a refined parameter, which may end in a pattern. A
+  lambda's parameter list is scanned before it is parsed, and the scan is unchanged, so a refinement on a lambda
+  parameter stays a syntax error; anonymous methods parse it and report CS20061.
+- [x] **Step 2, binding.** `SharperRefinement.Bind` (`Symbols/Source/SharperRefinement.cs`), once per parameter symbol
+  (`SourceComplexParameterSymbolBase.SharperRefinement`, forced by `ForceComplete`). Patterns that are not closed are
+  rejected on syntax before binding, because a designation outside a body asserts in the binder, and on the bound
+  pattern after it (a constant pattern that binds to a type). The value set is built from `ValueSetFactory.ForType`
+  with the relations the DAG uses; `MatchesNull` records whether `null` matches (`string s is not "x"`). The default
+  value is checked by evaluating the pattern on the constant. The flag `SharperReadOnly` makes the parameter readonly,
+  with the readonly parameter machinery of Feature 5. CS20058 to CS20061.
+  Beyond the design: `ref`, `out` and `in` parameters (a write through the ref would break the fact), explicit interface
+  implementations, delegates, extension block receivers and positional record parameters (the records exclusion) are
+  CS20061 too.
+  Left for step 3: the error on recursive `infer` returns, which only matters once returns have refinements. Open
+  points, as `PROTOTYPE(sharper)` comments: implicit interface implementations, `[DefaultParameterValue]` defaults, the
+  semantic model inside a refinement.
+  Tests: 14 `Refinement_*` tests (`SharperTests_Refinements.cs`). The Syntax project with `ROSLYN_TEST_SHARPER=1` has
+  the same 37 expected failures as the last run below, and none new.
+- [ ] Step 3, return refinements.
+- [ ] Step 4, call sites and switches.
+- [ ] Step 5, guard and metadata.
 
 ## Feature 12: pipe, without lifting
 
@@ -1348,7 +1431,7 @@ checks declared `[Pure]` members only. This section is the design for both and t
 | Pure or total | Pure is enough. The DAG may evaluate an opaque test in a different order than written, skip it when the outcome is already decided, and share two identical tests on the same input. It never hoists a test ahead of the arms | C# gives `Deconstruct` and property reads the same contract. Reordering a pure test can only change which deterministic exception surfaces, or skip it. Hoisting and speculative evaluation need `total` ([#36](https://github.com/ok3mad/roslyn/issues/36)) |
 | Where opaque patterns are allowed | Every pattern context: `is`, switch statements and switch expressions, at any depth. Not in refinements (Feature 11) | The issue's "match arms only" is about declared domains, which must stay closed so that call sites can prove them |
 | Which patterns can be opaque | Slice 1: a relational pattern (`<`, `<=`, `>`, `>=`) or a constant pattern (`== max`) whose operand is not a constant, in Sharper files, where C# reports CS9135 or CS0150 | Both are errors in C# today. The operand converts to the input type as a constant would, and the comparison is the one C# would use for `input op operand` with that type |
-| Purity of an operand | Checked by the member-mode `PurityWalker` over the bound operand. An impure one is a new error (CS20058, the next free code when slice 1 was built), with `GetPureReason`'s reason | The same rules as a `[Pure]` body, so the two cannot drift. Reading a mutable instance field is fine: nothing in a pure match can write it while the match runs. Mutable statics stay rejected, as in `[Pure]` bodies |
+| Purity of an operand | Checked by the member-mode `PurityWalker` over the bound operand. An impure one is a new error (CS20062, the next free code when slice 1 was built), with `GetPureReason`'s reason | The same rules as a `[Pure]` body, so the two cannot drift. Reading a mutable instance field is fine: nothing in a pure match can write it while the match runs. Mutable statics stay rejected, as in `[Pure]` bodies |
 | Exhaustiveness and subsumption | An opaque test never narrows a value set, so an arm with one counts as a guarded arm: no help for exhaustiveness (CS8509 without a catch-all), never subsumes a later arm. Two identical opaque tests on the same input are one test | Best effort, as in the brainstorm. Symbolic reasoning over the same `val` (such as `<= max` then `> max`) can come later without breaking anything |
 | Extractor lookup | `Parse(...)` in a positional pattern is an extractor only when type lookup fails; a type named `Parse` always wins, silently. Simple names and `Type.Method` | Design rule 2: with a type in scope it is valid C#. With no type it is CS0246 or CS0118 today |
 | Extractor shapes, in order | 1. The predicate form `x is IsEven` (a `bool M(T)`), which is an opaque test. 2. `bool TryX(T, out U…)`: matches when it returns `true`, sub-patterns on the `out` values, like `Deconstruct`. 3. `U F(T)`, the sub-pattern on the result as it is (`Parse({ } n)` for a nullable result; no special meaning for `null`). 4. C# 15 unions, after Sharper's union story ([#31](https://github.com/ok3mad/roslyn/issues/31)) | Each shape adds one rule; the predicate form needs nothing beyond slice 1, and the `Try` shape is what the BCL has. A `U?` that means "no match" would hide a legitimate `null` |
@@ -1382,8 +1465,8 @@ Prototype on `sharper/opaque-patterns` ([feature page](../features/opaque-patter
 | Which warning without a catch-all | CS8509, as planned; the `when` twin gets CS8846, whose text names a `when` clause |
 | When the operand is read | Before the match assigns the pattern's own variables: flow analysis visits the operands in the state before the match (`AbstractFlowPass.VisitSharperOpaquePatternOperands`), so `(var a, > a)` is CS0165. The nullable walker analyzes the operand where the DAG tests it, as it does a `when` clause |
 | Union matching | Not covered: a union input keeps C#'s error, since `UnionMatchingRewriter` rewrites the pattern before the DAG is built |
-| Refinements rejecting opaque patterns | Left to refined types slice 1 (Feature 11), which was not on `main` when slice 1 was built |
-| Pointers | `e is p->F` was CS0150 under Sharper and is now CS20058, since reading through a pointer is not pure (`FunctionType_Pattern_PointerMemberAccess`) |
+| Refinements rejecting opaque patterns | A refinement binds its pattern with the same binder, so `int i is > s_max` makes an opaque pattern, which `SharperRefinement.FindOpenPattern` rejects as not closed (CS20058). The operand's purity is not checked inside a refinement clause, so an impure operand gets CS20058 alone (`Opaque_RefinementRejects`) |
+| Pointers | `e is p->F` was CS0150 under Sharper and is now CS20062, since reading through a pointer is not pure (`FunctionType_Pattern_PointerMemberAccess`) |
 
 ## Follow-ups
 
@@ -1439,7 +1522,7 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 - [ ] Test `/nowarn` and `.editorconfig` with five-digit Sharper IDs. [#91](https://github.com/ok3mad/roslyn/issues/91)
 - [x] Decide immutability depth: binding, value or deep (a type-level immutability marker). [#92](https://github.com/ok3mad/roslyn/issues/92): deep, see [Feature 10](#feature-10-immutable-types-slice-1-design). Slice 1 is [#139](https://github.com/ok3mad/roslyn/issues/139), a prototype; follow-ups [#140](https://github.com/ok3mad/roslyn/issues/140), [#141](https://github.com/ok3mad/roslyn/issues/141), [#142](https://github.com/ok3mad/roslyn/issues/142).
 - [ ] Immutable types: treat an internal `[Immutable]` class whose subclasses are all visible and immutable as closed (a static type), as the design allows. `PROTOTYPE(sharper)` in `SharperImmutability.IsClosed`.
-- [ ] Sequence type: decide whether array creation should accept sequence elements (`new int[3][..]`, today CS0178, or `new int[..][3]`). [#64](https://github.com/ok3mad/roslyn/issues/64)
+- [x] Sequence type: decide whether array creation should accept sequence elements (`new int[3][..]`, today CS0178, or `new int[..][3]`). [#64](https://github.com/ok3mad/roslyn/issues/64): no, array creation keeps its C# meaning; write `new IEnumerable<int>[3]`. Not worth fixing for now; can be revisited.
 - [x] Function types: parentheses apply a suffix to the whole function type, `((int) -> int)?`, `((int) -> int)[]` and `((int) -> int)~`, with the new node `ParenthesizedTypeSyntax`. `((p)->F)[i]`, `((p)->F)?.X`, `((p)->F) ? a : b` and `(((p)->F))(x)` keep their C# meaning. [#58](https://github.com/ok3mad/roslyn/issues/58)
 - [x] Function types in patterns: declaration, type, recursive, list and property patterns, `switch` statements and expressions (`x is (int) -> int f`, `case () -> void a:`). In C#, `e is (p)->F` is a syntax error (the pattern parser stops at `->`), so there was no C# meaning to keep; `e is p->F` keeps its meaning. [#59](https://github.com/ok3mad/roslyn/issues/59)
 - [x] Report constraint errors of the short type forms where their C# twins do: on a function type's parameter or return type ([#62](https://github.com/ok3mad/roslyn/issues/62)), and on the element of `T[..]` ([#65](https://github.com/ok3mad/roslyn/issues/65)) and `T~`.

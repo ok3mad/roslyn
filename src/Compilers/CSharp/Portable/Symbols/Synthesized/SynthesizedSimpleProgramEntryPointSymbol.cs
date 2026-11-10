@@ -230,7 +230,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             return GetBodyBinder(ignoreAccessibility);
         }
 
-        private ExecutableCodeBinder CreateBodyBinder(bool ignoreAccessibility)
+        /// <summary>A new body binder, with local function symbols of its own (Sharper step P7 binds the body with one).</summary>
+        internal ExecutableCodeBinder CreateBodyBinder(bool ignoreAccessibility)
         {
             CSharpCompilation compilation = DeclaringCompilation;
 

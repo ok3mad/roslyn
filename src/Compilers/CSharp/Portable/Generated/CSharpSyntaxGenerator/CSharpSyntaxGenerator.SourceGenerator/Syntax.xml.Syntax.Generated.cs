@@ -14375,6 +14375,7 @@ public sealed partial class ParameterSyntax : BaseParameterSyntax
 {
     private SyntaxNode? attributeLists;
     private TypeSyntax? type;
+    private RefinementClauseSyntax? refinement;
     private EqualsValueClauseSyntax? @default;
 
     internal ParameterSyntax(InternalSyntax.CSharpSyntaxNode green, SyntaxNode? parent, int position)
@@ -14410,14 +14411,18 @@ public sealed partial class ParameterSyntax : BaseParameterSyntax
         }
     }
 
-    public EqualsValueClauseSyntax? Default => GetRed(ref this.@default, 4);
+    /// <summary>Gets the refinement of the parameter, such as <c>is &gt;=0</c> in <c>int i is &gt;=0</c>, in Sharper.</summary>
+    public RefinementClauseSyntax? Refinement => GetRed(ref this.refinement, 4);
+
+    public EqualsValueClauseSyntax? Default => GetRed(ref this.@default, 5);
 
     internal override SyntaxNode? GetNodeSlot(int index)
         => index switch
         {
             0 => GetRedAtZero(ref this.attributeLists)!,
             2 => GetRed(ref this.type, 2),
-            4 => GetRed(ref this.@default, 4),
+            4 => GetRed(ref this.refinement, 4),
+            5 => GetRed(ref this.@default, 5),
             _ => null,
         };
 
@@ -14426,18 +14431,19 @@ public sealed partial class ParameterSyntax : BaseParameterSyntax
         {
             0 => this.attributeLists,
             2 => this.type,
-            4 => this.@default,
+            4 => this.refinement,
+            5 => this.@default,
             _ => null,
         };
 
     public override void Accept(CSharpSyntaxVisitor visitor) => visitor.VisitParameter(this);
     public override TResult? Accept<TResult>(CSharpSyntaxVisitor<TResult> visitor) where TResult : default => visitor.VisitParameter(this);
 
-    public ParameterSyntax Update(SyntaxList<AttributeListSyntax> attributeLists, SyntaxTokenList modifiers, TypeSyntax? type, SyntaxToken identifier, EqualsValueClauseSyntax? @default)
+    public ParameterSyntax Update(SyntaxList<AttributeListSyntax> attributeLists, SyntaxTokenList modifiers, TypeSyntax? type, SyntaxToken identifier, RefinementClauseSyntax? refinement, EqualsValueClauseSyntax? @default)
     {
-        if (attributeLists != this.AttributeLists || modifiers != this.Modifiers || type != this.Type || identifier != this.Identifier || @default != this.Default)
+        if (attributeLists != this.AttributeLists || modifiers != this.Modifiers || type != this.Type || identifier != this.Identifier || refinement != this.Refinement || @default != this.Default)
         {
-            var newNode = SyntaxFactory.Parameter(attributeLists, modifiers, type, identifier, @default);
+            var newNode = SyntaxFactory.Parameter(attributeLists, modifiers, type, identifier, refinement, @default);
             var annotations = GetAnnotations();
             return annotations?.Length > 0 ? newNode.WithAnnotations(annotations) : newNode;
         }
@@ -14446,18 +14452,64 @@ public sealed partial class ParameterSyntax : BaseParameterSyntax
     }
 
     internal override BaseParameterSyntax WithAttributeListsCore(SyntaxList<AttributeListSyntax> attributeLists) => WithAttributeLists(attributeLists);
-    public new ParameterSyntax WithAttributeLists(SyntaxList<AttributeListSyntax> attributeLists) => Update(attributeLists, this.Modifiers, this.Type, this.Identifier, this.Default);
+    public new ParameterSyntax WithAttributeLists(SyntaxList<AttributeListSyntax> attributeLists) => Update(attributeLists, this.Modifiers, this.Type, this.Identifier, this.Refinement, this.Default);
     internal override BaseParameterSyntax WithModifiersCore(SyntaxTokenList modifiers) => WithModifiers(modifiers);
-    public new ParameterSyntax WithModifiers(SyntaxTokenList modifiers) => Update(this.AttributeLists, modifiers, this.Type, this.Identifier, this.Default);
+    public new ParameterSyntax WithModifiers(SyntaxTokenList modifiers) => Update(this.AttributeLists, modifiers, this.Type, this.Identifier, this.Refinement, this.Default);
     internal override BaseParameterSyntax WithTypeCore(TypeSyntax? type) => WithType(type);
-    public new ParameterSyntax WithType(TypeSyntax? type) => Update(this.AttributeLists, this.Modifiers, type, this.Identifier, this.Default);
-    public ParameterSyntax WithIdentifier(SyntaxToken identifier) => Update(this.AttributeLists, this.Modifiers, this.Type, identifier, this.Default);
-    public ParameterSyntax WithDefault(EqualsValueClauseSyntax? @default) => Update(this.AttributeLists, this.Modifiers, this.Type, this.Identifier, @default);
+    public new ParameterSyntax WithType(TypeSyntax? type) => Update(this.AttributeLists, this.Modifiers, type, this.Identifier, this.Refinement, this.Default);
+    public ParameterSyntax WithIdentifier(SyntaxToken identifier) => Update(this.AttributeLists, this.Modifiers, this.Type, identifier, this.Refinement, this.Default);
+    public ParameterSyntax WithRefinement(RefinementClauseSyntax? refinement) => Update(this.AttributeLists, this.Modifiers, this.Type, this.Identifier, refinement, this.Default);
+    public ParameterSyntax WithDefault(EqualsValueClauseSyntax? @default) => Update(this.AttributeLists, this.Modifiers, this.Type, this.Identifier, this.Refinement, @default);
 
     internal override BaseParameterSyntax AddAttributeListsCore(params AttributeListSyntax[] items) => AddAttributeLists(items);
     public new ParameterSyntax AddAttributeLists(params AttributeListSyntax[] items) => WithAttributeLists(this.AttributeLists.AddRange(items));
     internal override BaseParameterSyntax AddModifiersCore(params SyntaxToken[] items) => AddModifiers(items);
     public new ParameterSyntax AddModifiers(params SyntaxToken[] items) => WithModifiers(this.Modifiers.AddRange(items));
+}
+
+/// <summary>Class which represents the syntax node for a Sharper refinement, such as <c>is &gt;=0</c> in <c>int i is &gt;=0</c>.</summary>
+/// <remarks>
+/// <para>This node is associated with the following syntax kinds:</para>
+/// <list type="bullet">
+/// <item><description><see cref="SyntaxKind.RefinementClause"/></description></item>
+/// </list>
+/// </remarks>
+public sealed partial class RefinementClauseSyntax : CSharpSyntaxNode
+{
+    private PatternSyntax? pattern;
+
+    internal RefinementClauseSyntax(InternalSyntax.CSharpSyntaxNode green, SyntaxNode? parent, int position)
+      : base(green, parent, position)
+    {
+    }
+
+    /// <summary>SyntaxToken representing the is keyword.</summary>
+    public SyntaxToken IsKeyword => new SyntaxToken(this, ((InternalSyntax.RefinementClauseSyntax)this.Green).isKeyword, Position, 0);
+
+    /// <summary>PatternSyntax node representing the values the parameter can have, such as <c>&gt;=0</c>.</summary>
+    public PatternSyntax Pattern => GetRed(ref this.pattern, 1)!;
+
+    internal override SyntaxNode? GetNodeSlot(int index) => index == 1 ? GetRed(ref this.pattern, 1)! : null;
+
+    internal override SyntaxNode? GetCachedSlot(int index) => index == 1 ? this.pattern : null;
+
+    public override void Accept(CSharpSyntaxVisitor visitor) => visitor.VisitRefinementClause(this);
+    public override TResult? Accept<TResult>(CSharpSyntaxVisitor<TResult> visitor) where TResult : default => visitor.VisitRefinementClause(this);
+
+    public RefinementClauseSyntax Update(SyntaxToken isKeyword, PatternSyntax pattern)
+    {
+        if (isKeyword != this.IsKeyword || pattern != this.Pattern)
+        {
+            var newNode = SyntaxFactory.RefinementClause(isKeyword, pattern);
+            var annotations = GetAnnotations();
+            return annotations?.Length > 0 ? newNode.WithAnnotations(annotations) : newNode;
+        }
+
+        return this;
+    }
+
+    public RefinementClauseSyntax WithIsKeyword(SyntaxToken isKeyword) => Update(isKeyword, this.Pattern);
+    public RefinementClauseSyntax WithPattern(PatternSyntax pattern) => Update(this.IsKeyword, pattern);
 }
 
 /// <summary>Parameter syntax.</summary>

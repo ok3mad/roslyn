@@ -970,5 +970,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         TryExpression = 9903,
         /// <summary>Represents Sharper's pipe expression, such as <c>raw |&gt; Parse</c> or <c>order |&gt; Resolve(it, accounts)</c>.</summary>
         PipeExpression = 9904,
+        /// <summary>Represents Sharper's refinement of a parameter, such as <c>is &gt;=0</c> in <c>int i is &gt;=0</c>.</summary>
+        RefinementClause = 9905,
     }
 }

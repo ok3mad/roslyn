@@ -84,7 +84,7 @@ namespace Microsoft.CodeAnalysis.CSharp
 
         /// <summary>
         /// Makes the opaque pattern for an operand that <see cref="TryConvertSharperOpaqueOperand"/> accepted, and checks
-        /// that the operand is pure (CS20058) by the rules of a <c>[Pure]</c> body.
+        /// that the operand is pure (CS20062) by the rules of a <c>[Pure]</c> body.
         /// </summary>
         private BoundOpaquePattern MakeSharperOpaquePattern(
             SyntaxNode node,
@@ -100,7 +100,9 @@ namespace Microsoft.CodeAnalysis.CSharp
             Debug.Assert(relation.OperandTypes() == 0);
             relation |= RelationalOperatorType(type.EnumUnderlyingTypeOrSelf());
 
+            // A refinement rejects every opaque pattern as not closed (CS20058), so its operand is not checked there.
             if (!hasErrors && !value.HasErrors &&
+                node.FirstAncestorOrSelf<RefinementClauseSyntax>() is null &&
                 !SharperImmutability.CheckOpaquePatternOperand(Compilation, ContainingMemberOrLambda as MethodSymbol, value, diagnostics))
             {
                 hasErrors = true;

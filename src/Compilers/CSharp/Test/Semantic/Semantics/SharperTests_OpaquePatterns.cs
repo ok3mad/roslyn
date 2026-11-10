@@ -312,16 +312,16 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (6,16): warning CS0649: Field 'C.s_max' is never assigned to, and will always have its default value 0
                 //     static int s_max;
                 Diagnostic(ErrorCode.WRN_UnassignedInternalField, "s_max").WithArguments("C.s_max", "0").WithLocation(6, 16),
-                // (15,30): error CS20058: The operand of a pattern that is not a constant must be pure, but it is not: 'Next()' calls 'C.Next()', which is not known to be pure.
+                // (15,30): error CS20062: The operand of a pattern that is not a constant must be pure, but it is not: 'Next()' calls 'C.Next()', which is not known to be pure.
                 //     bool M1(int x) => x is > Next();
                 Diagnostic(ErrorCode.ERR_SharperOpaquePatternNotPure, "Next()").WithArguments("'Next()' calls 'C.Next()', which is not known to be pure").WithLocation(15, 30),
-                // (16,30): error CS20058: The operand of a pattern that is not a constant must be pure, but it is not: 's_max' reads static state that can change.
+                // (16,30): error CS20062: The operand of a pattern that is not a constant must be pure, but it is not: 's_max' reads static state that can change.
                 //     bool M2(int x) => x is > s_max;
                 Diagnostic(ErrorCode.ERR_SharperOpaquePatternNotPure, "s_max").WithArguments("'s_max' reads static state that can change").WithLocation(16, 30),
-                // (17,30): error CS20058: The operand of a pattern that is not a constant must be pure, but it is not: 's_list.Count' calls 'System.Collections.Generic.List<int>.Count', which is not known to be pure.
+                // (17,30): error CS20062: The operand of a pattern that is not a constant must be pure, but it is not: 's_list.Count' calls 'System.Collections.Generic.List<int>.Count', which is not known to be pure.
                 //     bool M3(int x) => x is > s_list.Count;
                 Diagnostic(ErrorCode.ERR_SharperOpaquePatternNotPure, "s_list.Count").WithArguments("'s_list.Count' calls 'System.Collections.Generic.List<int>.Count', which is not known to be pure").WithLocation(17, 30),
-                // (23,30): error CS20058: The operand of a pattern that is not a constant must be pure, but it is not: 'DateTime.Now' calls 'System.DateTime.Now', which is not known to be pure.
+                // (23,30): error CS20062: The operand of a pattern that is not a constant must be pure, but it is not: 'DateTime.Now' calls 'System.DateTime.Now', which is not known to be pure.
                 //     bool M9(int x) => x is > DateTime.Now.Second;
                 Diagnostic(ErrorCode.ERR_SharperOpaquePatternNotPure, "DateTime.Now").WithArguments("'DateTime.Now' calls 'System.DateTime.Now', which is not known to be pure").WithLocation(23, 30));
         }
@@ -415,6 +415,40 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (10,38): error CS9135: A constant value of type 'C' is expected
                 //     static bool M6(C c, C d) => c is d;
                 Diagnostic(ErrorCode.ERR_ConstantValueOfTypeExpected, "d").WithArguments("C").WithLocation(10, 38));
+        }
+
+        [Fact]
+        public void Opaque_RefinementRejects()
+        {
+            // A refinement is a declared domain, which must stay closed over constants (Feature 11): an operand that would
+            // make an opaque pattern elsewhere is still CS20058 there, pure or not.
+            var source = """
+                class C
+                {
+                    static readonly int s_max = 10;
+                    static int s_mutable;
+                    [Pure] static int Limit() => 10;
+                    static int Next() => ++s_mutable;
+                    void M1(int i is > s_max) { }
+                    void M2(int i is >= 0 and < Limit()) { }
+                    void M3(int i is not s_max) { }
+                    void M4(int i is > Next()) { }
+                    bool N(int i) => i is > s_max and < Limit();
+                }
+                """;
+            CreateImmutableCompilation(source).VerifyDiagnostics(
+                // (7,22): error CS20058: A refinement must be a closed pattern over constants, made of constant and relational patterns, 'and', 'or', 'not' and parentheses, such as 'is >=0' or 'is 1 or 2'; '> s_max' is not.
+                //     void M1(int i is > s_max) { }
+                Diagnostic(ErrorCode.ERR_SharperRefinementNotClosed, "> s_max").WithArguments("> s_max").WithLocation(7, 22),
+                // (8,31): error CS20058: A refinement must be a closed pattern over constants, made of constant and relational patterns, 'and', 'or', 'not' and parentheses, such as 'is >=0' or 'is 1 or 2'; '< Limit()' is not.
+                //     void M2(int i is >= 0 and < Limit()) { }
+                Diagnostic(ErrorCode.ERR_SharperRefinementNotClosed, "< Limit()").WithArguments("< Limit()").WithLocation(8, 31),
+                // (9,26): error CS20058: A refinement must be a closed pattern over constants, made of constant and relational patterns, 'and', 'or', 'not' and parentheses, such as 'is >=0' or 'is 1 or 2'; 's_max' is not.
+                //     void M3(int i is not s_max) { }
+                Diagnostic(ErrorCode.ERR_SharperRefinementNotClosed, "s_max").WithArguments("s_max").WithLocation(9, 26),
+                // (10,22): error CS20058: A refinement must be a closed pattern over constants, made of constant and relational patterns, 'and', 'or', 'not' and parentheses, such as 'is >=0' or 'is 1 or 2'; '> Next()' is not.
+                //     void M4(int i is > Next()) { }
+                Diagnostic(ErrorCode.ERR_SharperRefinementNotClosed, "> Next()").WithArguments("> Next()").WithLocation(10, 22));
         }
 
         [Fact]

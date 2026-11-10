@@ -4595,7 +4595,35 @@
       <Kind Name="IdentifierToken"/>
       <Kind Name="ArgListKeyword"/>
     </Field>
+    <!-- Sharper: a refinement, 'is' and a pattern, after the name and before the default value. Written before
+         Default because a node's fields are in source order; ParameterSyntax.cs keeps the overloads without it. -->
+    <Field Name="Refinement" Type="RefinementClauseSyntax" Optional="true">
+      <PropertyComment>
+        <summary>Gets the refinement of the parameter, such as <c>is &gt;=0</c> in <c>int i is &gt;=0</c>, in Sharper.</summary>
+      </PropertyComment>
+    </Field>
     <Field Name="Default" Type="EqualsValueClauseSyntax" Optional="true"/>
+  </Node>
+  <Node Name="RefinementClauseSyntax" Base="CSharpSyntaxNode">
+    <!-- Sharper's refinement of a parameter: a closed pattern over constants that every value of the parameter satisfies. -->
+    <Kind Name="RefinementClause"/>
+    <Field Name="IsKeyword" Type="SyntaxToken">
+      <Kind Name="IsKeyword"/>
+      <PropertyComment>
+        <summary>SyntaxToken representing the is keyword.</summary>
+      </PropertyComment>
+    </Field>
+    <Field Name="Pattern" Type="PatternSyntax">
+      <PropertyComment>
+        <summary>PatternSyntax node representing the values the parameter can have, such as <c>&gt;=0</c>.</summary>
+      </PropertyComment>
+    </Field>
+    <TypeComment>
+      <summary>Class which represents the syntax node for a Sharper refinement, such as <c>is &gt;=0</c> in <c>int i is &gt;=0</c>.</summary>
+    </TypeComment>
+    <FactoryComment>
+      <summary>Creates a RefinementClauseSyntax node.</summary>
+    </FactoryComment>
   </Node>
   <Node Name="FunctionPointerParameterSyntax" Base="BaseParameterSyntax">
     <TypeComment>
