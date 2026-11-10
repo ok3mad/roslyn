@@ -8620,6 +8620,9 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
   <data name="IDS_SharperRefinementOnExtensionReceiver" xml:space="preserve">
     <value>on an extension block receiver</value>
   </data>
+  <data name="ERR_SharperOpaquePatternNotPure" xml:space="preserve">
+    <value>The operand of a pattern that is not a constant must be pure, but it is not: {0}.</value>
+  </data>
   <data name="WRN_SharperPureOutArgumentNotFresh_Title" xml:space="preserve">
     <value>The out argument of a [Pure] member is not a fresh local</value>
   </data>

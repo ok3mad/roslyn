@@ -1,4 +1,4 @@
-# Sharper
+﻿# Sharper
 
 Sharper is an experimental dialect of C#. This repository is a fork of [dotnet/roslyn](https://github.com/dotnet/roslyn)
 that is being turned into the Sharper compiler. This folder is the home of Sharper's own documentation. The rest of
@@ -104,6 +104,7 @@ Not done yet:
 | [Implicit `it`](features/implicit-it.md) | `xs.Select(it.Name)` is `xs.Select(x => x.Name)`: an argument that uses `it` is a lambda, if the innermost parameter around it takes a one-parameter function. | Prototype, merged into `main` | [#24](https://github.com/ok3mad/roslyn/issues/24) |
 | [Pipe `\|>`](features/pipe.md) | `raw \|> ParseOrder \|> Resolve(it, accounts)` is `Resolve(ParseOrder(raw), accounts)`: a stage that uses `it` is an expression, any other stage is a function applied to the value. No lifting yet. | Prototype, on `sharper/pipe` | [#25](https://github.com/ok3mad/roslyn/issues/25) |
 | [`try` expression](features/try-expression.md) | `try int.Parse(s) catch { FormatException => -1 }` turns exceptions into values with switch arms; an unmatched exception propagates untouched. Slice 1: a declared union or the best common type as the result. | Prototype of slice 1, on `sharper/try-expression-slice1` | [#28](https://github.com/ok3mad/roslyn/issues/28) |
+| [Opaque patterns](features/opaque-patterns.md) | `amount switch { > 0 and <= max => Accept(amount), _ => Reject(amount) }`: a relational or constant pattern may compare with a pure value that is not a constant, at any depth and under `and`, `or` and `not`. Slice 1 of patterns on pure functions. | Prototype of slice 1, on `sharper/opaque-patterns` | [#34](https://github.com/ok3mad/roslyn/issues/34) |
 
 Every planned feature has an issue, one per row of the
 [syntax roadmap](planning/implementation-plan.md#syntax-roadmap), collected under the tracking issue
@@ -200,6 +201,7 @@ in `#pragma warning`, `/nowarn` and `.editorconfig`.
 | CS20059 | Error | Cannot refine parameter '{0}' of type '{1}'. A refinement needs a type whose constants can be compared: an integer, floating-point, 'decimal', 'char', 'bool', 'string' or enum type. |
 | CS20060 | Error | The default value of parameter '{0}' ({1}) does not satisfy its refinement '{2}'. |
 | CS20061 | Error | A refinement is not supported {0} yet. ({0} is "on a virtual, abstract or override member", "on an interface member", "on a partial member", "on a lambda or anonymous method parameter", ...) |
+| CS20062 | Error | The operand of a pattern that is not a constant must be pure, but it is not: {0}. |
 
 ## Where the code is
 
@@ -207,11 +209,11 @@ in `#pragma warning`, `/nowarn` and `.editorconfig`.
 | --- | --- |
 | Feature flag | `src/Compilers/CSharp/Portable/Errors/MessageID.cs` (`IDS_FeatureSharper`), `src/Compilers/Core/Portable/CommandLine/Feature.cs` (`Feature.Sharper`) |
 | Parser | `src/Compilers/CSharp/Portable/Parser/LanguageParser.cs` (search for `IDS_FeatureSharper`) |
-| Binding | `src/Compilers/CSharp/Portable/Binder/` (search for `IDS_FeatureSharper`); short type forms such as `T[..]` in `Binder_SharperTypes.cs`; inferred return types in `Binder_SharperInferredReturnType.cs` and `Symbols/Source/SharperInferredReturnType.cs`; inferred parameter types in `Binder_SharperInferredParameterType.cs` and `Symbols/Source/SharperInferredParameterType.cs`, the types copied from an overridden or implemented member in `Symbols/Source/SharperInferredParameterType_OverriddenMember.cs`, and the types pinned by uses in the body in `Symbols/Source/SharperInferredParameterType_Body.cs` and `Symbols/Source/SharperPlaceholderMethodSymbol.cs`; implicit `it` in `Binder_SharperImplicitIt.cs`; the pipe in `Binder_SharperPipe.cs`; refinements in `Symbols/Source/SharperRefinement.cs`; immutable types in `Symbols/SharperImmutability.cs`, and purity in `Symbols/SharperImmutability_Pure.cs`; the `try` expression in `Binder_SharperTryExpression.cs` |
+| Binding | `src/Compilers/CSharp/Portable/Binder/` (search for `IDS_FeatureSharper`); short type forms such as `T[..]` in `Binder_SharperTypes.cs`; inferred return types in `Binder_SharperInferredReturnType.cs` and `Symbols/Source/SharperInferredReturnType.cs`; inferred parameter types in `Binder_SharperInferredParameterType.cs` and `Symbols/Source/SharperInferredParameterType.cs`, the types copied from an overridden or implemented member in `Symbols/Source/SharperInferredParameterType_OverriddenMember.cs`, and the types pinned by uses in the body in `Symbols/Source/SharperInferredParameterType_Body.cs` and `Symbols/Source/SharperPlaceholderMethodSymbol.cs`; implicit `it` in `Binder_SharperImplicitIt.cs`; the pipe in `Binder_SharperPipe.cs`; refinements in `Symbols/Source/SharperRefinement.cs`; immutable types in `Symbols/SharperImmutability.cs`, and purity in `Symbols/SharperImmutability_Pure.cs`; the `try` expression in `Binder_SharperTryExpression.cs`; opaque patterns in `Binder_SharperOpaquePatterns.cs` and the decision DAG (`BoundDagOpaqueTest`) |
 | Syntax nodes | `src/Compilers/CSharp/Portable/Syntax/Syntax.xml` (`FunctionTypeSyntax`, `TaskTypeSyntax`, `ParenthesizedTypeSyntax`, `TryExpressionSyntax`, `PipeExpressionSyntax`, `RefinementClauseSyntax`, the new `Refinement` field of `ParameterSyntax`); Sharper kinds in `SyntaxKind.cs` count up from 9900, and the pipe token `BarGreaterThanToken` takes 8231, the top of the free punctuation gap |
 | Bound nodes | `src/Compilers/CSharp/Portable/BoundTree/BoundNodes.xml` |
 | Lowering | `src/Compilers/CSharp/Portable/Lowering/LocalRewriter/` |
-| Tests | `src/Compilers/CSharp/Test/Semantic/Semantics/SharperTests.cs` and the other files of the partial class `SharperTests`, such as `SharperTests_TryExpression.cs`, `SharperTests_ImmutableTypes.cs`, `SharperTests_Purity.cs`, `SharperTests_InferFromOverridden.cs`, `SharperTests_Pipe.cs` and `SharperTests_Refinements.cs` |
+| Tests | `src/Compilers/CSharp/Test/Semantic/Semantics/SharperTests.cs` and the other files of the partial class `SharperTests`, such as `SharperTests_TryExpression.cs`, `SharperTests_ImmutableTypes.cs`, `SharperTests_Purity.cs`, `SharperTests_InferFromOverridden.cs`, `SharperTests_Pipe.cs`, `SharperTests_Refinements.cs` and `SharperTests_OpaquePatterns.cs` |
 
 ## Building and testing
 

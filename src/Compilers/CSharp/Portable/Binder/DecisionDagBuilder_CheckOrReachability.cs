@@ -876,6 +876,7 @@ start:
                     or BoundDiscardPattern
                     or BoundTypePattern
                     or BoundRelationalPattern
+                    or BoundOpaquePattern
                     or BoundNegatedPattern, $"This visitor doesn't support pattern {node} yet.");
 
                 return base.Visit(node);
@@ -1040,6 +1041,12 @@ start:
                 return null;
             }
 
+            public override BoundNode? VisitOpaquePattern(BoundOpaquePattern node)
+            {
+                TryPushOperand(NegateIfNeeded(node));
+                return null;
+            }
+
             // Given a pattern that expects `pattern.InputType` as input type, produce
             // one that expects `inputType`.
             //
@@ -1090,6 +1097,11 @@ start:
                 if (pattern is BoundRelationalPattern relationalPattern)
                 {
                     return relationalPattern.Update(relationalPattern.Relation, relationalPattern.Value, relationalPattern.ConstantValue, isUnionMatching: false, inputType, relationalPattern.NarrowedType);
+                }
+
+                if (pattern is BoundOpaquePattern opaquePattern)
+                {
+                    return opaquePattern.Update(opaquePattern.Relation, opaquePattern.Value, opaquePattern.IsConstantPattern, inputType, opaquePattern.NarrowedType);
                 }
 
                 if (pattern is BoundDeclarationPattern declarationPattern)

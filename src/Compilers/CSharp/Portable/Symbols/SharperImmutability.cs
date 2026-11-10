@@ -979,7 +979,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         private sealed class PurityWalker : BoundTreeWalkerWithStackGuard
         {
             private readonly SharperImmutability _owner;
-            private readonly MethodSymbol _observer;
+            /// <summary>The member being checked; null for the operand of an opaque pattern outside a method.</summary>
+            private readonly MethodSymbol? _observer;
             private readonly NamedTypeSymbol? _definition;
             private readonly bool _localOnly;
             private readonly bool _allowsCreation;
@@ -1009,7 +1010,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             internal bool ImpureIsCulture;
             internal BoundStatement? Skipped;
 
-            internal PurityWalker(SharperImmutability owner, MethodSymbol observer, NamedTypeSymbol? definition, bool localOnly, bool allowsCreation, ArrayBuilder<MethodSymbol>? constructorsInProgress, bool isMember)
+            internal PurityWalker(SharperImmutability owner, MethodSymbol? observer, NamedTypeSymbol? definition, bool localOnly, bool allowsCreation, ArrayBuilder<MethodSymbol>? constructorsInProgress, bool isMember)
             {
                 _owner = owner;
                 _observer = observer;
@@ -1133,6 +1134,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     case BoundDeclarationPattern:
                     case BoundDiscardPattern:
                     case BoundRelationalPattern:
+                    case BoundOpaquePattern:
                     case BoundBinaryPattern:
                     case BoundNegatedPattern:
                     case BoundPropertySubpattern:
@@ -1368,10 +1370,10 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 return target switch
                 {
                     // Not through a ref local; a pure member writes only its own locals, not captured ones.
-                    BoundLocal { LocalSymbol: var local } => local.RefKind == RefKind.None && (!_isMember || local.ContainingSymbol is not MethodSymbol || local.ContainingSymbol == (object)_observer),
+                    BoundLocal { LocalSymbol: var local } => local.RefKind == RefKind.None && (!_isMember || local.ContainingSymbol is not MethodSymbol || local.ContainingSymbol == (object?)_observer),
                     BoundDiscardExpression => true,
                     // Not through a ref parameter: that writes the caller's state.
-                    BoundParameter { ParameterSymbol: var parameter } => parameter.ContainingSymbol == (object)_observer && parameter.RefKind is RefKind.None or RefKind.Out,
+                    BoundParameter { ParameterSymbol: var parameter } => parameter.ContainingSymbol == (object?)_observer && parameter.RefKind is RefKind.None or RefKind.Out,
                     BoundFieldAccess { ReceiverOpt: BoundThisReference } fieldAccess when WritesOwnThis && IsOwnMember(fieldAccess.FieldSymbol) => true,
                     // A field of a struct the member holds in its own state.
                     BoundFieldAccess { FieldSymbol.IsStatic: false, ReceiverOpt: { Type.IsValueType: true } receiver } when _isMember && receiver is not BoundThisReference && IsWritableLocalState(receiver) => true,
@@ -1391,7 +1393,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                    (conversion.UnderlyingConversions.IsDefault || conversion.UnderlyingConversions.All(IsBuiltInDeconstruction));
 
             private bool IsOwnMember(Symbol member)
-                => member.ContainingType.OriginalDefinition == (object)_observer.ContainingType.OriginalDefinition;
+                => member.ContainingType.OriginalDefinition == (object?)_observer?.ContainingType.OriginalDefinition;
 
             private bool IsPureGetter(PropertySymbol property, BoundExpression? receiver)
             {

@@ -471,6 +471,10 @@ namespace Microsoft.CodeAnalysis.CSharp
                     {
                         return MakeTestsAndBindingsForRelationalPattern(input, rel, out output);
                     }
+                case BoundOpaquePattern opaque:
+                    {
+                        return MakeTestsForOpaquePattern(input, opaque, out output);
+                    }
                 case BoundNegatedPattern neg:
                     output = input;
                     return MakeTestsAndBindingsForNegatedPattern(input, neg, bindings);
@@ -1265,6 +1269,22 @@ namespace Microsoft.CodeAnalysis.CSharp
             return Tests.AndSequence.Create(tests);
         }
 
+        /// <summary>
+        /// Sharper: an opaque pattern (Feature 13) tests for the operand's type, as a relational pattern does, and then
+        /// compares with the operand. Nothing is known of the comparison's outcome, so the value sets stay as they are.
+        /// </summary>
+        private Tests MakeTestsForOpaquePattern(
+            TestInputOutputInfo inputInfo,
+            BoundOpaquePattern opaque,
+            out TestInputOutputInfo outputInfo)
+        {
+            var tests = ArrayBuilder<Tests>.GetInstance(2);
+            outputInfo = MakeConvertToType(inputInfo, opaque.Syntax, opaque.NarrowedType, isExplicitTest: false, tests);
+            BoundDagTemp output = PrepareForUnionValuePropertyMatching(ref outputInfo, tests);
+            tests.Add(new Tests.One(new BoundDagOpaqueTest(opaque.Syntax, opaque.Relation, opaque.Value, output, opaque.HasErrors)));
+            return Tests.AndSequence.Create(tests);
+        }
+
         private TypeSymbol ErrorType(string name = "")
         {
             return new ExtendedErrorTypeSymbol(this._compilation, name, arity: 0, errorInfo: null, unreported: false);
@@ -1842,6 +1862,9 @@ namespace Microsoft.CodeAnalysis.CSharp
                     return resultForRelation(BinaryOperatorKind.Equal, t.Value);
                 case BoundDagRelationalTest t:
                     return resultForRelation(t.Relation, t.Value);
+                case BoundDagOpaqueTest:
+                    // Sharper: either outcome is possible, and neither narrows the values.
+                    return (values, values, true, true);
                 default:
                     throw ExceptionUtilities.UnexpectedValue(test);
             }
@@ -2040,6 +2063,14 @@ namespace Microsoft.CodeAnalysis.CSharp
             // The logic used here around cross matching type and null tests is duplicated in CheckConsistentUnionDecision.
             switch (test)
             {
+                case BoundDagOpaqueTest o1:
+                    if (other is BoundDagOpaqueTest o2 && o1.IsSameComparison(o2))
+                    {
+                        // Sharper: the same pure comparison on the same value has the same outcome.
+                        trueTestImpliesTrueOther = true;
+                        falseTestPermitsTrueOther = false;
+                    }
+                    break;
                 case BoundDagNonNullTest _:
                     switch (other)
                     {
@@ -3001,6 +3032,8 @@ namespace Microsoft.CodeAnalysis.CSharp
                                 _ => "??"
                             };
                             return $"?{d.Kind}({tempName(d.Input)} {operatorName} {r.Value})";
+                        case BoundDagOpaqueTest o:
+                            return $"?{d.Kind}({tempName(d.Input)} {o.OperatorKind.Operator()} {o.Value.Syntax})";
                         default:
                             return $"?{d.Kind}({tempName(d.Input)})";
                     }
@@ -4074,6 +4107,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                             }
 
                         case BoundDagRelationalTest:
+                        case BoundDagOpaqueTest:
                         case BoundDagTypeTest:
                         case BoundDagNonNullTest:
                         case BoundDagExplicitNullTest:
@@ -4166,7 +4200,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                         return;
                     }
 
-                    Debug.Assert(test is BoundDagTypeTest, "New type of non-evaluation test added, please update filter for this");
+                    Debug.Assert(test is BoundDagTypeTest or BoundDagOpaqueTest, "New type of non-evaluation test added, please update filter for this");
                     whenTrue = whenFalse = this;
 
                     // Keep in sync with DecisionDagBuilder.CheckInputRelation

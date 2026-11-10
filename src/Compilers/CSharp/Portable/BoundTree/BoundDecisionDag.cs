@@ -193,6 +193,9 @@ namespace Microsoft.CodeAnalysis.CSharp
                             var f = ValueSetFactory.ForType(input.Type);
                             if (f is null) return null;
                             return f.Related(d.Relation.Operator(), inputConstant, d.Value);
+                        case BoundDagOpaqueTest:
+                            // Sharper: the operand is not a constant.
+                            return null;
                         default:
                             throw ExceptionUtilities.UnexpectedValue(choice);
                     }

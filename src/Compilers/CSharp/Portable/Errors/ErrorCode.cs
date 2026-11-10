@@ -2576,6 +2576,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         ERR_SharperRefinementTypeNotSupported = SharperErrorCodes.Base + 59,
         ERR_SharperRefinementDefaultValueDisproven = SharperErrorCodes.Base + 60,
         ERR_SharperRefinementNotSupportedYet = SharperErrorCodes.Base + 61,
+        ERR_SharperOpaquePatternNotPure = SharperErrorCodes.Base + 62,
 
         // Note: you will need to do the following after adding errors:
         //  1) Update ErrorFacts.IsBuildOnlyDiagnostic (src/Compilers/CSharp/Portable/Errors/ErrorFacts.cs)
