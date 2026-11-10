@@ -75,9 +75,9 @@ var name = o switch { () -> void => "action", (int) -> int f => "f" + f(1), _ =>
 
 ## Limitations
 
-- **`ref`, `out` and `in` parameters, and more than 16 parameters,** have no `Func` or `Action` (CS20008, CS20009).
-  The lambda's natural type would synthesize an anonymous delegate, but that type is internal to one compilation and
-  cannot appear in a public signature. What to do instead is [#56](https://github.com/ok3mad/roslyn/issues/56).
+- **`ref`, `out` and `in` parameters, ref returns and more than 16 parameters** have no `Func` or `Action`, and are
+  errors for now (CS20008, CS20009; a ref return reports CS1073). The design is decided
+  ([#56](https://github.com/ok3mad/roslyn/issues/56)), see [Planned: ref parameters](#planned-ref-parameters).
 - **Parameter names** such as `(int width, int height) -> int` are not supported yet (CS20007), because `Func` cannot
   carry them. They are planned the way tuples carry their element names, in four steps under
   [#57](https://github.com/ok3mad/roslyn/issues/57): names in the syntax, ignored by the binder
@@ -86,6 +86,49 @@ var name = o switch { () -> void => "action", (int) -> int f => "f" + f(1), _ =>
   ([#214](https://github.com/ok3mad/roslyn/issues/214)); and names in metadata through a synthesized attribute
   ([#215](https://github.com/ok3mad/roslyn/issues/215)). Names will never change conversions or overload resolution.
 - **IDE:** the editor knows nothing about Sharper yet, so completion and formatting may not handle function types.
+
+## Planned: ref parameters
+
+Decided in [#56](https://github.com/ok3mad/roslyn/issues/56), not built yet. A function type that `Func` and
+`Action` cannot express is the anonymous delegate C# synthesizes for a lambda's natural type:
+
+```csharp
+(ref int, out string) -> bool tryRead = (ref int pos, out string s) => { s = ""; return true; };
+() -> ref int slot = () => ref s_value;
+var f = (ref int x) => x++;
+(ref int) -> void g = f;                      // the same type: one anonymous delegate per signature
+```
+
+- **What it covers:** `ref`, `out`, `in`, `ref readonly` and `scoped` parameters, `ref` and `ref readonly` returns,
+  and more than 16 parameters. Everything else stays `Func` or `Action`, so `(int) -> int` keeps meaning
+  `Func<int, int>`. `params` and `this` stay errors.
+- **Identity:** within a compilation, every function type with the same parameter types, ref kinds, `scoped`
+  and return is one type, the same one `var` gives a lambda with that signature (`GetMethodGroupOrLambdaDelegateType`,
+  `Binder_Expressions.cs`; anonymous delegates compare by signature). Like all anonymous delegates it is invariant, and
+  like any delegate it does not convert to a named delegate of the same shape; `f.Invoke` does.
+- **Visibility:** the anonymous delegate is internal, so these function types are allowed wherever an internal type
+  is: locals, private and internal members, public members of internal types, and type arguments in them. This is the
+  boundary `infer` already has for anonymous types (CS0050). A member visible outside the assembly reports a new Sharper
+  error that says to declare a named delegate, instead of the inconsistent accessibility errors (CS0050 to CS0053),
+  and so does an `infer` member whose inferred type is an anonymous delegate.
+- **Friend assemblies** (`InternalsVisibleTo`) see the other assembly's anonymous delegate as an unnamed type: they
+  can call it and pass lambdas to it, but their own function type of the same shape is a different type.
+- **Parameter names** ([#57](https://github.com/ok3mad/roslyn/issues/57)) must not become part of the anonymous
+  delegate's identity, as they are not part of `Func`'s.
+
+Rejected, because no other representation gives one type across assemblies:
+
+- **A public delegate synthesized in each assembly.** Two assemblies that use the same shape each define a copy, and
+  the CLR keeps them distinct, so a delegate from one does not pass to the other, and `List<F>` or `F[]` of them never
+  convert. Reusing a referenced assembly's copy when there is exactly one makes any private use of a function type a
+  public type others bind to, which its owner can no longer remove, and lets a new reference change what a type means.
+  Converting by wrapping one delegate in another allocates and breaks `==` and event removal.
+- **Type equivalence as in NoPIA** (`TypeIdentifierAttribute`): it needs one canonical definition in a referenced
+  assembly (`MetadataDecoder.cs`), does not allow generic types (CS1768), and the runtime supports it only on
+  Windows.
+- **A runtime library of delegates.** Ref kinds cannot be type arguments, so each combination needs its own type:
+  5ⁿ·4 shapes for n parameters, 3,114 up to four parameters. Any cut-off is arbitrary, and the library goes against
+  "no new library".
 
 ## Implementation
 
