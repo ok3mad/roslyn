@@ -22820,12 +22820,13 @@ internal sealed partial class ParameterSyntax : BaseParameterSyntax
     internal readonly GreenNode? modifiers;
     internal readonly TypeSyntax? type;
     internal readonly SyntaxToken? identifier;
+    internal readonly RefinementClauseSyntax? refinement;
     internal readonly EqualsValueClauseSyntax? @default;
 
-    internal ParameterSyntax(SyntaxKind kind, GreenNode? attributeLists, GreenNode? modifiers, TypeSyntax? type, SyntaxToken? identifier, EqualsValueClauseSyntax? @default, DiagnosticInfo[]? diagnostics, SyntaxAnnotation[]? annotations)
+    internal ParameterSyntax(SyntaxKind kind, GreenNode? attributeLists, GreenNode? modifiers, TypeSyntax? type, SyntaxToken? identifier, RefinementClauseSyntax? refinement, EqualsValueClauseSyntax? @default, DiagnosticInfo[]? diagnostics, SyntaxAnnotation[]? annotations)
       : base(kind, diagnostics, annotations)
     {
-        this.SlotCount = 5;
+        this.SlotCount = 6;
         if (attributeLists != null)
         {
             this.AdjustFlagsAndWidth(attributeLists);
@@ -22846,6 +22847,11 @@ internal sealed partial class ParameterSyntax : BaseParameterSyntax
             this.AdjustFlagsAndWidth(identifier);
             this.identifier = identifier;
         }
+        if (refinement != null)
+        {
+            this.AdjustFlagsAndWidth(refinement);
+            this.refinement = refinement;
+        }
         if (@default != null)
         {
             this.AdjustFlagsAndWidth(@default);
@@ -22853,11 +22859,11 @@ internal sealed partial class ParameterSyntax : BaseParameterSyntax
         }
     }
 
-    internal ParameterSyntax(SyntaxKind kind, GreenNode? attributeLists, GreenNode? modifiers, TypeSyntax? type, SyntaxToken? identifier, EqualsValueClauseSyntax? @default, SyntaxFactoryContext context)
+    internal ParameterSyntax(SyntaxKind kind, GreenNode? attributeLists, GreenNode? modifiers, TypeSyntax? type, SyntaxToken? identifier, RefinementClauseSyntax? refinement, EqualsValueClauseSyntax? @default, SyntaxFactoryContext context)
       : base(kind)
     {
         this.SetFactoryContext(context);
-        this.SlotCount = 5;
+        this.SlotCount = 6;
         if (attributeLists != null)
         {
             this.AdjustFlagsAndWidth(attributeLists);
@@ -22877,6 +22883,11 @@ internal sealed partial class ParameterSyntax : BaseParameterSyntax
         {
             this.AdjustFlagsAndWidth(identifier);
             this.identifier = identifier;
+        }
+        if (refinement != null)
+        {
+            this.AdjustFlagsAndWidth(refinement);
+            this.refinement = refinement;
         }
         if (@default != null)
         {
@@ -22885,10 +22896,10 @@ internal sealed partial class ParameterSyntax : BaseParameterSyntax
         }
     }
 
-    internal ParameterSyntax(SyntaxKind kind, GreenNode? attributeLists, GreenNode? modifiers, TypeSyntax? type, SyntaxToken? identifier, EqualsValueClauseSyntax? @default)
+    internal ParameterSyntax(SyntaxKind kind, GreenNode? attributeLists, GreenNode? modifiers, TypeSyntax? type, SyntaxToken? identifier, RefinementClauseSyntax? refinement, EqualsValueClauseSyntax? @default)
       : base(kind)
     {
-        this.SlotCount = 5;
+        this.SlotCount = 6;
         if (attributeLists != null)
         {
             this.AdjustFlagsAndWidth(attributeLists);
@@ -22908,6 +22919,11 @@ internal sealed partial class ParameterSyntax : BaseParameterSyntax
         {
             this.AdjustFlagsAndWidth(identifier);
             this.identifier = identifier;
+        }
+        if (refinement != null)
+        {
+            this.AdjustFlagsAndWidth(refinement);
+            this.refinement = refinement;
         }
         if (@default != null)
         {
@@ -22923,6 +22939,8 @@ internal sealed partial class ParameterSyntax : BaseParameterSyntax
     public override TypeSyntax? Type => this.type;
     /// <summary>Gets the identifier.</summary>
     public SyntaxToken? Identifier => this.identifier;
+    /// <summary>Gets the refinement of the parameter, such as <c>is &gt;=0</c> in <c>int i is &gt;=0</c>, in Sharper.</summary>
+    public RefinementClauseSyntax? Refinement => this.refinement;
     public EqualsValueClauseSyntax? Default => this.@default;
 
     internal override GreenNode? GetSlot(int index)
@@ -22932,7 +22950,8 @@ internal sealed partial class ParameterSyntax : BaseParameterSyntax
             1 => this.modifiers,
             2 => this.type,
             3 => this.identifier,
-            4 => this.@default,
+            4 => this.refinement,
+            5 => this.@default,
             _ => null,
         };
 
@@ -22941,11 +22960,11 @@ internal sealed partial class ParameterSyntax : BaseParameterSyntax
     public override void Accept(CSharpSyntaxVisitor visitor) => visitor.VisitParameter(this);
     public override TResult Accept<TResult>(CSharpSyntaxVisitor<TResult> visitor) => visitor.VisitParameter(this);
 
-    public ParameterSyntax Update(CoreSyntax.SyntaxList<AttributeListSyntax> attributeLists, CoreSyntax.SyntaxList<SyntaxToken> modifiers, TypeSyntax type, SyntaxToken identifier, EqualsValueClauseSyntax @default)
+    public ParameterSyntax Update(CoreSyntax.SyntaxList<AttributeListSyntax> attributeLists, CoreSyntax.SyntaxList<SyntaxToken> modifiers, TypeSyntax type, SyntaxToken identifier, RefinementClauseSyntax refinement, EqualsValueClauseSyntax @default)
     {
-        if (attributeLists != this.AttributeLists || modifiers != this.Modifiers || type != this.Type || identifier != this.Identifier || @default != this.Default)
+        if (attributeLists != this.AttributeLists || modifiers != this.Modifiers || type != this.Type || identifier != this.Identifier || refinement != this.Refinement || @default != this.Default)
         {
-            var newNode = SyntaxFactory.Parameter(attributeLists, modifiers, type, identifier, @default);
+            var newNode = SyntaxFactory.Parameter(attributeLists, modifiers, type, identifier, refinement, @default);
             var diags = GetDiagnostics();
             if (diags?.Length > 0)
                 newNode = newNode.WithDiagnosticsGreen(diags);
@@ -22959,10 +22978,89 @@ internal sealed partial class ParameterSyntax : BaseParameterSyntax
     }
 
     internal override GreenNode SetDiagnostics(DiagnosticInfo[]? diagnostics)
-        => new ParameterSyntax(this.Kind, this.attributeLists, this.modifiers, this.type, this.identifier, this.@default, diagnostics, GetAnnotations());
+        => new ParameterSyntax(this.Kind, this.attributeLists, this.modifiers, this.type, this.identifier, this.refinement, this.@default, diagnostics, GetAnnotations());
 
     internal override GreenNode SetAnnotations(SyntaxAnnotation[]? annotations)
-        => new ParameterSyntax(this.Kind, this.attributeLists, this.modifiers, this.type, this.identifier, this.@default, GetDiagnostics(), annotations);
+        => new ParameterSyntax(this.Kind, this.attributeLists, this.modifiers, this.type, this.identifier, this.refinement, this.@default, GetDiagnostics(), annotations);
+}
+
+/// <summary>Class which represents the syntax node for a Sharper refinement, such as <c>is &gt;=0</c> in <c>int i is &gt;=0</c>.</summary>
+internal sealed partial class RefinementClauseSyntax : CSharpSyntaxNode
+{
+    internal readonly SyntaxToken isKeyword;
+    internal readonly PatternSyntax pattern;
+
+    internal RefinementClauseSyntax(SyntaxKind kind, SyntaxToken isKeyword, PatternSyntax pattern, DiagnosticInfo[]? diagnostics, SyntaxAnnotation[]? annotations)
+      : base(kind, diagnostics, annotations)
+    {
+        this.SlotCount = 2;
+        this.AdjustFlagsAndWidth(isKeyword);
+        this.isKeyword = isKeyword;
+        this.AdjustFlagsAndWidth(pattern);
+        this.pattern = pattern;
+    }
+
+    internal RefinementClauseSyntax(SyntaxKind kind, SyntaxToken isKeyword, PatternSyntax pattern, SyntaxFactoryContext context)
+      : base(kind)
+    {
+        this.SetFactoryContext(context);
+        this.SlotCount = 2;
+        this.AdjustFlagsAndWidth(isKeyword);
+        this.isKeyword = isKeyword;
+        this.AdjustFlagsAndWidth(pattern);
+        this.pattern = pattern;
+    }
+
+    internal RefinementClauseSyntax(SyntaxKind kind, SyntaxToken isKeyword, PatternSyntax pattern)
+      : base(kind)
+    {
+        this.SlotCount = 2;
+        this.AdjustFlagsAndWidth(isKeyword);
+        this.isKeyword = isKeyword;
+        this.AdjustFlagsAndWidth(pattern);
+        this.pattern = pattern;
+    }
+
+    /// <summary>SyntaxToken representing the is keyword.</summary>
+    public SyntaxToken IsKeyword => this.isKeyword;
+    /// <summary>PatternSyntax node representing the values the parameter can have, such as <c>&gt;=0</c>.</summary>
+    public PatternSyntax Pattern => this.pattern;
+
+    internal override GreenNode? GetSlot(int index)
+        => index switch
+        {
+            0 => this.isKeyword,
+            1 => this.pattern,
+            _ => null,
+        };
+
+    internal override SyntaxNode CreateRed(SyntaxNode? parent, int position) => new CSharp.Syntax.RefinementClauseSyntax(this, parent, position);
+
+    public override void Accept(CSharpSyntaxVisitor visitor) => visitor.VisitRefinementClause(this);
+    public override TResult Accept<TResult>(CSharpSyntaxVisitor<TResult> visitor) => visitor.VisitRefinementClause(this);
+
+    public RefinementClauseSyntax Update(SyntaxToken isKeyword, PatternSyntax pattern)
+    {
+        if (isKeyword != this.IsKeyword || pattern != this.Pattern)
+        {
+            var newNode = SyntaxFactory.RefinementClause(isKeyword, pattern);
+            var diags = GetDiagnostics();
+            if (diags?.Length > 0)
+                newNode = newNode.WithDiagnosticsGreen(diags);
+            var annotations = GetAnnotations();
+            if (annotations?.Length > 0)
+                newNode = newNode.WithAnnotationsGreen(annotations);
+            return newNode;
+        }
+
+        return this;
+    }
+
+    internal override GreenNode SetDiagnostics(DiagnosticInfo[]? diagnostics)
+        => new RefinementClauseSyntax(this.Kind, this.isKeyword, this.pattern, diagnostics, GetAnnotations());
+
+    internal override GreenNode SetAnnotations(SyntaxAnnotation[]? annotations)
+        => new RefinementClauseSyntax(this.Kind, this.isKeyword, this.pattern, GetDiagnostics(), annotations);
 }
 
 /// <summary>Parameter syntax.</summary>
@@ -28121,6 +28219,7 @@ internal partial class CSharpSyntaxVisitor<TResult>
     public virtual TResult VisitParameterList(ParameterListSyntax node) => this.DefaultVisit(node);
     public virtual TResult VisitBracketedParameterList(BracketedParameterListSyntax node) => this.DefaultVisit(node);
     public virtual TResult VisitParameter(ParameterSyntax node) => this.DefaultVisit(node);
+    public virtual TResult VisitRefinementClause(RefinementClauseSyntax node) => this.DefaultVisit(node);
     public virtual TResult VisitFunctionPointerParameter(FunctionPointerParameterSyntax node) => this.DefaultVisit(node);
     public virtual TResult VisitIncompleteMember(IncompleteMemberSyntax node) => this.DefaultVisit(node);
     public virtual TResult VisitSkippedTokensTrivia(SkippedTokensTriviaSyntax node) => this.DefaultVisit(node);
@@ -28380,6 +28479,7 @@ internal partial class CSharpSyntaxVisitor
     public virtual void VisitParameterList(ParameterListSyntax node) => this.DefaultVisit(node);
     public virtual void VisitBracketedParameterList(BracketedParameterListSyntax node) => this.DefaultVisit(node);
     public virtual void VisitParameter(ParameterSyntax node) => this.DefaultVisit(node);
+    public virtual void VisitRefinementClause(RefinementClauseSyntax node) => this.DefaultVisit(node);
     public virtual void VisitFunctionPointerParameter(FunctionPointerParameterSyntax node) => this.DefaultVisit(node);
     public virtual void VisitIncompleteMember(IncompleteMemberSyntax node) => this.DefaultVisit(node);
     public virtual void VisitSkippedTokensTrivia(SkippedTokensTriviaSyntax node) => this.DefaultVisit(node);
@@ -29051,7 +29151,10 @@ internal partial class CSharpSyntaxRewriter : CSharpSyntaxVisitor<CSharpSyntaxNo
         => node.Update((SyntaxToken)Visit(node.OpenBracketToken), VisitList(node.Parameters), (SyntaxToken)Visit(node.CloseBracketToken));
 
     public override CSharpSyntaxNode VisitParameter(ParameterSyntax node)
-        => node.Update(VisitList(node.AttributeLists), VisitList(node.Modifiers), (TypeSyntax)Visit(node.Type), (SyntaxToken)Visit(node.Identifier), (EqualsValueClauseSyntax)Visit(node.Default));
+        => node.Update(VisitList(node.AttributeLists), VisitList(node.Modifiers), (TypeSyntax)Visit(node.Type), (SyntaxToken)Visit(node.Identifier), (RefinementClauseSyntax)Visit(node.Refinement), (EqualsValueClauseSyntax)Visit(node.Default));
+
+    public override CSharpSyntaxNode VisitRefinementClause(RefinementClauseSyntax node)
+        => node.Update((SyntaxToken)Visit(node.IsKeyword), (PatternSyntax)Visit(node.Pattern));
 
     public override CSharpSyntaxNode VisitFunctionPointerParameter(FunctionPointerParameterSyntax node)
         => node.Update(VisitList(node.AttributeLists), VisitList(node.Modifiers), (TypeSyntax)Visit(node.Type));
@@ -33750,7 +33853,7 @@ internal partial class ContextAwareSyntax
         return result;
     }
 
-    public ParameterSyntax Parameter(CoreSyntax.SyntaxList<AttributeListSyntax> attributeLists, CoreSyntax.SyntaxList<SyntaxToken> modifiers, TypeSyntax? type, SyntaxToken? identifier, EqualsValueClauseSyntax? @default)
+    public ParameterSyntax Parameter(CoreSyntax.SyntaxList<AttributeListSyntax> attributeLists, CoreSyntax.SyntaxList<SyntaxToken> modifiers, TypeSyntax? type, SyntaxToken? identifier, RefinementClauseSyntax? refinement, EqualsValueClauseSyntax? @default)
     {
 #if DEBUG
         if (identifier != null)
@@ -33765,7 +33868,28 @@ internal partial class ContextAwareSyntax
         }
 #endif
 
-        return new ParameterSyntax(SyntaxKind.Parameter, attributeLists.Node, modifiers.Node, type, identifier, @default, this.context);
+        return new ParameterSyntax(SyntaxKind.Parameter, attributeLists.Node, modifiers.Node, type, identifier, refinement, @default, this.context);
+    }
+
+    public RefinementClauseSyntax RefinementClause(SyntaxToken isKeyword, PatternSyntax pattern)
+    {
+#if DEBUG
+        if (isKeyword == null) throw new ArgumentNullException(nameof(isKeyword));
+        if (isKeyword.Kind != SyntaxKind.IsKeyword) throw new ArgumentException(nameof(isKeyword));
+        if (pattern == null) throw new ArgumentNullException(nameof(pattern));
+#endif
+
+        int hash;
+        var cached = CSharpSyntaxNodeCache.TryGetNode((int)SyntaxKind.RefinementClause, isKeyword, pattern, this.context, out hash);
+        if (cached != null) return (RefinementClauseSyntax)cached;
+
+        var result = new RefinementClauseSyntax(SyntaxKind.RefinementClause, isKeyword, pattern, this.context);
+        if (hash >= 0)
+        {
+            SyntaxNodeCache.AddNode(result, hash);
+        }
+
+        return result;
     }
 
     public FunctionPointerParameterSyntax FunctionPointerParameter(CoreSyntax.SyntaxList<AttributeListSyntax> attributeLists, CoreSyntax.SyntaxList<SyntaxToken> modifiers, TypeSyntax type)
@@ -39275,7 +39399,7 @@ internal static partial class SyntaxFactory
         return result;
     }
 
-    public static ParameterSyntax Parameter(CoreSyntax.SyntaxList<AttributeListSyntax> attributeLists, CoreSyntax.SyntaxList<SyntaxToken> modifiers, TypeSyntax? type, SyntaxToken? identifier, EqualsValueClauseSyntax? @default)
+    public static ParameterSyntax Parameter(CoreSyntax.SyntaxList<AttributeListSyntax> attributeLists, CoreSyntax.SyntaxList<SyntaxToken> modifiers, TypeSyntax? type, SyntaxToken? identifier, RefinementClauseSyntax? refinement, EqualsValueClauseSyntax? @default)
     {
 #if DEBUG
         if (identifier != null)
@@ -39290,7 +39414,28 @@ internal static partial class SyntaxFactory
         }
 #endif
 
-        return new ParameterSyntax(SyntaxKind.Parameter, attributeLists.Node, modifiers.Node, type, identifier, @default);
+        return new ParameterSyntax(SyntaxKind.Parameter, attributeLists.Node, modifiers.Node, type, identifier, refinement, @default);
+    }
+
+    public static RefinementClauseSyntax RefinementClause(SyntaxToken isKeyword, PatternSyntax pattern)
+    {
+#if DEBUG
+        if (isKeyword == null) throw new ArgumentNullException(nameof(isKeyword));
+        if (isKeyword.Kind != SyntaxKind.IsKeyword) throw new ArgumentException(nameof(isKeyword));
+        if (pattern == null) throw new ArgumentNullException(nameof(pattern));
+#endif
+
+        int hash;
+        var cached = SyntaxNodeCache.TryGetNode((int)SyntaxKind.RefinementClause, isKeyword, pattern, out hash);
+        if (cached != null) return (RefinementClauseSyntax)cached;
+
+        var result = new RefinementClauseSyntax(SyntaxKind.RefinementClause, isKeyword, pattern);
+        if (hash >= 0)
+        {
+            SyntaxNodeCache.AddNode(result, hash);
+        }
+
+        return result;
     }
 
     public static FunctionPointerParameterSyntax FunctionPointerParameter(CoreSyntax.SyntaxList<AttributeListSyntax> attributeLists, CoreSyntax.SyntaxList<SyntaxToken> modifiers, TypeSyntax type)

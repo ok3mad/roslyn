@@ -4902,8 +4902,8 @@ parse_member_name:;
                 return false;
             }
 
-            // cannot reuse a node that possibly ends in an expression
-            if (parameter.Default != null)
+            // cannot reuse a node that possibly ends in an expression (or, in Sharper, a pattern)
+            if (parameter.Default != null || parameter.Refinement != null)
             {
                 return false;
             }
@@ -4956,7 +4956,7 @@ parse_member_name:;
                 // We store an __arglist parameter as a parameter with null type and whose 
                 // .Identifier has the kind ArgListKeyword.
                 return _syntaxFactory.Parameter(
-                    attributes, modifiers.ToList(), type: null, this.EatToken(SyntaxKind.ArgListKeyword), @default: null);
+                    attributes, modifiers.ToList(), type: null, this.EatToken(SyntaxKind.ArgListKeyword), refinement: null, @default: null);
             }
 
             var type = this.ParseType(mode: ParseTypeMode.Parameter);
@@ -4982,6 +4982,12 @@ parse_member_name:;
                     this.EatToken()));
             }
 
+            // Sharper: a refinement, 'int i is >=0', comes after the name and before any default value, since
+            // 'int i = 0 is >=0' is valid C#: a default value of '(0 is >=0)'. In C#, 'is' here is a syntax error.
+            var refinement = identifier is not null && this.CurrentToken.Kind == SyntaxKind.IsKeyword && IsFeatureEnabled(MessageID.IDS_FeatureSharper)
+                ? _syntaxFactory.RefinementClause(this.EatToken(), ParsePattern(GetPrecedence(SyntaxKind.IsPatternExpression)))
+                : null;
+
             var equalsToken = TryEatToken(SyntaxKind.EqualsToken);
 
             return _syntaxFactory.Parameter(
@@ -4989,6 +4995,7 @@ parse_member_name:;
                 _pool.ToTokenListAndFree(modifiers),
                 type,
                 identifier,
+                refinement,
                 equalsToken == null ? null : _syntaxFactory.EqualsValueClause(equalsToken, this.ParseExpressionCore()));
         }
 
@@ -14471,7 +14478,7 @@ done:
                     var type = _syntaxFactory.IdentifierName(this.EatToken());
                     var identifier = this.ParseIdentifierToken();
                     var parameter = AddError(
-                        _syntaxFactory.Parameter(attributeLists: default, modifiers: default, type, identifier, @default: null),
+                        _syntaxFactory.Parameter(attributeLists: default, modifiers: default, type, identifier, refinement: null, @default: null),
                         ErrorCode.ERR_SharperValSimpleLambdaNeedsParentheses,
                         identifier.ValueText);
                     var paramList = _syntaxFactory.ParameterList(
@@ -14496,7 +14503,7 @@ done:
                     var arrow = this.EatToken(SyntaxKind.EqualsGreaterThanToken);
 
                     var parameter = _syntaxFactory.Parameter(
-                        attributeLists: default, modifiers: default, type: null, identifier, @default: null);
+                        attributeLists: default, modifiers: default, type: null, identifier, refinement: null, @default: null);
                     var (block, expression) = ParseLambdaBody();
                     return _syntaxFactory.SimpleLambdaExpression(
                         attributes, modifiers, parameter, arrow, block, expression);
@@ -14592,6 +14599,7 @@ done:
                 _pool.ToTokenListAndFree(modifiers),
                 paramType,
                 identifier,
+                refinement: null,
                 equalsToken != null
                     ? _syntaxFactory.EqualsValueClause(equalsToken, this.ParseExpressionCore())
                     : null);

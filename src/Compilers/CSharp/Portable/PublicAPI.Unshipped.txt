@@ -193,3 +193,21 @@ static Microsoft.CodeAnalysis.CSharp.SyntaxFactory.PipeExpression(Microsoft.Code
 static Microsoft.CodeAnalysis.CSharp.SyntaxFactory.PipeExpression(Microsoft.CodeAnalysis.CSharp.Syntax.ExpressionSyntax! left, Microsoft.CodeAnalysis.SyntaxToken operatorToken, Microsoft.CodeAnalysis.CSharp.Syntax.ExpressionSyntax! stage) -> Microsoft.CodeAnalysis.CSharp.Syntax.PipeExpressionSyntax!
 virtual Microsoft.CodeAnalysis.CSharp.CSharpSyntaxVisitor.VisitPipeExpression(Microsoft.CodeAnalysis.CSharp.Syntax.PipeExpressionSyntax! node) -> void
 virtual Microsoft.CodeAnalysis.CSharp.CSharpSyntaxVisitor<TResult>.VisitPipeExpression(Microsoft.CodeAnalysis.CSharp.Syntax.PipeExpressionSyntax! node) -> TResult?
+Microsoft.CodeAnalysis.CSharp.Syntax.ParameterSyntax.Refinement.get -> Microsoft.CodeAnalysis.CSharp.Syntax.RefinementClauseSyntax?
+Microsoft.CodeAnalysis.CSharp.Syntax.ParameterSyntax.Update(Microsoft.CodeAnalysis.SyntaxList<Microsoft.CodeAnalysis.CSharp.Syntax.AttributeListSyntax!> attributeLists, Microsoft.CodeAnalysis.SyntaxTokenList modifiers, Microsoft.CodeAnalysis.CSharp.Syntax.TypeSyntax? type, Microsoft.CodeAnalysis.SyntaxToken identifier, Microsoft.CodeAnalysis.CSharp.Syntax.RefinementClauseSyntax? refinement, Microsoft.CodeAnalysis.CSharp.Syntax.EqualsValueClauseSyntax? default) -> Microsoft.CodeAnalysis.CSharp.Syntax.ParameterSyntax!
+Microsoft.CodeAnalysis.CSharp.Syntax.ParameterSyntax.WithRefinement(Microsoft.CodeAnalysis.CSharp.Syntax.RefinementClauseSyntax? refinement) -> Microsoft.CodeAnalysis.CSharp.Syntax.ParameterSyntax!
+Microsoft.CodeAnalysis.CSharp.Syntax.RefinementClauseSyntax
+Microsoft.CodeAnalysis.CSharp.Syntax.RefinementClauseSyntax.IsKeyword.get -> Microsoft.CodeAnalysis.SyntaxToken
+Microsoft.CodeAnalysis.CSharp.Syntax.RefinementClauseSyntax.Pattern.get -> Microsoft.CodeAnalysis.CSharp.Syntax.PatternSyntax!
+Microsoft.CodeAnalysis.CSharp.Syntax.RefinementClauseSyntax.Update(Microsoft.CodeAnalysis.SyntaxToken isKeyword, Microsoft.CodeAnalysis.CSharp.Syntax.PatternSyntax! pattern) -> Microsoft.CodeAnalysis.CSharp.Syntax.RefinementClauseSyntax!
+Microsoft.CodeAnalysis.CSharp.Syntax.RefinementClauseSyntax.WithIsKeyword(Microsoft.CodeAnalysis.SyntaxToken isKeyword) -> Microsoft.CodeAnalysis.CSharp.Syntax.RefinementClauseSyntax!
+Microsoft.CodeAnalysis.CSharp.Syntax.RefinementClauseSyntax.WithPattern(Microsoft.CodeAnalysis.CSharp.Syntax.PatternSyntax! pattern) -> Microsoft.CodeAnalysis.CSharp.Syntax.RefinementClauseSyntax!
+Microsoft.CodeAnalysis.CSharp.SyntaxKind.RefinementClause = 9905 -> Microsoft.CodeAnalysis.CSharp.SyntaxKind
+override Microsoft.CodeAnalysis.CSharp.CSharpSyntaxRewriter.VisitRefinementClause(Microsoft.CodeAnalysis.CSharp.Syntax.RefinementClauseSyntax! node) -> Microsoft.CodeAnalysis.SyntaxNode?
+override Microsoft.CodeAnalysis.CSharp.Syntax.RefinementClauseSyntax.Accept(Microsoft.CodeAnalysis.CSharp.CSharpSyntaxVisitor! visitor) -> void
+override Microsoft.CodeAnalysis.CSharp.Syntax.RefinementClauseSyntax.Accept<TResult>(Microsoft.CodeAnalysis.CSharp.CSharpSyntaxVisitor<TResult>! visitor) -> TResult?
+static Microsoft.CodeAnalysis.CSharp.SyntaxFactory.Parameter(Microsoft.CodeAnalysis.SyntaxList<Microsoft.CodeAnalysis.CSharp.Syntax.AttributeListSyntax!> attributeLists, Microsoft.CodeAnalysis.SyntaxTokenList modifiers, Microsoft.CodeAnalysis.CSharp.Syntax.TypeSyntax? type, Microsoft.CodeAnalysis.SyntaxToken identifier, Microsoft.CodeAnalysis.CSharp.Syntax.RefinementClauseSyntax? refinement, Microsoft.CodeAnalysis.CSharp.Syntax.EqualsValueClauseSyntax? default) -> Microsoft.CodeAnalysis.CSharp.Syntax.ParameterSyntax!
+static Microsoft.CodeAnalysis.CSharp.SyntaxFactory.RefinementClause(Microsoft.CodeAnalysis.CSharp.Syntax.PatternSyntax! pattern) -> Microsoft.CodeAnalysis.CSharp.Syntax.RefinementClauseSyntax!
+static Microsoft.CodeAnalysis.CSharp.SyntaxFactory.RefinementClause(Microsoft.CodeAnalysis.SyntaxToken isKeyword, Microsoft.CodeAnalysis.CSharp.Syntax.PatternSyntax! pattern) -> Microsoft.CodeAnalysis.CSharp.Syntax.RefinementClauseSyntax!
+virtual Microsoft.CodeAnalysis.CSharp.CSharpSyntaxVisitor.VisitRefinementClause(Microsoft.CodeAnalysis.CSharp.Syntax.RefinementClauseSyntax! node) -> void
+virtual Microsoft.CodeAnalysis.CSharp.CSharpSyntaxVisitor<TResult>.VisitRefinementClause(Microsoft.CodeAnalysis.CSharp.Syntax.RefinementClauseSyntax! node) -> TResult?

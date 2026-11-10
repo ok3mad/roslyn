@@ -8,6 +8,7 @@ using System;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using Microsoft.CodeAnalysis.Collections;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -80,7 +81,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 _parameterSyntaxKind |= ParameterFlags.DefaultParameter;
             }
 
-            if (parameterSyntax != null && ParameterHelpers.IsSharperReadOnly(parameterSyntax))
+            // Sharper: a refined parameter (int i is >=0) is implicitly readonly, so its refinement holds in the whole body.
+            if (parameterSyntax != null && (ParameterHelpers.IsSharperReadOnly(parameterSyntax) || parameterSyntax.Refinement != null))
             {
                 _parameterSyntaxKind |= ParameterFlags.SharperReadOnly;
             }
@@ -97,10 +99,47 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         public override bool IsDiscard => false;
 
         /// <summary>
-        /// True if the parameter is declared with Sharper's <c>readonly</c> modifier (<c>readonly int x</c>), so it cannot be reassigned.
+        /// True if the parameter is declared with Sharper's <c>readonly</c> modifier (<c>readonly int x</c>), or has a
+        /// refinement (<c>int i is &gt;=0</c>), so it cannot be reassigned.
         /// It is a rule about the body only: it is not emitted and plays no part in the signature.
         /// </summary>
         internal bool IsSharperReadOnly => (_parameterSyntaxKind & ParameterFlags.SharperReadOnly) != 0;
+
+#nullable enable
+        private StrongBox<SharperRefinement?>? _lazySharperRefinement;
+
+        /// <summary>
+        /// The Sharper refinement of the parameter (<c>int i is &gt;=0</c>), bound and checked once, or null if it has none,
+        /// or if its pattern is not closed and could not be bound.
+        /// Lambda parameters and extension block receivers report their error where their parameter list binds
+        /// (<see cref="ParameterHelpers.CheckSharperRefinementContext"/>) and have none.
+        /// </summary>
+        internal SharperRefinement? SharperRefinement
+        {
+            get
+            {
+                if (ParameterSyntax?.Refinement is not { } syntax || ContainingSymbol is LambdaSymbol or NamedTypeSymbol)
+                {
+                    return null;
+                }
+
+                if (_lazySharperRefinement is null)
+                {
+                    var diagnostics = BindingDiagnosticBag.GetInstance();
+                    var refinement = new StrongBox<SharperRefinement?>(
+                        SharperRefinement.Bind(this, syntax, GetDefaultParameterValueBinder(syntax), DefaultSyntaxValue, diagnostics));
+                    if (Interlocked.CompareExchange(ref _lazySharperRefinement, refinement, null) is null)
+                    {
+                        AddDeclarationDiagnostics(diagnostics);
+                    }
+
+                    diagnostics.Free();
+                }
+
+                return _lazySharperRefinement.Value;
+            }
+        }
+#nullable disable
 
 #nullable enable
         internal sealed override ConstantValue? ExplicitDefaultConstantValue
@@ -1608,6 +1647,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             Debug.Assert(filter == null);
             _ = this.GetAttributes();
             _ = this.ExplicitDefaultConstantValue;
+            _ = this.SharperRefinement;
             DoMiscValidation();
             state.SpinWaitComplete(CompletionPart.ComplexParameterSymbolAll, cancellationToken);
         }

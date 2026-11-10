@@ -267,6 +267,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         {
             Debug.Assert(parameterContext is ParameterContext.Default or ParameterContext.FunctionPointer or ParameterContext.ExtensionReceiverParameter);
             CheckParameterModifiers(parameterSyntax, diagnostics, parameterContext);
+            CheckSharperRefinementContext(parameterSyntax, diagnostics, parameterContext);
 
             bool inExtension = parameterContext is ParameterContext.ExtensionReceiverParameter;
             var refKind = GetModifiers(parameterSyntax.Modifiers, ignoreParams: inExtension, out SyntaxToken refnessKeyword, out SyntaxToken paramsKeyword, out SyntaxToken thisKeyword, out ScopedKind scope);
@@ -624,6 +625,29 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 parameter.Modifiers.Count > 0 &&
                 parameter.Modifiers[0].IsKind(SyntaxKind.ReadOnlyKeyword) &&
                 parameter.IsFeatureEnabled(MessageID.IDS_FeatureSharper);
+        }
+
+        /// <summary>
+        /// Reports Sharper's error for a refinement (<c>int i is &gt;=0</c>) where a parameter list cannot have one in slice
+        /// 1 and the parameter symbol does not check it: lambdas and anonymous methods, and extension block receivers.
+        /// The other limits are checked by the symbol (<see cref="SharperRefinement.Bind"/>).
+        /// </summary>
+        internal static void CheckSharperRefinementContext(BaseParameterSyntax parameter, BindingDiagnosticBag diagnostics, ParameterContext parameterContext)
+        {
+            if (parameter is ParameterSyntax { Refinement: { } refinement })
+            {
+                MessageID? cause = parameterContext switch
+                {
+                    ParameterContext.Lambda or ParameterContext.AnonymousMethod => MessageID.IDS_SharperRefinementOnLambda,
+                    ParameterContext.ExtensionReceiverParameter => MessageID.IDS_SharperRefinementOnExtensionReceiver,
+                    _ => null,
+                };
+
+                if (cause is { } c)
+                {
+                    diagnostics.Add(ErrorCode.ERR_SharperRefinementNotSupportedYet, refinement.IsKeyword.GetLocation(), c.Localize());
+                }
+            }
         }
 
         internal static void CheckParameterModifiers(

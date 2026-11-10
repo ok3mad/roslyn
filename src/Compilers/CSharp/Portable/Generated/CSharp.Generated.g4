@@ -162,7 +162,119 @@ parameter_list
   ;
 
 parameter
-  : attribute_list* modifier* type? (identifier_token | '__arglist')? equals_value_clause?
+  : attribute_list* modifier* type? (identifier_token | '__arglist')? refinement_clause? equals_value_clause?
+  ;
+
+refinement_clause
+  : 'is' pattern
+  ;
+
+pattern
+  : binary_pattern
+  | constant_pattern
+  | declaration_pattern
+  | discard_pattern
+  | list_pattern
+  | parenthesized_pattern
+  | recursive_pattern
+  | relational_pattern
+  | slice_pattern
+  | type_pattern
+  | unary_pattern
+  | var_pattern
+  ;
+
+binary_pattern
+  : pattern ('or' | 'and') pattern
+  ;
+
+constant_pattern
+  : expression
+  ;
+
+declaration_pattern
+  : type variable_designation
+  ;
+
+variable_designation
+  : discard_designation
+  | parenthesized_variable_designation
+  | single_variable_designation
+  ;
+
+discard_designation
+  : '_'
+  ;
+
+parenthesized_variable_designation
+  : '(' (variable_designation (',' variable_designation)*)? ')'
+  ;
+
+single_variable_designation
+  : identifier_token
+  ;
+
+discard_pattern
+  : '_'
+  ;
+
+list_pattern
+  : '[' (pattern (',' pattern)* ','?)? ']' variable_designation?
+  ;
+
+parenthesized_pattern
+  : '(' pattern ')'
+  ;
+
+recursive_pattern
+  : type? positional_pattern_clause? property_pattern_clause? variable_designation?
+  ;
+
+positional_pattern_clause
+  : '(' (subpattern (',' subpattern)*)? ')'
+  ;
+
+subpattern
+  : base_expression_colon? pattern
+  ;
+
+base_expression_colon
+  : expression_colon
+  | name_colon
+  ;
+
+expression_colon
+  : expression ':'
+  ;
+
+property_pattern_clause
+  : '{' (subpattern (',' subpattern)* ','?)? '}'
+  ;
+
+relational_pattern
+  : '!=' expression
+  | '<' expression
+  | '<=' expression
+  | '==' expression
+  | '>' expression
+  | '>=' expression
+  ;
+
+slice_pattern
+  : '..' pattern?
+  ;
+
+type_pattern
+  : type
+  ;
+
+unary_pattern
+  : 'not' pattern
+  ;
+
+var_pattern
+  : 'val' variable_designation
+  | 'var' variable_designation
   ;
 
 constructor_initializer
@@ -596,114 +708,6 @@ switch_label
 
 case_pattern_switch_label
   : 'case' pattern when_clause? ':'
-  ;
-
-pattern
-  : binary_pattern
-  | constant_pattern
-  | declaration_pattern
-  | discard_pattern
-  | list_pattern
-  | parenthesized_pattern
-  | recursive_pattern
-  | relational_pattern
-  | slice_pattern
-  | type_pattern
-  | unary_pattern
-  | var_pattern
-  ;
-
-binary_pattern
-  : pattern ('or' | 'and') pattern
-  ;
-
-constant_pattern
-  : expression
-  ;
-
-declaration_pattern
-  : type variable_designation
-  ;
-
-variable_designation
-  : discard_designation
-  | parenthesized_variable_designation
-  | single_variable_designation
-  ;
-
-discard_designation
-  : '_'
-  ;
-
-parenthesized_variable_designation
-  : '(' (variable_designation (',' variable_designation)*)? ')'
-  ;
-
-single_variable_designation
-  : identifier_token
-  ;
-
-discard_pattern
-  : '_'
-  ;
-
-list_pattern
-  : '[' (pattern (',' pattern)* ','?)? ']' variable_designation?
-  ;
-
-parenthesized_pattern
-  : '(' pattern ')'
-  ;
-
-recursive_pattern
-  : type? positional_pattern_clause? property_pattern_clause? variable_designation?
-  ;
-
-positional_pattern_clause
-  : '(' (subpattern (',' subpattern)*)? ')'
-  ;
-
-subpattern
-  : base_expression_colon? pattern
-  ;
-
-base_expression_colon
-  : expression_colon
-  | name_colon
-  ;
-
-expression_colon
-  : expression ':'
-  ;
-
-property_pattern_clause
-  : '{' (subpattern (',' subpattern)* ','?)? '}'
-  ;
-
-relational_pattern
-  : '!=' expression
-  | '<' expression
-  | '<=' expression
-  | '==' expression
-  | '>' expression
-  | '>=' expression
-  ;
-
-slice_pattern
-  : '..' pattern?
-  ;
-
-type_pattern
-  : type
-  ;
-
-unary_pattern
-  : 'not' pattern
-  ;
-
-var_pattern
-  : 'val' variable_designation
-  | 'var' variable_designation
   ;
 
 when_clause
