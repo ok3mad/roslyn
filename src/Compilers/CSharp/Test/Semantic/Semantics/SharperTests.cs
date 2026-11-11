@@ -3296,7 +3296,8 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             {
                 if (!name.EndsWith("Twin"))
                 {
-                    Assert.Equal(locals[name + "Twin"], type);
+                    // The natural type of a lambda has the name of its parameter, which differs in the twin.
+                    Assert.Equal(locals[name + "Twin"]!.Replace("? xTwin,", "? x,"), type);
                 }
             }
         }
@@ -3855,8 +3856,8 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         [Fact]
         public void FunctionType_Names_SameAsUnnamed()
         {
-            // Names do not change the type: the named and unnamed spellings convert to each other, clash as overloads and
-            // give the same symbol.
+            // Names do not change what the type means: the named and unnamed spellings convert to each other and clash as
+            // overloads. The symbols differ only in the names they carry (FunctionTypeNames_* tests).
             var source = """
                 class C
                 {
@@ -3877,13 +3878,14 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 Diagnostic(ErrorCode.ERR_MemberAlreadyExists, "M").WithArguments("M", "C").WithLocation(4, 10));
 
             var n = comp.GetMember<MethodSymbol>("C.N");
-            Assert.Equal(n.Parameters[2].Type, n.Parameters[0].Type);
+            Assert.True(n.Parameters[2].Type.Equals(n.Parameters[0].Type, TypeCompareKind.IgnoreTupleNames));
+            Assert.NotEqual(n.Parameters[2].Type, n.Parameters[0].Type);
             Assert.Equal(n.Parameters[2].Type, n.Parameters[1].Type);
 
             var tree = comp.SyntaxTrees.Single();
             var model = comp.GetSemanticModel(tree);
             var named = tree.GetRoot().DescendantNodes().OfType<FunctionTypeSyntax>().First(t => t.Parameters.Count == 2);
-            Assert.Equal("System.Func<System.Int32, System.Int32, System.Int32>", model.GetTypeInfo(named).Type.ToTestDisplayString());
+            Assert.Equal("System.Func<System.Int32 width, System.Int32 height, System.Int32>", model.GetTypeInfo(named).Type.ToTestDisplayString());
             Assert.Equal("System.Int32", model.GetTypeInfo(named.Parameters[1].Type).Type.ToTestDisplayString());
             Assert.True(SyntaxFacts.IsInTypeOnlyContext(named.Parameters[1].Type));
         }

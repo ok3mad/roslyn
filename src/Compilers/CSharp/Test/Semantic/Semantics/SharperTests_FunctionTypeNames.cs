@@ -752,7 +752,20 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (26,12): warning CS8625: Cannot convert null literal to non-nullable reference type.
                 //         gt(null);
                 Diagnostic(ErrorCode.WRN_NullAsNonNullable, "null").WithLocation(26, 12));
-            Assert.Equal("", string.Join("|", FunctionTypeNames_LocalTypes(comp)));
+            AssertEx.Equal(
+            [
+                "b: System.Boolean",
+                "f: System.Func<System.String? text, System.String>",
+                "g: System.Func<System.String text, System.String?>",
+                "copy: System.Func<System.String? text, System.String>?",
+                "cond: System.Func<System.String text, System.String?>?",
+                "id: System.Func<System.String? text, System.String>?",
+                "array: System.Func<System.String text, System.String?>[]?",
+                "maybe: System.Func<System.String? text, System.String>?",
+                "lambda: System.Func<System.String? text, System.String other, System.String>?",
+                "ft: System.Func<System.String?, System.String>",
+                "gt: System.Func<System.String, System.String?>",
+            ], FunctionTypeNames_LocalTypes(comp));
         }
 
         [Fact]
