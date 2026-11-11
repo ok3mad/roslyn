@@ -12,6 +12,7 @@
 () -> string thunk = () => "ready";        // Func<string>
 (string) -> void print = Console.Write;    // Action<string>
 () -> void tick = () => { };               // Action
+(int width, int height) -> int area = (w, h) => w * h;   // Func<int, int, int>, with names
 
 static (int) -> int Compose((int) -> int f, (int) -> int g) => x => g(f(x));
 ```
@@ -39,8 +40,12 @@ var name = o switch { () -> void => "action", (int) -> int f => "f" + f(1), _ =>
   `((int) -> int)[]` is `Func<int, int>[]`, `((int) -> int)~` is `Task<Func<int, int>>` and `((int) -> int)[..]` is
   `IEnumerable<Func<int, int>>`. Such parentheses are allowed only around a function type, once: `((int))` and
   `(((int) -> int))` are not types.
-- **Parameters are types,** without names or modifiers. A parameter of tuple type needs its own parentheses:
-  `((int, int)) -> int`.
+- **Parameters are types, each with an optional name:** `(int width, int height) -> int`, and `(int x, int) -> void`,
+  where only some are named, as in a tuple. A parameter of tuple type needs its own parentheses: `((int, int)) -> int`,
+  and its name follows them: `((int a, int b) p) -> int`. Names do not change the type yet, so
+  `(int width, int height) -> int` is `Func<int, int, int>`, the same type as `(int, int) -> int`, and the two clash as
+  overloads. Names must be unique in one parameter list (CS0100, as for a method's parameters, `_` included); a nested
+  function type has its own: `(int a) -> (int a) -> int` is allowed.
 - **Constraints are those of `Func` and `Action`:** a pointer or a static type cannot be a parameter or return type
   (CS0306, CS0718), and a ref struct can only be one where `Func` allows it (.NET 9 and later). The error is reported
   where the `Func` spelling reports it: on the offending parameter or return type.
@@ -69,7 +74,7 @@ var name = o switch { () -> void => "action", (int) -> int f => "f" + f(1), _ =>
 
 | Code | Message |
 | --- | --- |
-| CS20007 | A function type cannot name its parameters. Remove the name '{0}'. |
+| CS0100 | The parameter name '{0}' is a duplicate (C#'s error, for two parameters of one function type with the same name) |
 | CS20008 | A function type parameter cannot be '{0}', because a function type is a 'System.Func' or 'System.Action' delegate. |
 | CS20009 | A function type cannot have more than {0} parameters, because no 'System.Func' or 'System.Action' delegate has more. |
 
@@ -78,13 +83,15 @@ var name = o switch { () -> void => "action", (int) -> int f => "f" + f(1), _ =>
 - **`ref`, `out` and `in` parameters, ref returns and more than 16 parameters** have no `Func` or `Action`, and are
   errors for now (CS20008, CS20009; a ref return reports CS1073). The design is decided
   ([#56](https://github.com/ok3mad/roslyn/issues/56)), see [Planned: ref parameters](#planned-ref-parameters).
-- **Parameter names** such as `(int width, int height) -> int` are not supported yet (CS20007), because `Func` cannot
-  carry them. They are planned the way tuples carry their element names, in four steps under
+- **Parameter names** such as `(int width, int height) -> int` are kept in the syntax but mean nothing yet: `Func`
+  cannot carry them, so they are lost through `var`, generic arguments and references, and the IDE does not show them.
+  They are planned the way tuples carry their element names, in four steps under
   [#57](https://github.com/ok3mad/roslyn/issues/57): names in the syntax, ignored by the binder
-  ([#212](https://github.com/ok3mad/roslyn/issues/212)); names on the `Func` or `Action` type symbol within a compilation
+  ([#212](https://github.com/ok3mad/roslyn/issues/212), done); names on the `Func` or `Action` type symbol within a compilation
   ([#213](https://github.com/ok3mad/roslyn/issues/213)); signature help, Quick Info and inline hints
   ([#214](https://github.com/ok3mad/roslyn/issues/214)); and names in metadata through a synthesized attribute
   ([#215](https://github.com/ok3mad/roslyn/issues/215)). Names will never change conversions or overload resolution.
+  The design is decided, see [Planned: parameter names](#planned-parameter-names).
 - **IDE:** the editor knows nothing about Sharper yet, so completion and formatting may not handle function types.
 
 ## Planned: ref parameters
@@ -130,11 +137,66 @@ Rejected, because no other representation gives one type across assemblies:
   5ⁿ·4 shapes for n parameters, 3,114 up to four parameters. Any cut-off is arbitrary, and the library goes against
   "no new library".
 
+## Planned: parameter names
+
+Decided in [#213](https://github.com/ok3mad/roslyn/issues/213) and [#215](https://github.com/ok3mad/roslyn/issues/215),
+not built yet. The names follow tuple element names in design and in the places the compiler handles them, but share
+none of their types or attributes, apart from one comparison flag.
+
+```csharp
+(int width, int height) -> int area = (w, h) => w * h;
+var g = area;                    // g's type has the names width, height
+var f = (int x, int y) => x + y; // Sharper: the natural type has the names x, y
+area(width: 3, height: 4);       // named arguments, once the names are in metadata (N4)
+
+// Library.cx
+public static int Apply((int width, int height) -> int f) => f(3, 4);
+// emitted as
+public static int Apply([Sharper.FunctionParameterNames(new[] { "width", "height" })] Func<int, int, int> f)
+```
+
+- **On the type symbol (N2):** a constructed `Func` or `Action` carries a record of parameter names, as a tuple
+  carries `TupleExtraData`, and its `DelegateInvokeMethod` has parameters with those names. The names go through
+  `var`, generic inference (a name is kept only where both sides agree, as `MergeTupleNames` does), `?:`, `??` and
+  arrays. A lambda's natural type carries its parameter names, in Sharper only.
+- **Never part of the type's meaning:** names reuse `TypeCompareKind.IgnoreTupleNames` instead of a new
+  `TypeCompareKind` value (public API), so every place that ignores tuple names, conversions and overload resolution
+  among them, ignores these too. Members that differ only in names still clash (CS0111). No caller can ignore one kind
+  of name and compare the other. `GetTypeInfo` returns the type with its names, and `SymbolEqualityComparer.Default`
+  tells two differently named function types apart, as it does tuples.
+- **No name-mismatch warning:** nothing like CS8123. Lambda parameters always have names, so a warning on converting a
+  lambda to a function type with other names would fire constantly, and tuples do not warn between variables either.
+- **Overrides and implementations** follow the tuple rules (CS8139, CS8141): changing a name is an error, and dropping
+  all names is allowed.
+- **In metadata (N4):** a new attribute, `Sharper.FunctionParameterNamesAttribute`, synthesized and embedded like
+  [`[Immutable]`](immutable-types.md#the-attributes), with a type of that name declared in the compilation taking
+  precedence. Other assemblies recognize it by namespace and name. This is the README's "fact for other assemblies"
+  row, so it is not a [runtime library](../README.md#runtime-library) type. It holds one slot per `Func`/`Action`
+  parameter, in pre-order depth-first order over the type, `null` for no name, and is left out when every slot is
+  `null`. It is emitted wherever tuple names are (parameters, returns, fields, properties, events, base types,
+  constraints). On a count mismatch the reader drops the names and keeps the type. Plain C# sees `Func<int, int, int>`.
+- **Named arguments (N4):** allowed on a delegate invocation only with the names of a function type, after N4, so
+  the IDE and the command line agree. Through a plain `Func<...>` there are no names, and a named argument is the
+  usual CS1739.
+- **IDE (N3):** after N2. Signature help, Quick Info and inline hints read the names from `DelegateInvokeMethod`, not
+  from the declaration's syntax, which would miss `var`, generic arguments and metadata.
+
+Rejected:
+
+- **`TupleElementNamesAttribute` for the names:** `TupleTypeDecoder` reports a type whose names do not match its tuple
+  elements as unsupported metadata, so plain C# consumers of a Sharper library would break.
+- **Names only on the declaring local, parameter or field:** cheaper, but the names are lost through `var` and
+  generic inference.
+- **The attribute in the runtime library:** an embedded attribute matched by name already crosses assemblies. A
+  library type would only help tools that want to reference it by type.
+
 ## Implementation
 
 The function type is the syntax node `FunctionTypeSyntax` (`Syntax.xml`), Sharper's first new syntax node. Its kind,
 `SyntaxKind.FunctionType`, is 9900: Sharper syntax nodes count up from there, apart from upstream's kinds. Its
-parameters reuse `FunctionPointerParameterSyntax`.
+parameters are `FunctionTypeParameterSyntax` (`SyntaxKind.FunctionTypeParameter`, 9906): modifiers, a type and an
+optional name, the shape of a tuple element with modifiers. The modifiers are bound by `BindFunctionType`, which
+reports CS20008 for them today.
 
 The parser (`LanguageParser.cs`) changes only when Sharper is on:
 
@@ -152,7 +214,8 @@ The parser (`LanguageParser.cs`) changes only when Sharper is on:
   ends: a suffix after a function type belongs to its return type, so a function type ends where its return type does,
   while a tuple or parenthesized type ends at its own `)` or suffix.
 
-The binder (`Binder_Symbols.cs`, `BindFunctionType`) binds the parameter and return types and constructs the
+The binder (`Binder_Symbols.cs`, `BindFunctionType`) checks that parameter names are unique, binds the parameter and
+return types and constructs the
 well-known `Func` or `Action` through `BindSharperTypeAlias` (`Binder_SharperTypes.cs`), checking constraints as for
 any generic type, with each parameter and return type as the location of its type argument. There is no bound node, so flow
 analysis, lowering and IOperation need no changes. Tests are the `FunctionType_*` tests in `SharperTests.cs`.

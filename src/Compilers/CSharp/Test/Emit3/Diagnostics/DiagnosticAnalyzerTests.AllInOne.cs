@@ -46,15 +46,15 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         [Fact]
         public void DiagnosticAnalyzerAllInOne_Sharper()
         {
-            // Uses every Sharper syntax node: a function type, a task type, a parenthesized function type, a try expression, a
-            // pipe and a refinement.
+            // Uses every Sharper syntax node: a function type and its parameters, a task type, a parenthesized function type,
+            // a try expression, a pipe and a refinement.
             var source = """
                 #nullable enable
                 using System.Threading.Tasks;
 
                 class C
                 {
-                    (int, string) -> bool _predicate = (i, s) => s.Length == i;
+                    (int length, string) -> bool _predicate = (i, s) => s.Length == i;
                     void Notify(((int) -> void)? callback) => callback?.Invoke(_predicate(1, "a") ? 1 : 0);
 
                     async int~ GetAsync() { await Task.Yield(); return 1; }

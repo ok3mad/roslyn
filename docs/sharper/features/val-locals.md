@@ -94,8 +94,11 @@ without a designation is still a type test.
 ## Not covered yet
 
 - **Noisy CS20003:** every non-readonly member of a struct `val` warns, even one that does not mutate. Inferring which
-  members mutate is [#84](https://github.com/ok3mad/roslyn/issues/84); the warning's default severity until then is
-  [#85](https://github.com/ok3mad/roslyn/issues/85).
+  members mutate is [#84](https://github.com/ok3mad/roslyn/issues/84). Until then CS20003, CS20010 and CS20013 stay
+  default warnings ([#85](https://github.com/ok3mad/roslyn/issues/85)): the copy changes behavior (a `MoveNext` on a
+  `val` enumerator never advances), and inference can then only remove warnings, never add them. Metadata members
+  marked `[IsReadOnly]` and `[Pure]` members (which must be `readonly`) already do not warn. Code where the noise is
+  not worth it can mark struct members `readonly` or use `/nowarn`.
 - **Sharpener:** escaping `val` as `@val` for the accepted breaks is [#86](https://github.com/ok3mad/roslyn/issues/86).
 - **IDE:** the editor does not treat `val` like `var` yet: classification, Quick Info, completion, hints and
   refactorings ([#87](https://github.com/ok3mad/roslyn/issues/87)). An analyzer that suggests `val` for locals that are

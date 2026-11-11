@@ -2521,7 +2521,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         ERR_SharperValMayNotBindToType = SharperErrorCodes.Base + 4,
         ERR_SharperValDeconstructionDisallowsSpecificType = SharperErrorCodes.Base + 5,
         ERR_SharperValRefReassignment = SharperErrorCodes.Base + 6,
-        ERR_SharperFunctionTypeParameterName = SharperErrorCodes.Base + 7,
+        // ERR_SharperFunctionTypeParameterName = SharperErrorCodes.Base + 7,   Retired in step N1 of function type parameter names, which keeps the names.
         ERR_SharperFunctionTypeParameterModifier = SharperErrorCodes.Base + 8,
         ERR_SharperFunctionTypeTooManyParameters = SharperErrorCodes.Base + 9,
         WRN_SharperReadOnlyLocalMemberCallOnCopy = SharperErrorCodes.Base + 10,

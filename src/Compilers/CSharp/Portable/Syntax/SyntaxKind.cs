@@ -972,5 +972,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         PipeExpression = 9904,
         /// <summary>Represents Sharper's refinement of a parameter, such as <c>is &gt;=0</c> in <c>int i is &gt;=0</c>.</summary>
         RefinementClause = 9905,
+        /// <summary>Represents a parameter of Sharper's function type, such as <c>int width</c> in <c>(int width, int height) -> int</c>.</summary>
+        FunctionTypeParameter = 9906,
     }
 }

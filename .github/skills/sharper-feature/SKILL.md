@@ -385,6 +385,19 @@ implementation plan, "Feature 3"):
    DAG node, as it does a `when` clause. The decision DAG rewriter lowers it (`_localRewriter.VisitExpression`), which
    can change `_factory.Syntax`.
 
+43. **A prologue belongs to the emitted method, after state machine rewriting.** Code that must run when a method is
+   called (the refinement guard) cannot go into the bound body: an iterator's or `async` method's body becomes
+   `MoveNext`, so it would run on the first `MoveNext` or inside the task. Lower it on its own (`LocalRewriter.Rewrite`)
+   and put it first in the body `MethodCompiler` emits after state machine rewriting, which is the kickoff method, and
+   before field initializers and primary constructor captures. Build it against the parameters of the method that is
+   emitted: a local function's closure method (compiled with the synthesized methods, not by `CompileMethod`) and an
+   extension block member's implementation method have their own parameters, with substituted types. Start it with
+   `BoundSequencePoint.CreateHidden()`: codegen asserts that a method with sequence points has one at offset 0
+   (`ILBuilder.RealizeSequencePoints`). A fact for other assemblies that the compiler writes, with an argument, is an entry
+   of the `[Immutable]` attribute table that does not bind by name, made when the declaration binds so that
+   `GetEmbeddedTypes` sees it, and written from the symbol's `AddSynthesizedAttributes` (`SharperRefinementGuard`,
+   `SharperImmutabilityAttribute.Refinement`).
+
 ## Inferred Types
 
 Inference from a body (`infer` return types, rows 10 and 15) reuses `var`'s rules for the natural type of an

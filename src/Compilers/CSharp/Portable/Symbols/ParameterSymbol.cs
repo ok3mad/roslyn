@@ -75,6 +75,12 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         internal abstract bool HasEnumeratorCancellationAttribute { get; }
 
         /// <summary>
+        /// Sharper: the refinement of the parameter (<c>int i is &gt;=0</c>), from its declaration or, in metadata, from its
+        /// embedded <c>Sharper.SharperRefinementAttribute</c>; null if it has none.
+        /// </summary>
+        internal virtual SharperRefinement? SharperRefinement => null;
+
+        /// <summary>
         /// Describes how the parameter is marshalled when passed to native code.
         /// Null if no specific marshalling information is available for the parameter.
         /// </summary>
