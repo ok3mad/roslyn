@@ -2,6 +2,7 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for more information.
 
+using System.Reflection.Metadata.Ecma335;
 using Microsoft.CodeAnalysis.CSharp.Test.Utilities;
 using Microsoft.CodeAnalysis.CSharp.UnitTests;
 using Microsoft.CodeAnalysis.Emit;
@@ -2107,6 +2108,62 @@ namespace Microsoft.CodeAnalysis.CSharp.EditAndContinue.UnitTests
                               IL_0139:  ret
                             }
                             """);
+                    })
+                .Verify();
+        }
+
+        /// <summary>
+        /// A body edit of an <c>infer</c> method that keeps the type and changes only the inferred return refinement
+        /// (docs/sharper/features/refined-types.md) is a body update. The return carries the attribute whatever the body
+        /// returns ("_" when there is no refinement), so the delta rewrites the attribute and never adds or removes the
+        /// return's metadata row, which the delta writer cannot do.
+        /// </summary>
+        [Fact]
+        public void InferredReturnRefinement_BodyEdit()
+        {
+            using var _ = CreateTest()
+                .AddBaseline("""
+                    class C
+                    {
+                        static infer F(int x) => 1;
+                        static infer G(int x) => x;
+                    }
+                    """)
+                .AddGeneration(
+                    // 1: another refinement
+                    """
+                    class C
+                    {
+                        static infer F(int x) => x > 0 ? 2 : 3;
+                        static infer G(int x) => x;
+                    }
+                    """,
+                    edits: [Edit(SemanticEditKind.Update, c => c.GetMember("C.F"))],
+                    validator: g =>
+                    {
+                        g.VerifyUpdatedMethodNames("F");
+
+                        // The attribute of the return of F is rewritten; the row of a return has no name.
+                        g.VerifyTableSize(TableIndex.Param, 2);
+                        g.VerifyCustomAttributes("[Sharper.SharperRefinementAttribute..ctor] <nil>");
+                    })
+                .AddGeneration(
+                    // 2: the refinement goes away, and one appears
+                    """
+                    class C
+                    {
+                        static infer F(int x) => x;
+                        static infer G(int x) => 3;
+                    }
+                    """,
+                    edits: [Edit(SemanticEditKind.Update, c => c.GetMember("C.F")), Edit(SemanticEditKind.Update, c => c.GetMember("C.G"))],
+                    validator: g =>
+                    {
+                        g.VerifyUpdatedMethodNames("F", "G");
+                        g.VerifyTableSize(TableIndex.Param, 4);
+                        g.VerifyCustomAttributes(
+                            "[Sharper.SharperRefinementAttribute..ctor] <nil>",
+                            "[Sharper.SharperRefinementAttribute..ctor] <nil>");
                     })
                 .Verify();
         }
