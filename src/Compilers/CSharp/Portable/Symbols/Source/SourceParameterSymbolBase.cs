@@ -2,8 +2,10 @@
 // The .NET Foundation licenses this file to you under the MIT license.
 // See the LICENSE file in the project root for more information.
 
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics;
+using System.Linq;
 using Microsoft.CodeAnalysis.CSharp.Emit;
 using Microsoft.CodeAnalysis.PooledObjects;
 using Roslyn.Utilities;
@@ -91,6 +93,18 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 sourceParameter.DefaultValueFromAttributes == ConstantValue.NotAvailable)
             {
                 AddSynthesizedAttribute(ref attributes, compilation.SynthesizeDecimalConstantAttribute(defaultValue.DecimalValue));
+            }
+
+            // Sharper: a refined parameter carries its refinement for other assemblies (Feature 11, step 5).
+            if (parameter.SharperRefinement is { HasErrors: false } refinement &&
+                compilation.SharperImmutability.GetAttributeType(SharperImmutabilityAttribute.Refinement, BindingDiagnosticBag.Discarded, refinement.Pattern.Syntax) is { } refinementAttribute &&
+                refinementAttribute.InstanceConstructors.FirstOrDefault(c => c.ParameterCount == 1 && c.Parameters[0].Type.SpecialType == SpecialType.System_String) is { } refinementConstructor)
+            {
+                AddSynthesizedAttribute(ref attributes, SynthesizedAttributeData.Create(
+                    compilation,
+                    refinementConstructor,
+                    ImmutableArray.Create(new TypedConstant(refinementConstructor.Parameters[0].Type, TypedConstantKind.Primitive, refinement.Text)),
+                    ImmutableArray<KeyValuePair<string, TypedConstant>>.Empty));
             }
 
             var type = parameter.TypeWithAnnotations;

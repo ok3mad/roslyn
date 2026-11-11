@@ -34,6 +34,10 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
         public override bool IsDiscard => _originalParam.IsDiscard;
 
+#nullable enable
+        internal sealed override SharperRefinement? SharperRefinement => _originalParam.SharperRefinement;
+#nullable disable
+
         public override ImmutableArray<SyntaxReference> DeclaringSyntaxReferences
         {
             get

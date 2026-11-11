@@ -114,7 +114,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         /// Lambda parameters and extension block receivers report their error where their parameter list binds
         /// (<see cref="ParameterHelpers.CheckSharperRefinementContext"/>) and have none.
         /// </summary>
-        internal SharperRefinement? SharperRefinement
+        internal sealed override SharperRefinement? SharperRefinement
         {
             get
             {

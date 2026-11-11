@@ -794,6 +794,14 @@ namespace Microsoft.CodeAnalysis.CSharp
                             stateMachine = stateMachine ?? asyncStateMachine;
                         }
 
+                        // Sharper: a local function with refined parameters checks them first, in the kickoff method if it
+                        // is an iterator or async.
+                        if (!loweredBody.HasErrors &&
+                            SharperRefinementGuard.MakeLoweredGuard(method, methodOrdinal, compilationState, diagnosticsThisMethod) is { } sharperGuard)
+                        {
+                            loweredBody = new BoundStatementList(loweredBody.Syntax, ImmutableArray.Create(sharperGuard, loweredBody)) { WasCompilerGenerated = true };
+                        }
+
                         SetGlobalErrorIfTrue(diagnosticsThisMethod.HasAnyErrors());
                         PipelinePhaseValidator.AssertAfterStateMachineRewriting(loweredBody);
 
@@ -1283,6 +1291,14 @@ namespace Microsoft.CodeAnalysis.CSharp
                         else
                         {
                             boundStatements = ImmutableArray<BoundStatement>.Empty;
+
+                            // Sharper: the guard of refined parameters comes first, before a primary constructor stores its
+                            // captured parameters and before field initializers run; in a state machine, the lowered body
+                            // is the kickoff method's.
+                            if (SharperRefinementGuard.MakeLoweredGuard(extensionImplementation ?? methodSymbol, methodOrdinal, compilationState, diagsForCurrentMethod) is { } sharperGuard)
+                            {
+                                boundStatements = boundStatements.Add(sharperGuard);
+                            }
 
                             if (methodSymbol is SynthesizedPrimaryConstructor primaryCtor)
                             {
