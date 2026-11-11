@@ -15,15 +15,57 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
     internal static partial class SharperInferredParameterType
     {
         /// <summary>
-        /// One local function whose <c>infer</c> parameters are being inferred from the delegate types it is converted to
-        /// (step P7), and the conversions recorded while the body that declares it is bound with a placeholder for it.
+        /// One local function (step P7) or private method (step P7b) whose <c>infer</c> parameters are being inferred from
+        /// the delegate types it is converted to, and the conversions recorded while the bodies that can convert it are
+        /// bound with a placeholder for it.
         /// </summary>
         private sealed class ConversionFrame
         {
-            internal readonly LocalFunctionStatementSyntax Declaration;
+            /// <summary>The <see cref="LocalFunctionStatementSyntax"/> or the <see cref="MethodDeclarationSyntax"/>.</summary>
+            internal readonly CSharpSyntaxNode Declaration;
 
-            /// <summary>The body that declares the local function, bound with the placeholder.</summary>
-            internal readonly CSharpSyntaxNode Body;
+            internal readonly ParameterListSyntax ParameterList;
+
+            /// <summary>Step P7: the body that declares the local function, bound with the placeholder.</summary>
+            internal readonly CSharpSyntaxNode? Body;
+
+            /// <summary>
+            /// Step P7b: the stand-in for the private method, which replaces it in the bindings of this frame (its
+            /// parameters being inferred have an error type).
+            /// </summary>
+            internal readonly SharperPlaceholderMethodSymbol? StandIn;
+
+            /// <summary>
+            /// Step P7b: the binder that the body being bound starts from. A binding whose binder chain does not reach it was
+            /// started by another inference (an inferred return type, a body inference) and sees the real method.
+            /// </summary>
+            internal Binder? Root;
+
+            /// <summary>Step P7b: the stand-ins of the other private methods that may infer from conversions, made on first use.</summary>
+            private Dictionary<MethodSymbol, SharperPlaceholderMethodSymbol>? _otherStandIns;
+
+            /// <summary>
+            /// Step P7b: the stand-in for <paramref name="method"/> in this frame's bindings: <see cref="StandIn"/> for the
+            /// method being inferred, which records its conversions, and one that records nothing for any other.
+            /// </summary>
+            internal SharperPlaceholderMethodSymbol GetStandIn(SourceOrdinaryMethodSymbol method)
+            {
+                Debug.Assert(StandIn is not null);
+                if ((object)StandIn.Original == method)
+                {
+                    return StandIn;
+                }
+
+                _otherStandIns ??= new Dictionary<MethodSymbol, SharperPlaceholderMethodSymbol>();
+                if (!_otherStandIns.TryGetValue(method, out var standIn))
+                {
+                    var declaration = (MethodDeclarationSyntax)method.SyntaxNode;
+                    standIn = CreatePlaceholder(method, declaration, declaration.ParameterList, useConversionResults: false, out _);
+                    _otherStandIns.Add(method, standIn);
+                }
+
+                return standIn;
+            }
 
             /// <summary>
             /// Per method group syntax, the conversions of the local function there: the delegate type and the delegate's
@@ -34,7 +76,34 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             internal ConversionFrame(LocalFunctionStatementSyntax declaration, CSharpSyntaxNode body)
             {
                 Declaration = declaration;
+                ParameterList = declaration.ParameterList;
                 Body = body;
+            }
+
+            internal ConversionFrame(MethodDeclarationSyntax declaration, SharperPlaceholderMethodSymbol standIn)
+            {
+                Declaration = declaration;
+                ParameterList = declaration.ParameterList;
+                StandIn = standIn;
+            }
+
+            /// <summary>True if <paramref name="binder"/> is in the binding of a body that this frame (step P7b) is binding.</summary>
+            internal bool IsInBinding(Binder binder)
+            {
+                if (Root is null)
+                {
+                    return false;
+                }
+
+                for (Binder? current = binder; current is not null; current = current.Next)
+                {
+                    if (current == Root)
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
             }
 
             internal void Free()
@@ -45,16 +114,26 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 }
 
                 Conversions.Clear();
+                if (_otherStandIns is not null)
+                {
+                    foreach (var (_, standIn) in _otherStandIns)
+                    {
+                        standIn.FreeCandidates();
+                    }
+
+                    _otherStandIns = null;
+                }
             }
         }
 
-        /// <summary>The local functions whose parameter types are being inferred from conversions on this thread, innermost last.</summary>
+        /// <summary>The local functions and private methods whose parameter types are being inferred from conversions on this thread, innermost last.</summary>
         [ThreadStatic] private static List<ConversionFrame>? s_conversionFrames;
 
         /// <summary>
-        /// Sharper step P7: called by overload resolution of a method group that is converted to a delegate type, with the
-        /// delegate's parameters as the arguments. When the group holds a local function whose <c>infer</c> parameters are
-        /// being inferred from its conversions on this thread, records the delegate's parameter types for them.
+        /// Sharper steps P7 and P7b: called by overload resolution of a method group that is converted to a delegate type,
+        /// with the delegate's parameters as the arguments. When the group holds a local function whose <c>infer</c>
+        /// parameters are being inferred from its conversions on this thread, or the stand-in of such a private method
+        /// (<see cref="ReplaceByConversionStandIns"/>), records the delegate's parameter types for them.
         /// </summary>
         /// <remarks>
         /// The local function's parameters being inferred have an error type in that binding, so the conversion fails;
@@ -75,23 +154,33 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
             foreach (MethodSymbol method in methods)
             {
-                if (method.OriginalDefinition is not LocalFunctionSymbol localFunction)
-                {
-                    continue;
-                }
-
-                LocalFunctionStatementSyntax declaration = localFunction.Syntax;
                 ConversionFrame? frame = null;
-                foreach (var candidate in frames)
+                MethodSymbol converted = method.OriginalDefinition;
+                if (converted is LocalFunctionSymbol localFunction)
                 {
-                    if (candidate.Declaration == declaration)
+                    LocalFunctionStatementSyntax declaration = localFunction.Syntax;
+                    foreach (var candidate in frames)
                     {
-                        frame = candidate;
-                        break;
+                        if (candidate.Declaration == declaration)
+                        {
+                            frame = candidate;
+                            break;
+                        }
+                    }
+                }
+                else if (converted is SharperPlaceholderMethodSymbol standIn)
+                {
+                    foreach (var candidate in frames)
+                    {
+                        if ((object?)candidate.StandIn == standIn)
+                        {
+                            frame = candidate;
+                            break;
+                        }
                     }
                 }
 
-                if (frame is null || TryGetConvertedTypes(binder, localFunction, declaration, arguments) is not { } types)
+                if (frame is null || TryGetConvertedTypes(binder, converted, frame.ParameterList, arguments) is not { } types)
                 {
                     continue;
                 }
@@ -118,13 +207,14 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         }
 
         /// <summary>
-        /// The delegate's parameter types for a conversion of <paramref name="localFunction"/> that fits the rest of its
-        /// signature (default types where the parameter is not being inferred), or null.
+        /// The delegate's parameter types for a conversion of <paramref name="method"/> (a local function or the stand-in of
+        /// a private method) that fits the rest of its signature (default types where the parameter is not being
+        /// inferred), or null.
         /// </summary>
-        private static ImmutableArray<TypeWithAnnotations>? TryGetConvertedTypes(Binder binder, LocalFunctionSymbol localFunction, LocalFunctionStatementSyntax declaration, AnalyzedArguments arguments)
+        private static ImmutableArray<TypeWithAnnotations>? TryGetConvertedTypes(Binder binder, MethodSymbol method, ParameterListSyntax parameterList, AnalyzedArguments arguments)
         {
-            SeparatedSyntaxList<ParameterSyntax> parameterSyntaxes = declaration.ParameterList.Parameters;
-            ImmutableArray<ParameterSymbol> parameters = localFunction.Parameters;
+            SeparatedSyntaxList<ParameterSyntax> parameterSyntaxes = parameterList.Parameters;
+            ImmutableArray<ParameterSymbol> parameters = method.Parameters;
             if (parameters.Length != arguments.Arguments.Count || parameterSyntaxes.Count != parameters.Length)
             {
                 return null;
@@ -148,7 +238,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 {
                     if (delegateParameterType.Type.IsErrorType() ||
                         delegateParameterType.Type.ContainsErrorType() ||
-                        delegateParameterType.Type.VisitType(static (t, method, _) => t is TypeParameterSymbol typeParameter && !IsInScope(typeParameter, method), localFunction) is not null)
+                        delegateParameterType.Type.VisitType(static (t, method, _) => t is TypeParameterSymbol typeParameter && !IsInScope(typeParameter, method), method) is not null)
                     {
                         fits = false;
                         break;
@@ -181,7 +271,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
             static bool IsInScope(TypeParameterSymbol typeParameter, Symbol method)
             {
-                for (Symbol? container = method; container is not null; container = container.ContainingSymbol)
+                // A stand-in has the type parameters of the method it stands for.
+                for (Symbol? container = (method as SharperPlaceholderMethodSymbol)?.Original ?? method; container is not null; container = container.ContainingSymbol)
                 {
                     if (ReferenceEquals(container, typeParameter.ContainingSymbol))
                     {
@@ -198,7 +289,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
         /// <summary>
         /// The result for an <c>infer</c> parameter without a default value of a local function, from the delegate types
-        /// the local function is converted to (step P7); null when the parameter is not a local function's.
+        /// the local function is converted to (step P7), or of a private method (step P7b, null when no conversion gives
+        /// its type); null when the parameter is neither's.
         /// </summary>
         /// <remarks>
         /// While the body that declares the local function is bound with a placeholder for it, the placeholder's parameter
@@ -206,6 +298,13 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         /// </remarks>
         private static Result? GetResultFromConversions(Symbol owner, ParameterSyntax parameter)
         {
+            if (owner is SourceOrdinaryMethodSymbol { SyntaxNode: MethodDeclarationSyntax { ParameterList: var methodParameterList } } &&
+                parameter.Parent == methodParameterList)
+            {
+                // Step P7b: null when no conversion gives the type, which then comes from the body.
+                return GetMemberConversionInference(owner).GetResult(methodParameterList.Parameters.IndexOf(parameter));
+            }
+
             if (owner is not LocalFunctionSymbol localFunction ||
                 localFunction.Syntax is not { ParameterList: var parameterList } declaration ||
                 parameter.Parent != parameterList)
@@ -344,45 +443,13 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             CSharpCompilation compilation)
         {
             SeparatedSyntaxList<ParameterSyntax> parameters = declaration.ParameterList.Parameters;
-            var uses = new ArrayBuilder<PinningUse>?[parameters.Count];
+            var walker = new ConversionSitesWalker(frame);
             if (boundBody is not null && frame.Conversions.Count > 0)
             {
-                var walker = new ConversionSitesWalker(frame);
                 walker.Visit(boundBody);
-                foreach (var syntax in walker.Sites)
-                {
-                    foreach (var (delegateType, types) in frame.Conversions[syntax])
-                    {
-                        object description = new MessageFragment(
-                            MessageID.IDS_SharperInferConversionTo,
-                            [delegateType?.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat) ?? localFunction.Name]);
-                        for (int i = 0; i < types.Length; i++)
-                        {
-                            if (!types[i].HasType)
-                            {
-                                continue;
-                            }
-
-                            var builder = uses[i] ??= ArrayBuilder<PinningUse>.GetInstance();
-                            bool seen = false;
-                            foreach (var use in builder)
-                            {
-                                if (use.Argument == syntax && use.Type.Equals(types[i], TypeCompareKind.ConsiderEverything))
-                                {
-                                    seen = true;
-                                    break;
-                                }
-                            }
-
-                            if (!seen)
-                            {
-                                builder.Add(new PinningUse(syntax, description, types[i]));
-                            }
-                        }
-                    }
-                }
             }
 
+            var uses = CollectConversionUses(frame, walker.Sites, localFunction.Name);
             var results = ArrayBuilder<Result?>.GetInstance(parameters.Count);
             for (int i = 0; i < parameters.Count; i++)
             {
@@ -393,6 +460,49 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             }
 
             return new BodyInference(results.ToImmutableAndFree());
+        }
+
+        /// <summary>
+        /// Per parameter, the uses that the conversions recorded at <paramref name="sites"/> give it: one per method group
+        /// and delegate parameter type, described by the delegate type (or <paramref name="name"/>).
+        /// </summary>
+        private static ArrayBuilder<PinningUse>?[] CollectConversionUses(ConversionFrame frame, List<SyntaxNode> sites, string name)
+        {
+            var uses = new ArrayBuilder<PinningUse>?[frame.ParameterList.Parameters.Count];
+            foreach (var syntax in sites)
+            {
+                foreach (var (delegateType, types) in frame.Conversions[syntax])
+                {
+                    object description = new MessageFragment(
+                        MessageID.IDS_SharperInferConversionTo,
+                        [delegateType?.ToDisplayString(SymbolDisplayFormat.CSharpErrorMessageFormat) ?? name]);
+                    for (int i = 0; i < types.Length; i++)
+                    {
+                        if (!types[i].HasType)
+                        {
+                            continue;
+                        }
+
+                        var builder = uses[i] ??= ArrayBuilder<PinningUse>.GetInstance();
+                        bool seen = false;
+                        foreach (var use in builder)
+                        {
+                            if (use.Argument == syntax && use.Type.Equals(types[i], TypeCompareKind.ConsiderEverything))
+                            {
+                                seen = true;
+                                break;
+                            }
+                        }
+
+                        if (!seen)
+                        {
+                            builder.Add(new PinningUse(syntax, description, types[i]));
+                        }
+                    }
+                }
+            }
+
+            return uses;
         }
 
         /// <summary>Finds the method group syntax nodes with recorded conversions that the final bound tree holds.</summary>

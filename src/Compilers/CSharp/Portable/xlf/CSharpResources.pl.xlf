@@ -2687,6 +2687,11 @@
         <target state="new">Cannot infer the type of parameter '{0}' from its uses, because binding the body of '{1}' needs the signature of '{1}', directly or through other members whose types are inferred. Write the parameter type.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperInferParameterConversionCycle">
+        <source>Cannot infer the type of parameter '{0}' from the conversions of '{1}', because binding the members that convert '{1}' needs the signature of '{1}', directly or through other members whose types are inferred. Write the parameter type.</source>
+        <target state="new">Cannot infer the type of parameter '{0}' from the conversions of '{1}', because binding the members that convert '{1}' needs the signature of '{1}', directly or through other members whose types are inferred. Write the parameter type.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperInferParameterCycle">
         <source>Cannot infer the type of parameter '{0}', because its default value depends on the type of '{0}' itself. Write the parameter type.</source>
         <target state="new">Cannot infer the type of parameter '{0}', because its default value depends on the type of '{0}' itself. Write the parameter type.</target>

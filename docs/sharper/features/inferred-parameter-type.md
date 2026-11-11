@@ -1,11 +1,12 @@
 # Inferred parameter type (`infer`)
 
-**Status:** Prototype of steps P1 to P6, merged into `main`; P7 on branch `sharper/infer-parameter-p7`. Requires
+**Status:** Prototype of steps P1 to P7, merged into `main`; P7b on branch `sharper/infer-parameter-p7b`. Requires
 `/features:sharper`. Issues: [#72](https://github.com/ok3mad/roslyn/issues/72) (P1),
 [#73](https://github.com/ok3mad/roslyn/issues/73) (P2), [#166](https://github.com/ok3mad/roslyn/issues/166) (P2 for the
 other member kinds), [#74](https://github.com/ok3mad/roslyn/issues/74) (P3),
 [#75](https://github.com/ok3mad/roslyn/issues/75) (P4), [#76](https://github.com/ok3mad/roslyn/issues/76) (P5),
-[#77](https://github.com/ok3mad/roslyn/issues/77) (P6), [#78](https://github.com/ok3mad/roslyn/issues/78) (P7), under
+[#77](https://github.com/ok3mad/roslyn/issues/77) (P6), [#78](https://github.com/ok3mad/roslyn/issues/78) (P7),
+[#207](https://github.com/ok3mad/roslyn/issues/207) (P7b), under
 [#27](https://github.com/ok3mad/roslyn/issues/27).
 
 ## Summary
@@ -39,8 +40,8 @@ extends it to overloaded and generic calls: `Format(n, "N2")` pins `n` when ever
 takes an `int` first, and `dict.GetValueOrDefault(key)` pins `TKey`. Step P6 adds the other uses: an assignment to a
 typed local, field or property (`this.Name = name`), `return x` from a member with a written return type, and `ref`,
 `out` and `in` arguments. Step P7 gives a local function's parameters the types of the delegate it is converted to, as
-for a lambda: `xs.Select(Format)` gives `Format(infer x)` the type `int` from `Func<int, TResult>`. The same for private
-members is [#207](https://github.com/ok3mad/roslyn/issues/207).
+for a lambda: `xs.Select(Format)` gives `Format(infer x)` the type `int` from `Func<int, TResult>`. Step P7b does the
+same for a private method, from the conversions anywhere in its type.
 
 ## Rules
 
@@ -217,7 +218,7 @@ class C(IProfiles profiles)
   source keep "nothing else gives its type". The parameter never becomes generic
   ([#79](https://github.com/ok3mad/roslyn/issues/79)).
 - **Precedence.** The member that is overridden or implemented (P2), then the default value (P1), then the delegate
-  types a local function is converted to (P7, below), then the body. The body is consulted only when neither gives the type; a use that does
+  types a local function or a private method is converted to (P7 and P7b, below), then the body. The body is consulted only when neither gives the type; a use that does
   not accept the type of a higher source reports the C# error of the twin with the type written (CS1503 names both
   types).
 - **Lambdas and local functions in the body** count like the rest of it: `xs.Select(x => profiles.Load(id))` pins
@@ -370,6 +371,43 @@ void Run(int[] xs)
 - **Members.** Local functions only. Private methods are [#207](https://github.com/ok3mad/roslyn/issues/207); other
   members would infer from their callers. A lambda's `infer` parameter without a default value keeps CS20027.
 
+## Private methods (step P7b)
+
+A private method takes the same types from the delegate types it is converted to in any body of its type:
+
+```csharp
+class C
+{
+    static infer Format(infer x) => $"<{x}>";                   // string Format(int x)
+    string[] Run(int[] xs) => xs.Select(Format).ToArray();
+
+    static readonly Func<double, double> s_half = Half;          // double Half(double d)
+    static double Half(infer d) => d / 2;
+
+    class Nested { internal static Func<string, int> Length = Measure; }
+    static int Measure(infer s) => s.Length;                    // int Measure(string s)
+}
+```
+
+- **Members.** Private ordinary methods, static or not, for their `infer` parameters without a default value. Not
+  partial methods, and not members of other accessibility, which would infer from their callers.
+- **Where.** The method's accessibility domain: every declaration of its type, other partial declarations included,
+  and the types nested in it, at any depth. The bodies of methods, constructors (with their initializers), destructors,
+  operators, conversions and accessors, and field and property initializers, also in lambdas and local functions there.
+  Primary constructor base arguments do not count yet.
+- **What converts, what pins nothing, agreement and nullability** as for a local function (above): CS20057 names two
+  delegate types, a maybe-null delegate parameter makes the type annotated, and calls, `var f = Format;` and conversions
+  that do not fit pin nothing.
+- **Precedence.** P2 (a private method overrides nothing), the default value (P1), the conversions, then the body
+  (P4 to P6). A parameter that no conversion gives takes its type from the body, as before; a use in the body that does
+  not accept the conversion's type reports C#'s error for the twin (CS1503).
+- **Cycles.** A body that converts the method and also needs its signature through a member whose type is inferred
+  from it (`Header()` with an inferred return type that calls `Format(0)`, used next to `xs.Select(Format)`) is a cycle:
+  CS20063 on each parameter inferred from conversions, whichever member is used first. Two private methods converted in
+  the same body are not a cycle.
+- **Cost.** Only the bodies that name the method without invoking it are bound once more, once per compilation; a
+  method that is only called costs nothing.
+
 ## How it works
 
 No syntax, bound node or lowering is added: `infer` parses as a type name, and the binder decides.
@@ -442,7 +480,17 @@ No syntax, bound node or lowering is added: `infer` parses as a type name, and t
    are fixed) records the delegate's parameter types (`RecordMethodGroupConversion`). Only conversions at method groups
    that the final bound tree holds count, with the error recovery binding of a lambda that stays unbound. The other local
    functions of that body with such parameters are placeholders in that binding too, unless already inferred, so the
-   body is bound once per local function. The result is kept by the compilation per parameter list, on the stack of the
+   body is bound once per local function.
+   For a private method (P7b), `GetMemberConversionInference` runs from `InferBeforeSignature` after P2 and P1 and before
+   the body. A per-type index (one syntax walk) gives the bodies that name the method without invoking it; each is bound
+   with a placeholder for its own member (P4's `CreatePlaceholder`, so its signature and return type are not read; an
+   accessor or initializer with its own symbol), while a frame with a stand-in for the method is on the stack. In the
+   bindings whose binder chain reaches the frame's root, overload resolution and the natural type of a method group
+   replace every private method that may infer from conversions by a stand-in (`ReplaceByConversionStandIns`); only the
+   method's own records its conversions. Nested inferences (an inferred return type, a body inference) have their own
+   binder chains and read the real signatures. The result is kept per parameter list in
+   `SharperConversionInferences`, on the stack keyed by the method's return type syntax, and a cycle is CS20063. P4 reads
+   P7b's result first, so its placeholder has the conversion's type. The result is kept by the compilation per parameter list, on the stack of the
    other inferences, and published once. A body bound with placeholders for its member's own parameters (P4) does not
    infer its local functions.
 11. **Semantic model.** `GetTypeInfo` and `GetSymbolInfo` on a parameter's `infer`, and on a copied `infer` return,
@@ -482,11 +530,14 @@ No syntax, bound node or lowering is added: `infer` parses as a type name, and t
   converts to nothing) records no candidates and is read as P4 reads a call that binds.
 - P6: a return from a lambda without a written return type, `yield return`, array elements and deconstruction pin
   nothing. CS20057 names the first two uses that differ, not every use.
-- P7: private members ([#207](https://github.com/ok3mad/roslyn/issues/207)). The overloads of one call that take
+- P7: the overloads of one call that take
   different delegate types report CS20057 rather than pinning nothing, and the conversions of a lambda's trial binding
   for another delegate type count when they are at the same method group as the final binding. After CS20057, C#
   reports its own errors for the conversions to the error type (CS0123, CS1503). The body is bound once more per local
   function with such a parameter, once per compilation.
+- P7b: partial methods, primary constructor base arguments and top-level statements are not covered. A member called in
+  a body that converts the method, whose inferred return type needs the method's signature, is a cycle (CS20063), even
+  where the conversion does not depend on it. A body is bound once more per private method it names as a method group.
 - The IDE (R5, [#71](https://github.com/ok3mad/roslyn/issues/71)) shows, writes and fixes `infer` parameter types as it
   does return types; see [IDE](inferred-return-type.md#ide-step-r5) on the return type page, which also has its
   follow-ups.
@@ -514,4 +565,8 @@ called from `OverloadResolution.MethodInvocationOverloadResolution` and `ObjectC
 `VisitLocalDeclaration` and `VisitReturnStatement` in `SharperInferredParameterType_Body.cs`; tests `InferFromUses_*` in
 `SharperTests_InferFromUses.cs`. Step P7: `Symbols/Source/SharperInferredParameterType_Conversions.cs`, called from
 `OverloadResolution.MethodInvocationOverloadResolution` and `SharperInferredParameterType.GetType`; tests
-`InferFromConversions_*` in `SharperTests_InferFromConversions.cs`.
+`InferFromConversions_*` in `SharperTests_InferFromConversions.cs`. Step P7b:
+`Symbols/Source/SharperInferredParameterType_MemberConversions.cs`, called from
+`SharperInferredParameterType.InferBeforeSignature`, `OverloadResolution.MethodInvocationOverloadResolution` and
+`Binder.GetUniqueSignatureFromMethodGroup`; tests `InferFromMemberConversions_*` in
+`SharperTests_InferFromMemberConversions.cs`.

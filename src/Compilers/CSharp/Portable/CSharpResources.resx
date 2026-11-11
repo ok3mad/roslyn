@@ -8572,6 +8572,9 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
   <data name="ERR_SharperInferParameterBodyCycle" xml:space="preserve">
     <value>Cannot infer the type of parameter '{0}' from its uses, because binding the body of '{1}' needs the signature of '{1}', directly or through other members whose types are inferred. Write the parameter type.</value>
   </data>
+  <data name="ERR_SharperInferParameterConversionCycle" xml:space="preserve">
+    <value>Cannot infer the type of parameter '{0}' from the conversions of '{1}', because binding the members that convert '{1}' needs the signature of '{1}', directly or through other members whose types are inferred. Write the parameter type.</value>
+  </data>
   <data name="ERR_SharperInferParameterUsesDisagree" xml:space="preserve">
     <value>Cannot infer the type of parameter '{0}', because its uses need different types: '{1}' for '{2}' and '{3}' for '{4}'. Write the parameter type.</value>
   </data>

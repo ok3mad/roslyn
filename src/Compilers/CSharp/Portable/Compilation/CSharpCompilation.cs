@@ -1652,6 +1652,26 @@ namespace Microsoft.CodeAnalysis.CSharp
             }
         }
 
+        private System.Runtime.CompilerServices.ConditionalWeakTable<ParameterListSyntax, SharperInferredParameterType.BodyInference>? _lazySharperConversionInferences;
+
+        /// <summary>
+        /// Sharper: the parameter types that private methods infer from the delegate types their method groups are converted
+        /// to in the bodies of their type (step P7b), by parameter list (see
+        /// <see cref="SharperInferredParameterType.GetMemberConversionInference"/>).
+        /// </summary>
+        internal System.Runtime.CompilerServices.ConditionalWeakTable<ParameterListSyntax, SharperInferredParameterType.BodyInference> SharperConversionInferences
+        {
+            get
+            {
+                if (_lazySharperConversionInferences == null)
+                {
+                    Interlocked.CompareExchange(ref _lazySharperConversionInferences, new System.Runtime.CompilerServices.ConditionalWeakTable<ParameterListSyntax, SharperInferredParameterType.BodyInference>(), null);
+                }
+
+                return _lazySharperConversionInferences;
+            }
+        }
+
         private SharperImmutability? _lazySharperImmutability;
 
         /// <summary>

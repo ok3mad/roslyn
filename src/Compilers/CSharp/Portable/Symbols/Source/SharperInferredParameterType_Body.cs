@@ -187,65 +187,13 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         private static BodyInference InferFromBody(SourceMemberMethodSymbol method, BaseMethodDeclarationSyntax declaration, ParameterListSyntax parameterList)
         {
             CSharpCompilation compilation = method.DeclaringCompilation;
-            Binder signatureBinder = GetDefaultValueBinder(method, parameterList.Parameters[0]);
-
-            // The parameters as the signature will have them, with a placeholder type where the type is being inferred.
-            var placeholderParameters = ArrayBuilder<(TypeWithAnnotations Type, RefKind RefKind, string Name)>.GetInstance(parameterList.Parameters.Count);
-            var isTarget = ArrayBuilder<bool>.GetInstance(parameterList.Parameters.Count);
-            foreach (var parameter in parameterList.Parameters)
-            {
-                TypeWithAnnotations type;
-                bool target = false;
-                if (parameter.Type is null)
-                {
-                    // __arglist is not a parameter.
-                    continue;
-                }
-
-                type = signatureBinder.BindTypeOrSharperInferKeyword(parameter.Type, BindingDiagnosticBag.Discarded, out bool isInfer);
-                if (isInfer)
-                {
-                    if (parameter.Default is null)
-                    {
-                        type = CreateErrorType(compilation);
-                        target = true;
-                    }
-                    else
-                    {
-                        type = GetOrInfer(method, parameter, GetDefaultValueBinder(method, parameter)).Type;
-                    }
-                }
-
-                placeholderParameters.Add((type, GetWrittenRefKind(parameter), parameter.Identifier.ValueText));
-                isTarget.Add(target);
-            }
-
+            var placeholder = CreatePlaceholder(method, declaration, parameterList, useConversionResults: true, out ImmutableArray<bool> isTarget);
             if (!isTarget.Contains(true))
             {
-                // A type named 'infer' is in scope.
-                placeholderParameters.Free();
-                isTarget.Free();
+                // A type named 'infer' is in scope, or the conversions of a private method give every type (step P7b).
                 return BodyInference.NotApplicable;
             }
 
-            // The written return type; a constructor returns void; 'infer' is being inferred.
-            TypeWithAnnotations returnType = default;
-            if (declaration is ConstructorDeclarationSyntax)
-            {
-                returnType = TypeWithAnnotations.Create(compilation.GetSpecialType(SpecialType.System_Void));
-            }
-            else if (declaration switch
-            {
-                MethodDeclarationSyntax m => m.ReturnType,
-                OperatorDeclarationSyntax o => o.ReturnType,
-                ConversionOperatorDeclarationSyntax c => c.Type,
-                _ => null,
-            } is { } returnTypeSyntax)
-            {
-                returnType = signatureBinder.BindTypeOrSharperInferKeyword(returnTypeSyntax.SkipRef(), BindingDiagnosticBag.Discarded, out _);
-            }
-
-            var placeholder = new SharperPlaceholderMethodSymbol(method, placeholderParameters.ToImmutableAndFree(), returnType, isTarget.ToImmutable());
             var collector = new UsesCollector(ImmutableArray<ParameterSymbol>.Empty, placeholder.ParameterCount);
             var dependencies = BindingDiagnosticBag.GetInstance(withDiagnostics: false, withDependencies: true);
             if (placeholder.TryGetBodyBinder() is { } bodyBinder)
@@ -296,9 +244,83 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 collector.Uses[ordinal]?.Free();
             }
 
-            isTarget.Free();
             dependencies.Free();
             return new BodyInference(results.ToImmutableAndFree());
+        }
+
+        /// <summary>
+        /// A placeholder for <paramref name="method"/> whose body can be bound before its signature exists (steps P4 and
+        /// P7b): its parameters have their written types or the types of their default values (P1), and its <c>infer</c>
+        /// parameters without a default value have an error type and are its targets. With
+        /// <paramref name="useConversionResults"/>, a parameter that the conversions of a private method give a type (step
+        /// P7b) has that type and is no target. The return type is the written one, void for a constructor, and being
+        /// inferred for <c>infer</c>.
+        /// </summary>
+        private static SharperPlaceholderMethodSymbol CreatePlaceholder(
+            SourceMemberMethodSymbol method,
+            BaseMethodDeclarationSyntax declaration,
+            ParameterListSyntax parameterList,
+            bool useConversionResults,
+            out ImmutableArray<bool> targets)
+        {
+            CSharpCompilation compilation = method.DeclaringCompilation;
+            Binder? signatureBinder = parameterList.Parameters.Count > 0 ? GetDefaultValueBinder(method, parameterList.Parameters[0]) : null;
+
+            // The parameters as the signature will have them, with a placeholder type where the type is being inferred.
+            var placeholderParameters = ArrayBuilder<(TypeWithAnnotations Type, RefKind RefKind, string Name)>.GetInstance(parameterList.Parameters.Count);
+            var isTarget = ArrayBuilder<bool>.GetInstance(parameterList.Parameters.Count);
+            foreach (var parameter in parameterList.Parameters)
+            {
+                TypeWithAnnotations type;
+                bool target = false;
+                if (parameter.Type is null)
+                {
+                    // __arglist is not a parameter.
+                    continue;
+                }
+
+                type = signatureBinder!.BindTypeOrSharperInferKeyword(parameter.Type, BindingDiagnosticBag.Discarded, out bool isInfer);
+                if (isInfer)
+                {
+                    if (parameter.Default is not null)
+                    {
+                        type = GetOrInfer(method, parameter, GetDefaultValueBinder(method, parameter)).Type;
+                    }
+                    else if (useConversionResults && GetResultFromConversions(method, parameter) is { } fromConversions)
+                    {
+                        type = fromConversions.Type;
+                    }
+                    else
+                    {
+                        type = CreateErrorType(compilation);
+                        target = true;
+                    }
+                }
+
+                placeholderParameters.Add((type, GetWrittenRefKind(parameter), parameter.Identifier.ValueText));
+                isTarget.Add(target);
+            }
+
+            // The written return type; a constructor returns void; 'infer' is being inferred.
+            TypeWithAnnotations returnType = default;
+            if (declaration is ConstructorDeclarationSyntax or DestructorDeclarationSyntax)
+            {
+                returnType = TypeWithAnnotations.Create(compilation.GetSpecialType(SpecialType.System_Void));
+            }
+            else if (declaration switch
+            {
+                MethodDeclarationSyntax m => m.ReturnType,
+                OperatorDeclarationSyntax o => o.ReturnType,
+                ConversionOperatorDeclarationSyntax c => c.Type,
+                _ => null,
+            } is { } returnTypeSyntax)
+            {
+                signatureBinder ??= method.WithTypeParametersBinder ?? compilation.GetBinderFactory(returnTypeSyntax.SyntaxTree).GetBinder(returnTypeSyntax);
+                returnType = signatureBinder.BindTypeOrSharperInferKeyword(returnTypeSyntax.SkipRef(), BindingDiagnosticBag.Discarded, out _);
+            }
+
+            targets = isTarget.ToImmutableAndFree();
+            return new SharperPlaceholderMethodSymbol(method, placeholderParameters.ToImmutableAndFree(), returnType, targets);
         }
 
         /// <summary>

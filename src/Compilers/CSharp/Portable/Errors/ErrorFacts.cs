@@ -2665,6 +2665,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 or ErrorCode.ERR_SharperItClaimedByInnerCall
                 or ErrorCode.ERR_SharperInferEventNoOverriddenMember
                 or ErrorCode.ERR_SharperInferParameterBodyCycle
+                or ErrorCode.ERR_SharperInferParameterConversionCycle
                 or ErrorCode.ERR_SharperInferParameterUsesDisagree
                 or ErrorCode.ERR_SharperRefinementNotClosed
                 or ErrorCode.ERR_SharperRefinementTypeNotSupported
