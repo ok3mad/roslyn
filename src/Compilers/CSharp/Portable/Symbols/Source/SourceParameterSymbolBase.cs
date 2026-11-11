@@ -96,15 +96,9 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             }
 
             // Sharper: a refined parameter carries its refinement for other assemblies (Feature 11, step 5).
-            if (parameter.SharperRefinement is { HasErrors: false } refinement &&
-                compilation.SharperImmutability.GetAttributeType(SharperImmutabilityAttribute.Refinement, BindingDiagnosticBag.Discarded, refinement.Pattern.Syntax) is { } refinementAttribute &&
-                refinementAttribute.InstanceConstructors.FirstOrDefault(c => c.ParameterCount == 1 && c.Parameters[0].Type.SpecialType == SpecialType.System_String) is { } refinementConstructor)
+            if (parameter.SharperRefinement is { HasErrors: false } refinement)
             {
-                AddSynthesizedAttribute(ref attributes, SynthesizedAttributeData.Create(
-                    compilation,
-                    refinementConstructor,
-                    ImmutableArray.Create(new TypedConstant(refinementConstructor.Parameters[0].Type, TypedConstantKind.Primitive, refinement.Text)),
-                    ImmutableArray<KeyValuePair<string, TypedConstant>>.Empty));
+                AddSynthesizedAttribute(ref attributes, SharperRefinement.SynthesizeAttribute(compilation, refinement.Text));
             }
 
             var type = parameter.TypeWithAnnotations;

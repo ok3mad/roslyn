@@ -1402,7 +1402,43 @@ rules and return inference.
   semantic model inside a refinement.
   Tests: 14 `Refinement_*` tests (`SharperTests_Refinements.cs`). The Syntax project with `ROSLYN_TEST_SHARPER=1` has
   the same 37 expected failures as the last run below, and none new.
-- [ ] Step 3, return refinements.
+- [x] **Step 3, return refinements** (`sharper/refined-returns`). `MethodSymbol.SharperReturnRefinement` and
+  `LocalSymbol.SharperRefinement` are the slots; `SharperRefinement.OfValues` and `OfExpression`
+  (`Symbols/Source/SharperRefinement_Inferred.cs`) compute the union. No new diagnostic. The open points, as decided:
+  - **Without a second binding, without new cycles.** `Binder.BindSharperInferredReturnType` already binds the body
+    once to infer the type; it now hands the returned values on, and the refinement is decided and published with the
+    type (`SharperInferredReturnType.Result`). Reading a refinement reads the return type first, so it is a use R3
+    already counts, and a method in a cycle has none. A `val` local's refinement is set when its declaration is bound
+    (`SourceLocalSymbol.SetSharperRefinement`); a body bound again sets an equal one.
+  - **Sources.** Constants, refined parameters, `val` locals, switch expressions, and beyond the plan's list: calls of
+    methods whose return has a refinement (what `val y = F()` keeps is then also what `=> F()` returns) and
+    conditional expressions. An arm that throws adds nothing.
+  - **Normal form.** `null`, the constants in ascending order, each once, then the other patterns in the order found,
+    each once; constants that another pattern allows are dropped. One refined value passed on unchanged keeps its
+    refinement as written (the same object).
+  - **Given up** (no refinement) when a value has none, when a value's type is not the return type (no constant is
+    converted here; an expression body's switch is already converted by natural typing), over 64 alternatives, and
+    when the union allows every value.
+  - **Nullable reference returns.** `return null;` is the constant `null` in the union and sets `MatchesNull`;
+    `Nullable<T>` returns have no value set, as for parameters.
+  - **Block bodies.** The union over every `return`, from the collector the type inference uses; lambdas and local
+    functions in the body have their own returns.
+  - **Iterators and `async`.** None. The refinement would be of the element or the awaited value, and there is no slot
+    for it on `yield` or `await`.
+  - **The recursion error.** It is R1's: a method that reads its own inferred return is CS20018, a cycle CS20033, and
+    such a method has no refinement. Nothing more was needed.
+  - **Who has one.** Not virtual, abstract or override members or interface members (the Signatures decision). Partial
+    definitions forward to their implementation. Operators and conversions infer, but only calls read a refinement.
+  - **Metadata.** The attribute on the return, on every accessibility, following "the refinement goes where the
+    inferred type goes" and R4; `PEMethodSymbol` reads it through its return parameter with step 5's code.
+  - **Edit and Continue.** A probe showed the delta writer failing (`EmitParametersFromOriginalMetadata`) when a body
+    edit made the return's attribute appear or disappear, since it cannot add or remove the return's `Param` row. So a
+    return that can have a refinement always carries the attribute, with `_` when the body gives none, and a body edit
+    that changes only the refinement is a body update. Left for step 4: once callers depend on a refinement, such an
+    edit must be a rude edit, which needs the IDE to see the refinement.
+  Left as `PROTOTYPE(sharper)`: `val` in deconstructions, patterns, `foreach` and `out`, and locals with a written type.
+  Tests: 15 `ReturnRefinement*` tests (`SharperTests_RefinementReturns.cs`) and one emit-difference test
+  (`EditAndContinueSharperTests`).
 - [ ] Step 4, call sites and switches.
 - [x] **Step 5, guard and metadata** (`sharper/refined-parameters-guard`). `SharperRefinementGuard`
   (`Lowering/SharperRefinementGuard.cs`) builds `if (p is not (pattern)) throw new ArgumentOutOfRangeException(nameof(p),
