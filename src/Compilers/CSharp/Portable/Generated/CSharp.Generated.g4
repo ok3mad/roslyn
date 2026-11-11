@@ -530,7 +530,11 @@ function_pointer_parameter
   ;
 
 function_type
-  : '(' (function_pointer_parameter (',' function_pointer_parameter)*)? ')' '->' type
+  : '(' (function_type_parameter (',' function_type_parameter)*)? ')' '->' type
+  ;
+
+function_type_parameter
+  : modifier* type identifier_token?
   ;
 
 nullable_type

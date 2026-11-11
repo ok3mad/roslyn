@@ -169,7 +169,7 @@ in `#pragma warning`, `/nowarn` and `.editorconfig`.
 | CS20004 | Error | The syntax 'val' for a pattern is not permitted to refer to a type, but '{0}' is in scope here. Use '@val' for the type. |
 | CS20005 | Error | Deconstruction 'val (...)' form disallows a specific type for 'val'. Use '@val' for the type. |
 | CS20006 | Error | Cannot ref-assign '{0}' because it is a ref val: it always refers to the same variable. Writes through '{0}' are allowed. |
-| CS20007 | Error | A function type cannot name its parameters. Remove the name '{0}'. |
+| CS20007 | | Retired in step N1 of function type parameter names, which keeps the names. Was: "A function type cannot name its parameters. Remove the name '{0}'." |
 | CS20008 | Error | A function type parameter cannot be '{0}', because a function type is a 'System.Func' or 'System.Action' delegate. |
 | CS20009 | Error | A function type cannot have more than {0} parameters, because no 'System.Func' or 'System.Action' delegate has more. |
 | CS20010 | Warning | Call to non-readonly member '{0}' on readonly local '{1}' runs on a copy, so '{1}' is not changed. |

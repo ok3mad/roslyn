@@ -733,8 +733,16 @@ namespace Microsoft.CodeAnalysis.CSharp
 
             var typeArguments = ArrayBuilder<TypeWithAnnotations>.GetInstance(syntax.Parameters.Count + 1);
             var typeArgumentLocations = ArrayBuilder<Location>.GetInstance(syntax.Parameters.Count + 1);
+            var names = PooledHashSet<string>.GetInstance();
             foreach (var parameter in syntax.Parameters)
             {
+                // Names are optional, per parameter, and do not change the type. As tuple element names, they must be
+                // unique. PROTOTYPE(sharper): carry the names on the type (https://github.com/ok3mad/roslyn/issues/213).
+                if (parameter.Identifier.IsKind(SyntaxKind.IdentifierToken) && !names.Add(parameter.Identifier.ValueText))
+                {
+                    diagnostics.Add(ErrorCode.ERR_DuplicateParamName, parameter.Identifier.GetLocation(), parameter.Identifier.ValueText);
+                }
+
                 // PROTOTYPE(sharper): ref, out and in parameters need a delegate other than Func and Action
                 // (https://github.com/ok3mad/roslyn/issues/56).
                 foreach (var modifier in parameter.Modifiers)
@@ -742,10 +750,11 @@ namespace Microsoft.CodeAnalysis.CSharp
                     diagnostics.Add(ErrorCode.ERR_SharperFunctionTypeParameterModifier, modifier.GetLocation(), modifier.Text);
                 }
 
-                Debug.Assert(parameter.Type is { });
                 typeArguments.Add(BindTypeArgument(parameter.Type, diagnostics, basesBeingResolved));
                 typeArgumentLocations.Add(parameter.Type.Location);
             }
+
+            names.Free();
 
             // The parser reports void anywhere but in the return type.
             var returnType = BindTypeArgument(syntax.ReturnType, diagnostics, basesBeingResolved);

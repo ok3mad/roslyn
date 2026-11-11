@@ -396,9 +396,9 @@
         <summary>SyntaxToken representing the open parenthesis.</summary>
       </PropertyComment>
     </Field>
-    <Field Name="Parameters" Type="SeparatedSyntaxList&lt;FunctionPointerParameterSyntax&gt;">
+    <Field Name="Parameters" Type="SeparatedSyntaxList&lt;FunctionTypeParameterSyntax&gt;">
       <PropertyComment>
-        <summary>SeparatedSyntaxList of the parameter types.</summary>
+        <summary>SeparatedSyntaxList of the parameters.</summary>
       </PropertyComment>
     </Field>
     <Field Name="CloseParenToken" Type="SyntaxToken">
@@ -423,6 +423,32 @@
     </TypeComment>
     <FactoryComment>
       <summary>Creates a FunctionTypeSyntax node.</summary>
+    </FactoryComment>
+  </Node>
+  <Node Name="FunctionTypeParameterSyntax" Base="CSharpSyntaxNode">
+    <!-- A parameter of Sharper's function type: modifiers, a type and an optional name, as in (int width, int) -> int. -->
+    <Kind Name="FunctionTypeParameter"/>
+    <Field Name="Modifiers" Type="SyntaxList&lt;SyntaxToken&gt;">
+      <PropertyComment>
+        <summary>Gets the modifier list.</summary>
+      </PropertyComment>
+    </Field>
+    <Field Name="Type" Type="TypeSyntax">
+      <PropertyComment>
+        <summary>Gets the type of the parameter.</summary>
+      </PropertyComment>
+    </Field>
+    <Field Name="Identifier" Type="SyntaxToken" Optional="true">
+      <Kind Name="IdentifierToken"/>
+      <PropertyComment>
+        <summary>Gets the optional name of the parameter.</summary>
+      </PropertyComment>
+    </Field>
+    <TypeComment>
+      <summary>Class which represents the syntax node for a parameter of a Sharper function type, such as <c>int width</c> in <c>(int width, int height) -&gt; int</c>.</summary>
+    </TypeComment>
+    <FactoryComment>
+      <summary>Creates a FunctionTypeParameterSyntax node.</summary>
     </FactoryComment>
   </Node>
   <Node Name="ParenthesizedTypeSyntax" Base="TypeSyntax">

@@ -70,6 +70,9 @@ public partial class CSharpSyntaxVisitor<TResult>
     /// <summary>Called when the visitor visits a FunctionTypeSyntax node.</summary>
     public virtual TResult? VisitFunctionType(FunctionTypeSyntax node) => this.DefaultVisit(node);
 
+    /// <summary>Called when the visitor visits a FunctionTypeParameterSyntax node.</summary>
+    public virtual TResult? VisitFunctionTypeParameter(FunctionTypeParameterSyntax node) => this.DefaultVisit(node);
+
     /// <summary>Called when the visitor visits a ParenthesizedTypeSyntax node.</summary>
     public virtual TResult? VisitParenthesizedType(ParenthesizedTypeSyntax node) => this.DefaultVisit(node);
 
@@ -842,6 +845,9 @@ public partial class CSharpSyntaxVisitor
     /// <summary>Called when the visitor visits a FunctionTypeSyntax node.</summary>
     public virtual void VisitFunctionType(FunctionTypeSyntax node) => this.DefaultVisit(node);
 
+    /// <summary>Called when the visitor visits a FunctionTypeParameterSyntax node.</summary>
+    public virtual void VisitFunctionTypeParameter(FunctionTypeParameterSyntax node) => this.DefaultVisit(node);
+
     /// <summary>Called when the visitor visits a ParenthesizedTypeSyntax node.</summary>
     public virtual void VisitParenthesizedType(ParenthesizedTypeSyntax node) => this.DefaultVisit(node);
 
@@ -1613,6 +1619,9 @@ public partial class CSharpSyntaxRewriter : CSharpSyntaxVisitor<SyntaxNode?>
 
     public override SyntaxNode? VisitFunctionType(FunctionTypeSyntax node)
         => node.Update(VisitToken(node.OpenParenToken), VisitList(node.Parameters), VisitToken(node.CloseParenToken), VisitToken(node.ArrowToken), (TypeSyntax?)Visit(node.ReturnType) ?? throw new ArgumentNullException("returnType"));
+
+    public override SyntaxNode? VisitFunctionTypeParameter(FunctionTypeParameterSyntax node)
+        => node.Update(VisitList(node.Modifiers), (TypeSyntax?)Visit(node.Type) ?? throw new ArgumentNullException("type"), VisitToken(node.Identifier));
 
     public override SyntaxNode? VisitParenthesizedType(ParenthesizedTypeSyntax node)
         => node.Update(VisitToken(node.OpenParenToken), (TypeSyntax?)Visit(node.Type) ?? throw new ArgumentNullException("type"), VisitToken(node.CloseParenToken));
@@ -2565,22 +2574,39 @@ public static partial class SyntaxFactory
         => SyntaxFactory.TupleType(SyntaxFactory.Token(SyntaxKind.OpenParenToken), elements, SyntaxFactory.Token(SyntaxKind.CloseParenToken));
 
     /// <summary>Creates a new FunctionTypeSyntax instance.</summary>
-    public static FunctionTypeSyntax FunctionType(SyntaxToken openParenToken, SeparatedSyntaxList<FunctionPointerParameterSyntax> parameters, SyntaxToken closeParenToken, SyntaxToken arrowToken, TypeSyntax returnType)
+    public static FunctionTypeSyntax FunctionType(SyntaxToken openParenToken, SeparatedSyntaxList<FunctionTypeParameterSyntax> parameters, SyntaxToken closeParenToken, SyntaxToken arrowToken, TypeSyntax returnType)
     {
         if (openParenToken.Kind() != SyntaxKind.OpenParenToken) throw new ArgumentException(nameof(openParenToken));
         if (closeParenToken.Kind() != SyntaxKind.CloseParenToken) throw new ArgumentException(nameof(closeParenToken));
         if (arrowToken.Kind() != SyntaxKind.MinusGreaterThanToken) throw new ArgumentException(nameof(arrowToken));
         if (returnType == null) throw new ArgumentNullException(nameof(returnType));
-        return (FunctionTypeSyntax)Syntax.InternalSyntax.SyntaxFactory.FunctionType((Syntax.InternalSyntax.SyntaxToken)openParenToken.Node!, parameters.Node.ToGreenSeparatedList<Syntax.InternalSyntax.FunctionPointerParameterSyntax>(), (Syntax.InternalSyntax.SyntaxToken)closeParenToken.Node!, (Syntax.InternalSyntax.SyntaxToken)arrowToken.Node!, (Syntax.InternalSyntax.TypeSyntax)returnType.Green).CreateRed();
+        return (FunctionTypeSyntax)Syntax.InternalSyntax.SyntaxFactory.FunctionType((Syntax.InternalSyntax.SyntaxToken)openParenToken.Node!, parameters.Node.ToGreenSeparatedList<Syntax.InternalSyntax.FunctionTypeParameterSyntax>(), (Syntax.InternalSyntax.SyntaxToken)closeParenToken.Node!, (Syntax.InternalSyntax.SyntaxToken)arrowToken.Node!, (Syntax.InternalSyntax.TypeSyntax)returnType.Green).CreateRed();
     }
 
     /// <summary>Creates a new FunctionTypeSyntax instance.</summary>
-    public static FunctionTypeSyntax FunctionType(SeparatedSyntaxList<FunctionPointerParameterSyntax> parameters, TypeSyntax returnType)
+    public static FunctionTypeSyntax FunctionType(SeparatedSyntaxList<FunctionTypeParameterSyntax> parameters, TypeSyntax returnType)
         => SyntaxFactory.FunctionType(SyntaxFactory.Token(SyntaxKind.OpenParenToken), parameters, SyntaxFactory.Token(SyntaxKind.CloseParenToken), SyntaxFactory.Token(SyntaxKind.MinusGreaterThanToken), returnType);
 
     /// <summary>Creates a new FunctionTypeSyntax instance.</summary>
     public static FunctionTypeSyntax FunctionType(TypeSyntax returnType)
         => SyntaxFactory.FunctionType(SyntaxFactory.Token(SyntaxKind.OpenParenToken), default, SyntaxFactory.Token(SyntaxKind.CloseParenToken), SyntaxFactory.Token(SyntaxKind.MinusGreaterThanToken), returnType);
+
+    /// <summary>Creates a new FunctionTypeParameterSyntax instance.</summary>
+    public static FunctionTypeParameterSyntax FunctionTypeParameter(SyntaxTokenList modifiers, TypeSyntax type, SyntaxToken identifier)
+    {
+        if (type == null) throw new ArgumentNullException(nameof(type));
+        switch (identifier.Kind())
+        {
+            case SyntaxKind.IdentifierToken:
+            case SyntaxKind.None: break;
+            default: throw new ArgumentException(nameof(identifier));
+        }
+        return (FunctionTypeParameterSyntax)Syntax.InternalSyntax.SyntaxFactory.FunctionTypeParameter(modifiers.Node.ToGreenList<Syntax.InternalSyntax.SyntaxToken>(), (Syntax.InternalSyntax.TypeSyntax)type.Green, (Syntax.InternalSyntax.SyntaxToken?)identifier.Node).CreateRed();
+    }
+
+    /// <summary>Creates a new FunctionTypeParameterSyntax instance.</summary>
+    public static FunctionTypeParameterSyntax FunctionTypeParameter(TypeSyntax type)
+        => SyntaxFactory.FunctionTypeParameter(default(SyntaxTokenList), type, default);
 
     /// <summary>Creates a new ParenthesizedTypeSyntax instance.</summary>
     public static ParenthesizedTypeSyntax ParenthesizedType(SyntaxToken openParenToken, TypeSyntax type, SyntaxToken closeParenToken)
