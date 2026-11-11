@@ -1582,8 +1582,8 @@ internal sealed partial class FunctionTypeSyntax : TypeSyntax
 
     /// <summary>SyntaxToken representing the open parenthesis.</summary>
     public SyntaxToken OpenParenToken => this.openParenToken;
-    /// <summary>SeparatedSyntaxList of the parameter types.</summary>
-    public CoreSyntax.SeparatedSyntaxList<FunctionPointerParameterSyntax> Parameters => new CoreSyntax.SeparatedSyntaxList<FunctionPointerParameterSyntax>(new CoreSyntax.SyntaxList<CSharpSyntaxNode>(this.parameters));
+    /// <summary>SeparatedSyntaxList of the parameters.</summary>
+    public CoreSyntax.SeparatedSyntaxList<FunctionTypeParameterSyntax> Parameters => new CoreSyntax.SeparatedSyntaxList<FunctionTypeParameterSyntax>(new CoreSyntax.SyntaxList<CSharpSyntaxNode>(this.parameters));
     /// <summary>SyntaxToken representing the close parenthesis.</summary>
     public SyntaxToken CloseParenToken => this.closeParenToken;
     /// <summary>SyntaxToken representing the arrow.</summary>
@@ -1607,7 +1607,7 @@ internal sealed partial class FunctionTypeSyntax : TypeSyntax
     public override void Accept(CSharpSyntaxVisitor visitor) => visitor.VisitFunctionType(this);
     public override TResult Accept<TResult>(CSharpSyntaxVisitor<TResult> visitor) => visitor.VisitFunctionType(this);
 
-    public FunctionTypeSyntax Update(SyntaxToken openParenToken, CoreSyntax.SeparatedSyntaxList<FunctionPointerParameterSyntax> parameters, SyntaxToken closeParenToken, SyntaxToken arrowToken, TypeSyntax returnType)
+    public FunctionTypeSyntax Update(SyntaxToken openParenToken, CoreSyntax.SeparatedSyntaxList<FunctionTypeParameterSyntax> parameters, SyntaxToken closeParenToken, SyntaxToken arrowToken, TypeSyntax returnType)
     {
         if (openParenToken != this.OpenParenToken || parameters != this.Parameters || closeParenToken != this.CloseParenToken || arrowToken != this.ArrowToken || returnType != this.ReturnType)
         {
@@ -1629,6 +1629,113 @@ internal sealed partial class FunctionTypeSyntax : TypeSyntax
 
     internal override GreenNode SetAnnotations(SyntaxAnnotation[]? annotations)
         => new FunctionTypeSyntax(this.Kind, this.openParenToken, this.parameters, this.closeParenToken, this.arrowToken, this.returnType, GetDiagnostics(), annotations);
+}
+
+/// <summary>Class which represents the syntax node for a parameter of a Sharper function type, such as <c>int width</c> in <c>(int width, int height) -&gt; int</c>.</summary>
+internal sealed partial class FunctionTypeParameterSyntax : CSharpSyntaxNode
+{
+    internal readonly GreenNode? modifiers;
+    internal readonly TypeSyntax type;
+    internal readonly SyntaxToken? identifier;
+
+    internal FunctionTypeParameterSyntax(SyntaxKind kind, GreenNode? modifiers, TypeSyntax type, SyntaxToken? identifier, DiagnosticInfo[]? diagnostics, SyntaxAnnotation[]? annotations)
+      : base(kind, diagnostics, annotations)
+    {
+        this.SlotCount = 3;
+        if (modifiers != null)
+        {
+            this.AdjustFlagsAndWidth(modifiers);
+            this.modifiers = modifiers;
+        }
+        this.AdjustFlagsAndWidth(type);
+        this.type = type;
+        if (identifier != null)
+        {
+            this.AdjustFlagsAndWidth(identifier);
+            this.identifier = identifier;
+        }
+    }
+
+    internal FunctionTypeParameterSyntax(SyntaxKind kind, GreenNode? modifiers, TypeSyntax type, SyntaxToken? identifier, SyntaxFactoryContext context)
+      : base(kind)
+    {
+        this.SetFactoryContext(context);
+        this.SlotCount = 3;
+        if (modifiers != null)
+        {
+            this.AdjustFlagsAndWidth(modifiers);
+            this.modifiers = modifiers;
+        }
+        this.AdjustFlagsAndWidth(type);
+        this.type = type;
+        if (identifier != null)
+        {
+            this.AdjustFlagsAndWidth(identifier);
+            this.identifier = identifier;
+        }
+    }
+
+    internal FunctionTypeParameterSyntax(SyntaxKind kind, GreenNode? modifiers, TypeSyntax type, SyntaxToken? identifier)
+      : base(kind)
+    {
+        this.SlotCount = 3;
+        if (modifiers != null)
+        {
+            this.AdjustFlagsAndWidth(modifiers);
+            this.modifiers = modifiers;
+        }
+        this.AdjustFlagsAndWidth(type);
+        this.type = type;
+        if (identifier != null)
+        {
+            this.AdjustFlagsAndWidth(identifier);
+            this.identifier = identifier;
+        }
+    }
+
+    /// <summary>Gets the modifier list.</summary>
+    public CoreSyntax.SyntaxList<SyntaxToken> Modifiers => new CoreSyntax.SyntaxList<SyntaxToken>(this.modifiers);
+    /// <summary>Gets the type of the parameter.</summary>
+    public TypeSyntax Type => this.type;
+    /// <summary>Gets the optional name of the parameter.</summary>
+    public SyntaxToken? Identifier => this.identifier;
+
+    internal override GreenNode? GetSlot(int index)
+        => index switch
+        {
+            0 => this.modifiers,
+            1 => this.type,
+            2 => this.identifier,
+            _ => null,
+        };
+
+    internal override SyntaxNode CreateRed(SyntaxNode? parent, int position) => new CSharp.Syntax.FunctionTypeParameterSyntax(this, parent, position);
+
+    public override void Accept(CSharpSyntaxVisitor visitor) => visitor.VisitFunctionTypeParameter(this);
+    public override TResult Accept<TResult>(CSharpSyntaxVisitor<TResult> visitor) => visitor.VisitFunctionTypeParameter(this);
+
+    public FunctionTypeParameterSyntax Update(CoreSyntax.SyntaxList<SyntaxToken> modifiers, TypeSyntax type, SyntaxToken identifier)
+    {
+        if (modifiers != this.Modifiers || type != this.Type || identifier != this.Identifier)
+        {
+            var newNode = SyntaxFactory.FunctionTypeParameter(modifiers, type, identifier);
+            var diags = GetDiagnostics();
+            if (diags?.Length > 0)
+                newNode = newNode.WithDiagnosticsGreen(diags);
+            var annotations = GetAnnotations();
+            if (annotations?.Length > 0)
+                newNode = newNode.WithAnnotationsGreen(annotations);
+            return newNode;
+        }
+
+        return this;
+    }
+
+    internal override GreenNode SetDiagnostics(DiagnosticInfo[]? diagnostics)
+        => new FunctionTypeParameterSyntax(this.Kind, this.modifiers, this.type, this.identifier, diagnostics, GetAnnotations());
+
+    internal override GreenNode SetAnnotations(SyntaxAnnotation[]? annotations)
+        => new FunctionTypeParameterSyntax(this.Kind, this.modifiers, this.type, this.identifier, GetDiagnostics(), annotations);
 }
 
 /// <summary>Class which represents the syntax node for a Sharper parenthesized type, such as ((int) -&gt; int).</summary>
@@ -28030,6 +28137,7 @@ internal partial class CSharpSyntaxVisitor<TResult>
     public virtual TResult VisitTaskType(TaskTypeSyntax node) => this.DefaultVisit(node);
     public virtual TResult VisitTupleType(TupleTypeSyntax node) => this.DefaultVisit(node);
     public virtual TResult VisitFunctionType(FunctionTypeSyntax node) => this.DefaultVisit(node);
+    public virtual TResult VisitFunctionTypeParameter(FunctionTypeParameterSyntax node) => this.DefaultVisit(node);
     public virtual TResult VisitParenthesizedType(ParenthesizedTypeSyntax node) => this.DefaultVisit(node);
     public virtual TResult VisitTupleElement(TupleElementSyntax node) => this.DefaultVisit(node);
     public virtual TResult VisitOmittedTypeArgument(OmittedTypeArgumentSyntax node) => this.DefaultVisit(node);
@@ -28290,6 +28398,7 @@ internal partial class CSharpSyntaxVisitor
     public virtual void VisitTaskType(TaskTypeSyntax node) => this.DefaultVisit(node);
     public virtual void VisitTupleType(TupleTypeSyntax node) => this.DefaultVisit(node);
     public virtual void VisitFunctionType(FunctionTypeSyntax node) => this.DefaultVisit(node);
+    public virtual void VisitFunctionTypeParameter(FunctionTypeParameterSyntax node) => this.DefaultVisit(node);
     public virtual void VisitParenthesizedType(ParenthesizedTypeSyntax node) => this.DefaultVisit(node);
     public virtual void VisitTupleElement(TupleElementSyntax node) => this.DefaultVisit(node);
     public virtual void VisitOmittedTypeArgument(OmittedTypeArgumentSyntax node) => this.DefaultVisit(node);
@@ -28585,6 +28694,9 @@ internal partial class CSharpSyntaxRewriter : CSharpSyntaxVisitor<CSharpSyntaxNo
 
     public override CSharpSyntaxNode VisitFunctionType(FunctionTypeSyntax node)
         => node.Update((SyntaxToken)Visit(node.OpenParenToken), VisitList(node.Parameters), (SyntaxToken)Visit(node.CloseParenToken), (SyntaxToken)Visit(node.ArrowToken), (TypeSyntax)Visit(node.ReturnType));
+
+    public override CSharpSyntaxNode VisitFunctionTypeParameter(FunctionTypeParameterSyntax node)
+        => node.Update(VisitList(node.Modifiers), (TypeSyntax)Visit(node.Type), (SyntaxToken)Visit(node.Identifier));
 
     public override CSharpSyntaxNode VisitParenthesizedType(ParenthesizedTypeSyntax node)
         => node.Update((SyntaxToken)Visit(node.OpenParenToken), (TypeSyntax)Visit(node.Type), (SyntaxToken)Visit(node.CloseParenToken));
@@ -29688,7 +29800,7 @@ internal partial class ContextAwareSyntax
         return result;
     }
 
-    public FunctionTypeSyntax FunctionType(SyntaxToken openParenToken, CoreSyntax.SeparatedSyntaxList<FunctionPointerParameterSyntax> parameters, SyntaxToken closeParenToken, SyntaxToken arrowToken, TypeSyntax returnType)
+    public FunctionTypeSyntax FunctionType(SyntaxToken openParenToken, CoreSyntax.SeparatedSyntaxList<FunctionTypeParameterSyntax> parameters, SyntaxToken closeParenToken, SyntaxToken arrowToken, TypeSyntax returnType)
     {
 #if DEBUG
         if (openParenToken == null) throw new ArgumentNullException(nameof(openParenToken));
@@ -29701,6 +29813,34 @@ internal partial class ContextAwareSyntax
 #endif
 
         return new FunctionTypeSyntax(SyntaxKind.FunctionType, openParenToken, parameters.Node, closeParenToken, arrowToken, returnType, this.context);
+    }
+
+    public FunctionTypeParameterSyntax FunctionTypeParameter(CoreSyntax.SyntaxList<SyntaxToken> modifiers, TypeSyntax type, SyntaxToken? identifier)
+    {
+#if DEBUG
+        if (type == null) throw new ArgumentNullException(nameof(type));
+        if (identifier != null)
+        {
+            switch (identifier.Kind)
+            {
+                case SyntaxKind.IdentifierToken:
+                case SyntaxKind.None: break;
+                default: throw new ArgumentException(nameof(identifier));
+            }
+        }
+#endif
+
+        int hash;
+        var cached = CSharpSyntaxNodeCache.TryGetNode((int)SyntaxKind.FunctionTypeParameter, modifiers.Node, type, identifier, this.context, out hash);
+        if (cached != null) return (FunctionTypeParameterSyntax)cached;
+
+        var result = new FunctionTypeParameterSyntax(SyntaxKind.FunctionTypeParameter, modifiers.Node, type, identifier, this.context);
+        if (hash >= 0)
+        {
+            SyntaxNodeCache.AddNode(result, hash);
+        }
+
+        return result;
     }
 
     public ParenthesizedTypeSyntax ParenthesizedType(SyntaxToken openParenToken, TypeSyntax type, SyntaxToken closeParenToken)
@@ -35234,7 +35374,7 @@ internal static partial class SyntaxFactory
         return result;
     }
 
-    public static FunctionTypeSyntax FunctionType(SyntaxToken openParenToken, CoreSyntax.SeparatedSyntaxList<FunctionPointerParameterSyntax> parameters, SyntaxToken closeParenToken, SyntaxToken arrowToken, TypeSyntax returnType)
+    public static FunctionTypeSyntax FunctionType(SyntaxToken openParenToken, CoreSyntax.SeparatedSyntaxList<FunctionTypeParameterSyntax> parameters, SyntaxToken closeParenToken, SyntaxToken arrowToken, TypeSyntax returnType)
     {
 #if DEBUG
         if (openParenToken == null) throw new ArgumentNullException(nameof(openParenToken));
@@ -35247,6 +35387,34 @@ internal static partial class SyntaxFactory
 #endif
 
         return new FunctionTypeSyntax(SyntaxKind.FunctionType, openParenToken, parameters.Node, closeParenToken, arrowToken, returnType);
+    }
+
+    public static FunctionTypeParameterSyntax FunctionTypeParameter(CoreSyntax.SyntaxList<SyntaxToken> modifiers, TypeSyntax type, SyntaxToken? identifier)
+    {
+#if DEBUG
+        if (type == null) throw new ArgumentNullException(nameof(type));
+        if (identifier != null)
+        {
+            switch (identifier.Kind)
+            {
+                case SyntaxKind.IdentifierToken:
+                case SyntaxKind.None: break;
+                default: throw new ArgumentException(nameof(identifier));
+            }
+        }
+#endif
+
+        int hash;
+        var cached = SyntaxNodeCache.TryGetNode((int)SyntaxKind.FunctionTypeParameter, modifiers.Node, type, identifier, out hash);
+        if (cached != null) return (FunctionTypeParameterSyntax)cached;
+
+        var result = new FunctionTypeParameterSyntax(SyntaxKind.FunctionTypeParameter, modifiers.Node, type, identifier);
+        if (hash >= 0)
+        {
+            SyntaxNodeCache.AddNode(result, hash);
+        }
+
+        return result;
     }
 
     public static ParenthesizedTypeSyntax ParenthesizedType(SyntaxToken openParenToken, TypeSyntax type, SyntaxToken closeParenToken)

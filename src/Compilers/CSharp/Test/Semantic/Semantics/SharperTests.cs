@@ -2830,12 +2830,6 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (4,27): error CS20008: A function type parameter cannot be 'in', because a function type is a 'System.Func' or 'System.Action' delegate.
                 //     (ref int, out string, in long) -> bool modifiers;
                 Diagnostic(ErrorCode.ERR_SharperFunctionTypeParameterModifier, "in").WithArguments("in").WithLocation(4, 27),
-                // (5,10): error CS20007: A function type cannot name its parameters. Remove the name 'x'.
-                //     (int x, int y) -> int names;
-                Diagnostic(ErrorCode.ERR_SharperFunctionTypeParameterName, "x").WithArguments("x").WithLocation(5, 10),
-                // (5,17): error CS20007: A function type cannot name its parameters. Remove the name 'y'.
-                //     (int x, int y) -> int names;
-                Diagnostic(ErrorCode.ERR_SharperFunctionTypeParameterName, "y").WithArguments("y").WithLocation(5, 17),
                 // (6,5): error CS20009: A function type cannot have more than 16 parameters, because no 'System.Func' or 'System.Action' delegate has more.
                 //     (int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int) -> int tooMany;
                 Diagnostic(ErrorCode.ERR_SharperFunctionTypeTooManyParameters, "(int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int) -> int").WithArguments("16").WithLocation(6, 5),
@@ -3815,6 +3809,242 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             // Sharper syntax nodes sit apart from the upstream ones; an upstream merge must not reuse the value.
             Assert.Equal(9902, (int)SyntaxKind.ParenthesizedType);
             Assert.Single(Enum.GetValues(typeof(SyntaxKind)).Cast<SyntaxKind>(), k => (int)k == (int)SyntaxKind.ParenthesizedType);
+        }
+
+        [Fact]
+        public void FunctionType_Names_Basic()
+        {
+            // Parameter names are optional, per parameter, and change nothing about the type: a named function type is
+            // still the Func or Action it stands for.
+            var source = """
+                using System;
+                using System.Collections.Generic;
+                using Area = (int width, int height) -> int;
+
+                (int width, int height) -> int area = (w, h) => w * h;
+                (int x, int) -> void log = (x, y) => Console.Write(x + y);
+                (int a) -> (int b) -> int adder = a => b => a + b;
+                ((int a, int b) p) -> int sum = p => p.a + p.b;
+                var list = new List<(string text) -> int> { s => s.Length };
+                Area aliased = area;
+                object o = area;
+
+                log(area(2, 3), 0);
+                Console.Write(" " + adder(3)(4));
+                Console.Write(" " + sum((5, 6)));
+                Console.Write(" " + list[0]("seven"));
+                Console.Write(" " + aliased(2, 4));
+                Console.Write(" " + (o is (int w, int h) -> int f ? f(3, 3) : -1));
+                Console.Write(" " + Describe(o));
+                Console.Write(" " + (typeof((int width, int height) -> int) == typeof(Func<int, int, int>)));
+                Console.Write(" " + (typeof((int x, int) -> void) == typeof(Action<int, int>)));
+                Console.Write(" " + (typeof((int a) -> (int b) -> int) == typeof(Func<int, Func<int, int>>)));
+                Console.Write(" " + (typeof(((int a, int b) p) -> int) == typeof(Func<(int, int), int>)));
+
+                static string Describe(object o) => o switch
+                {
+                    (int x) -> int => "unary",
+                    (int x, int y) -> int f => "binary" + f(1, 2),
+                    _ => "other",
+                };
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90,
+                expectedOutput: ExecutionConditionUtil.IsCoreClr ? "6 7 11 5 8 9 binary2 True True True True" : null).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void FunctionType_Names_SameAsUnnamed()
+        {
+            // Names do not change the type: the named and unnamed spellings convert to each other, clash as overloads and
+            // give the same symbol.
+            var source = """
+                class C
+                {
+                    void M((int x) -> int f) { }
+                    void M((int) -> int f) { }
+                    void N((int width, int height) -> int named, (int, int) -> int unnamed, System.Func<int, int, int> twin)
+                    {
+                        named = unnamed;
+                        unnamed = twin;
+                        twin = named;
+                    }
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics(
+                // (4,10): error CS0111: Type 'C' already defines a member called 'M' with the same parameter types
+                //     void M((int) -> int f) { }
+                Diagnostic(ErrorCode.ERR_MemberAlreadyExists, "M").WithArguments("M", "C").WithLocation(4, 10));
+
+            var n = comp.GetMember<MethodSymbol>("C.N");
+            Assert.Equal(n.Parameters[2].Type, n.Parameters[0].Type);
+            Assert.Equal(n.Parameters[2].Type, n.Parameters[1].Type);
+
+            var tree = comp.SyntaxTrees.Single();
+            var model = comp.GetSemanticModel(tree);
+            var named = tree.GetRoot().DescendantNodes().OfType<FunctionTypeSyntax>().First(t => t.Parameters.Count == 2);
+            Assert.Equal("System.Func<System.Int32, System.Int32, System.Int32>", model.GetTypeInfo(named).Type.ToTestDisplayString());
+            Assert.Equal("System.Int32", model.GetTypeInfo(named.Parameters[1].Type).Type.ToTestDisplayString());
+            Assert.True(SyntaxFacts.IsInTypeOnlyContext(named.Parameters[1].Type));
+        }
+
+        [Fact]
+        public void FunctionType_Names_Duplicate()
+        {
+            // Names must be unique within one parameter list, as tuple element names must. Nested function types and tuple
+            // parameters have their own names.
+            var source = """
+                #pragma warning disable CS0169 // The field is never used
+                class C
+                {
+                    (int x, int x) -> int duplicate;
+                    (int x, string y, long x) -> void duplicateAction;
+                    (int x, int, int x, int x) -> int duplicateThrice;
+                    (int a) -> (int a) -> int nested;
+                    ((int a, int b) a) -> int tuple;
+                    ((int x, int x) -> int f) -> int inner;
+                    (int @x, int x) -> int escaped;
+                    (int _, int _) -> int discards;
+                    (int, int) -> int unnamed;
+                }
+                """;
+            // CS0100, as for the parameters of a method. A discard is a name here, as in a method's parameter list.
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (4,17): error CS0100: The parameter name 'x' is a duplicate
+                //     (int x, int x) -> int duplicate;
+                Diagnostic(ErrorCode.ERR_DuplicateParamName, "x").WithArguments("x").WithLocation(4, 17),
+                // (5,28): error CS0100: The parameter name 'x' is a duplicate
+                //     (int x, string y, long x) -> void duplicateAction;
+                Diagnostic(ErrorCode.ERR_DuplicateParamName, "x").WithArguments("x").WithLocation(5, 28),
+                // (6,22): error CS0100: The parameter name 'x' is a duplicate
+                //     (int x, int, int x, int x) -> int duplicateThrice;
+                Diagnostic(ErrorCode.ERR_DuplicateParamName, "x").WithArguments("x").WithLocation(6, 22),
+                // (6,29): error CS0100: The parameter name 'x' is a duplicate
+                //     (int x, int, int x, int x) -> int duplicateThrice;
+                Diagnostic(ErrorCode.ERR_DuplicateParamName, "x").WithArguments("x").WithLocation(6, 29),
+                // (9,18): error CS0100: The parameter name 'x' is a duplicate
+                //     ((int x, int x) -> int f) -> int inner;
+                Diagnostic(ErrorCode.ERR_DuplicateParamName, "x").WithArguments("x").WithLocation(9, 18),
+                // (10,18): error CS0100: The parameter name 'x' is a duplicate
+                //     (int @x, int x) -> int escaped;
+                Diagnostic(ErrorCode.ERR_DuplicateParamName, "x").WithArguments("x").WithLocation(10, 18),
+                // (11,17): error CS0100: The parameter name '_' is a duplicate
+                //     (int _, int _) -> int discards;
+                Diagnostic(ErrorCode.ERR_DuplicateParamName, "_").WithArguments("_").WithLocation(11, 17));
+        }
+
+        [Fact]
+        public void FunctionType_Names_Modifiers()
+        {
+            // The modifiers stay on the parameter, before its type; ref parameters are still errors.
+            var source = """
+                #pragma warning disable CS0169 // The field is never used
+                class C
+                {
+                    (ref int x, out string y) -> bool modifiers;
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            comp.VerifyDiagnostics(
+                // (4,6): error CS20008: A function type parameter cannot be 'ref', because a function type is a 'System.Func' or 'System.Action' delegate.
+                //     (ref int x, out string y) -> bool modifiers;
+                Diagnostic(ErrorCode.ERR_SharperFunctionTypeParameterModifier, "ref").WithArguments("ref").WithLocation(4, 6),
+                // (4,17): error CS20008: A function type parameter cannot be 'out', because a function type is a 'System.Func' or 'System.Action' delegate.
+                //     (ref int x, out string y) -> bool modifiers;
+                Diagnostic(ErrorCode.ERR_SharperFunctionTypeParameterModifier, "out").WithArguments("out").WithLocation(4, 17));
+
+            var type = comp.SyntaxTrees.Single().GetRoot().DescendantNodes().OfType<FunctionTypeSyntax>().Single();
+            Assert.Equal(SyntaxKind.RefKeyword, type.Parameters[0].Modifiers.Single().Kind());
+            Assert.Equal("x", type.Parameters[0].Identifier.ValueText);
+            Assert.Equal(SyntaxKind.OutKeyword, type.Parameters[1].Modifiers.Single().Kind());
+            Assert.Equal("y", type.Parameters[1].Identifier.ValueText);
+        }
+
+        [Fact]
+        public void FunctionType_Names_Parsing()
+        {
+            var statement = SyntaxFactory.ParseStatement("(int width, int) -> (string s) -> void f = null;", options: s_sharperOptions);
+            Assert.False(statement.ContainsDiagnostics);
+            var type = (FunctionTypeSyntax)((LocalDeclarationStatementSyntax)statement).Declaration.Type;
+            Assert.Equal(SyntaxKind.FunctionTypeParameter, type.Parameters[0].Kind());
+            Assert.Equal("width", type.Parameters[0].Identifier.ValueText);
+            Assert.Equal("int", type.Parameters[0].Type.ToString());
+            Assert.Equal(SyntaxKind.None, type.Parameters[1].Identifier.Kind());
+            var returnType = (FunctionTypeSyntax)type.ReturnType;
+            Assert.Equal("s", returnType.Parameters.Single().Identifier.ValueText);
+
+            // A tuple parameter with a name: the tuple's own names belong to the tuple.
+            statement = SyntaxFactory.ParseStatement("((int a, int b) p) -> int f = null;", options: s_sharperOptions);
+            Assert.False(statement.ContainsDiagnostics);
+            type = (FunctionTypeSyntax)((LocalDeclarationStatementSyntax)statement).Declaration.Type;
+            var parameter = type.Parameters.Single();
+            Assert.Equal("p", parameter.Identifier.ValueText);
+            Assert.Equal(SyntaxKind.TupleType, parameter.Type.Kind());
+
+            // In a pattern and a generic argument.
+            var expression = SyntaxFactory.ParseExpression("o is (int x) -> int f", options: s_sharperOptions);
+            Assert.False(expression.ContainsDiagnostics);
+            var pattern = (DeclarationPatternSyntax)((IsPatternExpressionSyntax)expression).Pattern;
+            Assert.Equal("x", ((FunctionTypeSyntax)pattern.Type).Parameters.Single().Identifier.ValueText);
+
+            expression = SyntaxFactory.ParseExpression("F<(int x) -> int>(y)", options: s_sharperOptions);
+            Assert.False(expression.ContainsDiagnostics);
+            Assert.Equal(SyntaxKind.InvocationExpression, expression.Kind());
+
+            // The factory builds the node.
+            var built = SyntaxFactory.FunctionType(
+                SyntaxFactory.SeparatedList([SyntaxFactory.FunctionTypeParameter(default, SyntaxFactory.ParseTypeName("int"), SyntaxFactory.Identifier("width"))]),
+                SyntaxFactory.ParseTypeName("int"));
+            Assert.Equal("width", built.Parameters.Single().Identifier.ValueText);
+            Assert.Equal("int width", built.Parameters.Single().NormalizeWhitespace().ToString());
+        }
+
+        [Fact]
+        public void FunctionType_Names_Disabled()
+        {
+            // Without Sharper, a function type with names reports the usual C# errors.
+            var source = """
+                class C
+                {
+                    void M()
+                    {
+                        (int width, int height) -> int area = null;
+                    }
+                }
+                """;
+            CreateCompilation(source, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (5,9): error CS0193: The * or -> operator must be applied to a pointer
+                //         (int width, int height) -> int area = null;
+                Diagnostic(ErrorCode.ERR_PtrExpected, "(int width, int height) -> ").WithLocation(5, 9),
+                // (5,10): error CS8185: A declaration is not allowed in this context.
+                //         (int width, int height) -> int area = null;
+                Diagnostic(ErrorCode.ERR_DeclarationExpressionNotPermitted, "int width").WithLocation(5, 10),
+                // (5,10): error CS0165: Use of unassigned local variable 'width'
+                //         (int width, int height) -> int area = null;
+                Diagnostic(ErrorCode.ERR_UseDefViolation, "int width").WithArguments("width").WithLocation(5, 10),
+                // (5,21): error CS8185: A declaration is not allowed in this context.
+                //         (int width, int height) -> int area = null;
+                Diagnostic(ErrorCode.ERR_DeclarationExpressionNotPermitted, "int height").WithLocation(5, 21),
+                // (5,21): error CS0165: Use of unassigned local variable 'height'
+                //         (int width, int height) -> int area = null;
+                Diagnostic(ErrorCode.ERR_UseDefViolation, "int height").WithArguments("height").WithLocation(5, 21),
+                // (5,36): error CS1001: Identifier expected
+                //         (int width, int height) -> int area = null;
+                Diagnostic(ErrorCode.ERR_IdentifierExpected, "int").WithLocation(5, 36),
+                // (5,36): error CS1002: ; expected
+                //         (int width, int height) -> int area = null;
+                Diagnostic(ErrorCode.ERR_SemicolonExpected, "int").WithLocation(5, 36),
+                // (5,47): error CS0037: Cannot convert null to 'int' because it is a non-nullable value type
+                //         (int width, int height) -> int area = null;
+                Diagnostic(ErrorCode.ERR_ValueCantBeNull, "null").WithArguments("int").WithLocation(5, 47));
+        }
+
+        [Fact]
+        public void FunctionType_Names_SyntaxKind()
+        {
+            // Sharper syntax nodes sit apart from the upstream ones; an upstream merge must not reuse the value.
+            Assert.Equal(9906, (int)SyntaxKind.FunctionTypeParameter);
+            Assert.Single(Enum.GetValues(typeof(SyntaxKind)).Cast<SyntaxKind>(), k => (int)k == (int)SyntaxKind.FunctionTypeParameter);
         }
 
         [Fact]

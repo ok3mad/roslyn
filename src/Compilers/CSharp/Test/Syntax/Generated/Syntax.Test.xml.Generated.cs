@@ -62,7 +62,10 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             => InternalSyntaxFactory.TupleType(InternalSyntaxFactory.Token(SyntaxKind.OpenParenToken), new Microsoft.CodeAnalysis.Syntax.InternalSyntax.SeparatedSyntaxList<Syntax.InternalSyntax.TupleElementSyntax>(), InternalSyntaxFactory.Token(SyntaxKind.CloseParenToken));
 
         private static Syntax.InternalSyntax.FunctionTypeSyntax GenerateFunctionType()
-            => InternalSyntaxFactory.FunctionType(InternalSyntaxFactory.Token(SyntaxKind.OpenParenToken), new Microsoft.CodeAnalysis.Syntax.InternalSyntax.SeparatedSyntaxList<Syntax.InternalSyntax.FunctionPointerParameterSyntax>(), InternalSyntaxFactory.Token(SyntaxKind.CloseParenToken), InternalSyntaxFactory.Token(SyntaxKind.MinusGreaterThanToken), GenerateIdentifierName());
+            => InternalSyntaxFactory.FunctionType(InternalSyntaxFactory.Token(SyntaxKind.OpenParenToken), new Microsoft.CodeAnalysis.Syntax.InternalSyntax.SeparatedSyntaxList<Syntax.InternalSyntax.FunctionTypeParameterSyntax>(), InternalSyntaxFactory.Token(SyntaxKind.CloseParenToken), InternalSyntaxFactory.Token(SyntaxKind.MinusGreaterThanToken), GenerateIdentifierName());
+
+        private static Syntax.InternalSyntax.FunctionTypeParameterSyntax GenerateFunctionTypeParameter()
+            => InternalSyntaxFactory.FunctionTypeParameter(new Microsoft.CodeAnalysis.Syntax.InternalSyntax.SyntaxList<Syntax.InternalSyntax.SyntaxToken>(), GenerateIdentifierName(), null);
 
         private static Syntax.InternalSyntax.ParenthesizedTypeSyntax GenerateParenthesizedType()
             => InternalSyntaxFactory.ParenthesizedType(InternalSyntaxFactory.Token(SyntaxKind.OpenParenToken), GenerateIdentifierName(), InternalSyntaxFactory.Token(SyntaxKind.CloseParenToken));
@@ -983,6 +986,18 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             Assert.Equal(SyntaxKind.CloseParenToken, node.CloseParenToken.Kind);
             Assert.Equal(SyntaxKind.MinusGreaterThanToken, node.ArrowToken.Kind);
             Assert.NotNull(node.ReturnType);
+
+            AttachAndCheckDiagnostics(node);
+        }
+
+        [Fact]
+        public void TestFunctionTypeParameterFactoryAndProperties()
+        {
+            var node = GenerateFunctionTypeParameter();
+
+            Assert.Equal(default, node.Modifiers);
+            Assert.NotNull(node.Type);
+            Assert.Null(node.Identifier);
 
             AttachAndCheckDiagnostics(node);
         }
@@ -4545,6 +4560,32 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         public void TestFunctionTypeIdentityRewriter()
         {
             var oldNode = GenerateFunctionType();
+            var rewriter = new IdentityRewriter();
+            var newNode = rewriter.Visit(oldNode);
+
+            Assert.Same(oldNode, newNode);
+        }
+
+        [Fact]
+        public void TestFunctionTypeParameterTokenDeleteRewriter()
+        {
+            var oldNode = GenerateFunctionTypeParameter();
+            var rewriter = new TokenDeleteRewriter();
+            var newNode = rewriter.Visit(oldNode);
+
+            if(!oldNode.IsMissing)
+            {
+                Assert.NotEqual(oldNode, newNode);
+            }
+
+            Assert.NotNull(newNode);
+            Assert.True(newNode.IsMissing, "No tokens => missing");
+        }
+
+        [Fact]
+        public void TestFunctionTypeParameterIdentityRewriter()
+        {
+            var oldNode = GenerateFunctionTypeParameter();
             var rewriter = new IdentityRewriter();
             var newNode = rewriter.Visit(oldNode);
 
@@ -10796,7 +10837,10 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             => SyntaxFactory.TupleType(SyntaxFactory.Token(SyntaxKind.OpenParenToken), new SeparatedSyntaxList<TupleElementSyntax>(), SyntaxFactory.Token(SyntaxKind.CloseParenToken));
 
         private static FunctionTypeSyntax GenerateFunctionType()
-            => SyntaxFactory.FunctionType(SyntaxFactory.Token(SyntaxKind.OpenParenToken), new SeparatedSyntaxList<FunctionPointerParameterSyntax>(), SyntaxFactory.Token(SyntaxKind.CloseParenToken), SyntaxFactory.Token(SyntaxKind.MinusGreaterThanToken), GenerateIdentifierName());
+            => SyntaxFactory.FunctionType(SyntaxFactory.Token(SyntaxKind.OpenParenToken), new SeparatedSyntaxList<FunctionTypeParameterSyntax>(), SyntaxFactory.Token(SyntaxKind.CloseParenToken), SyntaxFactory.Token(SyntaxKind.MinusGreaterThanToken), GenerateIdentifierName());
+
+        private static FunctionTypeParameterSyntax GenerateFunctionTypeParameter()
+            => SyntaxFactory.FunctionTypeParameter(new SyntaxTokenList(), GenerateIdentifierName(), default(SyntaxToken));
 
         private static ParenthesizedTypeSyntax GenerateParenthesizedType()
             => SyntaxFactory.ParenthesizedType(SyntaxFactory.Token(SyntaxKind.OpenParenToken), GenerateIdentifierName(), SyntaxFactory.Token(SyntaxKind.CloseParenToken));
@@ -11718,6 +11762,18 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             Assert.Equal(SyntaxKind.MinusGreaterThanToken, node.ArrowToken.Kind());
             Assert.NotNull(node.ReturnType);
             var newNode = node.WithOpenParenToken(node.OpenParenToken).WithParameters(node.Parameters).WithCloseParenToken(node.CloseParenToken).WithArrowToken(node.ArrowToken).WithReturnType(node.ReturnType);
+            Assert.Equal(node, newNode);
+        }
+
+        [Fact]
+        public void TestFunctionTypeParameterFactoryAndProperties()
+        {
+            var node = GenerateFunctionTypeParameter();
+
+            Assert.Equal(default, node.Modifiers);
+            Assert.NotNull(node.Type);
+            Assert.Equal(SyntaxKind.None, node.Identifier.Kind());
+            var newNode = node.WithModifiers(node.Modifiers).WithType(node.Type).WithIdentifier(node.Identifier);
             Assert.Equal(node, newNode);
         }
 
@@ -15279,6 +15335,32 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         public void TestFunctionTypeIdentityRewriter()
         {
             var oldNode = GenerateFunctionType();
+            var rewriter = new IdentityRewriter();
+            var newNode = rewriter.Visit(oldNode);
+
+            Assert.Same(oldNode, newNode);
+        }
+
+        [Fact]
+        public void TestFunctionTypeParameterTokenDeleteRewriter()
+        {
+            var oldNode = GenerateFunctionTypeParameter();
+            var rewriter = new TokenDeleteRewriter();
+            var newNode = rewriter.Visit(oldNode);
+
+            if(!oldNode.IsMissing)
+            {
+                Assert.NotEqual(oldNode, newNode);
+            }
+
+            Assert.NotNull(newNode);
+            Assert.True(newNode.IsMissing, "No tokens => missing");
+        }
+
+        [Fact]
+        public void TestFunctionTypeParameterIdentityRewriter()
+        {
+            var oldNode = GenerateFunctionTypeParameter();
             var rewriter = new IdentityRewriter();
             var newNode = rewriter.Visit(oldNode);
 

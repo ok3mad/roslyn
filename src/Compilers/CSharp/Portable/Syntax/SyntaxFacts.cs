@@ -101,7 +101,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                         throw ExceptionUtilities.Unreachable();
 
                     case FunctionType:
-                        // The parameter types are under FunctionPointerParameter.
+                        // The parameter types are under FunctionTypeParameter.
                         return ((FunctionTypeSyntax)parent).ReturnType == node;
 
                     case TaskType:
@@ -227,6 +227,9 @@ namespace Microsoft.CodeAnalysis.CSharp
 
                     case TupleElement:
                         return ((TupleElementSyntax)parent).Type == node;
+
+                    case FunctionTypeParameter:
+                        return ((FunctionTypeParameterSyntax)parent).Type == node;
 
                     case DeclarationExpression:
                         return ((DeclarationExpressionSyntax)parent).Type == node;

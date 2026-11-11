@@ -8229,15 +8229,15 @@ done:
         }
 
         /// <summary>
-        /// Sharper: parses a function type, <c>(A, B) -> R</c>. Parameter modifiers are kept for the binder to report;
-        /// parameter names are skipped with an error.
+        /// Sharper: parses a function type, <c>(A, B) -> R</c> or <c>(A a, B b) -> R</c>. Parameter modifiers are kept
+        /// for the binder to report, and each parameter may have a name, as a tuple element may.
         /// </summary>
         /// <param name="mode">In a pattern, the return type is parsed as the type of a pattern, so that
         /// <c>x is (int) -> int ? a : b</c> stays a conditional, as <c>x is int ? a : b</c> is.</param>
         private FunctionTypeSyntax ParseSharperFunctionType(ParseTypeMode mode = ParseTypeMode.Normal)
         {
             var open = this.EatToken(SyntaxKind.OpenParenToken);
-            var parameters = _pool.AllocateSeparated<FunctionPointerParameterSyntax>();
+            var parameters = _pool.AllocateSeparated<FunctionTypeParameterSyntax>();
 
             if (this.CurrentToken.Kind != SyntaxKind.CloseParenToken)
             {
@@ -8246,18 +8246,10 @@ done:
                     var modifiers = _pool.Allocate<SyntaxToken>();
                     ParseParameterModifiers(modifiers, isFunctionPointerParameter: true, isLambdaParameter: false);
 
-                    TypeSyntax type = this.ParseType(ParseTypeMode.Parameter);
-                    if (IsTrueIdentifier())
-                    {
-                        // PROTOTYPE(sharper): parameter names are not supported yet (https://github.com/ok3mad/roslyn/issues/57).
-                        var name = this.EatToken();
-                        type = AddTrailingSkippedSyntax(type, this.AddError(name, ErrorCode.ERR_SharperFunctionTypeParameterName, name.ValueText));
-                    }
-
-                    parameters.Add(_syntaxFactory.FunctionPointerParameter(
-                        attributeLists: default,
+                    parameters.Add(_syntaxFactory.FunctionTypeParameter(
                         _pool.ToTokenListAndFree(modifiers),
-                        type));
+                        this.ParseType(ParseTypeMode.Parameter),
+                        IsTrueIdentifier() ? this.ParseIdentifierToken() : null));
 
                     if (this.CurrentToken.Kind != SyntaxKind.CommaToken)
                     {

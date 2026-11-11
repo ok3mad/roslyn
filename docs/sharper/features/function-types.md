@@ -12,6 +12,7 @@
 () -> string thunk = () => "ready";        // Func<string>
 (string) -> void print = Console.Write;    // Action<string>
 () -> void tick = () => { };               // Action
+(int width, int height) -> int area = (w, h) => w * h;   // Func<int, int, int>, with names
 
 static (int) -> int Compose((int) -> int f, (int) -> int g) => x => g(f(x));
 ```
@@ -39,8 +40,12 @@ var name = o switch { () -> void => "action", (int) -> int f => "f" + f(1), _ =>
   `((int) -> int)[]` is `Func<int, int>[]`, `((int) -> int)~` is `Task<Func<int, int>>` and `((int) -> int)[..]` is
   `IEnumerable<Func<int, int>>`. Such parentheses are allowed only around a function type, once: `((int))` and
   `(((int) -> int))` are not types.
-- **Parameters are types,** without names or modifiers. A parameter of tuple type needs its own parentheses:
-  `((int, int)) -> int`.
+- **Parameters are types, each with an optional name:** `(int width, int height) -> int`, and `(int x, int) -> void`,
+  where only some are named, as in a tuple. A parameter of tuple type needs its own parentheses: `((int, int)) -> int`,
+  and its name follows them: `((int a, int b) p) -> int`. Names do not change the type yet, so
+  `(int width, int height) -> int` is `Func<int, int, int>`, the same type as `(int, int) -> int`, and the two clash as
+  overloads. Names must be unique in one parameter list (CS0100, as for a method's parameters, `_` included); a nested
+  function type has its own: `(int a) -> (int a) -> int` is allowed.
 - **Constraints are those of `Func` and `Action`:** a pointer or a static type cannot be a parameter or return type
   (CS0306, CS0718), and a ref struct can only be one where `Func` allows it (.NET 9 and later). The error is reported
   where the `Func` spelling reports it: on the offending parameter or return type.
@@ -69,7 +74,7 @@ var name = o switch { () -> void => "action", (int) -> int f => "f" + f(1), _ =>
 
 | Code | Message |
 | --- | --- |
-| CS20007 | A function type cannot name its parameters. Remove the name '{0}'. |
+| CS0100 | The parameter name '{0}' is a duplicate (C#'s error, for two parameters of one function type with the same name) |
 | CS20008 | A function type parameter cannot be '{0}', because a function type is a 'System.Func' or 'System.Action' delegate. |
 | CS20009 | A function type cannot have more than {0} parameters, because no 'System.Func' or 'System.Action' delegate has more. |
 
@@ -78,10 +83,11 @@ var name = o switch { () -> void => "action", (int) -> int f => "f" + f(1), _ =>
 - **`ref`, `out` and `in` parameters, ref returns and more than 16 parameters** have no `Func` or `Action`, and are
   errors for now (CS20008, CS20009; a ref return reports CS1073). The design is decided
   ([#56](https://github.com/ok3mad/roslyn/issues/56)), see [Planned: ref parameters](#planned-ref-parameters).
-- **Parameter names** such as `(int width, int height) -> int` are not supported yet (CS20007), because `Func` cannot
-  carry them. They are planned the way tuples carry their element names, in four steps under
+- **Parameter names** such as `(int width, int height) -> int` are kept in the syntax but mean nothing yet: `Func`
+  cannot carry them, so they are lost through `var`, generic arguments and references, and the IDE does not show them.
+  They are planned the way tuples carry their element names, in four steps under
   [#57](https://github.com/ok3mad/roslyn/issues/57): names in the syntax, ignored by the binder
-  ([#212](https://github.com/ok3mad/roslyn/issues/212)); names on the `Func` or `Action` type symbol within a compilation
+  ([#212](https://github.com/ok3mad/roslyn/issues/212), done); names on the `Func` or `Action` type symbol within a compilation
   ([#213](https://github.com/ok3mad/roslyn/issues/213)); signature help, Quick Info and inline hints
   ([#214](https://github.com/ok3mad/roslyn/issues/214)); and names in metadata through a synthesized attribute
   ([#215](https://github.com/ok3mad/roslyn/issues/215)). Names will never change conversions or overload resolution.
@@ -188,7 +194,9 @@ Rejected:
 
 The function type is the syntax node `FunctionTypeSyntax` (`Syntax.xml`), Sharper's first new syntax node. Its kind,
 `SyntaxKind.FunctionType`, is 9900: Sharper syntax nodes count up from there, apart from upstream's kinds. Its
-parameters reuse `FunctionPointerParameterSyntax`.
+parameters are `FunctionTypeParameterSyntax` (`SyntaxKind.FunctionTypeParameter`, 9906): modifiers, a type and an
+optional name, the shape of a tuple element with modifiers. The modifiers are bound by `BindFunctionType`, which
+reports CS20008 for them today.
 
 The parser (`LanguageParser.cs`) changes only when Sharper is on:
 
@@ -206,7 +214,8 @@ The parser (`LanguageParser.cs`) changes only when Sharper is on:
   ends: a suffix after a function type belongs to its return type, so a function type ends where its return type does,
   while a tuple or parenthesized type ends at its own `)` or suffix.
 
-The binder (`Binder_Symbols.cs`, `BindFunctionType`) binds the parameter and return types and constructs the
+The binder (`Binder_Symbols.cs`, `BindFunctionType`) checks that parameter names are unique, binds the parameter and
+return types and constructs the
 well-known `Func` or `Action` through `BindSharperTypeAlias` (`Binder_SharperTypes.cs`), checking constraints as for
 any generic type, with each parameter and return type as the location of its type argument. There is no bound node, so flow
 analysis, lowering and IOperation need no changes. Tests are the `FunctionType_*` tests in `SharperTests.cs`.
