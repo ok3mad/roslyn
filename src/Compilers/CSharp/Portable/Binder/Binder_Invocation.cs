@@ -1992,7 +1992,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             }
 
             // PROTOTYPE(sharper): Silence the warning for members inferred not to mutate 'this', once member mutation is inferred.
-            // Tracked in #84; the warning's default severity until then is #85.
+            // Tracked in #84; until then the warning stays on by default (decided in #85).
             var local = receiver is BoundImplicitIndexerReceiverPlaceholder placeholder ? placeholder.Receiver : receiver;
             object variable = local switch
             {
