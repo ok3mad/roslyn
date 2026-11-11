@@ -43,6 +43,7 @@ jobs:
           src/LanguageServer/Microsoft.CodeAnalysis.LanguageServer/Microsoft.CodeAnalysis.LanguageServer.csproj
           -c Release
           -p:PublishReadyToRun=false
+          -p:RollForward=Major
           -p:OfficialBuildId=${{ steps.version.outputs.build_id }}
           -p:PreReleaseVersionLabel=sharper
           -o out/sharper-vscode/server

@@ -3,7 +3,15 @@
 // See docs/sharper/vscode.md.
 {
   "name": "Sharper playground",
-  "image": "mcr.microsoft.com/devcontainers/dotnet:10.0",
+  "image": "mcr.microsoft.com/devcontainers/dotnet:11.0",
+  // The language server targets .NET 10, as upstream Roslyn's does; releases before the switch to .NET 11 need its
+  // runtime.
+  "features": {
+    "ghcr.io/devcontainers/features/dotnet:2": {
+      "version": "none",
+      "dotnetRuntimeVersions": "10.0"
+    }
+  },
   "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}/docs/sharper/playground",
   "postCreateCommand": "bash ${containerWorkspaceFolder}/../../../.devcontainer/sharper/setup.sh",
   "customizations": {
