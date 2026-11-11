@@ -16,7 +16,11 @@ total = 0;   // error CS1656: Cannot assign to 'total' because it is a 'val vari
 ```
 
 It is `var` plus the read-only rule that C# already applies to `foreach` and `using` variables, and the same as
-[`readonly var x = e;`](readonly-locals.md), which also has an explicitly typed form, `readonly int x = e;`.
+[`readonly var x = e;`](readonly-locals.md), which also has an explicitly typed form, `readonly int x = e;`. `val` is
+sugar: `readonly` plus the type inference of its position, so `(val x) => ...` is `(readonly x) => ...`. Only the
+spelling differs, which shows in the messages ('val variable' instead of 'readonly local'), the struct-copy warning
+code (CS20003 instead of CS20010, [#228](https://github.com/ok3mad/roslyn/issues/228)), and the places where it can be
+written: `val` also works where C# has no modifier slot (`foreach`, deconstruction, `out`, patterns).
 
 ## Rules
 
@@ -103,7 +107,10 @@ without a designation is still a type test.
 - **IDE:** the editor does not treat `val` like `var` yet: classification, Quick Info, completion, hints and
   refactorings ([#87](https://github.com/ok3mad/roslyn/issues/87)). An analyzer that suggests `val` for locals that are
   never reassigned is [#89](https://github.com/ok3mad/roslyn/issues/89).
-- **Public API:** nothing public tells a `val` local from a `var` local ([#88](https://github.com/ok3mad/roslyn/issues/88)).
+- **Public API:** decided not to add any ([#88](https://github.com/ok3mad/roslyn/issues/88)). Nothing on `ILocalSymbol` or
+  `IParameterSymbol` tells a `val` from a `var`; the IDE and analyzers ask `SharperFacts`, which reads the syntax and the
+  semantic model, so a type named `val` still counts as a type. The helpers come with the IDE work (#87). See the
+  [decision](../planning/implementation-plan.md#decisions).
 - **Edit and Continue** has not been verified with `val` ([#90](https://github.com/ok3mad/roslyn/issues/90)).
 - **Deeper immutability:** `val` makes the binding read-only, and a struct value with it, but not the object behind a
   reference. A type-level marker is an open question ([#92](https://github.com/ok3mad/roslyn/issues/92)).
