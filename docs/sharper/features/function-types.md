@@ -85,6 +85,7 @@ var name = o switch { () -> void => "action", (int) -> int f => "f" + f(1), _ =>
   ([#213](https://github.com/ok3mad/roslyn/issues/213)); signature help, Quick Info and inline hints
   ([#214](https://github.com/ok3mad/roslyn/issues/214)); and names in metadata through a synthesized attribute
   ([#215](https://github.com/ok3mad/roslyn/issues/215)). Names will never change conversions or overload resolution.
+  The design is decided, see [Planned: parameter names](#planned-parameter-names).
 - **IDE:** the editor knows nothing about Sharper yet, so completion and formatting may not handle function types.
 
 ## Planned: ref parameters
@@ -129,6 +130,59 @@ Rejected, because no other representation gives one type across assemblies:
 - **A runtime library of delegates.** Ref kinds cannot be type arguments, so each combination needs its own type:
   5ⁿ·4 shapes for n parameters, 3,114 up to four parameters. Any cut-off is arbitrary, and the library goes against
   "no new library".
+
+## Planned: parameter names
+
+Decided in [#213](https://github.com/ok3mad/roslyn/issues/213) and [#215](https://github.com/ok3mad/roslyn/issues/215),
+not built yet. The names follow tuple element names in design and in the places the compiler handles them, but share
+none of their types or attributes, apart from one comparison flag.
+
+```csharp
+(int width, int height) -> int area = (w, h) => w * h;
+var g = area;                    // g's type has the names width, height
+var f = (int x, int y) => x + y; // Sharper: the natural type has the names x, y
+area(width: 3, height: 4);       // named arguments, once the names are in metadata (N4)
+
+// Library.cx
+public static int Apply((int width, int height) -> int f) => f(3, 4);
+// emitted as
+public static int Apply([Sharper.FunctionParameterNames(new[] { "width", "height" })] Func<int, int, int> f)
+```
+
+- **On the type symbol (N2):** a constructed `Func` or `Action` carries a record of parameter names, as a tuple
+  carries `TupleExtraData`, and its `DelegateInvokeMethod` has parameters with those names. The names go through
+  `var`, generic inference (a name is kept only where both sides agree, as `MergeTupleNames` does), `?:`, `??` and
+  arrays. A lambda's natural type carries its parameter names, in Sharper only.
+- **Never part of the type's meaning:** names reuse `TypeCompareKind.IgnoreTupleNames` instead of a new
+  `TypeCompareKind` value (public API), so every place that ignores tuple names, conversions and overload resolution
+  among them, ignores these too. Members that differ only in names still clash (CS0111). No caller can ignore one kind
+  of name and compare the other. `GetTypeInfo` returns the type with its names, and `SymbolEqualityComparer.Default`
+  tells two differently named function types apart, as it does tuples.
+- **No name-mismatch warning:** nothing like CS8123. Lambda parameters always have names, so a warning on converting a
+  lambda to a function type with other names would fire constantly, and tuples do not warn between variables either.
+- **Overrides and implementations** follow the tuple rules (CS8139, CS8141): changing a name is an error, and dropping
+  all names is allowed.
+- **In metadata (N4):** a new attribute, `Sharper.FunctionParameterNamesAttribute`, synthesized and embedded like
+  [`[Immutable]`](immutable-types.md#the-attributes), with a type of that name declared in the compilation taking
+  precedence. Other assemblies recognize it by namespace and name. This is the README's "fact for other assemblies"
+  row, so it is not a [runtime library](../README.md#runtime-library) type. It holds one slot per `Func`/`Action`
+  parameter, in pre-order depth-first order over the type, `null` for no name, and is left out when every slot is
+  `null`. It is emitted wherever tuple names are (parameters, returns, fields, properties, events, base types,
+  constraints). On a count mismatch the reader drops the names and keeps the type. Plain C# sees `Func<int, int, int>`.
+- **Named arguments (N4):** allowed on a delegate invocation only with the names of a function type, after N4, so
+  the IDE and the command line agree. Through a plain `Func<...>` there are no names, and a named argument is the
+  usual CS1739.
+- **IDE (N3):** after N2. Signature help, Quick Info and inline hints read the names from `DelegateInvokeMethod`, not
+  from the declaration's syntax, which would miss `var`, generic arguments and metadata.
+
+Rejected:
+
+- **`TupleElementNamesAttribute` for the names:** `TupleTypeDecoder` reports a type whose names do not match its tuple
+  elements as unsupported metadata, so plain C# consumers of a Sharper library would break.
+- **Names only on the declaring local, parameter or field:** cheaper, but the names are lost through `var` and
+  generic inference.
+- **The attribute in the runtime library:** an embedded attribute matched by name already crosses assemblies. A
+  library type would only help tools that want to reference it by type.
 
 ## Implementation
 
