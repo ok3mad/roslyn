@@ -398,6 +398,15 @@ implementation plan, "Feature 3"):
    `GetEmbeddedTypes` sees it, and written from the symbol's `AddSynthesizedAttributes` (`SharperRefinementGuard`,
    `SharperImmutabilityAttribute.Refinement`).
 
+44. **A contract on a virtual or interface slot is checked from both ends.** `[Pure]` on a slot binds every override and
+   implementation (`SharperImmutability.CheckPureOverrides`). On the declaration side, walk `OverriddenMethod` for
+   overrides, read `ExplicitInterfaceImplementations`, and ask `FindImplementationForInterfaceMember` for every
+   interface of the type to find implicit implementations, also one inherited from a base class, which is reported on
+   the type that declares the interface. On the call side, a call binds to the most derived override visible on the
+   receiver, not to the slot, so the query walks the overridden members too (`IsPureSlot`). An error in a Sharper file is
+   a warning in a C# file of the same compilation, where the attribute does not bind; skip the members the compiler
+   writes.
+
 ## Inferred Types
 
 Inference from a body (`infer` return types, rows 10 and 15) reuses `var`'s rules for the natural type of an
