@@ -1194,6 +1194,22 @@ members that convert '{1}' needs the signature of '{1}', directly or through oth
 Write the parameter type." CS20056 names one body and cannot say this without changing its arguments, which would change
 every P4 cycle expectation.
 
+Tests: 8 `InferFromMemberConversions_*` tests in `SharperTests_InferFromMemberConversions.cs`: every place and kind of
+conversion with runtime output next to C# twins (the issue's example, field and property initializers, a cast, a
+constructor, a getter with a function type, a written parameter, `ref`, a lambda, a nested type), partial declarations
+in two files with inferred return types around the conversion, conversions that disagree, what pins nothing (other
+accessibility, calls, natural types, a body source behind them), precedence, nullability, the cycle from every starting
+member, and threads. One earlier expectation changed on purpose: P7's `InferFromConversions_PinsNothing` had a private
+`Member` whose conversion pinned nothing, which is what #207 changes; it is now public, so the test keeps checking that
+other members pin nothing. All 508 Sharper test cases pass, also with `ROSLYN_TEST_IOPERATION=1`. Regression run (net10.0,
+Debug): Semantic 20,330 passed, Symbol 13,923 and Emit 7,312, none failed; the Semantic test project builds with
+`-warnaserror`; the analyzer build reports no error (its warnings are the three RS0062 in P2's
+`SharperInferredParameterType_OverriddenMember.cs`, as on `main`).
+
+Follow-ups: partial methods, primary constructor base arguments and top-level statements; a member called next to the
+conversion whose inferred return type needs the method's signature is a cycle even where the conversion does not depend
+on it; after CS20057, C# reports its own CS0123 for the conversions to the error type, as in P7.
+
 ## Feature 10: immutable types, slice 1 (design)
 
 `[Immutable] sealed record Money(decimal Amount, string Currency);` (issue [#139](https://github.com/ok3mad/roslyn/issues/139),
