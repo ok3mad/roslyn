@@ -29,6 +29,12 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         AssumePure,
         Phantom,
         Pure,
+
+        /// <summary>
+        /// <c>SharperRefinementAttribute(string pattern)</c> on a refined parameter (<see cref="SharperRefinement"/>). The
+        /// compiler writes it; it is not an attribute name that binds in source (<see cref="SharperImmutability.TryGetAttributeKind"/>).
+        /// </summary>
+        Refinement,
     }
 
     /// <summary>
@@ -49,6 +55,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             ("AssumePureAttribute", AttributeTargets.Property | AttributeTargets.Method),
             ("PhantomAttribute", AttributeTargets.GenericParameter),
             ("PureAttribute", AttributeTargets.Method | AttributeTargets.Constructor | AttributeTargets.Property),
+            (SharperRefinement.AttributeName, AttributeTargets.Parameter | AttributeTargets.ReturnValue),
         ];
 
         private readonly CSharpCompilation _compilation;
@@ -83,7 +90,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         /// </summary>
         internal static bool TryGetAttributeKind(string name, bool isVerbatim, out SharperImmutabilityAttribute kind)
         {
-            for (int i = 0; i < s_attributes.Length; i++)
+            // The refinement attribute is written by the compiler only, so its name does not bind to it.
+            for (int i = 0; i < (int)SharperImmutabilityAttribute.Refinement; i++)
             {
                 string fullName = s_attributes[i].Name;
                 if (name == fullName || (!isVerbatim && name.Length + "Attribute".Length == fullName.Length && fullName.StartsWith(name, StringComparison.Ordinal)))
@@ -120,7 +128,14 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     Interlocked.CompareExchange(ref _lazyAttributeNamespace, new SynthesizedNamespaceSymbol(_compilation.SourceModule.GlobalNamespace, AttributeNamespace), null);
                 }
 
-                declared = new SynthesizedEmbeddedSharperAttributeSymbol(s_attributes[index].Name, s_attributes[index].Targets, _lazyAttributeNamespace, _compilation.SourceModule, systemAttribute);
+                TypeSymbol? stringParameter = null;
+                if (kind == SharperImmutabilityAttribute.Refinement)
+                {
+                    stringParameter = _compilation.GetSpecialType(SpecialType.System_String);
+                    Binder.ReportUseSite(stringParameter, diagnostics, node);
+                }
+
+                declared = new SynthesizedEmbeddedSharperAttributeSymbol(s_attributes[index].Name, s_attributes[index].Targets, _lazyAttributeNamespace, _compilation.SourceModule, systemAttribute, stringParameter);
             }
 
             Interlocked.CompareExchange(ref _lazyAttributeTypes[index], declared, null);

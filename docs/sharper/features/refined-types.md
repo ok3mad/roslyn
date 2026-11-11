@@ -1,13 +1,13 @@
 # Refined types
 
-**Status:** Prototype of slice 1, steps 1 and 2 (syntax and binding), on `sharper/refined-parameters-syntax`. Requires
-`/features:sharper`. Issue: [#33](https://github.com/ok3mad/roslyn/issues/33). The design is in the implementation
-plan, [Feature 11](../planning/implementation-plan.md#feature-11-refined-types-slice-1-design).
+**Status:** Prototype of slice 1: steps 1 and 2 (syntax and binding) are merged into `main`; step 5 (the entry guard
+and the metadata attribute) is on `sharper/refined-parameters-guard`. Requires `/features:sharper`. Issue:
+[#33](https://github.com/ok3mad/roslyn/issues/33). The design is in the implementation plan,
+[Feature 11](../planning/implementation-plan.md#feature-11-refined-types-slice-1-design).
 
-**Runtime behavior is unchanged in this step.** A refinement is parsed, bound and checked, and the parameter is
-readonly, but nothing reads it yet: there is no entry guard, calls are not checked, and switches behave as in C#.
-`Page(-1)` compiles and runs with `i == -1`. Return refinements (step 3), call sites and switches (step 4), and the
-guard and metadata (step 5) come next.
+**Calls are not checked yet.** A refinement is parsed, bound and checked, the parameter is readonly, and the method
+checks it at entry: `Page(-1)` compiles, and throws `ArgumentOutOfRangeException` when it runs. Switches behave as in
+C#. Return refinements (step 3) and call sites and switches (step 4) come next.
 
 ## Summary
 
@@ -56,6 +56,57 @@ The value set of a refinement is computed once per parameter symbol (`SharperRef
 `ValueSetFactory` and the same relations the decision DAG uses. A refined parameter is never a
 `SourceSimpleParameterSymbol`, which keeps no syntax.
 
+## Runtime guard
+
+Every method with refined parameters checks them at entry, in order, on every accessibility. `Page` above runs as if
+it were written:
+
+```csharp
+static int Page(int i)
+{
+    if (!(i is >=0)) throw new ArgumentOutOfRangeException(nameof(i), i, "The value does not satisfy the refinement 'is >= 0'.");
+    ...
+}
+```
+
+The guard covers every caller the compiler cannot check: C# callers, delegates, reflection. It is lowered through the
+`is`-pattern lowering and has no sequence points of its own. The exception is the BCL's, looked up by name in the core
+library (CS0656 at the refinement if it is missing); behavior lowers to C#, so the guard needs nothing from the
+Sharper [runtime library](../README.md#runtime-library).
+
+| Member | Where the guard runs |
+| --- | --- |
+| Method, operator, conversion, indexer accessor | First in the body |
+| Iterator, `async` method, `async` iterator | In the kickoff method, before the state machine is created: the call throws, before anything is enumerated or awaited |
+| Constructor | Before field initializers and the `base` or `this` call |
+| Primary constructor of a class or struct | Before the captured parameters are stored and before field initializers |
+| Local function | In its closure method (in the kickoff method if it is an iterator or `async`) |
+| Extension block member | In its implementation method |
+
+The code is `SharperRefinementGuard` (`Lowering/SharperRefinementGuard.cs`): `MethodCompiler` lowers the guard on its
+own against the parameters of the method that is emitted, and puts it first in the body after state machine
+rewriting.
+
+## Metadata
+
+A refined parameter carries an embedded `Sharper.SharperRefinementAttribute(string pattern)`, made like the
+[`[Immutable]`](immutable-types.md#the-attributes) attributes: internal, `[Embedded]`, synthesized only when a
+refinement needs it. The compiler writes it; the name does not bind in source. The string is the normalized pattern:
+
+| Source | Attribute text |
+| --- | --- |
+| `int i is >=0 and <10 or 42` | `>= 0 and < 10 or 42` |
+| `string s is not ("" or " ")` | `not ("" or " ")` |
+| `Color k is Color.Red or Color.Green` | `Color.Red or Color.Green` |
+| `Flags f is (Flags)3` | `(Flags)3`, for a value with no member |
+| `decimal m is >Min`, with `const decimal Min = 0.01m` | `> 0.01m`, the constant's value |
+| `double d is not double.NaN` | `not double.NaN` |
+
+Constants are written as literals of the parameter type, so the text is valid C# for it and reads without binding
+any name. A metadata parameter reads the attribute back (`PEParameterSymbol.SharperRefinement`), matched by namespace
+and name and trusted as `[Immutable]` is, and gets the same value set and null rule as the source symbol; text that
+does not parse or does not fit the type gives no refinement. A C# caller sees the plain type and meets the guard.
+
 ## Open points
 
 - An implicit implementation of an interface member, `public void M(int i is >=0)` for `I.M(int i)`, is not
@@ -63,9 +114,17 @@ The value set of a refinement is computed once per parameter symbol (`SharperRef
 - A default value from `[DefaultParameterValue]` is not checked.
 - Recursive `infer` returns (an error in the design) wait for return refinements, step 3.
 - The semantic model does not bind a refinement's pattern yet: `GetSymbolInfo` on a constant in it finds nothing.
+- Runtime async: the guard is the first statement of the method itself, and whether the runtime throws to the caller or
+  faults the task is not tested.
+- The guard always runs; eliding it when every caller is proven is an optimization for later.
 
 ## Tests
 
 `src/Compilers/CSharp/Test/Semantic/Semantics/SharperTests_Refinements.cs` (`Refinement_*`): parsing with the flag on
 and off, the default-value ambiguity, the factory overloads, every position, the value sets, each diagnostic, and
 runtime behavior next to the C# twin.
+
+`SharperTests_RefinementGuards.cs` (`RefinementGuard_*`, `RefinementMetadata_*`): the guard on every supported type
+and member, its exception (parameter name, value, message) next to the C# twin, iterators and `async` throwing
+eagerly, constructors before field initializers, a C# caller, the IL in Debug and Release, the missing exception, the
+flag off; the attribute's shape, round trips through metadata for every type and member, and text that is not trusted.

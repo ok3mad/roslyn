@@ -1354,7 +1354,28 @@ rules and return inference.
   the same 37 expected failures as the last run below, and none new.
 - [ ] Step 3, return refinements.
 - [ ] Step 4, call sites and switches.
-- [ ] Step 5, guard and metadata.
+- [x] **Step 5, guard and metadata** (`sharper/refined-parameters-guard`). `SharperRefinementGuard`
+  (`Lowering/SharperRefinementGuard.cs`) builds `if (p is not (pattern)) throw new ArgumentOutOfRangeException(nameof(p),
+  p, "...")` for each refined parameter, lowers it with `LocalRewriter.Rewrite` on its own, and `MethodCompiler` puts it
+  first in the emitted body after state machine rewriting: in the kickoff method of iterators and `async` methods, and
+  before the captured-parameter stores and field initializers of constructors (constructors and class and struct
+  primary constructors allow refinements since step 2). The guard is built against the parameters of the method that is
+  emitted, so local functions (their closure methods, compiled with the synthesized methods) and extension block members
+  (their implementation methods) are covered; the pattern is rebuilt from its constants against those parameters'
+  types (`SharperRefinement.MakePattern`). It starts with a hidden sequence point, since codegen requires one at offset 0
+  once a method has any. The exception stays the BCL's: #217's runtime library is only for types two assemblies must
+  agree on, and a guard is behavior. `ArgumentOutOfRangeException` is not a well-known type, so its constructor is looked
+  up by name in the core library; a missing one is CS0656 at the refinement.
+  The metadata is an embedded `Sharper.SharperRefinementAttribute(string pattern)`, a compiler-only entry in the table of
+  `[Immutable]` and `[Pure]` (`SharperImmutabilityAttribute.Refinement`, whose name does not bind in source), synthesized
+  with a string constructor when a refinement binds and written by `SourceParameterSymbolBase.AddSynthesizedAttributes`.
+  The text is normalized from the bound constants (`SharperRefinement.Text`): literals of the parameter type, enum
+  members by name or as a cast of the value, `double.NaN` and infinities by name, only the parentheses precedence needs.
+  `PEParameterSymbol.SharperRefinement` parses it back without binding names (`SharperRefinement.FromMetadata`) and
+  computes the value set with the same code as source; `ParameterSymbol.SharperRefinement` is virtual, and cloned
+  (indexer accessor) and wrapped (substituted, retargeting, extension implementation) parameters forward it.
+  Tests: 13 `RefinementGuard_*` and `RefinementMetadata_*` tests (`SharperTests_RefinementGuards.cs`).
+  Open point, as a `PROTOTYPE(sharper)` comment: runtime async, which has no kickoff method.
 
 ## Feature 12: pipe, without lifting
 

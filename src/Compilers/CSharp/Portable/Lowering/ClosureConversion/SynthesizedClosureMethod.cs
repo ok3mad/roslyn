@@ -20,6 +20,9 @@ namespace Microsoft.CodeAnalysis.CSharp
         private readonly ImmutableArray<NamedTypeSymbol> _structEnvironments;
 
         internal MethodSymbol TopLevelMethod { get; }
+
+        /// <summary>The lambda or local function this method implements (Sharper: its parameters' refinements).</summary>
+        internal MethodSymbol OriginalMethod => BaseMethod;
         internal readonly DebugId LambdaId;
 
         internal SynthesizedClosureMethod(

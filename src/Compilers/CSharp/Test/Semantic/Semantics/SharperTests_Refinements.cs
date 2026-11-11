@@ -14,8 +14,8 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
 {
     /// <summary>
     /// Sharper's refined parameters, slice 1 steps 1 and 2 (issue #33): <c>static int Page(int i is &gt;=0)</c> parses
-    /// and binds its refinement, and the parameter is readonly. Nothing reads the refinement yet: there is no guard, and
-    /// calls and switches behave as in C#.
+    /// and binds its refinement, and the parameter is readonly. The guard and the metadata (step 5) are tested in
+    /// <c>SharperTests_RefinementGuards.cs</c>; calls and switches still behave as in C#.
     /// </summary>
     public sealed partial class SharperTests
     {
@@ -164,7 +164,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         [Fact]
         public void Refinement_Basic()
         {
-            // A refinement changes nothing at runtime in this step: each method runs as its C# twin does.
+            // Values inside the domain run as the C# twin does.
             var source = """
                 using System;
 
@@ -206,21 +206,6 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 """;
             CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90,
                 expectedOutput: ExecutionConditionUtil.IsCoreClr ? "11 5 0.5 2 q True s Green 7 9 38" : null).VerifyDiagnostics();
-        }
-
-        [Fact]
-        public void Refinement_NoGuardYet()
-        {
-            // Step 2 has no call-site check and no guard: a value outside the domain gets in, as in C#.
-            // PROTOTYPE(sharper): steps 4 and 5 report 'Page(-1)' and guard the entry.
-            var source = """
-                class C
-                {
-                    static int Page(int i is >=0) => i;
-                    static void Main() => System.Console.Write(Page(-1));
-                }
-                """;
-            CompileAndVerify(source, parseOptions: s_sharperOptions, expectedOutput: "-1").VerifyDiagnostics();
         }
 
         [Fact]

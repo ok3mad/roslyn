@@ -11,6 +11,7 @@ using System.Reflection;
 using System.Reflection.Metadata;
 using System.Reflection.Metadata.Ecma335;
 using System.Runtime.InteropServices;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using Microsoft.CodeAnalysis.Collections;
 using Microsoft.CodeAnalysis.CSharp.Emit;
@@ -184,6 +185,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols.Metadata.PE
         /// Attributes filtered out from m_lazyCustomAttributes, ParamArray, etc.
         /// </summary>
         private ImmutableArray<CSharpAttributeData> _lazyHiddenAttributes;
+
+        private StrongBox<SharperRefinement?>? _lazySharperRefinement;
 
         private readonly ushort _ordinal;
 
@@ -1269,6 +1272,34 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols.Metadata.PE
                 };
 
                 return DeriveCompilerFeatureRequiredDiagnostic(decoder) is { Code: (int)ErrorCode.ERR_UnsupportedCompilerFeature } || base.HasUnsupportedMetadata;
+            }
+        }
+
+        /// <summary>
+        /// Sharper: the refinement in the parameter's embedded <c>Sharper.SharperRefinementAttribute</c>, recognized by
+        /// namespace and name and trusted, as <c>[Immutable]</c> is (<see cref="SharperRefinement.FromMetadata"/>).
+        /// </summary>
+        internal override SharperRefinement? SharperRefinement
+        {
+            get
+            {
+                if (_lazySharperRefinement is null)
+                {
+                    SharperRefinement? refinement = null;
+                    foreach (var attribute in GetAttributes())
+                    {
+                        if (attribute.IsTargetAttribute(SharperImmutability.AttributeNamespace, SharperRefinement.AttributeName) &&
+                            attribute.CommonConstructorArguments is [{ ValueInternal: string text }])
+                        {
+                            refinement = SharperRefinement.FromMetadata(Type, text);
+                            break;
+                        }
+                    }
+
+                    Interlocked.CompareExchange(ref _lazySharperRefinement, new StrongBox<SharperRefinement?>(refinement), null);
+                }
+
+                return _lazySharperRefinement.Value;
             }
         }
     }

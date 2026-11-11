@@ -34,6 +34,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
         public sealed override bool IsDiscard => _underlyingParameter.IsDiscard;
 
+        internal override SharperRefinement? SharperRefinement => _underlyingParameter.SharperRefinement;
+
         #region Forwarded
 
         public override TypeWithAnnotations TypeWithAnnotations
