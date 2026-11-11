@@ -675,7 +675,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             else if (MemberSignatureComparer.ConsideringTupleNamesCreatesDifference(definition, implementation))
             {
                 hasTypeDifferences = true;
-                diagnostics.Add(ErrorCode.ERR_PartialMemberInconsistentTupleNames, implementation.GetFirstLocation(), definition, implementation);
+                diagnostics.Add(SymbolExtensions.TupleOrSharperFunctionTypeNamesError(definition, implementation, ErrorCode.ERR_PartialMemberInconsistentTupleNames, ErrorCode.ERR_SharperPartialMemberInconsistentFunctionTypeNames), implementation.GetFirstLocation(), definition, implementation);
             }
 
             if (definition.RefKind != implementation.RefKind)

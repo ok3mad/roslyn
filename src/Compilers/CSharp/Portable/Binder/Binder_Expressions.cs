@@ -12347,12 +12347,23 @@ namespace Microsoft.CodeAnalysis.CSharp
                     }
                     if (checkConstraints(Compilation, Conversions, delegateType, typeArguments))
                     {
-                        return delegateType.Construct(typeArguments);
+                        var constructed = delegateType.Construct(typeArguments);
+                        if (syntax is AnonymousFunctionExpressionSyntax && syntax.IsFeatureEnabled(MessageID.IDS_FeatureSharper))
+                        {
+                            // Sharper: the natural type of a lambda has the names of its parameters, as the type of
+                            // a tuple literal has the names of its elements. Discards have no name.
+                            constructed = constructed.WithSharperFunctionTypeParameterNames(
+                                parameters.SelectAsArray(static p => p.IsDiscard || string.IsNullOrEmpty(p.Name) ? null : p.Name));
+                        }
+
+                        return constructed;
                     }
                 }
             }
 
             // Synthesize a delegate type for other cases.
+            // PROTOTYPE(sharper): the parameter names of a lambda or a function type with ref parameters would attach
+            // here, without becoming part of the anonymous delegate's identity (https://github.com/ok3mad/roslyn/issues/56).
             var fieldsBuilder = ArrayBuilder<AnonymousTypeField>.GetInstance(parameterTypes.Length + 1);
             var location = syntax.Location;
             for (int i = 0; i < parameterTypes.Length; i++)
