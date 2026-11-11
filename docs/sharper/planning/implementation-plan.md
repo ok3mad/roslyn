@@ -1374,8 +1374,11 @@ rules and return inference.
   `PEParameterSymbol.SharperRefinement` parses it back without binding names (`SharperRefinement.FromMetadata`) and
   computes the value set with the same code as source; `ParameterSymbol.SharperRefinement` is virtual, and cloned
   (indexer accessor) and wrapped (substituted, retargeting, extension implementation) parameters forward it.
-  Tests: 13 `RefinementGuard_*` and `RefinementMetadata_*` tests (`SharperTests_RefinementGuards.cs`).
-  Open point, as a `PROTOTYPE(sharper)` comment: runtime async, which has no kickoff method.
+  Runtime async has no kickoff method, and the runtime puts any exception of a runtime-async method into its task (a
+  probe showed `Load(0)` returning a faulted task), so `IsRuntimeAsyncEnabledIn` keeps the compiler's state machine for
+  a method with a guard (`SharperRefinementGuard.HasGuard`); other methods of the same compilation still use runtime
+  async. A wrapper that checks and calls a runtime-async body is left as a `PROTOTYPE(sharper)` comment.
+  Tests: 14 `RefinementGuard_*` and `RefinementMetadata_*` tests (`SharperTests_RefinementGuards.cs`).
 
 ## Feature 12: pipe, without lifting
 

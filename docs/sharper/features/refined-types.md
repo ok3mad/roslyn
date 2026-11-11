@@ -77,7 +77,7 @@ Sharper [runtime library](../README.md#runtime-library).
 | Member | Where the guard runs |
 | --- | --- |
 | Method, operator, conversion, indexer accessor | First in the body |
-| Iterator, `async` method, `async` iterator | In the kickoff method, before the state machine is created: the call throws, before anything is enumerated or awaited |
+| Iterator, `async` method, `async` iterator | In the kickoff method, before the state machine is created: the call throws, before anything is enumerated or awaited. With runtime async on, such a method keeps the compiler's state machine: a runtime-async method has no kickoff method, and the runtime would put the guard's exception into the returned task |
 | Constructor | Before field initializers and the `base` or `this` call |
 | Primary constructor of a class or struct | Before the captured parameters are stored and before field initializers |
 | Local function | In its closure method (in the kickoff method if it is an iterator or `async`) |
@@ -114,8 +114,8 @@ does not parse or does not fit the type gives no refinement. A C# caller sees th
 - A default value from `[DefaultParameterValue]` is not checked.
 - Recursive `infer` returns (an error in the design) wait for return refinements, step 3.
 - The semantic model does not bind a refinement's pattern yet: `GetSymbolInfo` on a constant in it finds nothing.
-- Runtime async: the guard is the first statement of the method itself, and whether the runtime throws to the caller or
-  faults the task is not tested.
+- A method with refined parameters does not use runtime async (see the guard table); a synthesized wrapper that checks
+  and then calls a runtime-async body would let it.
 - The guard always runs; eliding it when every caller is proven is an optimization for later.
 
 ## Tests
@@ -126,5 +126,5 @@ runtime behavior next to the C# twin.
 
 `SharperTests_RefinementGuards.cs` (`RefinementGuard_*`, `RefinementMetadata_*`): the guard on every supported type
 and member, its exception (parameter name, value, message) next to the C# twin, iterators and `async` throwing
-eagerly, constructors before field initializers, a C# caller, the IL in Debug and Release, the missing exception, the
+eagerly (also with runtime async on), constructors before field initializers, a C# caller, the IL in Debug and Release, the missing exception, the
 flag off; the attribute's shape, round trips through metadata for every type and member, and text that is not trusted.

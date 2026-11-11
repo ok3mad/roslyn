@@ -376,6 +376,13 @@ namespace Microsoft.CodeAnalysis.CSharp
                 return false;
             }
 
+            // Sharper: a method with refined parameters checks them in a kickoff method, so that the call throws. A
+            // runtime-async method has none: the runtime would put the guard's exception into the returned task.
+            if (SharperRefinementGuard.HasGuard(method))
+            {
+                return false;
+            }
+
             var methodReturn = method.ReturnType.OriginalDefinition;
             if ((object)methodReturn == LambdaSymbol.ReturnTypeIsBeingInferred)
             {

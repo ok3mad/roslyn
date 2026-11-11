@@ -333,6 +333,118 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         }
 
         [Fact]
+        public void RefinementGuard_RuntimeAsync()
+        {
+            // A runtime-async method has no kickoff method: the runtime puts every exception it throws into the returned
+            // task, so a guard there would not throw at the call. A method with refined parameters keeps the compiler's state
+            // machine instead, and checks in its kickoff method; other methods still use runtime async.
+            var source = """
+                using System;
+                using System.Threading.Tasks;
+
+                class C
+                {
+                    static async Task<int> Load(int id is >0)
+                    {
+                        Console.WriteLine("loading");
+                        await Task.Yield();
+                        return id;
+                    }
+
+                    static async Task<int> Plain(int id)
+                    {
+                        await Task.Yield();
+                        return id;
+                    }
+
+                    static async Task Main()
+                    {
+                        Task<int> t = null;
+                        try
+                        {
+                            t = Load(0);
+                            Console.WriteLine("returned " + t.Status);
+                        }
+                        catch (ArgumentOutOfRangeException e)
+                        {
+                            Console.WriteLine("threw " + e.ParamName);
+                        }
+
+                        if (t is not null)
+                        {
+                            try { await t; } catch (ArgumentOutOfRangeException e) { Console.WriteLine("awaited " + e.ParamName); }
+                        }
+
+                        Console.WriteLine(await Load(4));
+                        Console.WriteLine(await Plain(5));
+                    }
+                }
+                """;
+            var comp = CreateRuntimeAsyncCompilation(source, TestOptions.ReleaseExe, parseOptions: WithRuntimeAsync(s_sharperOptions.WithLanguageVersion(LanguageVersion.Preview)));
+            var verifier = CompileAndVerify(comp, expectedOutput: RuntimeAsyncTestHelpers.ExpectedOutput("""
+                threw id
+                loading
+                4
+                5
+                """), verify: Verification.Fails);
+            verifier.VerifyIL("C.Load", """
+                {
+                  // Code size       81 (0x51)
+                  .maxstack  3
+                  .locals init (C.<Load>d__0 V_0)
+                  IL_0000:  ldarg.0
+                  IL_0001:  ldc.i4.0
+                  IL_0002:  bgt.s      IL_001a
+                  IL_0004:  ldstr      "id"
+                  IL_0009:  ldarg.0
+                  IL_000a:  box        "int"
+                  IL_000f:  ldstr      "The value does not satisfy the refinement 'is > 0'."
+                  IL_0014:  newobj     "System.ArgumentOutOfRangeException..ctor(string, object, string)"
+                  IL_0019:  throw
+                  IL_001a:  ldloca.s   V_0
+                  IL_001c:  call       "System.Runtime.CompilerServices.AsyncTaskMethodBuilder<int> System.Runtime.CompilerServices.AsyncTaskMethodBuilder<int>.Create()"
+                  IL_0021:  stfld      "System.Runtime.CompilerServices.AsyncTaskMethodBuilder<int> C.<Load>d__0.<>t__builder"
+                  IL_0026:  ldloca.s   V_0
+                  IL_0028:  ldarg.0
+                  IL_0029:  stfld      "int C.<Load>d__0.id"
+                  IL_002e:  ldloca.s   V_0
+                  IL_0030:  ldc.i4.m1
+                  IL_0031:  stfld      "int C.<Load>d__0.<>1__state"
+                  IL_0036:  ldloca.s   V_0
+                  IL_0038:  ldflda     "System.Runtime.CompilerServices.AsyncTaskMethodBuilder<int> C.<Load>d__0.<>t__builder"
+                  IL_003d:  ldloca.s   V_0
+                  IL_003f:  call       "void System.Runtime.CompilerServices.AsyncTaskMethodBuilder<int>.Start<C.<Load>d__0>(ref C.<Load>d__0)"
+                  IL_0044:  ldloca.s   V_0
+                  IL_0046:  ldflda     "System.Runtime.CompilerServices.AsyncTaskMethodBuilder<int> C.<Load>d__0.<>t__builder"
+                  IL_004b:  call       "System.Threading.Tasks.Task<int> System.Runtime.CompilerServices.AsyncTaskMethodBuilder<int>.Task.get"
+                  IL_0050:  ret
+                }
+                """);
+            verifier.VerifyIL("C.Plain", """
+                {
+                  // Code size       38 (0x26)
+                  .maxstack  1
+                  .locals init (System.Runtime.CompilerServices.YieldAwaitable.YieldAwaiter V_0,
+                                System.Runtime.CompilerServices.YieldAwaitable V_1)
+                  IL_0000:  call       "System.Runtime.CompilerServices.YieldAwaitable System.Threading.Tasks.Task.Yield()"
+                  IL_0005:  stloc.1
+                  IL_0006:  ldloca.s   V_1
+                  IL_0008:  call       "System.Runtime.CompilerServices.YieldAwaitable.YieldAwaiter System.Runtime.CompilerServices.YieldAwaitable.GetAwaiter()"
+                  IL_000d:  stloc.0
+                  IL_000e:  ldloca.s   V_0
+                  IL_0010:  call       "bool System.Runtime.CompilerServices.YieldAwaitable.YieldAwaiter.IsCompleted.get"
+                  IL_0015:  brtrue.s   IL_001d
+                  IL_0017:  ldloc.0
+                  IL_0018:  call       "void System.Runtime.CompilerServices.AsyncHelpers.UnsafeAwaitAwaiter<System.Runtime.CompilerServices.YieldAwaitable.YieldAwaiter>(System.Runtime.CompilerServices.YieldAwaitable.YieldAwaiter)"
+                  IL_001d:  ldloca.s   V_0
+                  IL_001f:  call       "void System.Runtime.CompilerServices.YieldAwaitable.YieldAwaiter.GetResult()"
+                  IL_0024:  ldarg.0
+                  IL_0025:  ret
+                }
+                """);
+        }
+
+        [Fact]
         public void RefinementGuard_CodeGen()
         {
             // The guard is the is-pattern lowering of 'i is not (...)' with a throw, first in the body and without sequence

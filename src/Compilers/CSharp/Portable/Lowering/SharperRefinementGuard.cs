@@ -24,8 +24,11 @@ namespace Microsoft.CodeAnalysis.CSharp
     /// the last two have parameters of their own, with substituted types, so the pattern is rebuilt against them
     /// (<see cref="SharperRefinement.MakePattern"/>). A refined parameter is readonly, so reading it before a closure
     /// copies it is the same as reading the copy.
-    /// PROTOTYPE(sharper): with runtime async (no state machine) the guard is the first statement of the async method itself,
-    /// and whether the runtime then throws to the caller or faults the task is not tested.
+    /// Runtime async has no kickoff method: the runtime puts an exception thrown anywhere in a runtime-async method into
+    /// the returned task. A method with a guard therefore keeps the compiler's state machine
+    /// (<see cref="CSharpCompilation.IsRuntimeAsyncEnabledIn"/>, through <see cref="HasGuard"/>).
+    /// PROTOTYPE(sharper): a synthesized wrapper that checks and then calls a runtime-async body would keep runtime async
+    /// for these methods.
     /// </remarks>
     internal static class SharperRefinementGuard
     {
@@ -104,6 +107,14 @@ namespace Microsoft.CodeAnalysis.CSharp
             // The guard has no sequence points of its own, and comes before the body's first one, so a method with any must
             // start with a hidden one (the debugger does not stop in the guard).
             return factory.StatementList(BoundSequencePoint.CreateHidden(), guard);
+        }
+
+        /// <summary>True if <paramref name="method"/>, a method that is compiled, checks refined parameters at entry.</summary>
+        internal static bool HasGuard(MethodSymbol method)
+        {
+            var refined = GetRefinedParameters(method);
+            refined?.Free();
+            return refined is not null;
         }
 
         /// <summary>
