@@ -1,4 +1,4 @@
-﻿# Sharper: Roslyn Implementation Plan
+# Sharper: Roslyn Implementation Plan
 
 > [!NOTE]
 > This plan is maintained here; it started as the "Sharper: Roslyn Implementation Plan" planning doc. For a quick
@@ -1377,7 +1377,8 @@ rules and return inference.
   Runtime async has no kickoff method, and the runtime puts any exception of a runtime-async method into its task (a
   probe showed `Load(0)` returning a faulted task), so `IsRuntimeAsyncEnabledIn` keeps the compiler's state machine for
   a method with a guard (`SharperRefinementGuard.HasGuard`); other methods of the same compilation still use runtime
-  async. A wrapper that checks and calls a runtime-async body is left as a `PROTOTYPE(sharper)` comment.
+  async. A wrapper that checks and calls a runtime-async body is left as a `PROTOTYPE(sharper)` comment
+  ([#224](https://github.com/ok3mad/roslyn/issues/224)).
   Tests: 14 `RefinementGuard_*` and `RefinementMetadata_*` tests (`SharperTests_RefinementGuards.cs`).
 
 ## Feature 12: pipe, without lifting

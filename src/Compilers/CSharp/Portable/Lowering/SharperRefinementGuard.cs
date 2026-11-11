@@ -28,7 +28,7 @@ namespace Microsoft.CodeAnalysis.CSharp
     /// the returned task. A method with a guard therefore keeps the compiler's state machine
     /// (<see cref="CSharpCompilation.IsRuntimeAsyncEnabledIn"/>, through <see cref="HasGuard"/>).
     /// PROTOTYPE(sharper): a synthesized wrapper that checks and then calls a runtime-async body would keep runtime async
-    /// for these methods.
+    /// for these methods (#224).
     /// </remarks>
     internal static class SharperRefinementGuard
     {

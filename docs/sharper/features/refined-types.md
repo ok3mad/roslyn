@@ -115,7 +115,7 @@ does not parse or does not fit the type gives no refinement. A C# caller sees th
 - Recursive `infer` returns (an error in the design) wait for return refinements, step 3.
 - The semantic model does not bind a refinement's pattern yet: `GetSymbolInfo` on a constant in it finds nothing.
 - A method with refined parameters does not use runtime async (see the guard table); a synthesized wrapper that checks
-  and then calls a runtime-async body would let it.
+  and then calls a runtime-async body would let it ([#224](https://github.com/ok3mad/roslyn/issues/224)).
 - The guard always runs; eliding it when every caller is proven is an optimization for later.
 
 ## Tests
