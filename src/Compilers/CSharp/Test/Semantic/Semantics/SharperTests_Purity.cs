@@ -1098,6 +1098,71 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         }
 
         [Fact]
+        public void PureSlot_HidingMember()
+        {
+            // A 'new' member hides the slot's member without overriding or implementing it, so it is free. Only a type that
+            // re-declares the interface makes its 'new' member the implementation (re-implementation), which then fills
+            // the slot.
+            var source = """
+                interface I { [Pure] int M(); }
+
+                abstract class Base { [Pure] public virtual int V() => 1; }
+
+                class C : Base, I
+                {
+                    [Pure] public virtual int M() => 1;
+                }
+
+                class Hides : C
+                {
+                    static int s_count;
+                    public new int M() => s_count++;
+                    public new int V() => s_count++;
+                }
+
+                class HidesVirtual : C
+                {
+                    static int s_count;
+                    public new virtual int M() => s_count++;
+                }
+
+                class OverridesHiding : HidesVirtual
+                {
+                    static int s_count;
+                    public override int M() => s_count++;
+                }
+
+                class Reimplements : C, I
+                {
+                    public new int M() => 2;
+                }
+
+                static class Calls
+                {
+                    [Pure] static int ThroughSlots(Hides h) => ((C)h).M() + ((I)h).M() + ((Base)h).V();
+                    [Pure] static int Hidden(Hides h) => h.M();
+                    [Pure] static int HiddenV(Hides h) => h.V();
+                    [Pure] static int HiddenVirtual(OverridesHiding o) => o.M();
+                    [Pure] static int ThroughBase(OverridesHiding o) => ((C)o).M();
+                    [Pure] static int Reimplemented(Reimplements r) => r.M() + ((I)r).M();
+                }
+                """;
+            CreateImmutableCompilation(source).VerifyDiagnostics(
+                // (31,20): error CS20064: 'Reimplements.M()' overrides or implements the [Pure] member 'I.M()', so it must be marked [Pure] too.
+                //     public new int M() => 2;
+                Diagnostic(ErrorCode.ERR_SharperPureOverrideNotPure, "M").WithArguments("Reimplements.M()", "I.M()").WithLocation(31, 20),
+                // (37,42): error CS20050: 'Calls.Hidden(Hides)' is marked [Pure], but it is not pure: 'h.M()' calls 'Hides.M()', which is not known to be pure.
+                //     [Pure] static int Hidden(Hides h) => h.M();
+                Diagnostic(ErrorCode.ERR_SharperPureNotPure, "h.M()").WithArguments("Calls.Hidden(Hides)", "'h.M()' calls 'Hides.M()', which is not known to be pure").WithLocation(37, 42),
+                // (38,43): error CS20050: 'Calls.HiddenV(Hides)' is marked [Pure], but it is not pure: 'h.V()' calls 'Hides.V()', which is not known to be pure.
+                //     [Pure] static int HiddenV(Hides h) => h.V();
+                Diagnostic(ErrorCode.ERR_SharperPureNotPure, "h.V()").WithArguments("Calls.HiddenV(Hides)", "'h.V()' calls 'Hides.V()', which is not known to be pure").WithLocation(38, 43),
+                // (39,59): error CS20050: 'Calls.HiddenVirtual(OverridesHiding)' is marked [Pure], but it is not pure: 'o.M()' calls 'OverridesHiding.M()', which is not known to be pure.
+                //     [Pure] static int HiddenVirtual(OverridesHiding o) => o.M();
+                Diagnostic(ErrorCode.ERR_SharperPureNotPure, "o.M()").WithArguments("Calls.HiddenVirtual(OverridesHiding)", "'o.M()' calls 'OverridesHiding.M()', which is not known to be pure").WithLocation(39, 59));
+        }
+
+        [Fact]
         public void PureSlot_Metadata()
         {
             var library = """

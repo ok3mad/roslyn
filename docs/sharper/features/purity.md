@@ -169,6 +169,9 @@ static class Shapes
   pure only if `B.M` is.
 - **A slot stays a slot.** A member that fills a `[Pure]` slot binds its overrides, also in a derived type that
   implements the interface member with another member: a call of `c.M()` on a `C` can still run the override.
+- **Hiding.** A `new` member hides the slot's member without overriding or implementing it, so it is free, and so are
+  the overrides of a `new virtual` one; a call that binds to it is pure only if it is `[Pure]`. A type that re-declares
+  the interface (`class D : C, I`) makes its `new` member the implementation for `D`, which then must be `[Pure]`.
 - **Changing a slot.** Adding `[Pure]` to a virtual or interface member breaks its overriders and implementers the next
   time they compile (CS20064, or CS20065 in C# files); assemblies that are already compiled keep running and are trusted.
   Removing it breaks the `[Pure]` callers of the slot (CS20050); overrides that stay `[Pure]` remain valid. Neither is a
