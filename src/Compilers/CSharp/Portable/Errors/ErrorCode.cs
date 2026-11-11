@@ -2566,7 +2566,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         ERR_SharperPipeInExpressionTree = SharperErrorCodes.Base + 49,
         ERR_SharperPureNotPure = SharperErrorCodes.Base + 50,
         ERR_SharperPureStructMemberNotReadOnly = SharperErrorCodes.Base + 51,
-        ERR_SharperPureVirtual = SharperErrorCodes.Base + 52,
+        // ERR_SharperPureVirtual = SharperErrorCodes.Base + 52,   Retired in the second part of purity slice 1 (#173): [Pure] is allowed on virtual, abstract, override and interface members.
         WRN_SharperPureOutArgumentNotFresh = SharperErrorCodes.Base + 53,
         ERR_SharperItClaimedByInnerCall = SharperErrorCodes.Base + 54,
         ERR_SharperInferEventNoOverriddenMember = SharperErrorCodes.Base + 55,
@@ -2578,6 +2578,8 @@ namespace Microsoft.CodeAnalysis.CSharp
         ERR_SharperRefinementNotSupportedYet = SharperErrorCodes.Base + 61,
         ERR_SharperOpaquePatternNotPure = SharperErrorCodes.Base + 62,
         ERR_SharperInferParameterConversionCycle = SharperErrorCodes.Base + 63,
+        ERR_SharperPureOverrideNotPure = SharperErrorCodes.Base + 64,
+        WRN_SharperPureOverrideNotPure = SharperErrorCodes.Base + 65,
 
         // Note: you will need to do the following after adding errors:
         //  1) Update ErrorFacts.IsBuildOnlyDiagnostic (src/Compilers/CSharp/Portable/Errors/ErrorFacts.cs)
