@@ -15,13 +15,16 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
     /// <summary>
     /// The refinement of a Sharper parameter, <c>int i is &gt;=0</c>: a closed pattern over constants that every value of
     /// the parameter satisfies (Feature 11 of the implementation plan). It is bound once per parameter symbol
-    /// (<see cref="SourceComplexParameterSymbolBase.SharperRefinement"/>), with its value set.
+    /// (<see cref="SourceComplexParameterSymbolBase.SharperRefinement"/>), with its value set. The return of an
+    /// <c>infer</c> method and a <c>val</c> local have an inferred one (<see cref="OfValues"/>).
     /// </summary>
     /// <remarks>
     /// Slice 1: the refinement is bound and checked, and makes the parameter <c>readonly</c> (step 2). The method checks
     /// it at entry (<see cref="SharperRefinementGuard"/>), and the parameter carries its normalized text (<see cref="Text"/>)
     /// in an embedded <c>Sharper.SharperRefinementAttribute</c>, which metadata symbols read back
-    /// (<see cref="FromMetadata"/>; step 5). Call sites and switches come in step 4.
+    /// (<see cref="FromMetadata"/>; step 5). Returns and <c>val</c> locals get theirs in step 3
+    /// (<see cref="MethodSymbol.SharperReturnRefinement"/>, <see cref="LocalSymbol.SharperRefinement"/>). Call sites and
+    /// switches come in step 4.
     /// </remarks>
     internal sealed partial class SharperRefinement
     {

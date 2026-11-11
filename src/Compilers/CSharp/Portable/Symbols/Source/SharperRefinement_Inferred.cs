@@ -295,8 +295,15 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         }
 
         /// <summary>Orders the constants of one type: numbers by value with NaN last, strings by ordinal, false before true.</summary>
-        private sealed class ConstantComparer(IConstantValueSetFactory factory) : IComparer<ConstantValue>
+        private sealed class ConstantComparer : IComparer<ConstantValue>
         {
+            private readonly IConstantValueSetFactory _factory;
+
+            internal ConstantComparer(IConstantValueSetFactory factory)
+            {
+                _factory = factory;
+            }
+
             public int Compare(ConstantValue? x, ConstantValue? y)
             {
                 Debug.Assert(x is not null && y is not null);
@@ -317,8 +324,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     return xNaN.CompareTo(yNaN);
                 }
 
-                return factory.Related(BinaryOperatorKind.LessThan, x, y) ? -1
-                    : factory.Related(BinaryOperatorKind.LessThan, y, x) ? 1
+                return _factory.Related(BinaryOperatorKind.LessThan, x, y) ? -1
+                    : _factory.Related(BinaryOperatorKind.LessThan, y, x) ? 1
                     : 0;
             }
         }
