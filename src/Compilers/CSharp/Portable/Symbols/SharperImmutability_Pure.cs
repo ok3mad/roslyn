@@ -15,7 +15,9 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
     /// depends only on the contents of what it reads through its arguments (<c>this</c> included) and on state that
     /// cannot change. Purity is declared, never inferred: a pure member calls only <c>[Pure]</c>, <c>[AssumePure]</c>
     /// and attested members. The body is checked by the member mode of <see cref="PurityWalker"/>, from the method
-    /// compiler (<see cref="CheckPureBodies"/>).
+    /// compiler (<see cref="CheckPureBodies"/>). <c>[Pure]</c> on a virtual, abstract or interface member is a contract
+    /// on its slot: every override and implementation must be pure too (<see cref="CheckPureOverrides"/>), so a call
+    /// through the slot is pure (<see cref="IsPure"/>).
     /// </summary>
     internal sealed partial class SharperImmutability
     {
@@ -29,6 +31,95 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             return HasAttribute(method, SharperImmutabilityAttribute.Pure) ||
                 (method is { MethodKind: MethodKind.PropertyGet, AssociatedSymbol: PropertySymbol property } && HasAttribute(property, SharperImmutabilityAttribute.Pure));
         }
+
+        /// <summary>
+        /// Whether the slot of a method is <c>[Pure]</c>: the method is declared <c>[Pure]</c>, it implements a
+        /// <c>[Pure]</c> interface member for its own type, or it overrides, directly or not, a member that does either.
+        /// Every override and implementation of a <c>[Pure]</c> slot is under its contract, also one that is not marked
+        /// because it comes from a C# file or another assembly, which are trusted. A member that once filled a
+        /// <c>[Pure]</c> slot stays one for its overrides, even where a derived type implements the interface member
+        /// with another member.
+        /// </summary>
+        internal bool IsPureSlot(MethodSymbol method)
+            => FindPureSlot(method) is not null;
+
+        /// <summary>
+        /// The nearest declaration that makes a method's slot <c>[Pure]</c>: the method itself or the interface member it
+        /// implements, or the same for the nearest member it overrides.
+        /// </summary>
+        private MethodSymbol? FindPureSlot(MethodSymbol method)
+        {
+            for (MethodSymbol? current = method.OriginalDefinition; current is not null; current = current.OverriddenMethod?.OriginalDefinition)
+            {
+                if (IsDeclaredPure(current))
+                {
+                    return current;
+                }
+
+                if (FindImplementedPureInterfaceMember(current) is { } implemented)
+                {
+                    return implemented;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// The <c>[Pure]</c> interface member that a method definition implements implicitly for its own type, if any. An
+        /// explicit implementation in the type takes the slot, so the type's public member of the same name is then free.
+        /// An implementation inherited from a base class is not the base member's slot: the base did not promise it.
+        /// </summary>
+        private MethodSymbol? FindImplementedPureInterfaceMember(MethodSymbol definition)
+        {
+            if (definition.IsExplicitInterfaceImplementation || definition.ContainingType is not { IsInterface: false } type)
+            {
+                return null;
+            }
+
+            if (_implementedPureInterfaceMembers.TryGetValue(definition, out var cached))
+            {
+                return cached;
+            }
+
+            MethodSymbol? found = null;
+            foreach (var @interface in type.AllInterfacesNoUseSiteDiagnostics)
+            {
+                foreach (var slotDefinition in GetPureInterfaceMembers(@interface.OriginalDefinition))
+                {
+                    // An implicit implementation has the interface member's name, accessors included.
+                    if (slotDefinition.Name == definition.Name)
+                    {
+                        var slot = slotDefinition.AsMember(@interface);
+                        if (type.FindImplementationForInterfaceMember(slot) is MethodSymbol implementation &&
+                            (object)implementation.OriginalDefinition == definition)
+                        {
+                            found = slotDefinition;
+                            break;
+                        }
+                    }
+                }
+
+                if (found is not null)
+                {
+                    break;
+                }
+            }
+
+            return _implementedPureInterfaceMembers.GetOrAdd(definition, found);
+        }
+
+        /// <summary>
+        /// Whether a call of a member is pure by a claim, with or without virtual dispatch: its slot is <c>[Pure]</c>
+        /// (<see cref="IsPureSlot"/>), it is <c>[AssumePure]</c>, or it is an attested member of another assembly. This
+        /// is the one answer for the <c>[Pure]</c> checker and for the observer rule of immutable types
+        /// (<see cref="PurityWalker"/> in both modes), so the two cannot drift.
+        /// </summary>
+        internal bool IsPure(MethodSymbol method)
+            => IsAssumedPure(method) ||
+               IsPureSlot(method) ||
+               IsAttestedMethod(method) ||
+               (method is { MethodKind: MethodKind.PropertyGet, AssociatedSymbol: PropertySymbol property } && IsAttestedGetter(property));
 
         #region Bodies
 
@@ -278,19 +369,11 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
         /// <summary>
         /// The checks of a <c>[Pure]</c> declaration in a Sharper file. A struct member must be <c>readonly</c>, so the
-        /// existing errors cover writes to <c>this</c> and consumers see <c>[IsReadOnly]</c>. Virtual members are not
-        /// supported yet: every override would have to be pure.
+        /// existing errors cover writes to <c>this</c> and consumers see <c>[IsReadOnly]</c>.
         /// </summary>
         private static void CheckPureDeclaration(Symbol member, BindingDiagnosticBag diagnostics)
         {
             var location = member.GetFirstLocation();
-            if (member.IsVirtual || member.IsAbstract || member.IsOverride)
-            {
-                // Not supported yet: the rule for overrides and implementations is the second part of slice 1 (#173).
-                diagnostics.Add(ErrorCode.ERR_SharperPureVirtual, location, member);
-                return;
-            }
-
             var method = member as MethodSymbol ?? ((PropertySymbol)member).GetMethod;
             if (method is { IsStatic: false, MethodKind: not MethodKind.Constructor } &&
                 method.ContainingType.IsStructType() &&
@@ -298,6 +381,118 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             {
                 diagnostics.Add(ErrorCode.ERR_SharperPureStructMemberNotReadOnly, location, member);
             }
+        }
+
+        /// <summary>
+        /// The rule for a <c>[Pure]</c> slot: every override and every implementation of it must be pure too, which means
+        /// marked <c>[Pure]</c> (and so checked) or <c>[AssumePure]</c> (vouched for). An error for a member in a Sharper
+        /// file, a warning for one in a C# file, where <c>[Pure]</c> does not bind and nothing is checked. Members the
+        /// compiler writes are not covered.
+        /// </summary>
+        private void CheckPureOverrides(SourceMemberContainerTypeSymbol type, bool isSharper, BindingDiagnosticBag diagnostics)
+        {
+            foreach (var member in type.GetMembers())
+            {
+                // PROTOTYPE(sharper): the members the compiler writes for a record (ToString, Equals, GetHashCode) are not held to a [Pure] slot they override.
+                if (member is not MethodSymbol { IsImplicitlyDeclared: false } method || MakesPureClaim(method))
+                {
+                    continue;
+                }
+
+                MethodSymbol? slot = method.IsOverride && method.OverriddenMethod is { } overridden ? FindPureSlot(overridden) : null;
+                if (slot is null)
+                {
+                    foreach (var implemented in method.ExplicitInterfaceImplementations)
+                    {
+                        if (IsDeclaredPure(implemented))
+                        {
+                            slot = implemented;
+                            break;
+                        }
+                    }
+                }
+
+                if (slot is not null)
+                {
+                    var declaration = method.AssociatedSymbol ?? method;
+                    diagnostics.Add(
+                        IsInSharperFile(declaration) ? ErrorCode.ERR_SharperPureOverrideNotPure : ErrorCode.WRN_SharperPureOverrideNotPure,
+                        declaration.GetFirstLocation(),
+                        declaration,
+                        slot.AssociatedSymbol ?? slot);
+                }
+            }
+
+            if (type.IsInterface)
+            {
+                return;
+            }
+
+            // Implicit implementations, found through the interface map.
+            foreach (var @interface in type.AllInterfacesNoUseSiteDiagnostics)
+            {
+                foreach (var slotDefinition in GetPureInterfaceMembers(@interface.OriginalDefinition))
+                {
+                    var slot = slotDefinition.AsMember(@interface);
+                    if (type.FindImplementationForInterfaceMember(slot) is not MethodSymbol implementation ||
+                        implementation.ContainingType.IsInterface ||
+                        implementation.IsExplicitInterfaceImplementation ||
+                        MakesPureClaim(implementation) ||
+                        (implementation.IsOverride && implementation.OverriddenMethod is { } overridden && FindPureSlot(overridden) is not null))
+                    {
+                        // An interface's own implementation and an explicit one are checked where they are declared, and
+                        // an override of a [Pure] slot by the override rule.
+                        continue;
+                    }
+
+                    var declaration = implementation.AssociatedSymbol ?? implementation;
+                    if ((object)implementation.ContainingType.OriginalDefinition == type)
+                    {
+                        if (!implementation.IsImplicitlyDeclared)
+                        {
+                            diagnostics.Add(
+                                IsInSharperFile(declaration) ? ErrorCode.ERR_SharperPureOverrideNotPure : ErrorCode.WRN_SharperPureOverrideNotPure,
+                                declaration.GetFirstLocation(),
+                                declaration,
+                                slot.AssociatedSymbol ?? slot);
+                        }
+                    }
+                    else if (type.InterfacesAndTheirBaseInterfacesNoUseSiteDiagnostics.ContainsKey(@interface))
+                    {
+                        // A member of a base class implements the interface for this type, which declares it. A base
+                        // class that declares the interface itself is checked, or trusted, on its own.
+                        diagnostics.Add(
+                            isSharper ? ErrorCode.ERR_SharperPureOverrideNotPure : ErrorCode.WRN_SharperPureOverrideNotPure,
+                            type.GetFirstLocation(),
+                            declaration,
+                            slot.AssociatedSymbol ?? slot);
+                    }
+                }
+            }
+        }
+
+        /// <summary>A member that claims purity itself: <c>[Pure]</c>, which is checked, or <c>[AssumePure]</c>, which is not.</summary>
+        private static bool MakesPureClaim(MethodSymbol method)
+            => IsDeclaredPure(method) || IsAssumedPure(method);
+
+        /// <summary>The <c>[Pure]</c> slots an interface definition declares: its abstract and virtual members, static ones included.</summary>
+        private ImmutableArray<MethodSymbol> GetPureInterfaceMembers(NamedTypeSymbol definition)
+        {
+            if (_pureInterfaceMembers.TryGetValue(definition, out var slots))
+            {
+                return slots;
+            }
+
+            var builder = ArrayBuilder<MethodSymbol>.GetInstance();
+            foreach (var member in definition.GetMembers())
+            {
+                if (member is MethodSymbol method && (method.IsAbstract || method.IsVirtual) && IsDeclaredPure(method))
+                {
+                    builder.Add(method);
+                }
+            }
+
+            return _pureInterfaceMembers.GetOrAdd(definition, builder.ToImmutableAndFree());
         }
 
         /// <summary>

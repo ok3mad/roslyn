@@ -524,28 +524,28 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
-                // (38,26): error CS20064: 'Changed.M(Func<int x, int>)': cannot change function type parameter names when overriding inherited member 'B.M(Func<int a, int>)'
+                // (38,26): error CS20066: 'Changed.M(Func<int x, int>)': cannot change function type parameter names when overriding inherited member 'B.M(Func<int a, int>)'
                 //     public override void M((int x) -> int f) { }
                 Diagnostic(ErrorCode.ERR_SharperCantChangeFunctionTypeNamesOnOverride, "M").WithArguments("Changed.M(System.Func<int x, int>)", "B.M(System.Func<int a, int>)").WithLocation(38, 26),
-                // (39,36): error CS20064: 'Changed.R()': cannot change function type parameter names when overriding inherited member 'B.R()'
+                // (39,36): error CS20066: 'Changed.R()': cannot change function type parameter names when overriding inherited member 'B.R()'
                 //     public override (int x) -> int R() => null;
                 Diagnostic(ErrorCode.ERR_SharperCantChangeFunctionTypeNamesOnOverride, "R").WithArguments("Changed.R()", "B.R()").WithLocation(39, 36),
-                // (40,36): error CS20064: 'Changed.P': cannot change function type parameter names when overriding inherited member 'B.P'
+                // (40,36): error CS20066: 'Changed.P': cannot change function type parameter names when overriding inherited member 'B.P'
                 //     public override (int x) -> int P => null;
                 Diagnostic(ErrorCode.ERR_SharperCantChangeFunctionTypeNamesOnOverride, "P").WithArguments("Changed.P", "B.P").WithLocation(40, 36),
-                // (40,41): error CS20064: 'Changed.P.get': cannot change function type parameter names when overriding inherited member 'B.P.get'
+                // (40,41): error CS20066: 'Changed.P.get': cannot change function type parameter names when overriding inherited member 'B.P.get'
                 //     public override (int x) -> int P => null;
                 Diagnostic(ErrorCode.ERR_SharperCantChangeFunctionTypeNamesOnOverride, "null").WithArguments("Changed.P.get", "B.P.get").WithLocation(40, 41),
-                // (41,43): error CS20064: 'Changed.E': cannot change function type parameter names when overriding inherited member 'B.E'
+                // (41,43): error CS20066: 'Changed.E': cannot change function type parameter names when overriding inherited member 'B.E'
                 //     public override event (int x) -> void E { add { } remove { } }
                 Diagnostic(ErrorCode.ERR_SharperCantChangeFunctionTypeNamesOnOverride, "E").WithArguments("Changed.E", "B.E").WithLocation(41, 43),
-                // (41,47): error CS20064: 'Changed.E.add': cannot change function type parameter names when overriding inherited member 'B.E.add'
+                // (41,47): error CS20066: 'Changed.E.add': cannot change function type parameter names when overriding inherited member 'B.E.add'
                 //     public override event (int x) -> void E { add { } remove { } }
                 Diagnostic(ErrorCode.ERR_SharperCantChangeFunctionTypeNamesOnOverride, "add").WithArguments("Changed.E.add", "B.E.add").WithLocation(41, 47),
-                // (41,55): error CS20064: 'Changed.E.remove': cannot change function type parameter names when overriding inherited member 'B.E.remove'
+                // (41,55): error CS20066: 'Changed.E.remove': cannot change function type parameter names when overriding inherited member 'B.E.remove'
                 //     public override event (int x) -> void E { add { } remove { } }
                 Diagnostic(ErrorCode.ERR_SharperCantChangeFunctionTypeNamesOnOverride, "remove").WithArguments("Changed.E.remove", "B.E.remove").WithLocation(41, 55),
-                // (42,26): error CS20064: 'Changed.Plain(Func<int x, int>)': cannot change function type parameter names when overriding inherited member 'B.Plain(Func<int, int>)'
+                // (42,26): error CS20066: 'Changed.Plain(Func<int x, int>)': cannot change function type parameter names when overriding inherited member 'B.Plain(Func<int, int>)'
                 //     public override void Plain((int x) -> int f) { }
                 Diagnostic(ErrorCode.ERR_SharperCantChangeFunctionTypeNamesOnOverride, "Plain").WithArguments("Changed.Plain(System.Func<int x, int>)", "B.Plain(System.Func<int, int>)").WithLocation(42, 26),
                 // (43,26): error CS8139: 'Changed.Tuple((int x, int y))': cannot change tuple element names when overriding inherited member 'B.Tuple((int a, int b))'
@@ -617,34 +617,34 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
-                // (32,17): error CS20065: The function type parameter names in the signature of 'Changed.M(Func<int x, int>)' must match the function type parameter names of interface member 'I.M(Func<int a, int>)' (including on the return type).
+                // (32,17): error CS20067: The function type parameter names in the signature of 'Changed.M(Func<int x, int>)' must match the function type parameter names of interface member 'I.M(Func<int a, int>)' (including on the return type).
                 //     public void M((int x) -> int f) { }
                 Diagnostic(ErrorCode.ERR_SharperImplBadFunctionTypeNames, "M").WithArguments("Changed.M(System.Func<int x, int>)", "I.M(System.Func<int a, int>)").WithLocation(32, 17),
-                // (33,27): error CS20065: The function type parameter names in the signature of 'Changed.R()' must match the function type parameter names of interface member 'I.R()' (including on the return type).
+                // (33,27): error CS20067: The function type parameter names in the signature of 'Changed.R()' must match the function type parameter names of interface member 'I.R()' (including on the return type).
                 //     public (int x) -> int R() => null;
                 Diagnostic(ErrorCode.ERR_SharperImplBadFunctionTypeNames, "R").WithArguments("Changed.R()", "I.R()").WithLocation(33, 27),
-                // (34,27): error CS20065: The function type parameter names in the signature of 'Changed.P' must match the function type parameter names of interface member 'I.P' (including on the return type).
+                // (34,27): error CS20067: The function type parameter names in the signature of 'Changed.P' must match the function type parameter names of interface member 'I.P' (including on the return type).
                 //     public (int x) -> int P => null;
                 Diagnostic(ErrorCode.ERR_SharperImplBadFunctionTypeNames, "P").WithArguments("Changed.P", "I.P").WithLocation(34, 27),
-                // (34,32): error CS20065: The function type parameter names in the signature of 'Changed.P.get' must match the function type parameter names of interface member 'I.P.get' (including on the return type).
+                // (34,32): error CS20067: The function type parameter names in the signature of 'Changed.P.get' must match the function type parameter names of interface member 'I.P.get' (including on the return type).
                 //     public (int x) -> int P => null;
                 Diagnostic(ErrorCode.ERR_SharperImplBadFunctionTypeNames, "null").WithArguments("Changed.P.get", "I.P.get").WithLocation(34, 32),
-                // (35,17): error CS20065: The function type parameter names in the signature of 'Changed.Plain(Func<int x, int>)' must match the function type parameter names of interface member 'I.Plain(Func<int, int>)' (including on the return type).
+                // (35,17): error CS20067: The function type parameter names in the signature of 'Changed.Plain(Func<int x, int>)' must match the function type parameter names of interface member 'I.Plain(Func<int, int>)' (including on the return type).
                 //     public void Plain((int x) -> int f) { }
                 Diagnostic(ErrorCode.ERR_SharperImplBadFunctionTypeNames, "Plain").WithArguments("Changed.Plain(System.Func<int x, int>)", "I.Plain(System.Func<int, int>)").WithLocation(35, 17),
                 // (36,17): error CS8141: The tuple element names in the signature of method 'Changed.Tuple((int x, int y))' must match the tuple element names of interface method 'I.Tuple((int a, int b))' (including on the return type).
                 //     public void Tuple((int x, int y) t) { }
                 Diagnostic(ErrorCode.ERR_ImplBadTupleNames, "Tuple").WithArguments("Changed.Tuple((int x, int y))", "I.Tuple((int a, int b))").WithLocation(36, 17),
-                // (50,12): error CS20065: The function type parameter names in the signature of 'ExplicitChanged.I.M(Func<int x, int>)' must match the function type parameter names of interface member 'I.M(Func<int a, int>)' (including on the return type).
+                // (50,12): error CS20067: The function type parameter names in the signature of 'ExplicitChanged.I.M(Func<int x, int>)' must match the function type parameter names of interface member 'I.M(Func<int a, int>)' (including on the return type).
                 //     void I.M((int x) -> int f) { }
                 Diagnostic(ErrorCode.ERR_SharperImplBadFunctionTypeNames, "M").WithArguments("ExplicitChanged.I.M(System.Func<int x, int>)", "I.M(System.Func<int a, int>)").WithLocation(50, 12),
-                // (51,22): error CS20065: The function type parameter names in the signature of 'ExplicitChanged.I.R()' must match the function type parameter names of interface member 'I.R()' (including on the return type).
+                // (51,22): error CS20067: The function type parameter names in the signature of 'ExplicitChanged.I.R()' must match the function type parameter names of interface member 'I.R()' (including on the return type).
                 //     (int x) -> int I.R() => null;
                 Diagnostic(ErrorCode.ERR_SharperImplBadFunctionTypeNames, "R").WithArguments("ExplicitChanged.I.R()", "I.R()").WithLocation(51, 22),
-                // (52,22): error CS20065: The function type parameter names in the signature of 'ExplicitChanged.I.P' must match the function type parameter names of interface member 'I.P' (including on the return type).
+                // (52,22): error CS20067: The function type parameter names in the signature of 'ExplicitChanged.I.P' must match the function type parameter names of interface member 'I.P' (including on the return type).
                 //     (int x) -> int I.P => null;
                 Diagnostic(ErrorCode.ERR_SharperImplBadFunctionTypeNames, "P").WithArguments("ExplicitChanged.I.P", "I.P").WithLocation(52, 22),
-                // (53,12): error CS20065: The function type parameter names in the signature of 'ExplicitChanged.I.Plain(Func<int x, int>)' must match the function type parameter names of interface member 'I.Plain(Func<int, int>)' (including on the return type).
+                // (53,12): error CS20067: The function type parameter names in the signature of 'ExplicitChanged.I.Plain(Func<int x, int>)' must match the function type parameter names of interface member 'I.Plain(Func<int, int>)' (including on the return type).
                 //     void I.Plain((int x) -> int f) { }
                 Diagnostic(ErrorCode.ERR_SharperImplBadFunctionTypeNames, "Plain").WithArguments("ExplicitChanged.I.Plain(System.Func<int x, int>)", "I.Plain(System.Func<int, int>)").WithLocation(53, 12),
                 // (54,12): error CS8141: The tuple element names in the signature of method 'ExplicitChanged.I.Tuple((int x, int y))' must match the tuple element names of interface method 'I.Tuple((int a, int b))' (including on the return type).
@@ -682,25 +682,25 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
-                // (8,18): error CS20066: Both partial member declarations, 'C.Changed(Func<int a, int>)' and 'C.Changed(Func<int x, int>)', must use the same function type parameter names.
+                // (8,18): error CS20068: Both partial member declarations, 'C.Changed(Func<int a, int>)' and 'C.Changed(Func<int x, int>)', must use the same function type parameter names.
                 //     partial void Changed((int x) -> int f) { }
                 Diagnostic(ErrorCode.ERR_SharperPartialMemberInconsistentFunctionTypeNames, "Changed").WithArguments("C.Changed(System.Func<int a, int>)", "C.Changed(System.Func<int x, int>)").WithLocation(8, 18),
-                // (10,18): error CS20066: Both partial member declarations, 'C.Dropped(Func<int a, int>)' and 'C.Dropped(Func<int, int>)', must use the same function type parameter names.
+                // (10,18): error CS20068: Both partial member declarations, 'C.Dropped(Func<int a, int>)' and 'C.Dropped(Func<int, int>)', must use the same function type parameter names.
                 //     partial void Dropped(Func<int, int> f) { }
                 Diagnostic(ErrorCode.ERR_SharperPartialMemberInconsistentFunctionTypeNames, "Dropped").WithArguments("C.Dropped(System.Func<int a, int>)", "C.Dropped(System.Func<int, int>)").WithLocation(10, 18),
-                // (12,18): error CS20066: Both partial member declarations, 'C.Added(Func<int, int>)' and 'C.Added(Func<int a, int>)', must use the same function type parameter names.
+                // (12,18): error CS20068: Both partial member declarations, 'C.Added(Func<int, int>)' and 'C.Added(Func<int a, int>)', must use the same function type parameter names.
                 //     partial void Added((int a) -> int f) { }
                 Diagnostic(ErrorCode.ERR_SharperPartialMemberInconsistentFunctionTypeNames, "Added").WithArguments("C.Added(System.Func<int, int>)", "C.Added(System.Func<int a, int>)").WithLocation(12, 18),
-                // (14,35): error CS20066: Both partial member declarations, 'C.R()' and 'C.R()', must use the same function type parameter names.
+                // (14,35): error CS20068: Both partial member declarations, 'C.R()' and 'C.R()', must use the same function type parameter names.
                 //     public partial (int x) -> int R() => null;
                 Diagnostic(ErrorCode.ERR_SharperPartialMemberInconsistentFunctionTypeNames, "R").WithArguments("C.R()", "C.R()").WithLocation(14, 35),
-                // (16,35): error CS20066: Both partial member declarations, 'C.P' and 'C.P', must use the same function type parameter names.
+                // (16,35): error CS20068: Both partial member declarations, 'C.P' and 'C.P', must use the same function type parameter names.
                 //     public partial (int x) -> int P => null;
                 Diagnostic(ErrorCode.ERR_SharperPartialMemberInconsistentFunctionTypeNames, "P").WithArguments("C.P", "C.P").WithLocation(16, 35),
                 // (18,18): error CS8142: Both partial member declarations, 'C.Tuple((int a, int b))' and 'C.Tuple((int x, int y))', must use the same tuple element names.
                 //     partial void Tuple((int x, int y) t) { }
                 Diagnostic(ErrorCode.ERR_PartialMemberInconsistentTupleNames, "Tuple").WithArguments("C.Tuple((int a, int b))", "C.Tuple((int x, int y))").WithLocation(18, 18),
-                // (20,24): error CS20066: Both partial member declarations, 'C.this[Func<int a, int>]' and 'C.this[Func<int x, int>]', must use the same function type parameter names.
+                // (20,24): error CS20068: Both partial member declarations, 'C.this[Func<int a, int>]' and 'C.this[Func<int x, int>]', must use the same function type parameter names.
                 //     public partial int this[(int x) -> int f] => 0;
                 Diagnostic(ErrorCode.ERR_SharperPartialMemberInconsistentFunctionTypeNames, "this").WithArguments("C.this[System.Func<int a, int>]", "C.this[System.Func<int x, int>]").WithLocation(20, 24),
                 // (22,24): error CS8142: Both partial member declarations, 'C.this[(int a, int b)]' and 'C.this[(int x, int y)]', must use the same tuple element names.

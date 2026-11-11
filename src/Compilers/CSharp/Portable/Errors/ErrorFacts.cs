@@ -578,6 +578,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 case ErrorCode.WRN_SharperTryExpressionAwaitableBody:
                 case ErrorCode.WRN_SharperImmutableHierarchyViolated:
                 case ErrorCode.WRN_SharperPureOutArgumentNotFresh:
+                case ErrorCode.WRN_SharperPureOverrideNotPure:
                     return 1;
                 default:
                     return 0;
@@ -2663,12 +2664,13 @@ namespace Microsoft.CodeAnalysis.CSharp
                 or ErrorCode.ERR_SharperPipeInExpressionTree
                 or ErrorCode.ERR_SharperPureNotPure
                 or ErrorCode.ERR_SharperPureStructMemberNotReadOnly
-                or ErrorCode.ERR_SharperPureVirtual
                 or ErrorCode.WRN_SharperPureOutArgumentNotFresh
                 or ErrorCode.ERR_SharperItClaimedByInnerCall
                 or ErrorCode.ERR_SharperInferEventNoOverriddenMember
                 or ErrorCode.ERR_SharperInferParameterBodyCycle
                 or ErrorCode.ERR_SharperInferParameterConversionCycle
+                or ErrorCode.ERR_SharperPureOverrideNotPure
+                or ErrorCode.WRN_SharperPureOverrideNotPure
                 or ErrorCode.ERR_SharperInferParameterUsesDisagree
                 or ErrorCode.ERR_SharperRefinementNotClosed
                 or ErrorCode.ERR_SharperRefinementTypeNotSupported

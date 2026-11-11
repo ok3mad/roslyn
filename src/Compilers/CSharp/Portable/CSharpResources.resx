@@ -8569,8 +8569,14 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
   <data name="ERR_SharperPureStructMemberNotReadOnly" xml:space="preserve">
     <value>'{0}' is marked [Pure], so it must be readonly: declare it 'readonly', or make the struct 'readonly'.</value>
   </data>
-  <data name="ERR_SharperPureVirtual" xml:space="preserve">
-    <value>'{0}' cannot be marked [Pure] yet: [Pure] is not supported on virtual, abstract and override members.</value>
+  <data name="ERR_SharperPureOverrideNotPure" xml:space="preserve">
+    <value>'{0}' overrides or implements the [Pure] member '{1}', so it must be marked [Pure] too.</value>
+  </data>
+  <data name="WRN_SharperPureOverrideNotPure" xml:space="preserve">
+    <value>'{0}' overrides or implements the [Pure] member '{1}', so it must be pure too, but it is not marked [Pure], and a C# file is not checked. Move it to a Sharper file and mark it [Pure].</value>
+  </data>
+  <data name="WRN_SharperPureOverrideNotPure_Title" xml:space="preserve">
+    <value>A member in a C# file overrides or implements a [Pure] member</value>
   </data>
   <data name="WRN_SharperPureOutArgumentNotFresh" xml:space="preserve">
     <value>The out argument '{1}' of the [Pure] member '{0}' is not a fresh local, so '{0}' may observe its own write through another argument.</value>

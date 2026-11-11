@@ -79,9 +79,9 @@ var name = o switch { () -> void => "action", (int) -> int f => "f" + f(1), _ =>
 | CS0100 | The parameter name '{0}' is a duplicate (C#'s error, for two parameters of one function type with the same name) |
 | CS20008 | A function type parameter cannot be '{0}', because a function type is a 'System.Func' or 'System.Action' delegate. |
 | CS20009 | A function type cannot have more than {0} parameters, because no 'System.Func' or 'System.Action' delegate has more. |
-| CS20064 | '{0}': cannot change function type parameter names when overriding inherited member '{1}' |
-| CS20065 | The function type parameter names in the signature of '{0}' must match the function type parameter names of interface member '{1}' (including on the return type). |
-| CS20066 | Both partial member declarations, '{0}' and '{1}', must use the same function type parameter names. |
+| CS20066 | '{0}': cannot change function type parameter names when overriding inherited member '{1}' |
+| CS20067 | The function type parameter names in the signature of '{0}' must match the function type parameter names of interface member '{1}' (including on the return type). |
+| CS20068 | Both partial member declarations, '{0}' and '{1}', must use the same function type parameter names. |
 
 ## Limitations
 
@@ -168,8 +168,8 @@ var merged = b ? area : f;       // no names: a name is kept only where both sid
   are one type in `typeof`, `is` and casts, and members that differ only in them clash (CS0111, CS0663, CS0557), as do
   interfaces in a base list (CS8779). There is no warning for names that differ. `SymbolEqualityComparer.Default`
   tells differently named function types apart, as it does tuples.
-- **Overrides and implementations** cannot change a name, and may drop all names (CS20064, CS20065; tuples: CS8139,
-  CS8141). The two parts of a partial member use the same names (CS20066; tuples: CS8142). A signature that also has
+- **Overrides and implementations** cannot change a name, and may drop all names (CS20066, CS20067; tuples: CS8139,
+  CS8141). The two parts of a partial member use the same names (CS20068; tuples: CS8142). A signature that also has
   tuple element names reports the tuple error.
 - **Named arguments** do not use the names until they are in metadata: `area(arg1: 3, arg2: 4)` works as through
   `Func`, and `area(width: 3)` is CS1746.

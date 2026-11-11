@@ -433,6 +433,7 @@ class X
                         case ErrorCode.WRN_SharperTryExpressionAwaitableBody:
                         case ErrorCode.WRN_SharperImmutableHierarchyViolated:
                         case ErrorCode.WRN_SharperPureOutArgumentNotFresh:
+                        case ErrorCode.WRN_SharperPureOverrideNotPure:
                             Assert.Equal(1, ErrorFacts.GetWarningLevel(errorCode));
                             break;
                         case ErrorCode.WRN_MainIgnored:

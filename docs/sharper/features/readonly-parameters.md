@@ -79,7 +79,8 @@ the rule. A record's `readonly` parameter is only read by the generated property
 
 - Extension block receivers (`extension(readonly int x)`) and function pointer parameters (`delegate*<readonly int,
   void>`) keep CS9190: a receiver is shared by the members of the block, and a function pointer has no body.
-- `IParameterSymbol` has no read-only flag, as `ILocalSymbol` has none for `val` and `readonly` locals
+- `IParameterSymbol` has no read-only flag, and will not get one: `readonly` is not part of the signature, so it is
+  no contract, and tooling asks `SharperFacts` instead, as for `val` and `readonly` locals
   ([#88](https://github.com/ok3mad/roslyn/issues/88)). The IDE does not know `readonly` parameters yet.
 - CS20013 warns for every non-readonly member, like CS20003 and CS20010
   ([#84](https://github.com/ok3mad/roslyn/issues/84)).
