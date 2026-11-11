@@ -3132,6 +3132,11 @@
         <target state="translated">Dieser Vorgang darf nur in einem unsicheren Kontext verwendet werden</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_UnsafeUnassignedAddressOf">
+        <source>The operand of an address-of expression is not definitely assigned. Ensure the operand is assigned or use an unsafe context.</source>
+        <target state="new">The operand of an address-of expression is not definitely assigned. Ensure the operand is assigned or use an unsafe context.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_UnsafeUninitializedStackAlloc">
         <source>stackalloc expression without an initializer inside SkipLocalsInit may only be used in an unsafe context</source>
         <target state="translated">stackalloc-Ausdruck ohne Initialisierer in SkipLocalsInit darf nur in einem unsicheren Kontext verwendet werden</target>
@@ -4157,6 +4162,16 @@
         <target state="translated">Ein Wert vom Typ „System.Threading.Lock“, der in einen anderen Typ konvertiert wurde, verwendet wahrscheinlich eine unbeabsichtigte monitorbasierte Sperrung in der Anweisung „lock“.</target>
         <note />
       </trans-unit>
+      <trans-unit id="WRN_DeprecatedFeatureFlag">
+        <source>Feature flag '{0}' is deprecated and will be removed in a future version. Use MSBuild property '{1}' or compiler option '{2}' instead.</source>
+        <target state="new">Feature flag '{0}' is deprecated and will be removed in a future version. Use MSBuild property '{1}' or compiler option '{2}' instead.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WRN_DeprecatedFeatureFlag_Title">
+        <source>Feature flag is deprecated</source>
+        <target state="new">Feature flag is deprecated</target>
+        <note />
+      </trans-unit>
       <trans-unit id="WRN_DoNotCompareFunctionPointers">
         <source>Comparison of function pointers might yield an unexpected result, since pointers to the same function may be distinct.</source>
         <target state="translated">Der Vergleich von Funktionszeigern kann zu einem unerwarteten Ergebnis führen, weil Zeiger auf dieselbe Funktion möglicherweise unterschiedlich sind.</target>
@@ -4943,6 +4958,9 @@
 -nullable[+|-]                Specify nullable context option enable|disable.
 -nullable:{enable|disable|warnings|annotations}
                               Specify nullable context option enable|disable|warnings|annotations.
+-memorysafetyrulesversion:&lt;n&gt;  Set memory safety rules version as
+                              `1` (legacy),
+                              `2` (updated: unsafe members require unsafe context at use site)
 
                        - SECURITY -
 -delaysign[+|-]               Delay-sign the assembly using only the public

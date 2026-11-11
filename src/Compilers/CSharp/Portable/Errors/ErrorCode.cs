@@ -2512,6 +2512,8 @@ namespace Microsoft.CodeAnalysis.CSharp
 
         ERR_BadCompilationOptionValueAccepted = 9400,
         ERR_IllegalUnsafeModifier = 9401,
+        WRN_DeprecatedFeatureFlag = 9402,
+        ERR_UnsafeUnassignedAddressOf = 9403,
 
         // Sharper diagnostics are numbered from SharperErrorCodes.Base, far above the upstream numbers (CS9401 today), so
         // upstream can keep adding codes without clashing. Add new Sharper codes at the end of this block.

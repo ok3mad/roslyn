@@ -353,6 +353,7 @@
                 case ErrorCode.WRN_SharperTryExpressionAwaitableBody:
                 case ErrorCode.WRN_SharperImmutableHierarchyViolated:
                 case ErrorCode.WRN_SharperPureOutArgumentNotFresh:
+                case ErrorCode.WRN_DeprecatedFeatureFlag:
                     return true;
                 default:
                     return false;
