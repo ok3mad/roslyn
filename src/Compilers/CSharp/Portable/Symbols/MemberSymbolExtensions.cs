@@ -871,9 +871,11 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         /// </summary>
         internal static ErrorCode TupleOrSharperFunctionTypeNamesError(Symbol member1, Symbol member2, ErrorCode tupleNamesError, ErrorCode functionTypeNamesError)
         {
-            return member1.ContainsTupleNames(static t => t.ContainsTupleNames()) || member2.ContainsTupleNames(static t => t.ContainsTupleNames())
-                ? tupleNamesError
-                : functionTypeNamesError;
+            return hasTupleNames(member1) || hasTupleNames(member2) ? tupleNamesError : functionTypeNamesError;
+
+            // An indexer's parameters count too, which the check below leaves out.
+            static bool hasTupleNames(Symbol member)
+                => member.ContainsTupleNames(static t => t.ContainsTupleNames()) || member.GetParameters().Any(static p => p.Type.ContainsTupleNames());
         }
 
         private static bool ContainsTupleNames(this Symbol member, Func<TypeSymbol, bool> containsNames)

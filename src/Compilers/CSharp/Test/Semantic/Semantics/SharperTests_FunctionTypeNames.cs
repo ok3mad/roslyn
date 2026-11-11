@@ -675,6 +675,10 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                     public partial (int x) -> int P => null;
                     partial void Tuple((int a, int b) t);
                     partial void Tuple((int x, int y) t) { }
+                    public partial int this[(int a) -> int f] { get; }
+                    public partial int this[(int x) -> int f] => 0;
+                    public partial int this[(int a, int b) t] { get; }
+                    public partial int this[(int x, int y) t] => 0;
                 }
                 """;
             CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
@@ -695,7 +699,13 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 Diagnostic(ErrorCode.ERR_SharperPartialMemberInconsistentFunctionTypeNames, "P").WithArguments("C.P", "C.P").WithLocation(16, 35),
                 // (18,18): error CS8142: Both partial member declarations, 'C.Tuple((int a, int b))' and 'C.Tuple((int x, int y))', must use the same tuple element names.
                 //     partial void Tuple((int x, int y) t) { }
-                Diagnostic(ErrorCode.ERR_PartialMemberInconsistentTupleNames, "Tuple").WithArguments("C.Tuple((int a, int b))", "C.Tuple((int x, int y))").WithLocation(18, 18));
+                Diagnostic(ErrorCode.ERR_PartialMemberInconsistentTupleNames, "Tuple").WithArguments("C.Tuple((int a, int b))", "C.Tuple((int x, int y))").WithLocation(18, 18),
+                // (20,24): error CS20066: Both partial member declarations, 'C.this[Func<int a, int>]' and 'C.this[Func<int x, int>]', must use the same function type parameter names.
+                //     public partial int this[(int x) -> int f] => 0;
+                Diagnostic(ErrorCode.ERR_SharperPartialMemberInconsistentFunctionTypeNames, "this").WithArguments("C.this[System.Func<int a, int>]", "C.this[System.Func<int x, int>]").WithLocation(20, 24),
+                // (22,24): error CS8142: Both partial member declarations, 'C.this[(int a, int b)]' and 'C.this[(int x, int y)]', must use the same tuple element names.
+                //     public partial int this[(int x, int y) t] => 0;
+                Diagnostic(ErrorCode.ERR_PartialMemberInconsistentTupleNames, "this").WithArguments("C.this[(int a, int b)]", "C.this[(int x, int y)]").WithLocation(22, 24));
         }
 
         [Fact]
