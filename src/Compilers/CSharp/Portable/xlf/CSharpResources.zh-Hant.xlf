@@ -2787,14 +2787,14 @@
         <target state="new">'{0}' is marked [Pure], but it is not pure: {1}.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperPureOverrideNotPure">
+        <source>'{0}' overrides or implements the [Pure] member '{1}', so it must be marked [Pure] too.</source>
+        <target state="new">'{0}' overrides or implements the [Pure] member '{1}', so it must be marked [Pure] too.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperPureStructMemberNotReadOnly">
         <source>'{0}' is marked [Pure], so it must be readonly: declare it 'readonly', or make the struct 'readonly'.</source>
         <target state="new">'{0}' is marked [Pure], so it must be readonly: declare it 'readonly', or make the struct 'readonly'.</target>
-        <note />
-      </trans-unit>
-      <trans-unit id="ERR_SharperPureVirtual">
-        <source>'{0}' cannot be marked [Pure] yet: [Pure] is not supported on virtual, abstract and override members.</source>
-        <target state="new">'{0}' cannot be marked [Pure] yet: [Pure] is not supported on virtual, abstract and override members.</target>
         <note />
       </trans-unit>
       <trans-unit id="ERR_SharperReadOnlyLocalWithNoInitializer">
@@ -4700,6 +4700,16 @@
       <trans-unit id="WRN_SharperPureOutArgumentNotFresh_Title">
         <source>The out argument of a [Pure] member is not a fresh local</source>
         <target state="new">The out argument of a [Pure] member is not a fresh local</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WRN_SharperPureOverrideNotPure">
+        <source>'{0}' overrides or implements the [Pure] member '{1}', so it must be pure too, but it is not marked [Pure], and a C# file is not checked. Move it to a Sharper file and mark it [Pure].</source>
+        <target state="new">'{0}' overrides or implements the [Pure] member '{1}', so it must be pure too, but it is not marked [Pure], and a C# file is not checked. Move it to a Sharper file and mark it [Pure].</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WRN_SharperPureOverrideNotPure_Title">
+        <source>A member in a C# file overrides or implements a [Pure] member</source>
+        <target state="new">A member in a C# file overrides or implements a [Pure] member</target>
         <note />
       </trans-unit>
       <trans-unit id="WRN_SharperReadOnlyLocalMemberCallOnCopy">

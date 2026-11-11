@@ -1545,6 +1545,56 @@ Prototype on `sharper/opaque-patterns` ([feature page](../features/opaque-patter
 | Refinements rejecting opaque patterns | A refinement binds its pattern with the same binder, so `int i is > s_max` makes an opaque pattern, which `SharperRefinement.FindOpenPattern` rejects as not closed (CS20058). The operand's purity is not checked inside a refinement clause, so an impure operand gets CS20058 alone (`Opaque_RefinementRejects`) |
 | Pointers | `e is p->F` was CS0150 under Sharper and is now CS20062, since reading through a pointer is not pure (`FunctionType_Pattern_PointerMemberAccess`) |
 
+## Feature 14: purity, slice 1, second part: virtual and interface members
+
+`[Pure]` on virtual, abstract, override and interface members, with the rule that every override and implementation of
+a `[Pure]` slot is `[Pure]` too (issue [#173](https://github.com/ok3mad/roslyn/issues/173), "Second PR"; the
+[feature page](../features/purity.md#virtual-and-interface-members)). The first part checked declared `[Pure]` on
+non-virtual members and rejected the rest with CS20052. Prototype on `sharper/purity-virtual-members`, tests
+`PureSlot_*` in `SharperTests_Purity.cs`.
+
+**Probe.** What the code showed:
+
+| Area | What the code shows |
+| --- | --- |
+| Calls | A call binds to the most derived override visible on the receiver's static type (`d.A()` is `Derived.A`), and a call on an interface to the interface member. So "the slot is `[Pure]`" must look up the chain of overridden members, not only at the bound member |
+| Interface map | `TypeSymbol.FindImplementationForInterfaceMember` answers for methods and accessors, implicit, explicit, inherited from a base class, and default implementations in derived interfaces; `MethodSymbol.ExplicitInterfaceImplementations` gives the explicit ones directly |
+| Observers | The observer mode of `PurityWalker` accepted no `[Pure]` callee and no attested method; a `[Pure]` operator did not count in either mode |
+| Precedent | `[ImmutableHierarchy]`: an error for a Sharper type, a warning for a C# type of the same compilation (CS20038, CS20039), from `SharperImmutability.CheckDeclaration` |
+
+### Decisions
+
+| Question | Decision | Why |
+| --- | --- | --- |
+| One attribute or two | One: `[Pure]` means "a call of this member is pure" everywhere. On a non-virtual member that is a claim about its body, on a virtual or interface member about every body a call can run. No separate "hierarchy" attribute, as `[Immutable]` has | Purity is part of the member's contract, like its return type and nullability, which overrides cannot widen either; D's `pure` and Java's checked exceptions work the same way. `[Immutable]` needed two because it describes values of an exact type, and a subclass is a new type; a virtual call has no exact member. A body-only claim would serve only `base.M()` and sealed or exact receivers, such as a `[Pure]` override that extends a pure default while other overrides stay impure. Its idiomatic workaround is a non-virtual `[Pure]` core method that the virtual one calls, and inference inside one assembly ("Later" in #173) would cover `base.M()` without an attribute. No realistic case needed more, so it stays out. It can be added later without breaking anything, while splitting one attribute after it ships would break |
+| CS20052 | Retired, not narrowed: nothing of "virtual, abstract or override" is left unsupported | Every member kind that can be `[Pure]` can be a slot or fill one |
+| What must be `[Pure]` | A member that overrides a `[Pure]` slot, at every level (an abstract or sealed override too), and a member that implements a `[Pure]` interface member. Error CS20064, on the member's name | The contract is on the slot, so each link must carry it; an unmarked link would also leave its body unchecked |
+| An override that starts the contract | Allowed: `[Pure]` on an override of an unmarked member binds the overrides below it | It is a stronger promise on a subtype, and the call on the derived type binds to the override |
+| When a call through a slot is pure | `IsPureSlot`: the bound member is declared `[Pure]`, implements a `[Pure]` interface member for its own type (through the interface map, cached per member), or overrides, directly or not, a member that does either | An override or implementation that is unmarked (a C# file, another assembly) is still under the contract, so `d.A()` and `((Base)d).A()` agree, and so do `c.M()` and `((I)c).M()`. Leaving the direct call impure would let a C# or metadata implementation be called as if it promised nothing, which breaks the guarantee from the other side |
+| Explicit implementations | Must be marked; attributes are allowed there. Found through `ExplicitInterfaceImplementations` | The member is declared for the slot and nothing else |
+| Implicit implementations | Found through the interface map of every class and struct, for every interface it has. The member in the type is reported on its name. A base class's member that implements the interface for a type that declares it (`class D : B, I`) is reported on `D`, naming `B.M`; a base class that declares the interface itself is checked, or trusted, on its own | The map is the only place that says which member fills the slot. `B.M` may be in another assembly, so the fix has to be possible in `D` (an explicit implementation) |
+| Explicit implementations and the public member | An explicit implementation takes the slot, so a public member of the same name is free and may be impure. A slot stays a slot: a member that implements a `[Pure]` interface member binds its overrides, also in a derived type that implements the interface member explicitly. An implementation inherited from a base class (`class D : B, I`) is not `B.M`'s slot, so `d.M()` is pure only if `B.M` is | The explicit member is what fulfils the contract. A `C`-typed call can run an override of `C.M` whatever `D` does with `I`, so the override cannot drop the promise. `B` did not declare `I`, so it promised nothing for its own callers |
+| Default interface members | A `[Pure]` one is checked like any body; a reimplementation in a derived interface (`int I.M() => ...`) is an explicit implementation and must be marked. `static abstract` members follow the same rule | An interface is an implementer too |
+| Generic virtual methods | Nothing special: the claim is read from the original definition, and the chain of overridden members is walked on definitions | Purity does not depend on type arguments in slice 1 |
+| Properties and indexers | `[Pure]` on the property means its getter (as in the first part), so only the getter of an override is held to the slot; `[Pure]` on the `get` accessor counts too. Diagnostics name the property | A setter writes, so it is never part of the contract |
+| `[AssumePure]` on an override or implementation | Satisfies the rule. `[AssumePure]` on a base slot stays what it was: a hard claim about calls of that member, which puts nothing on overrides | A hard claim names what its author vouches for (Feature 10); a caching override needs the escape. Whoever writes it on a virtual member vouches for the overrides |
+| C# files of a mixed compilation | Warning CS20065 on the same location as the error, also for a slot from metadata. Its text says that a C# file is not checked and that the member should move to a Sharper file. A compilation without Sharper files gets nothing | `[Pure]` does not bind in a C# file, so the member cannot be marked there; the warning says the contract is on trust. Unlike `[ImmutableHierarchy]`'s warning it is not limited to slots declared in the same compilation: the gate on Sharper files already keeps plain C# compilations as upstream |
+| A slot that gains or loses `[Pure]` | Gaining it breaks overriders and implementers when they next compile (CS20064, CS20065); compiled assemblies keep running and are trusted. Losing it breaks the `[Pure]` callers of the slot (CS20050); overrides that keep `[Pure]` stay valid and start the contract themselves. Neither is a binary break | The issue: "adding it breaks overriders, removing it breaks callers". Only the attribute changes in metadata |
+| Metadata | A `[Pure]` slot from another assembly counts as one from source, recognized by name. Overrides in other assemblies are trusted | "Consumers trust it and do not re-check" |
+| One `IsPure(member)` | `SharperImmutability.IsPure`: a `[Pure]` slot, `[AssumePure]`, or an attested member. `PurityWalker` asks it in both modes (`IsPureByClaim`), for calls, getters and operators. In observer mode a callee that is not `[AssumePure]` must also return a statically immutable type, unless the observer may create its result | A pure member may create and return a mutable object; an observer that returned it would hand out a new mutable object on every read. This widens the observer rule (`[Pure]` and attested callees, `Math.Abs`) and the member rule (`[Pure]` operators), and narrows nothing |
+| Compiler-written members | Not held to a slot (a record's `ToString`, `Equals`, `GetHashCode`): `PROTOTYPE(sharper)` in `CheckPureOverrides` | The user cannot mark them; whether a record's members are pure is a question of its own |
+| The `out` warning | Unchanged: CS20053 still looks at the bound member only | The rules for `out` are [#177](https://github.com/ok3mad/roslyn/issues/177) |
+
+### What it taught
+
+- **A contract on a slot is checked from both ends.** The declaration side needs the chain of overridden members and
+  the interface map; the call side needs the chain again, because the bound member of a call is the most derived
+  override, not the slot.
+- **The interface map reports where the fix is possible.** An inherited implementation belongs to a base class that
+  may be in another assembly, so the diagnostic goes to the type that declares the interface.
+- **Sharing a query between two checkers exposes where their rules differ.** The observer rule forbids creating a
+  mutable result, which a pure member may do, so the shared answer needs the observer's creation rule on top.
+
 ## Follow-ups
 
 Sharper diagnostics were renumbered from `SharperErrorCodes.Base` (20000): CS9402, CS9403 and CS9404 became CS20001, CS20002 and CS20003, and this document uses the new numbers throughout.
@@ -1597,6 +1647,7 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 - [ ] `try` expression: sequence points, code coverage and Edit and Continue for the arms. [#145](https://github.com/ok3mad/roslyn/issues/145)
 - [x] Nullable: a union conversion in a target-typed arm (switch, `?:`, `try`) does not check the case parameter for null. [#146](https://github.com/ok3mad/roslyn/issues/146): fixed in `NullableWalker.VisitUnionConversion`.
 - [ ] Test `/nowarn` and `.editorconfig` with five-digit Sharper IDs. [#91](https://github.com/ok3mad/roslyn/issues/91)
+- [ ] Purity: hold the members the compiler writes for a record to a `[Pure]` slot they override, and decide whether they are pure. `PROTOTYPE(sharper)` in `SharperImmutability.CheckPureOverrides`.
 - [x] Decide immutability depth: binding, value or deep (a type-level immutability marker). [#92](https://github.com/ok3mad/roslyn/issues/92): deep, see [Feature 10](#feature-10-immutable-types-slice-1-design). Slice 1 is [#139](https://github.com/ok3mad/roslyn/issues/139), a prototype; follow-ups [#140](https://github.com/ok3mad/roslyn/issues/140), [#141](https://github.com/ok3mad/roslyn/issues/141), [#142](https://github.com/ok3mad/roslyn/issues/142).
 - [ ] Immutable types: treat an internal `[Immutable]` class whose subclasses are all visible and immutable as closed (a static type), as the design allows. `PROTOTYPE(sharper)` in `SharperImmutability.IsClosed`.
 - [x] Sequence type: decide whether array creation should accept sequence elements (`new int[3][..]`, today CS0178, or `new int[..][3]`). [#64](https://github.com/ok3mad/roslyn/issues/64): no, array creation keeps its C# meaning; write `new IEnumerable<int>[3]`. Not worth fixing for now; can be revisited.

@@ -1,6 +1,6 @@
 ﻿# Purity
 
-**Status:** Prototype of slice 1, first part. Requires `/features:sharper`. Issue:
+**Status:** Prototype of slice 1. Requires `/features:sharper`. Issue:
 [#173](https://github.com/ok3mad/roslyn/issues/173), under [#36](https://github.com/ok3mad/roslyn/issues/36);
 the rules for `out` in [#177](https://github.com/ok3mad/roslyn/issues/177).
 
@@ -60,8 +60,8 @@ A `[Pure]` member's body may:
 - read anything reached through its arguments, mutable or not: fields, array elements, `in` and `ref readonly`
   parameters, auto-properties;
 - read constants and `static readonly` fields of an immutable type, and get-only static auto-properties of one;
-- call `[Pure]` members (not through a virtual slot), `[AssumePure]` members, the pure observers of immutable types,
-  and the attested members of other assemblies (below);
+- call `[Pure]` members, also through a virtual or interface slot that is `[Pure]` (below), `[AssumePure]` members,
+  the pure observers of immutable types, and the attested members of other assemblies (below);
 - create objects of any type whose constructor is `[Pure]`, attested, or written by the compiler (a record's, a primary
   constructor, a default constructor) and pure itself; create arrays; box;
 - set fields and auto-properties (or `[AssumePure]` setters) of a new object in its object initializer, and use `with`
@@ -73,8 +73,8 @@ A `[Pure]` member's body may:
 It reports the first expression that does anything else (CS20050), with the reason:
 
 - a write to a field, an array element, a static, a `ref` parameter or local, or a captured local;
-- a call of a member that is not known to be pure, including virtual calls, delegate invocations and constructors
-  from other assemblies;
+- a call of a member that is not known to be pure, including calls through a virtual or interface slot that is not
+  `[Pure]`, delegate invocations and constructors from other assemblies;
 - reading a mutable static, including a `static readonly` field of a mutable type: that is a global variable in
   disguise;
 - observing identity (`ReferenceEquals`, reference `==`, `object.Equals` and `GetHashCode` that are not overridden,
@@ -102,10 +102,80 @@ array; and the constructors of exceptions.
   functions. On a property it means the get accessor.
 - An instance member of a struct must be `readonly`, or the struct `readonly` (CS20051). The existing errors then cover
   writes to `this`, and other assemblies see `[IsReadOnly]`. Auto-property getters already are.
-- Virtual, abstract and override members cannot be `[Pure]` yet (CS20052): every override would have to be pure too.
+- `[Pure]` goes on virtual, abstract, override and interface members too, where it is a contract on the slot (next
+  section).
 - Only Sharper files are checked. In a C# file the name `Pure` does not bind (CS0246). A `[Pure]` that binds to another
   type, such as `System.Diagnostics.Contracts.PureAttribute` through a `using`, is not this attribute and is not
   checked.
+
+## Virtual and interface members
+
+`[Pure]` on a virtual, abstract or interface member is a contract on its slot: every override and every implementation
+must be pure too. A call through the slot is then pure, whatever runs. This is the same claim as on any other member,
+"a call of this member is pure"; a virtual call can run any override, so the claim covers them, as a return type does:
+
+```csharp
+interface IShape
+{
+    [Pure] int Area();
+}
+
+sealed class Square(int side) : IShape
+{
+    [Pure] public int Area() => side * side;
+}
+
+sealed class Circle(int radius) : IShape
+{
+    public int Area() => 3 * radius * radius;
+    // error CS20064: 'Circle.Area()' overrides or implements the [Pure] member 'IShape.Area()', so it must be marked [Pure] too.
+}
+
+static class Shapes
+{
+    [Pure] public static int Total(IShape[] shapes)
+    {
+        int sum = 0;
+        foreach (var shape in shapes) sum += shape.Area();
+        return sum;
+    }
+}
+```
+
+- **Overrides.** An override of a `[Pure]` member must be marked `[Pure]`, at every level, abstract and sealed overrides
+  included; its body is then checked like any other (CS20050). An override may also start the contract: `[Pure]` on an
+  override of an unmarked member binds the overrides below it, and calls on the derived type are pure.
+- **Implementations.** A member that implements a `[Pure]` interface member must be marked `[Pure]`: an explicit
+  implementation, an implicit one, and an implementation in a derived interface. Default interface members and
+  `static abstract` members follow the same rule, and a `[Pure]` default body is checked. When a base class's member
+  implements the interface for a class that declares it (`class D : B, I`, with `B.M` for `I.M`), the error is on `D`
+  and names `B.M`; if `B` cannot be changed, `D` implements the member explicitly. A struct's implementation must then
+  be `readonly` as well (CS20051).
+- **Properties and indexers.** `[Pure]` on a property or an indexer means its getter, so only the getter of an override
+  is held to it; `[Pure]` on the `get` accessor works as well. A setter is never part of the contract.
+- **Generic methods** need nothing special: the claim belongs to the definition.
+- **`[AssumePure]`** on an override or implementation satisfies the rule: the author vouches for a body the compiler
+  does not check, as [for observers](immutable-types.md#the-attributes).
+- **C# files.** A member in a C# file of a compilation with Sharper files gets a warning instead (CS20065), at the
+  member's name, or at the type's name for an inherited implementation. `[Pure]` does not bind in a C# file and nothing
+  there is checked, so the fix is to move the member to a Sharper file. The slot's contract holds either way: a call
+  through it stays pure.
+- **Calls.** A call is pure when the member it binds to fills a `[Pure]` slot: it is `[Pure]`, it implements a
+  `[Pure]` interface member for its own type, or it overrides, directly or not, a member that does either. So `c.M()`
+  is as pure as `((I)c).M()`, and so is a call on a derived type whose override is unmarked (it comes from a C# file
+  or from another assembly, and is trusted). An explicit implementation takes the slot: with `[Pure] int I.M()` in
+  `C`, the public `C.M` is not part of the contract and may be impure. An implementation that a class inherits from
+  its base (`class D : B, I`) is not the base member's slot, since `B` promised nothing, so `d.M()` calls `B.M` and is
+  pure only if `B.M` is.
+- **A slot stays a slot.** A member that fills a `[Pure]` slot binds its overrides, also in a derived type that
+  implements the interface member with another member: a call of `c.M()` on a `C` can still run the override.
+- **Hiding.** A `new` member hides the slot's member without overriding or implementing it, so it is free, and so are
+  the overrides of a `new virtual` one; a call that binds to it is pure only if it is `[Pure]`. A type that re-declares
+  the interface (`class D : C, I`) makes its `new` member the implementation for `D`, which then must be `[Pure]`.
+- **Changing a slot.** Adding `[Pure]` to a virtual or interface member breaks its overriders and implementers the next
+  time they compile (CS20064, or CS20065 in C# files); assemblies that are already compiled keep running and are trusted.
+  Removing it breaks the `[Pure]` callers of the slot (CS20050); overrides that stay `[Pure]` remain valid. Neither is a
+  binary break.
 
 ## `out` arguments
 
@@ -127,7 +197,9 @@ are to be made precise in [#177](https://github.com/ok3mad/roslyn/issues/177).
 
 `[Pure]` is `Sharper.PureAttribute`, synthesized and embedded like [`[Immutable]`](immutable-types.md#the-attributes)
 when no type of that name is in scope. Other assemblies recognize it by name and trust it without checking it again.
-Purity is never inferred, so only what is declared crosses assemblies.
+Purity is never inferred, so only what is declared crosses assemblies. A `[Pure]` slot from another assembly counts as
+one from source: its overrides and implementations here must be `[Pure]`, and overrides in other assemblies are
+trusted to honour it.
 `System.Diagnostics.Contracts.PureAttribute` is not trusted, because nothing checks it.
 
 ## Diagnostics
@@ -136,26 +208,37 @@ Purity is never inferred, so only what is declared crosses assemblies.
 | --- | --- | --- |
 | CS20050 | Error | A `[Pure]` member is not pure, with the first expression that is not and why. |
 | CS20051 | Error | A `[Pure]` instance member of a struct is not `readonly`. |
-| CS20052 | Error | `[Pure]` on a virtual, abstract or override member. |
+| CS20052 | | Retired: `[Pure]` is allowed on virtual, abstract, override and interface members. |
 | CS20053 | Warning | An `out` argument of a `[Pure]` member is not a fresh local. |
+| CS20064 | Error | A member in a Sharper file overrides or implements a `[Pure]` member and is not marked `[Pure]`. |
+| CS20065 | Warning | The same for a member in a C# file of a compilation with Sharper files. |
 
 ## Not covered
 
-- The rule for overrides and implementations, and `[Pure]` on virtual and interface members (the second part of slice
-  1).
+- Lambdas and delegate invocations, `await` and `yield`.
+- The members the compiler writes for a record (`ToString`, `Equals`, `GetHashCode`) are not held to a `[Pure]` slot
+  they override.
+- The `out` warning (CS20053) looks at the member a call binds to, so a call of an unmarked override of a `[Pure]` slot
+  gets none ([#177](https://github.com/ok3mad/roslyn/issues/177)).
 - Inference inside one assembly, mutating an object the member created itself (escape analysis), and conditional purity
   (`pure(f)`, `pure(provider)`).
 - `total` ([#33](https://github.com/ok3mad/roslyn/issues/33)), and a `pure` keyword, which could imply `readonly` on
   struct members.
 - The observers of an immutable type count as pure for a `[Pure]` caller, but they are checked by the observer rule of
   [immutable types](immutable-types.md), which holds statics fixed: an observer that reads a `static readonly` field of
-  a mutable type is accepted there.
+  a mutable type is accepted there. Which calls are pure is one question for both (`IsPure`, below): an observer may
+  call `[Pure]` and attested members too.
 
 ## Code
 
 `Symbols/SharperImmutability_Pure.cs` (under `src/Compilers/CSharp/Portable`), part of `SharperImmutability`:
 
-- `IsDeclaredPure(method)` is the query, by attribute name.
+- `IsDeclaredPure(method)` says whether a member carries the claim, by attribute name. `IsPureSlot(method)` adds the
+  `[Pure]` interface member it implements for its own type and the members it overrides, and `IsPure(method)` is the one answer to "is a call of this member pure by a claim" (`[Pure]`
+  slot, `[AssumePure]`, attested), which both modes of `PurityWalker` use (`IsPureByClaim`).
+- `CheckPureOverrides` is the rule for overrides and implementations. It runs from `CheckDeclaration` for every type of
+  a compilation with Sharper files, and finds implicit implementations through the interface map
+  (`FindImplementationForInterfaceMember`).
 - `CheckPureBodies` is called from `MethodCompiler.CompileMethod` after `DiagnosticsPass`, with the bound body (and a
   constructor's instance initializers), so nothing is bound twice. It checks the member and its `[Pure]` local
   functions with the member mode of `PurityWalker` (`Symbols/SharperImmutability.cs`), which the observers of
