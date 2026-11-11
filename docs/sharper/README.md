@@ -43,7 +43,9 @@ has the full implementation checklist.
    reads two comparisons that only compile with user-defined operators. Function types add the same one for
    `F<(p)->b>(x)`. Both also cover the argument-list form, such as `M(F < a[..], b > (c))`.
 3. **Reuse the C# syntax.** Features reinterpret existing syntax in the binder where possible, instead of adding
-   syntax nodes and public API.
+   syntax nodes and public API. Sharper facts that are no contract for other assemblies (`val`, `readonly`, inferred
+   types) get no public symbol API either: the IDE reads them through `SharperFacts`, from syntax and the semantic
+   model ([decision](planning/implementation-plan.md#decisions)).
 4. **Lower to C#.** Each feature lowers to constructs the compiler already emits, so debugging, PDBs and the runtime
    need no changes. A feature uses a type of the [runtime library](#runtime-library) only where that section allows
    it.
