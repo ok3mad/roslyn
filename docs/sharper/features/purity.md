@@ -111,7 +111,8 @@ array; and the constructors of exceptions.
 ## Virtual and interface members
 
 `[Pure]` on a virtual, abstract or interface member is a contract on its slot: every override and every implementation
-must be pure too. A call through the slot is then pure, whatever runs:
+must be pure too. A call through the slot is then pure, whatever runs. This is the same claim as on any other member,
+"a call of this member is pure"; a virtual call can run any override, so the claim covers them, as a return type does:
 
 ```csharp
 interface IShape
@@ -159,10 +160,15 @@ static class Shapes
   member's name, or at the type's name for an inherited implementation. `[Pure]` does not bind in a C# file and nothing
   there is checked, so the fix is to move the member to a Sharper file. The slot's contract holds either way: a call
   through it stays pure.
-- **Calls.** A call is pure when the member it binds to is `[Pure]` or overrides a `[Pure]` member, directly or not.
-  So a call on a derived type whose override is unmarked (it comes from a C# file or from another assembly) is still
-  pure. A direct call of an unmarked implicit implementation (`c.M()` rather than `((I)c).M()`) is not: the
-  class's own member is not a slot of the interface.
+- **Calls.** A call is pure when the member it binds to fills a `[Pure]` slot: it is `[Pure]`, it implements a
+  `[Pure]` interface member for its own type, or it overrides, directly or not, a member that does either. So `c.M()`
+  is as pure as `((I)c).M()`, and so is a call on a derived type whose override is unmarked (it comes from a C# file
+  or from another assembly, and is trusted). An explicit implementation takes the slot: with `[Pure] int I.M()` in
+  `C`, the public `C.M` is not part of the contract and may be impure. An implementation that a class inherits from
+  its base (`class D : B, I`) is not the base member's slot, since `B` promised nothing, so `d.M()` calls `B.M` and is
+  pure only if `B.M` is.
+- **A slot stays a slot.** A member that fills a `[Pure]` slot binds its overrides, also in a derived type that
+  implements the interface member with another member: a call of `c.M()` on a `C` can still run the override.
 - **Changing a slot.** Adding `[Pure]` to a virtual or interface member breaks its overriders and implementers the next
   time they compile (CS20064, or CS20065 in C# files); assemblies that are already compiled keep running and are trusted.
   Removing it breaks the `[Pure]` callers of the slot (CS20050); overrides that stay `[Pure]` remain valid. Neither is a
@@ -225,7 +231,7 @@ trusted to honour it.
 `Symbols/SharperImmutability_Pure.cs` (under `src/Compilers/CSharp/Portable`), part of `SharperImmutability`:
 
 - `IsDeclaredPure(method)` says whether a member carries the claim, by attribute name. `IsPureSlot(method)` adds the
-  members it overrides, and `IsPure(method)` is the one answer to "is a call of this member pure by a claim" (`[Pure]`
+  `[Pure]` interface member it implements for its own type and the members it overrides, and `IsPure(method)` is the one answer to "is a call of this member pure by a claim" (`[Pure]`
   slot, `[AssumePure]`, attested), which both modes of `PurityWalker` use (`IsPureByClaim`).
 - `CheckPureOverrides` is the rule for overrides and implementations. It runs from `CheckDeclaration` for every type of
   a compilation with Sharper files, and finds implicit implementations through the interface map

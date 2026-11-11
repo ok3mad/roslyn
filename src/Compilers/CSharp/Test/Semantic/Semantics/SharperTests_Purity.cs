@@ -915,10 +915,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 Diagnostic(ErrorCode.WRN_SharperPureOverrideNotPure, "M").WithArguments("Derived.M()", "I.M()").WithLocation(5, 16),
                 // b.cs(10,11): warning CS20065: 'Explicit.I.M()' overrides or implements the [Pure] member 'I.M()', so it must be pure too, but it is not marked [Pure], and a C# file is not checked. Move it to a Sharper file and mark it [Pure].
                 //     int I.M() => 3;
-                Diagnostic(ErrorCode.WRN_SharperPureOverrideNotPure, "M").WithArguments("Explicit.I.M()", "I.M()").WithLocation(10, 11),
-                // a.cx(14,70): error CS20050: 'C.Calls(Derived, I)' is marked [Pure], but it is not pure: 'd.M()' calls 'Derived.M()', which is not known to be pure.
-                //     [Pure] static int Calls(Derived d, I i) => d.A() + d.P + i.M() + d.M();
-                Diagnostic(ErrorCode.ERR_SharperPureNotPure, "d.M()").WithArguments("C.Calls(Derived, I)", "'d.M()' calls 'Derived.M()', which is not known to be pure").WithLocation(14, 70));
+                Diagnostic(ErrorCode.WRN_SharperPureOverrideNotPure, "M").WithArguments("Explicit.I.M()", "I.M()").WithLocation(10, 11));
         }
 
         [Fact]
@@ -1032,12 +1029,72 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (63,11): error CS20064: 'IDerived.I.M()' overrides or implements the [Pure] member 'I.M()', so it must be marked [Pure] too.
                 //     int I.M() => 1;
                 Diagnostic(ErrorCode.ERR_SharperPureOverrideNotPure, "M").WithArguments("IDerived.I.M()", "I.M()").WithLocation(63, 11),
-                // (70,52): error CS20050: 'C.CallsImplicit(Implicit)' is marked [Pure], but it is not pure: 'x.M()' calls 'Implicit.M()', which is not known to be pure.
-                //     [Pure] static int CallsImplicit(Implicit x) => x.M();
-                Diagnostic(ErrorCode.ERR_SharperPureNotPure, "x.M()").WithArguments("C.CallsImplicit(Implicit)", "'x.M()' calls 'Implicit.M()', which is not known to be pure").WithLocation(70, 52),
                 // (71,44): error CS20050: 'C.CallsUnmarked(I)' is marked [Pure], but it is not pure: 'x.Unmarked()' calls 'I.Unmarked()', which is not known to be pure.
                 //     [Pure] static int CallsUnmarked(I x) { x.Unmarked(); return 0; }
                 Diagnostic(ErrorCode.ERR_SharperPureNotPure, "x.Unmarked()").WithArguments("C.CallsUnmarked(I)", "'x.Unmarked()' calls 'I.Unmarked()', which is not known to be pure").WithLocation(71, 44));
+        }
+
+        [Fact]
+        public void PureSlot_ImplicitImplementationCall()
+        {
+            // An implicit implementation fills the [Pure] slot, so a direct call of it is pure too, also when it is only
+            // trusted (a C# file). An explicit [Pure] implementation takes the slot and frees the public member of that
+            // name. A member that filled the slot stays one for its overrides, even where a derived type implements the
+            // interface member explicitly.
+            var sharper = """
+                public interface I
+                {
+                    [Pure] int M();
+                    [Pure] int P { get; }
+                }
+
+                public class Explicit : I
+                {
+                    static int s_count;
+                    [Pure] int I.M() => 1;
+                    [Pure] int I.P => 2;
+                    public int M() => s_count++;
+                    public int P => s_count++;
+                }
+
+                class Reimplements : Implicit, I
+                {
+                    [Pure] int I.M() => 1;
+                    [Pure] int I.P => 2;
+                    public override int M() => 3;
+                    public override int P => 4;
+                }
+
+                static class C
+                {
+                    [Pure] static int Calls(Implicit x) => x.M() + x.P;
+                    [Pure] static int CallsExplicit(Explicit e) => ((I)e).M() + ((I)e).P;
+                    [Pure] static int CallsFree(Explicit e) => e.M();
+                }
+                """;
+            var csharp = """
+                public class Implicit : I
+                {
+                    public virtual int M() => 1;
+                    public virtual int P => 2;
+                }
+                """;
+            CreateMixedPurityCompilation(sharper, csharp).VerifyDiagnostics(
+                // b.cs(3,24): warning CS20065: 'Implicit.M()' overrides or implements the [Pure] member 'I.M()', so it must be pure too, but it is not marked [Pure], and a C# file is not checked. Move it to a Sharper file and mark it [Pure].
+                //     public virtual int M() => 1;
+                Diagnostic(ErrorCode.WRN_SharperPureOverrideNotPure, "M").WithArguments("Implicit.M()", "I.M()").WithLocation(3, 24),
+                // b.cs(4,24): warning CS20065: 'Implicit.P' overrides or implements the [Pure] member 'I.P', so it must be pure too, but it is not marked [Pure], and a C# file is not checked. Move it to a Sharper file and mark it [Pure].
+                //     public virtual int P => 2;
+                Diagnostic(ErrorCode.WRN_SharperPureOverrideNotPure, "P").WithArguments("Implicit.P", "I.P").WithLocation(4, 24),
+                // a.cx(20,25): error CS20064: 'Reimplements.M()' overrides or implements the [Pure] member 'I.M()', so it must be marked [Pure] too.
+                //     public override int M() => 3;
+                Diagnostic(ErrorCode.ERR_SharperPureOverrideNotPure, "M").WithArguments("Reimplements.M()", "I.M()").WithLocation(20, 25),
+                // a.cx(21,25): error CS20064: 'Reimplements.P' overrides or implements the [Pure] member 'I.P', so it must be marked [Pure] too.
+                //     public override int P => 4;
+                Diagnostic(ErrorCode.ERR_SharperPureOverrideNotPure, "P").WithArguments("Reimplements.P", "I.P").WithLocation(21, 25),
+                // a.cx(28,48): error CS20050: 'C.CallsFree(Explicit)' is marked [Pure], but it is not pure: 'e.M()' calls 'Explicit.M()', which is not known to be pure.
+                //     [Pure] static int CallsFree(Explicit e) => e.M();
+                Diagnostic(ErrorCode.ERR_SharperPureNotPure, "e.M()").WithArguments("C.CallsFree(Explicit)", "'e.M()' calls 'Explicit.M()', which is not known to be pure").WithLocation(28, 48));
         }
 
         [Fact]
@@ -1120,10 +1177,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                     [Pure] static int CallsImplementation(CSharpDerived d) => d.M();
                 }
                 """;
-            CreateImmutableCompilation(consumer, references: [libraryComp.EmitToImageReference(), csharpComp.EmitToImageReference()]).VerifyDiagnostics(
-                // (4,63): error CS20050: 'C.CallsImplementation(CSharpDerived)' is marked [Pure], but it is not pure: 'd.M()' calls 'CSharpDerived.M()', which is not known to be pure.
-                //     [Pure] static int CallsImplementation(CSharpDerived d) => d.M();
-                Diagnostic(ErrorCode.ERR_SharperPureNotPure, "d.M()").WithArguments("C.CallsImplementation(CSharpDerived)", "'d.M()' calls 'CSharpDerived.M()', which is not known to be pure").WithLocation(4, 63));
+            CreateImmutableCompilation(consumer, references: [libraryComp.EmitToImageReference(), csharpComp.EmitToImageReference()]).VerifyDiagnostics();
 
             // In a mixed compilation, the C# file gets the warning for a slot from metadata too.
             CreateMixedPurityCompilation("class Sharper { }", csharp, references: [libraryComp.EmitToImageReference()]).VerifyDiagnostics(

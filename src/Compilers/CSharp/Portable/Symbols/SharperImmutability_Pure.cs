@@ -33,15 +33,21 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         }
 
         /// <summary>
-        /// Whether the slot of a method is <c>[Pure]</c>: the method is declared <c>[Pure]</c>, or it overrides, directly
-        /// or not, a member that is. Every override of a <c>[Pure]</c> slot is under its contract, also one that is not
-        /// marked because it comes from a C# file or another assembly, which are trusted.
+        /// Whether the slot of a method is <c>[Pure]</c>: the method is declared <c>[Pure]</c>, it implements a
+        /// <c>[Pure]</c> interface member for its own type, or it overrides, directly or not, a member that does either.
+        /// Every override and implementation of a <c>[Pure]</c> slot is under its contract, also one that is not marked
+        /// because it comes from a C# file or another assembly, which are trusted. A member that once filled a
+        /// <c>[Pure]</c> slot stays one for its overrides, even where a derived type implements the interface member
+        /// with another member.
         /// </summary>
-        internal static bool IsPureSlot(MethodSymbol method)
+        internal bool IsPureSlot(MethodSymbol method)
             => FindPureSlot(method) is not null;
 
-        /// <summary>The nearest declaration that makes a method's slot <c>[Pure]</c>: the method itself, or the nearest member it overrides.</summary>
-        private static MethodSymbol? FindPureSlot(MethodSymbol method)
+        /// <summary>
+        /// The nearest declaration that makes a method's slot <c>[Pure]</c>: the method itself or the interface member it
+        /// implements, or the same for the nearest member it overrides.
+        /// </summary>
+        private MethodSymbol? FindPureSlot(MethodSymbol method)
         {
             for (MethodSymbol? current = method.OriginalDefinition; current is not null; current = current.OverriddenMethod?.OriginalDefinition)
             {
@@ -49,9 +55,58 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 {
                     return current;
                 }
+
+                if (FindImplementedPureInterfaceMember(current) is { } implemented)
+                {
+                    return implemented;
+                }
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// The <c>[Pure]</c> interface member that a method definition implements implicitly for its own type, if any. An
+        /// explicit implementation in the type takes the slot, so the type's public member of the same name is then free.
+        /// An implementation inherited from a base class is not the base member's slot: the base did not promise it.
+        /// </summary>
+        private MethodSymbol? FindImplementedPureInterfaceMember(MethodSymbol definition)
+        {
+            if (definition.IsExplicitInterfaceImplementation || definition.ContainingType is not { IsInterface: false } type)
+            {
+                return null;
+            }
+
+            if (_implementedPureInterfaceMembers.TryGetValue(definition, out var cached))
+            {
+                return cached;
+            }
+
+            MethodSymbol? found = null;
+            foreach (var @interface in type.AllInterfacesNoUseSiteDiagnostics)
+            {
+                foreach (var slotDefinition in GetPureInterfaceMembers(@interface.OriginalDefinition))
+                {
+                    // An implicit implementation has the interface member's name, accessors included.
+                    if (slotDefinition.Name == definition.Name)
+                    {
+                        var slot = slotDefinition.AsMember(@interface);
+                        if (type.FindImplementationForInterfaceMember(slot) is MethodSymbol implementation &&
+                            (object)implementation.OriginalDefinition == definition)
+                        {
+                            found = slotDefinition;
+                            break;
+                        }
+                    }
+                }
+
+                if (found is not null)
+                {
+                    break;
+                }
+            }
+
+            return _implementedPureInterfaceMembers.GetOrAdd(definition, found);
         }
 
         /// <summary>
@@ -60,7 +115,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         /// is the one answer for the <c>[Pure]</c> checker and for the observer rule of immutable types
         /// (<see cref="PurityWalker"/> in both modes), so the two cannot drift.
         /// </summary>
-        internal static bool IsPure(MethodSymbol method)
+        internal bool IsPure(MethodSymbol method)
             => IsAssumedPure(method) ||
                IsPureSlot(method) ||
                IsAttestedMethod(method) ||
@@ -383,7 +438,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                         implementation.ContainingType.IsInterface ||
                         implementation.IsExplicitInterfaceImplementation ||
                         MakesPureClaim(implementation) ||
-                        IsPureSlot(implementation))
+                        (implementation.IsOverride && implementation.OverriddenMethod is { } overridden && FindPureSlot(overridden) is not null))
                     {
                         // An interface's own implementation and an explicit one are checked where they are declared, and
                         // an override of a [Pure] slot by the override rule.

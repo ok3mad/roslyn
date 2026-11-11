@@ -403,7 +403,8 @@ implementation plan, "Feature 3"):
    overrides, read `ExplicitInterfaceImplementations`, and ask `FindImplementationForInterfaceMember` for every
    interface of the type to find implicit implementations, also one inherited from a base class, which is reported on
    the type that declares the interface. On the call side, a call binds to the most derived override visible on the
-   receiver, not to the slot, so the query walks the overridden members too (`IsPureSlot`). An error in a Sharper file is
+   receiver, not to the slot, so the query walks the overridden members and asks the interface map of each one's own
+   type (`IsPureSlot`); a member that filled the slot once stays one for its overrides. An error in a Sharper file is
    a warning in a C# file of the same compilation, where the attribute does not bind; skip the members the compiler
    writes.
 

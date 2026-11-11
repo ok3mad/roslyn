@@ -67,6 +67,9 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         /// <summary>The [Pure] slots of each interface definition (<see cref="GetPureInterfaceMembers"/>).</summary>
         private readonly ConcurrentDictionary<NamedTypeSymbol, ImmutableArray<MethodSymbol>> _pureInterfaceMembers = new ConcurrentDictionary<NamedTypeSymbol, ImmutableArray<MethodSymbol>>(ReferenceEqualityComparer.Instance);
 
+        /// <summary>The [Pure] interface member each method definition implements, or null (<see cref="FindImplementedPureInterfaceMember"/>).</summary>
+        private readonly ConcurrentDictionary<MethodSymbol, MethodSymbol?> _implementedPureInterfaceMembers = new ConcurrentDictionary<MethodSymbol, MethodSymbol?>(ReferenceEqualityComparer.Instance);
+
         internal SharperImmutability(CSharpCompilation compilation)
         {
             _compilation = compilation;
@@ -1451,7 +1454,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             /// </summary>
             private bool IsPureByClaim(MethodSymbol method)
                 => IsAssumedPure(method) ||
-                   (IsPure(method) &&
+                   (_owner.IsPure(method) &&
                     (_isMember || _allowsCreation || _owner.CheckType(method.ReturnType, exact: false, _definition, _localOnly) == TypeFailure.None));
 
             private static bool IsVirtualDispatch(MethodSymbol method)
