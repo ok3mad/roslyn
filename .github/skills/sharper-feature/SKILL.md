@@ -419,6 +419,12 @@ compiler-generated, that has the parameter's syntax; look through it, not throug
 is recorded during that binding: P5's overloaded calls have overload resolution record, on the placeholder, the
 candidates that are applicable with the placeholder in place (`OverloadResolution.RecordSharperPlaceholderCandidates`),
 keyed by argument syntax and binding owner (trap 40).
+A source that binds other members' bodies (P7b: a private method's conversions anywhere in its type) binds each with a
+placeholder for that body's own member, so that its signature and inferred return type are not read, and replaces every
+member that infers the same way by a stand-in in those bindings, not only the one being inferred: another one would start
+its own inference, bind the same body again and find the first in progress, a cycle that depends on the order. Tell
+these bindings apart by their root binder (`ConversionFrame.IsInBinding`), not by the containing member: a nested
+inferred return type binds the same body with the same member.
 
 ## Testing
 

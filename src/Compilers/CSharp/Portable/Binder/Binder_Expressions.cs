@@ -12112,8 +12112,10 @@ namespace Microsoft.CodeAnalysis.CSharp
             if (node.ResultKind == LookupResultKind.Viable)
             {
                 var methods = ArrayBuilder<MethodSymbol>.GetInstance(capacity: node.Methods.Length);
-                foreach (var memberMethod in node.Methods)
+                foreach (var nodeMethod in node.Methods)
                 {
+                    // Sharper: a body bound for the conversions of a private method reads its stand-in (step P7b).
+                    var memberMethod = SharperInferredParameterType.GetConversionStandIn(this, nodeMethod);
                     switch (node.ReceiverOpt)
                     {
                         case BoundTypeOrValueExpression:

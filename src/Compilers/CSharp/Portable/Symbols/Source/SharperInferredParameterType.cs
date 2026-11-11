@@ -48,7 +48,9 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         /// <summary>
         /// The inferences in progress on this thread, innermost last: a <see cref="ParameterSyntax"/> for a type inferred
         /// from a default value, a member declaration (or the declarator of a field-like event) for types copied from the
-        /// member that it overrides or implements (step P2).
+        /// member that it overrides or implements (step P2), a parameter list for types inferred from a body (P4) or a local
+        /// function's conversions (P7), and a method's return type syntax for types inferred from the conversions of a
+        /// private method (P7b).
         /// </summary>
         [ThreadStatic] private static List<SyntaxNode>? s_inProgress;
 
@@ -74,10 +76,10 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             // Step P2: the types copied from the member that a method, property, indexer or operator overrides or implements.
             GetOverriddenSignature(owner);
 
-            // Step P7 infers a local function's parameters from the delegate types it is converted to
-            // (GetResultFromConversions); local functions hold no signature lock and infer on demand.
-            // PROTOTYPE(sharper): P7 for private members (#207), the delegate types a member is converted to, goes here:
-            // after P2 and P1, before the body.
+            // Step P7b: the delegate types that a private method is converted to in the bodies of its type. Step P7 infers a
+            // local function's parameters the same way (GetResultFromConversions); local functions hold no signature lock
+            // and infer on demand.
+            GetMemberConversionInference(owner);
 
             // Steps P4 to P6: the types that the uses in the body give the parameters that have none of the sources above.
             GetBodyInference(owner);
@@ -105,8 +107,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             {
                 // A parameter of a method that overrides or implements a member takes its type from there instead
                 // (GetOverriddenSignature, in ParameterHelpers.MakeParameter). Otherwise the uses in the body may give it
-                // (steps P4 to P6), the delegate types a local function is converted to (step P7), or the parameter has no
-                // source. A local function has no body source, and a member no conversion source yet.
+                // (steps P4 to P6), the delegate types a local function (step P7) or a private method (step P7b) is converted
+                // to, which come first, or the parameter has no source. A local function has no body source.
                 if ((GetResultFromConversions(owner, parameter) ?? GetResultFromBody(owner, parameter)) is { } inferred)
                 {
                     diagnostics.AddRange(inferred.Diagnostics, allowMismatchInDependencyAccumulation: true);
@@ -196,7 +198,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         /// The results are decided for the whole cycle (<see cref="CSharpCompilation.SharperInferenceCycleResults"/>)
         /// before any is published. Once one is published, another thread can complete a signature with it and compute a
         /// member of the cycle without seeing the cycle (an override that copies the error type of its base's parameter);
-        /// such a thread then publishes the decided result instead of its own (<see cref="Publish"/>).
+        /// such a thread then publishes the decided result instead of its own (<see cref="Publish{TNode, TResult}(ConditionalWeakTable{TNode, TResult}, CSharpCompilation, TNode, SyntaxNode, TResult)"/>).
         /// </remarks>
         private static void PublishCycle(CSharpCompilation compilation, List<SyntaxNode> inProgress, int cycleStart)
         {
@@ -207,6 +209,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 {
                     ParameterSyntax parameter => CreateCycleResult(parameter, compilation),
                     ParameterListSyntax parameterList => BodyInference.CreateCycle(parameterList, compilation),
+                    TypeSyntax { Parent: MethodDeclarationSyntax method } returnType when method.ReturnType == returnType => CreateConversionCycle(method, compilation),
                     CSharpSyntaxNode member => OverriddenSignature.CreateCycle(member),
                     _ => throw ExceptionUtilities.UnexpectedValue(node),
                 });
@@ -221,6 +224,9 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                         break;
                     case ParameterListSyntax parameterList:
                         Publish(compilation.SharperBodyInferences, compilation, parameterList, (BodyInference)decided.GetValue(parameterList, _ => throw ExceptionUtilities.Unreachable()));
+                        break;
+                    case TypeSyntax { Parent: MethodDeclarationSyntax method } returnType when method.ReturnType == returnType:
+                        Publish(compilation.SharperConversionInferences, compilation, method.ParameterList, returnType, (BodyInference)decided.GetValue(returnType, _ => throw ExceptionUtilities.Unreachable()));
                         break;
                     case CSharpSyntaxNode member:
                         Publish(compilation.SharperOverriddenSignatures, compilation, member, (OverriddenSignature)decided.GetValue(member, _ => throw ExceptionUtilities.Unreachable()));
@@ -239,7 +245,19 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             where TNode : SyntaxNode
             where TResult : class
         {
-            return results.GetValue(node, _ => compilation.SharperInferenceCycleResults.TryGetValue(node, out object? decided) ? (TResult)decided : result);
+            return Publish(results, compilation, node, node, result);
+        }
+
+        /// <summary>
+        /// Publishes <paramref name="result"/> for <paramref name="node"/>, where a cycle result is decided under
+        /// <paramref name="key"/>, the inference's key on the stack: step P7b keeps its results by parameter list, which
+        /// is step P4's key, and is on the stack as the method's return type syntax.
+        /// </summary>
+        private static TResult Publish<TNode, TResult>(ConditionalWeakTable<TNode, TResult> results, CSharpCompilation compilation, TNode node, SyntaxNode key, TResult result)
+            where TNode : SyntaxNode
+            where TResult : class
+        {
+            return results.GetValue(node, _ => compilation.SharperInferenceCycleResults.TryGetValue(key, out object? decided) ? (TResult)decided : result);
         }
 
         private static Result CreateCycleResult(ParameterSyntax parameter, CSharpCompilation compilation)

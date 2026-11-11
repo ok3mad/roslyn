@@ -162,7 +162,11 @@ namespace Microsoft.CodeAnalysis.CSharp
             var placeholder = _binder.ContainingMember() as SharperPlaceholderMethodSymbol;
             placeholder?.ReplaceOriginal(methods);
 
-            // Sharper: the delegate types a local function whose parameter types are being inferred is converted to (step P7).
+            // Sharper: a body bound for the conversions of a private method calls its stand-in, not the method (step P7b).
+            SharperInferredParameterType.ReplaceByConversionStandIns(_binder, methods);
+
+            // Sharper: the delegate types a local function (step P7) or private method (step P7b) whose parameter types are
+            // being inferred is converted to.
             if ((options & (Options.IsMethodGroupConversion | Options.IsFunctionPointerResolution)) == Options.IsMethodGroupConversion)
             {
                 SharperInferredParameterType.RecordMethodGroupConversion(_binder, methods, arguments);

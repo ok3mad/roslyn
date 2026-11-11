@@ -193,7 +193,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         public void InferFromConversions_PinsNothing()
         {
             // A conversion to a type with no known parameter types, a call, a conversion that does not fit the signature, and
-            // members (inference from callers) pin nothing.
+            // members other than private methods (inference from callers; private methods are step P7b) pin nothing.
             var source = """
                 using System;
 
@@ -210,7 +210,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                     void Unfixed() { Apply(F); string F(infer x) => ""; }
                     void Lambda() { Func<int, string> f = (infer x) => ""; }
 
-                    static string Member(infer x) => "";
+                    public static string Member(infer x) => "";
                     void UsesMember() { Func<int, string> f = Member; }
                 }
                 """;
@@ -255,9 +255,9 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (14,44): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and nothing else gives its type. Write the parameter type.
                 //     void Lambda() { Func<int, string> f = (infer x) => ""; }
                 Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "nothing else gives its type").WithLocation(14, 44),
-                // (16,26): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and the body does not use it. Write the parameter type.
-                //     static string Member(infer x) => "";
-                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "the body does not use it").WithLocation(16, 26),
+                // (16,33): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and the body does not use it. Write the parameter type.
+                //     public static string Member(infer x) => "";
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "infer").WithArguments("x", "the body does not use it").WithLocation(16, 33),
                 // (17,47): error CS0123: No overload for 'Member' matches delegate 'Func<int, string>'
                 //     void UsesMember() { Func<int, string> f = Member; }
                 Diagnostic(ErrorCode.ERR_MethDelegateMismatch, "Member").WithArguments("Member", "System.Func<int, string>").WithLocation(17, 47));
