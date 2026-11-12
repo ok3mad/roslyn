@@ -544,3 +544,516 @@ public sealed class SharperWriteInferredTypeCodeFixTests(ITestOutputHelper logge
             }
             """), TestParameters.Default);
 }
+
+/// <summary>#201: the fix for CS20027 offers exactly the types its message lists.</summary>
+[Trait(Traits.Feature, Traits.Features.CodeActionsUseExplicitType)]
+public sealed class SharperWriteInferredTypeExactListTests(ITestOutputHelper logger) : AbstractCSharpDiagnosticProviderBasedUserDiagnosticTest_NoEditor(logger)
+{
+    private static readonly TestParameters s_sharper = new(parseOptions: SharperTestOptions.Sharper);
+
+    internal override (DiagnosticAnalyzer?, CodeFixProvider) CreateDiagnosticProviderAndFixer(Workspace workspace)
+        => (null, new SharperWriteInferredTypeCodeFixProvider());
+
+    [Fact]
+    public Task CS20027_CandidatesDisagree_LeavesOutRuledOutCandidates()
+        // The third 'Format' takes no string as its second argument, so the compiler lists only 'int' and 'double'.
+        => TestExactActionSetOfferedAsync("""
+            class C
+            {
+                static string Format(int value, string format) => "";
+                static string Format(double value, string format) => "";
+                static string Format(long value, int width) => "";
+                static string F([|infer|] n) => Format(n, "N2");
+            }
+            """, [SharperTestOptions.Title("int"), SharperTestOptions.Title("double")], s_sharper);
+
+    [Fact]
+    public Task CS20027_CandidatesDisagree_KeepsNullableAnnotation()
+        => TestExactActionSetOfferedAsync("""
+            #nullable enable
+            class C
+            {
+                static string Format(string? value, string format) => "";
+                static string Format(int value, string format) => "";
+                static string Format(long value, int width) => "";
+                static string F([|infer|] n) => Format(n, "N2");
+            }
+            """, [SharperTestOptions.Title("string?"), SharperTestOptions.Title("int")], s_sharper);
+
+    [Fact]
+    public Task CS20027_CandidatesDisagree_GenericType()
+        => TestExactActionSetOfferedAsync("""
+            using System.Collections.Generic;
+            class C
+            {
+                static void Add(List<int> list, string s) { }
+                static void Add(int[] array, string s) { }
+                static void Add(long[] array, int i) { }
+                static void F([|infer|] items) => Add(items, "");
+            }
+            """, [SharperTestOptions.Title("List<int>"), SharperTestOptions.Title("int[]")], s_sharper);
+}
+
+/// <summary>#201 and P8: "Make 'F' generic" for CS20027.</summary>
+[Trait(Traits.Feature, Traits.Features.CodeActionsUseExplicitType)]
+public sealed class SharperMakeGenericCodeFixTests(ITestOutputHelper logger) : AbstractCSharpDiagnosticProviderBasedUserDiagnosticTest_NoEditor(logger)
+{
+    private static readonly TestParameters s_sharper = new(parseOptions: SharperTestOptions.Sharper);
+
+    private static string Title(string name) => string.Format(CSharpFeaturesResources.Make_0_generic, name);
+
+    internal override (DiagnosticAnalyzer?, CodeFixProvider) CreateDiagnosticProviderAndFixer(Workspace workspace)
+        => (null, new SharperMakeGenericCodeFixProvider());
+
+    [Fact]
+    public Task NotUsed()
+        => TestAsync("""
+            class C
+            {
+                static void F([|infer|] x) { }
+            }
+            """, """
+            class C
+            {
+                static void F<T>(T x) { }
+            }
+            """, s_sharper);
+
+    [Fact]
+    public Task Title_NamesTheMethod()
+        => TestExactActionSetOfferedAsync("""
+            class C
+            {
+                static void Log([|infer|] x) { }
+            }
+            """, [Title("Log")], s_sharper);
+
+    [Fact]
+    public Task PassedToGenericMethod()
+        => TestAsync("""
+            using System.Collections.Generic;
+            class C
+            {
+                static List<U> Wrap<U>(U u) => [u];
+                static int Count([|infer|] value) => Wrap(value).Count;
+                static int M() => Count(1) + Count("");
+            }
+            """, """
+            using System.Collections.Generic;
+            class C
+            {
+                static List<U> Wrap<U>(U u) => [u];
+                static int Count<T>(T value) => Wrap(value).Count;
+                static int M() => Count(1) + Count("");
+            }
+            """, s_sharper);
+
+    [Fact]
+    public Task Interpolation()
+        => TestAsync("""
+            class C
+            {
+                static string Show([|infer|] x) => $"<{x}>";
+            }
+            """, """
+            class C
+            {
+                static string Show<T>(T x) => $"<{x}>";
+            }
+            """, s_sharper);
+
+    [Fact]
+    public Task AlreadyGeneric()
+        => TestAsync("""
+            class C
+            {
+                static void F<U>(U u, [|infer|] x) { }
+            }
+            """, """
+            class C
+            {
+                static void F<U, T>(U u, T x) { }
+            }
+            """, s_sharper);
+
+    [Fact]
+    public Task LocalFunction()
+        => TestAsync("""
+            class C
+            {
+                void M()
+                {
+                    void Log([|infer|] x) { }
+                    Log(1);
+                }
+            }
+            """, """
+            class C
+            {
+                void M()
+                {
+                    void Log<T>(T x) { }
+                    Log(1);
+                }
+            }
+            """, s_sharper);
+
+    [Fact]
+    public Task NameClash_UsesParameterName()
+        => TestAsync("""
+            class C<T>
+            {
+                static void F([|infer|] value) { }
+            }
+            """, """
+            class C<T>
+            {
+                static void F<TValue>(TValue value) { }
+            }
+            """, s_sharper);
+
+    [Fact]
+    public Task Missing_NameClash_BothNames()
+        => TestMissingAsync("""
+            class C<T, TValue>
+            {
+                static void F([|infer|] value) { }
+            }
+            """, s_sharper);
+
+    [Fact]
+    public Task NameClash_Local_UsesParameterName()
+        => TestAsync("""
+            class C
+            {
+                static void F([|infer|] x) { var T = 1; }
+            }
+            """, """
+            class C
+            {
+                static void F<TX>(TX x) { var T = 1; }
+            }
+            """, s_sharper);
+
+    [Fact]
+    public Task Missing_MemberAccess()
+        // 'T' has no 'Length'.
+        => TestMissingAsync("""
+            class C
+            {
+                static int F([|infer|] x) => x.Length;
+            }
+            """, s_sharper);
+
+    [Fact]
+    public Task Missing_CandidatesDisagree()
+        => TestMissingAsync("""
+            class C
+            {
+                static string Format(int value, string format) => "";
+                static string Format(double value, string format) => "";
+                static string F([|infer|] n) => Format(n, "N2");
+            }
+            """, s_sharper);
+
+    [Fact]
+    public Task Missing_CallGivesNoTypeArgument()
+        // F(null) cannot infer 'T'.
+        => TestMissingAsync("""
+            class C
+            {
+                static void F([|infer|] x) { }
+                static void M() => F(null);
+            }
+            """, s_sharper);
+
+    [Fact]
+    public Task Missing_Virtual()
+        => TestMissingAsync("""
+            class C
+            {
+                public virtual void F([|infer|] x) { }
+            }
+            """, s_sharper);
+
+    [Fact]
+    public Task Missing_Lambda()
+        => TestMissingAsync("""
+            using System;
+            class C
+            {
+                Action<int> a = ([|infer|] x) => { };
+            }
+            """, s_sharper);
+
+    [Fact]
+    public Task CxDocument()
+        => TestAsync(SharperTestOptions.InCxDocument("""
+            class C
+            {
+                static void F([|infer|] x) { }
+            }
+            """), SharperTestOptions.CrLf("""
+            class C
+            {
+                static void F<T>(T x) { }
+            }
+            """), TestParameters.Default);
+
+    [Fact]
+    public Task Missing_PlainCSharp()
+        // Without Sharper, 'infer' is a type name (CS0246), and there is nothing to fix here.
+        => TestMissingAsync("""
+            class C
+            {
+                static void F([|infer|] x) { }
+            }
+            """);
+}
+
+/// <summary>#201: write a type for CS20014, CS20024 and CS20026 (nothing to infer).</summary>
+[Trait(Traits.Feature, Traits.Features.CodeActionsUseExplicitType)]
+public sealed class SharperWriteTypeForNothingToInferCodeFixTests(ITestOutputHelper logger) : AbstractCSharpDiagnosticProviderBasedUserDiagnosticTest_NoEditor(logger)
+{
+    private static readonly TestParameters s_sharper = new(parseOptions: SharperTestOptions.Sharper);
+
+    internal override (DiagnosticAnalyzer?, CodeFixProvider) CreateDiagnosticProviderAndFixer(Workspace workspace)
+        => (null, new SharperWriteTypeForNothingToInferCodeFixProvider());
+
+    [Fact]
+    public Task CS20014_Null()
+        => TestAsync("""
+            class C
+            {
+                static infer F() => [|null|];
+            }
+            """, """
+            class C
+            {
+                static object F() => null;
+            }
+            """, s_sharper);
+
+    [Fact]
+    public Task CS20014_Null_NullableEnabled()
+        => TestAsync("""
+            #nullable enable
+            class C
+            {
+                static infer F() => [|null|];
+            }
+            """, """
+            #nullable enable
+            class C
+            {
+                static object? F() => null;
+            }
+            """, s_sharper);
+
+    [Fact]
+    public Task CS20014_Default_Block()
+        => TestAsync("""
+            class C
+            {
+                static infer F() { return [|default|]; }
+            }
+            """, """
+            class C
+            {
+                static object F() { return default; }
+            }
+            """, s_sharper);
+
+    [Fact]
+    public Task CS20014_Throw()
+        => TestAsync("""
+            using System;
+            class C
+            {
+                static infer F() => [|throw new InvalidOperationException()|];
+            }
+            """, """
+            using System;
+            class C
+            {
+                static object F() => throw new InvalidOperationException();
+            }
+            """, s_sharper);
+
+    [Fact]
+    public Task CS20014_Async()
+        => TestAsync("""
+            #nullable enable
+            using System.Threading.Tasks;
+            class C
+            {
+                static async infer F() { await Task.Yield(); return [|null|]; }
+            }
+            """, """
+            #nullable enable
+            using System.Threading.Tasks;
+            class C
+            {
+                static async Task<object?> F() { await Task.Yield(); return null; }
+            }
+            """, s_sharper);
+
+    [Fact]
+    public Task CS20014_LocalFunction()
+        => TestAsync("""
+            class C
+            {
+                void M()
+                {
+                    infer F() => [|null|];
+                }
+            }
+            """, """
+            class C
+            {
+                void M()
+                {
+                    object F() => null;
+                }
+            }
+            """, s_sharper);
+
+    [Fact]
+    public Task CS20014_Missing_Lambda()
+        // 'object' would not take a lambda.
+        => TestMissingAsync("""
+            class C
+            {
+                static infer F() => [|x => x|];
+            }
+            """, s_sharper);
+
+    [Fact]
+    public Task CS20024_OffersEachTypeTheBaseClassAndObject()
+        => TestExactActionSetOfferedAsync("""
+            class Animal { }
+            class Dog : Animal { }
+            class Cat : Animal { }
+            class C
+            {
+                static [|infer|] Pick(bool dog) { if (dog) return new Dog(); return new Cat(); }
+            }
+            """, [SharperTestOptions.Title("Dog"), SharperTestOptions.Title("Cat"), SharperTestOptions.Title("Animal"), SharperTestOptions.Title("object")], s_sharper);
+
+    [Fact]
+    public Task CS20024_WritesTheBaseClass()
+        => TestAsync("""
+            class Animal { }
+            class Dog : Animal { }
+            class Cat : Animal { }
+            class C
+            {
+                static [|infer|] Pick(bool dog) { if (dog) return new Dog(); return new Cat(); }
+            }
+            """, """
+            class Animal { }
+            class Dog : Animal { }
+            class Cat : Animal { }
+            class C
+            {
+                static Animal Pick(bool dog) { if (dog) return new Dog(); return new Cat(); }
+            }
+            """, s_sharper.WithIndex(2));
+
+    [Fact]
+    public Task CS20024_NoBaseClass()
+        => TestExactActionSetOfferedAsync("""
+            class C
+            {
+                static [|infer|] F(bool b) { if (b) return 1; return ""; }
+            }
+            """, [SharperTestOptions.Title("int"), SharperTestOptions.Title("string"), SharperTestOptions.Title("object")], s_sharper);
+
+    [Fact]
+    public Task CS20024_WithNull_Nullable()
+        => TestExactActionSetOfferedAsync("""
+            #nullable enable
+            class C
+            {
+                static [|infer|] F(int i) { if (i == 0) return 1; if (i == 1) return ""; return null; }
+            }
+            """, [SharperTestOptions.Title("int?"), SharperTestOptions.Title("string?"), SharperTestOptions.Title("object?")], s_sharper);
+
+    [Fact]
+    public Task CS20024_IgnoresNestedFunctions()
+        => TestExactActionSetOfferedAsync("""
+            using System;
+            class C
+            {
+                static [|infer|] F(bool b)
+                {
+                    Func<long> f = () => { return 1L; };
+                    if (b) return 1;
+                    return "";
+                }
+            }
+            """, [SharperTestOptions.Title("int"), SharperTestOptions.Title("string"), SharperTestOptions.Title("object")], s_sharper);
+
+    [Fact]
+    public Task CS20024_Iterator()
+        => TestExactActionSetOfferedAsync("""
+            using System.Collections.Generic;
+            class C
+            {
+                static [|infer|] F() { yield return 1; yield return ""; }
+            }
+            """, [SharperTestOptions.Title("IEnumerable<int>"), SharperTestOptions.Title("IEnumerable<string>"), SharperTestOptions.Title("IEnumerable<object>")], s_sharper);
+
+    [Fact]
+    public Task CS20026_Null()
+        => TestAsync("""
+            class C
+            {
+                void F(infer x = [|null|]) { }
+            }
+            """, """
+            class C
+            {
+                void F(object x = null) { }
+            }
+            """, s_sharper);
+
+    [Fact]
+    public Task CS20026_Default_NullableEnabled()
+        => TestAsync("""
+            #nullable enable
+            class C
+            {
+                void F(infer x = [|default|]) { }
+            }
+            """, """
+            #nullable enable
+            class C
+            {
+                void F(object? x = default) { }
+            }
+            """, s_sharper);
+
+    [Fact]
+    public Task CxDocument()
+        => TestAsync(SharperTestOptions.InCxDocument("""
+            class C
+            {
+                void F(infer x = [|null|]) { }
+            }
+            """), SharperTestOptions.CrLf("""
+            class C
+            {
+                void F(object x = null) { }
+            }
+            """), TestParameters.Default);
+
+    [Fact]
+    public Task Missing_PlainCSharp()
+        => TestMissingAsync("""
+            class C
+            {
+                void F(infer x = [|null|]) { }
+            }
+            """);
+}

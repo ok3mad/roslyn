@@ -324,6 +324,12 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         }
 
         /// <summary>
+        /// The <see cref="Diagnostic.Properties"/> key of CS20027 that lists the types the disagreeing candidates take
+        /// (documentation comment reference IDs, one per line). The IDE fix that writes the parameter type reads it.
+        /// </summary>
+        internal const string CandidateTypesPropertyName = "SharperInferCandidateTypes";
+
+        /// <summary>
         /// The type of <paramref name="parameter"/> from the uses that pin it: none is CS20027, which says why with the
         /// first use that pins nothing (or <paramref name="noUseReason"/>), uses that agree give their type, and uses that
         /// disagree are CS20057, naming the first two that differ. Uses that the parameter flows into merge their
@@ -333,7 +339,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         private static Result DecideFromUses(
             ParameterSyntax parameter,
             ArrayBuilder<PinningUse>? uses,
-            (SyntaxNode Syntax, IFormattable Reason)? firstNotPinning,
+            (SyntaxNode Syntax, IFormattable Reason, ImmutableArray<TypeSymbol> Types)? firstNotPinning,
             BindingDiagnosticBag dependencies,
             CSharpCompilation compilation,
             IFormattable? noUseReason = null,
@@ -344,13 +350,14 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             if (uses is null or { Count: 0 })
             {
                 // Why nothing pinned the parameter: its first use that pins nothing, or no use.
-                if (firstNotPinning is var (syntax, reason))
+                if (firstNotPinning is var (syntax, reason, types))
                 {
                     var info = new CSDiagnosticInfo(
                         ErrorCode.ERR_SharperInferParameterNoDefault,
                         args: [parameter.Identifier.ValueText, reason],
                         symbols: ImmutableArray<Symbol>.Empty,
-                        additionalLocations: [syntax.Location]);
+                        additionalLocations: [syntax.Location],
+                        properties: getCandidateTypesProperty(types));
                     diagnostics.Add(info, parameter.Type!.Location);
                 }
                 else
@@ -394,6 +401,29 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             }
 
             return new Result(type, diagnostics.ToReadOnlyAndFree());
+
+            // The types that the candidates which disagree take (the list in the message), for the IDE fix that writes
+            // one of them: documentation comment reference IDs, one per line, in the order of the message.
+            static ImmutableDictionary<string, string>? getCandidateTypesProperty(ImmutableArray<TypeSymbol> types)
+            {
+                if (types.IsDefaultOrEmpty)
+                {
+                    return null;
+                }
+
+                var ids = ArrayBuilder<string>.GetInstance(types.Length);
+                foreach (var candidateType in types)
+                {
+                    if (!candidateType.IsErrorType() && DocumentationCommentId.CreateReferenceId(candidateType.GetPublicSymbol()) is { } id && !ids.Contains(id))
+                    {
+                        ids.Add(id);
+                    }
+                }
+
+                return ids.Count == 0
+                    ? null
+                    : ImmutableDictionary<string, string>.Empty.Add(CandidateTypesPropertyName, string.Join("\n", ids.ToArrayAndFree()));
+            }
 
             static ImmutableArray<Symbol> getSymbols(object first, object other)
                 => (first, other) switch
@@ -483,7 +513,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             internal readonly ArrayBuilder<PinningUse>?[] Uses;
 
             /// <summary>Per placeholder parameter, its first use that pins nothing, and why.</summary>
-            internal readonly (SyntaxNode Syntax, IFormattable Reason)?[] FirstNotPinning;
+            internal readonly (SyntaxNode Syntax, IFormattable Reason, ImmutableArray<TypeSymbol> Types)?[] FirstNotPinning;
 
             /// <summary>The lambda, local function or placeholder whose body is being walked (the owner of its binding).</summary>
             private Symbol? _owner;
@@ -493,7 +523,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 _targets = targets;
                 _owner = targets.IsEmpty ? null : targets[0].ContainingSymbol;
                 Uses = new ArrayBuilder<PinningUse>?[parameterCount];
-                FirstNotPinning = new (SyntaxNode, IFormattable)?[parameterCount];
+                FirstNotPinning = new (SyntaxNode, IFormattable, ImmutableArray<TypeSymbol>)?[parameterCount];
             }
 
             public override BoundNode? VisitLambda(BoundLambda node)
@@ -734,8 +764,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 return base.VisitParameter(node);
             }
 
-            private void NoteNotPinning(ParameterSymbol target, SyntaxNode syntax, IFormattable reason)
-                => FirstNotPinning[target.Ordinal] ??= (syntax, reason);
+            private void NoteNotPinning(ParameterSymbol target, SyntaxNode syntax, IFormattable reason, ImmutableArray<TypeSymbol> types = default)
+                => FirstNotPinning[target.Ordinal] ??= (syntax, reason, types);
 
             /// <summary>
             /// The uses in a call with several candidates (step P5): each argument that is a parameter being inferred pins
@@ -822,6 +852,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 else
                 {
                     var list = ArrayBuilder<MessageFragment>.GetInstance(candidates.Length);
+                    var types = ArrayBuilder<TypeSymbol>.GetInstance(candidates.Length);
                     var seen = PooledHashSet<string>.GetInstance();
                     foreach (var candidate in candidates)
                     {
@@ -830,11 +861,12 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                         if (seen.Add(member + "|" + candidateType + "|" + candidate.IsExpanded))
                         {
                             list.Add(new MessageFragment(candidate.IsExpanded ? MessageID.IDS_SharperInferCandidateTakesExpanded : MessageID.IDS_SharperInferCandidateTakes, [member, candidateType]));
+                            types.Add(candidate.Type.Type);
                         }
                     }
 
                     seen.Free();
-                    NoteNotPinning(target, syntax, new MessageFragment(MessageID.IDS_SharperInferCandidatesDisagree, [name, new MessageFragmentList(list.ToImmutableAndFree())]));
+                    NoteNotPinning(target, syntax, new MessageFragment(MessageID.IDS_SharperInferCandidatesDisagree, [name, new MessageFragmentList(list.ToImmutableAndFree())]), types.ToImmutableAndFree());
                 }
 
                 static bool isOneMethod(ImmutableArray<SharperPlaceholderCandidate> candidates)
