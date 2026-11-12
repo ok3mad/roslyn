@@ -176,7 +176,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
             foreach (var parameter in declaration.Parameters)
             {
-                if (parameter is { Type.IsInfer: true, Default: null })
+                if (parameter is { Type.IsInferOrValParameterType: true, Default: null })
                 {
                     return true;
                 }

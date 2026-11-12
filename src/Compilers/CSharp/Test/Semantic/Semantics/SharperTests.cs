@@ -5608,7 +5608,8 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         [Fact]
         public void ValLambda_NotInAnonymousMethodsOrLocalFunctions()
         {
-            // Their parameters are always explicitly typed, so val there is a type name, as in C#. Natural types need explicit
+            // An anonymous method's parameters are always explicitly typed, so val there is a type name, as in C#. A local
+            // function's val x is readonly infer x (#178), here with nothing to infer from. Natural types need explicit
             // parameter types too, as for (x) => x.
             var source = """
                 using System;
@@ -5628,12 +5629,12 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (6,35): error CS0246: The type or namespace name 'val' could not be found (are you missing a using directive or an assembly reference?)
                 //         Action<int> e = delegate (val x) { };
                 Diagnostic(ErrorCode.ERR_SingleTypeNameNotFound, "val").WithArguments("val").WithLocation(6, 35),
-                // (7,20): error CS0246: The type or namespace name 'val' could not be found (are you missing a using directive or an assembly reference?)
+                // (7,20): error CS20027: Cannot infer the type of parameter 'x', because it has no default value, and nothing else gives its type. Write the parameter type.
                 //         void Local(val x) { }
-                Diagnostic(ErrorCode.ERR_SingleTypeNameNotFound, "val").WithArguments("val").WithLocation(7, 20),
-                // (8,15): error CS1503: Argument 1: cannot convert from 'int' to 'val'
+                Diagnostic(ErrorCode.ERR_SharperInferParameterNoDefault, "val").WithArguments("x", "nothing else gives its type").WithLocation(7, 20),
+                // (8,15): error CS1503: Argument 1: cannot convert from 'int' to 'infer'
                 //         Local(1);
-                Diagnostic(ErrorCode.ERR_BadArgType, "1").WithArguments("1", "int", "val").WithLocation(8, 15),
+                Diagnostic(ErrorCode.ERR_BadArgType, "1").WithArguments("1", "int", "infer").WithLocation(8, 15),
                 // (9,17): error CS8917: The delegate type could not be inferred.
                 //         var f = (val x) => x;
                 Diagnostic(ErrorCode.ERR_CannotInferDelegateType, "(val x) => x").WithLocation(9, 17),

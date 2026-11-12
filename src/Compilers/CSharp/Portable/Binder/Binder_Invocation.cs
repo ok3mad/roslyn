@@ -2004,7 +2004,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             MessageID cause = local switch
             {
                 BoundLocal { LocalSymbol: SourceLocalSymbol { IsVal: false } } => MessageID.IDS_READONLYLOCAL,
-                BoundParameter { ParameterSymbol: SourceComplexParameterSymbolBase { IsSharperReadOnly: true } } => MessageID.IDS_READONLYPARAMETER,
+                BoundParameter { ParameterSymbol: SourceComplexParameterSymbolBase { IsSharperVal: false, IsSharperReadOnly: true } } => MessageID.IDS_READONLYPARAMETER,
                 _ => MessageID.IDS_VALLOCAL,
             };
             Error(diagnostics, ErrorCode.WRN_SharperValMemberCallOnCopy, local.Syntax, method, variable, cause.Localize());

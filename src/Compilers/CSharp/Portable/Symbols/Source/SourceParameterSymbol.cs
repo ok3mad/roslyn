@@ -47,6 +47,9 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             var name = identifier.ValueText;
             var location = new SourceLocation(name == "" ? syntax.Type : identifier);
 
+            // Sharper: 'val x' is 'readonly infer x' where no type named 'val' is in scope (#178).
+            bool isSharperVal = syntax.Type is { IsSharperValParameterType: true } valSyntax && context.IsSharperValKeyword(valSyntax);
+
             if (hasParamsModifier && parameterType.IsSZArray())
             {
                 // touch the constructor in order to generate proper use-site diagnostics
@@ -73,7 +76,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     hasParamsModifier: hasParamsModifier,
                     isParams: hasParamsModifier || isParamsFromOverriddenMember,
                     isExtensionMethodThis,
-                    scope);
+                    scope,
+                    isSharperVal);
             }
 
             if (!hasParamsModifier &&
@@ -84,6 +88,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 !owner.IsPartialMember() &&
                 scope == ScopedKind.None &&
                 !ParameterHelpers.IsSharperReadOnly(syntax) &&
+                !isSharperVal &&
                 syntax.Refinement == null)
             {
                 return new SourceSimpleParameterSymbol(owner, parameterType, ordinal, refKind, name, location);
@@ -101,7 +106,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 // Sharper: an 'infer' parameter copies 'params' from the member its method implements (step P2).
                 isParams: hasParamsModifier || isParamsFromOverriddenMember,
                 isExtensionMethodThis,
-                scope);
+                scope,
+                isSharperVal);
         }
 
         protected SourceParameterSymbol(
@@ -144,7 +150,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     hasParamsModifier: HasParamsModifier,
                     isParams: newIsParams,
                     this.IsExtensionMethodThis,
-                    this.DeclaredScope);
+                    this.DeclaredScope,
+                    isSharperVal: this is SourceComplexParameterSymbolBase { IsSharperVal: true });
             }
 
             // Local functions should never have custom modifiers
@@ -162,7 +169,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 hasParamsModifier: HasParamsModifier,
                 isParams: newIsParams,
                 this.IsExtensionMethodThis,
-                this.DeclaredScope);
+                this.DeclaredScope,
+                isSharperVal: this is SourceComplexParameterSymbolBase { IsSharperVal: true });
         }
 
         internal sealed override bool RequiresCompletion

@@ -188,7 +188,8 @@ implementation plan, "Feature 3"):
    explicitly typed parameter list, and `ParameterHelpers.CheckParameterModifiers` (CS9272 for `params`). Each needed the
    binder's decision, and the semantic model needed it too for `GetTypeInfo` on `val`. A decision made by lookup cannot
    be recomputed from syntax later, so it travels with the bound state (`UnboundLambdaState.ParameterIsSharperVal`) to
-   the symbol (`LambdaParameterSymbol.IsSharperVal`).
+   the symbol (`SourceComplexParameterSymbolBase.IsSharperVal`, which a method's `val x` sets too, from
+   `SourceParameterSymbol.Create`).
 20. **A modifier C# rejects may be rejected by the parser.** `readonly` on a local parses, but the parser attaches CS0106
    to the token, so no binder change can lift it. Gate the error in the parser, then add it back wherever the same
    modifier list builds another construct (`readonly` locals: the local function path and `const readonly`). Check that
@@ -209,7 +210,7 @@ implementation plan, "Feature 3"):
 22. **Simple symbols keep no syntax.** A rule read from a parameter's syntax needs the syntax on the symbol, but
    `SourceParameterSymbol.Create` makes a parameter with no modifiers, attributes or default a
    `SourceSimpleParameterSymbol`, which drops it. Add the condition there so such parameters stay complex
-   (`readonly` parameters), or carry the decision in a flag, as `LambdaParameterSymbol.IsSharperVal` does.
+   (`readonly` parameters, `val` method parameters), or carry the decision in a flag, as `IsSharperVal` does.
 
 23. **A signature inferred from a body must not be computed under the method-checks lock.** `MethodChecks` runs under a
    per-method lock (`LazyMethodChecks`) and reads the return type itself; binding a body there reads other methods'
