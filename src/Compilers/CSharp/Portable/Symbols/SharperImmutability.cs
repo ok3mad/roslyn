@@ -31,7 +31,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         Pure,
 
         /// <summary>
-        /// <c>SharperRefinementAttribute(string pattern)</c> on a refined parameter (<see cref="SharperRefinement"/>). The
+        /// <c>SharperRefinementAttribute(string pattern)</c> on a refined parameter or return (<see cref="SharperRefinement"/>). The
         /// compiler writes it; it is not an attribute name that binds in source (<see cref="SharperImmutability.TryGetAttributeKind"/>).
         /// </summary>
         Refinement,
@@ -63,6 +63,12 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         private readonly NamedTypeSymbol?[] _lazyAttributeTypes = new NamedTypeSymbol?[s_attributes.Length];
         private NamespaceSymbol? _lazyAttributeNamespace;
         private int _lazyHasSharperTrees;
+
+        /// <summary>The [Pure] slots of each interface definition (<see cref="GetPureInterfaceMembers"/>).</summary>
+        private readonly ConcurrentDictionary<NamedTypeSymbol, ImmutableArray<MethodSymbol>> _pureInterfaceMembers = new ConcurrentDictionary<NamedTypeSymbol, ImmutableArray<MethodSymbol>>(ReferenceEqualityComparer.Instance);
+
+        /// <summary>The [Pure] interface member each method definition implements, or null (<see cref="FindImplementedPureInterfaceMember"/>).</summary>
+        private readonly ConcurrentDictionary<MethodSymbol, MethodSymbol?> _implementedPureInterfaceMembers = new ConcurrentDictionary<MethodSymbol, MethodSymbol?>(ReferenceEqualityComparer.Instance);
 
         internal SharperImmutability(CSharpCompilation compilation)
         {
@@ -1200,6 +1206,10 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     case BoundWithExpression withExpression:
                         return IsPureWith(withExpression);
 
+                    case BoundValuePlaceholder:
+                        // The input of a predicate pattern (Feature 13, slice 2), a value the match already has.
+                        return true;
+
                     case BoundObjectInitializerExpression:
                     case BoundObjectOrCollectionValuePlaceholder:
                         // Only reached from a pure creation or 'with': the setters are checked by the assignments, and the
@@ -1413,12 +1423,12 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             private bool IsPureGetter(PropertySymbol property, BoundExpression? receiver)
             {
                 if (HasAttribute(property.OriginalDefinition, SharperImmutabilityAttribute.AssumePure) ||
-                    (property.GetMethod is { } getter && IsAssumedPure(getter)))
+                    (property.GetMethod is { } getter && IsPureByClaim(getter)))
                 {
                     return true;
                 }
 
-                if (_isMember && property.GetMethod is { } getMethod && (IsPureCallee(getMethod) || IsAttestedGetter(property) || IsReadableAutoProperty(property)))
+                if (_isMember && property.GetMethod is not null && IsReadableAutoProperty(property))
                 {
                     return true;
                 }
@@ -1440,9 +1450,16 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                    !IsVirtualDispatch(property.GetMethod!) &&
                    (!property.IsStatic || (source.SetMethod is null && _owner.IsImmutable(property.Type, exact: false)));
 
-            /// <summary>A <c>[Pure]</c> member, called without virtual dispatch.</summary>
-            private static bool IsPureCallee(MethodSymbol method)
-                => IsDeclaredPure(method) && !IsVirtualDispatch(method);
+            /// <summary>
+            /// A call of a member that is pure by a claim (<see cref="IsPure"/>), with or without virtual dispatch: every
+            /// override of a <c>[Pure]</c> slot is pure. A pure member may create and return a mutable object, so an
+            /// observer that may not create one (see <see cref="FindImpureExpression"/>) calls it only for a result of
+            /// an immutable type, from which nothing mutable can be reached. <c>[AssumePure]</c> vouches for the call anywhere.
+            /// </summary>
+            private bool IsPureByClaim(MethodSymbol method)
+                => IsAssumedPure(method) ||
+                   (_owner.IsPure(method) &&
+                    (_isMember || _allowsCreation || _owner.CheckType(method.ReturnType, exact: false, _definition, _localOnly) == TypeFailure.None));
 
             private static bool IsVirtualDispatch(MethodSymbol method)
                 => (method.IsVirtual || method.IsAbstract || (method.IsOverride && !method.IsSealed)) &&
@@ -1466,7 +1483,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     return IsConstructor && IsPureConstructor(method);
                 }
 
-                if (_isMember && (IsPureCallee(method) || IsAttestedMethod(method)))
+                if (IsPureByClaim(method))
                 {
                     return true;
                 }
@@ -1505,8 +1522,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             /// Operators are not observers. Those of the attested types are pure (decimal arithmetic, string equality)
             /// unless they create an object; others need [AssumePure].
             /// </summary>
-            private static bool IsPureOperator(MethodSymbol method)
-                => IsAssumedPure(method) ||
+            private bool IsPureOperator(MethodSymbol method)
+                => IsPureByClaim(method) ||
                    (IsAttested(method.ContainingType.OriginalDefinition, out _) && method.ReturnType.IsValueType);
 
             /// <summary>
@@ -1763,8 +1780,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         /// The checks of a source type declaration: a claim of <c>[Immutable]</c> is proven, a type in an
         /// <c>[ImmutableHierarchy]</c> is immutable, and <c>[Phantom]</c> and <c>[UnobservableWrite]</c> are used where
         /// they mean something. Only a project that writes a claim checks it, and only in Sharper files: consumers trust
-        /// claims. The exception is a C# type in a hierarchy declared in a Sharper file of the same compilation, which
-        /// gets a warning.
+        /// claims. The exceptions are a C# type in a hierarchy declared in a Sharper file of the same compilation, and a
+        /// C# member that overrides or implements a <c>[Pure]</c> member, which get a warning.
         /// </summary>
         internal static void CheckDeclaration(SourceMemberContainerTypeSymbol type, BindingDiagnosticBag diagnostics)
         {
@@ -1805,6 +1822,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
                 checker.CheckAttributeUses(type, isImmutable, diagnostics);
             }
+
+            checker.CheckPureOverrides(type, isSharper, diagnostics);
 
             if (type.TypeKind is TypeKind.Class or TypeKind.Struct &&
                 FindImmutableHierarchy(type, isSharper) is { } hierarchy &&

@@ -59,7 +59,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         private readonly ImmutableArray<TypeWithAnnotations> _typeArgumentsWithAnnotations;
         private readonly NamedTypeSymbol _constructedFrom;
 
-        internal ConstructedNamedTypeSymbol(NamedTypeSymbol constructedFrom, ImmutableArray<TypeWithAnnotations> typeArgumentsWithAnnotations, bool unbound = false, TupleExtraData tupleData = null)
+        internal ConstructedNamedTypeSymbol(NamedTypeSymbol constructedFrom, ImmutableArray<TypeWithAnnotations> typeArgumentsWithAnnotations, bool unbound = false, TupleExtraData tupleData = null, SharperFunctionTypeNames sharperFunctionTypeNames = null)
             : base(newContainer: constructedFrom.ContainingSymbol,
                    map: new TypeMap(constructedFrom.ContainingType, constructedFrom.OriginalDefinition.TypeParameters, typeArgumentsWithAnnotations),
                    originalDefinition: constructedFrom.OriginalDefinition,
@@ -70,11 +70,22 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
             Debug.Assert(constructedFrom.Arity == typeArgumentsWithAnnotations.Length);
             Debug.Assert(constructedFrom.Arity != 0);
+            Debug.Assert(tupleData is null || sharperFunctionTypeNames is null);
+            InitializeSharperFunctionTypeNames(sharperFunctionTypeNames);
         }
 
         protected override NamedTypeSymbol WithTupleDataCore(TupleExtraData newData)
         {
             return new ConstructedNamedTypeSymbol(_constructedFrom, _typeArgumentsWithAnnotations, IsUnboundGenericType, tupleData: newData);
+        }
+
+        /// <summary>
+        /// Sharper: a copy of this type with the parameter names of a function type, or with none.
+        /// </summary>
+        internal NamedTypeSymbol WithSharperFunctionTypeNames(SharperFunctionTypeNames names)
+        {
+            Debug.Assert(!IsTupleType);
+            return new ConstructedNamedTypeSymbol(_constructedFrom, _typeArgumentsWithAnnotations, IsUnboundGenericType, sharperFunctionTypeNames: names);
         }
 
         public override NamedTypeSymbol ConstructedFrom

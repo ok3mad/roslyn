@@ -202,6 +202,11 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                     static int Twin(int x, int max) => x switch { var a when a > max => 1, var a when a <= max => 2 };
                     static int N(int x, int max) => x switch { > max => 1, not > max => 2 };
                     static int O(int x, int max) => x switch { > max => 1, _ => 2 };
+                    static int P(int x) => x switch { > Limits.Max() => 1, not > Limits.Max() => 2 };
+                }
+                static class Limits
+                {
+                    [Pure] public static int Max() => 10;
                 }
                 """;
             // An arm with an opaque test helps exhaustiveness no more than a guarded arm does, but the same test on the same

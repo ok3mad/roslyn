@@ -173,6 +173,31 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             // The error points at the argument.
             var disagree = comp.GetDiagnostics().First();
             Assert.Equal(source.IndexOf("Over(x);") + "Over(".Length, disagree.AdditionalLocations.Single().SourceSpan.Start);
+
+            // #201: the types the message lists, for the IDE fix, as reference IDs in a property; only where candidates disagree.
+            Assert.Equal("System.Int32\nSystem.String", disagree.Properties[SharperInferredParameterType.CandidateTypesPropertyName]);
+            Assert.All(comp.GetDiagnostics().Where(d => !d.GetMessage().Contains("take different types")), d => Assert.Empty(d.Properties));
+        }
+
+        [Fact]
+        public void InferFromOverloads_CandidateTypesProperty_LeavesOutRuledOutCandidates()
+        {
+            // #201: the third 'Over' does not accept the string, so its type is not listed.
+            var source = """
+                using System.Collections.Generic;
+                class C
+                {
+                    static void Over(List<int> x, string s) { }
+                    static void Over(int[] x, string s) { }
+                    static void Over(long x, int i) { }
+                    static void F(infer x) => Over(x, "");
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
+            var diagnostic = comp.GetDiagnostics().Single(d => d.Code == (int)ErrorCode.ERR_SharperInferParameterNoDefault);
+            Assert.Equal(
+                "System.Collections.Generic.List{System.Int32}\nSystem.Int32[]",
+                diagnostic.Properties[SharperInferredParameterType.CandidateTypesPropertyName]);
         }
 
         [Fact]

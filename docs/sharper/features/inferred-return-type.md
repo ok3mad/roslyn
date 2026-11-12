@@ -152,17 +152,42 @@ static string F(infer n) => Format(n, "N2");                    // CS20027; fix:
   accessibility: it is a deliberate action. The upgrade analyzers that would suggest it (IDE20009 and IDE20010 in
   [upgrade analyzers](../planning/upgrade-analyzers.md)) are not built yet.
 - **The fix for CS20027 and CS20057** writes the parameter type. Where CS20027 says that the candidates of a call
-  disagree, it offers the type each candidate takes; for CS20057 (uses that need different types), the type of each
-  use; otherwise `object`. This is the fix that [step P8](../planning/implementation-plan.md#type-inference-work-breakdown)
-  leaves to R5.
+  disagree, it offers exactly the types the message lists (the candidates that the other arguments do not rule out);
+  for CS20057 (uses that need different types), the type of each use; otherwise `object`. This is the fix that
+  [step P8](../planning/implementation-plan.md#type-inference-work-breakdown) leaves to R5.
+- **Make 'F' generic** (fix for CS20027, P8's other fix, [#201](https://github.com/ok3mad/roslyn/issues/201)) adds a
+  type parameter and uses it for the parameter: `void F(infer x) { }` becomes `void F<T>(T x) { }`. Offered on an
+  ordinary method or a local function with a body, and only where:
+  - the method is not `override`, `virtual`, `abstract`, `extern` or `partial`, and implements no interface member
+    (explicitly or implicitly): the other declaration would no longer match;
+  - the name `T`, or else `T` and the parameter name (`TValue` for `value`), clashes with nothing: no symbol of that
+    name is in scope at the parameter, and no identifier in the method is spelled so. Otherwise it is not offered;
+  - the document with the type parameter in place has no error it did not have, apart from the CS20027 that goes
+    away. So it is not offered where the body needs a specific type (`x.Length`, a call whose candidates disagree), or
+    where a call in the document gives no type argument (`F(null)`). Calls in other documents are not checked, as for
+    any signature change the user asks for. It is offered where nothing in the body needs a type: no use, an
+    interpolation, or a generic method whose type parameter pins nothing yet.
+- **Write the type for CS20014, CS20024 and CS20026** ([#201](https://github.com/ok3mad/roslyn/issues/201)). CS20014
+  (the returned value has no type) and CS20026 (`infer x = null`) write `object`, or `object?` for `null` and
+  `default` where nullable annotations are enabled; a lambda or method group without a natural type gets no fix,
+  since `object` would not take it. CS20024 (no best common type) offers each type the returned values have, then the
+  most derived base class they all convert to by reference (not `object`), then `object`; where a returned value has
+  no type (`null`), each is nullable (`int?`, `string?`). For an async method the type is `Task<T>`, for an iterator
+  `IEnumerable<T>`, as the compiler would have inferred.
 - **Go to definition and Find all references** on calls to members with inferred signatures, and on their `infer`
   parameters, need nothing new: the symbols are ordinary ones. Tests check them.
 
 The IDE needs no compiler API for this: the semantic model already gives the inferred types (`GetTypeInfo` and
 `GetSymbolInfo` on `infer`, and the declared symbols), and whether `infer` is the keyword follows from the syntax, the
-parse options and the symbol `infer` binds to, as in Edit and Continue (`IsSharperReturnTypeInferred`). The one gap is
-the list of types in CS20027's message, which is not public: the fix rebuilds it from the error's additional
-locations (the use that pinned nothing, or the disagreeing arguments) and the candidates of the call there.
+parse options and the symbol `infer` binds to, as in Edit and Continue (`IsSharperReturnTypeInferred`). The list of
+types in CS20027's message (candidates that disagree) is carried as a diagnostic property
+(`Diagnostic.Properties["SharperInferCandidateTypes"]`: documentation comment reference IDs, one per line, in the
+order of the message), which the fix resolves with `DocumentationCommentId`. This is no new public API: compiler
+diagnostics had no properties, so `DiagnosticInfo` gained an internal virtual `Properties`, which `CSDiagnosticInfo`
+sets and the compiler's `Diagnostic` returns, and the IDE's `CompilerDiagnosticAnalyzer`, which used to replace a
+compiler diagnostic's properties with its own, now adds its own to them (#201).
+The fix still rebuilds the types from the error's additional locations and the candidates there, and uses a rebuilt
+type that matches a listed one, for the nullable annotations and tuple names that a reference ID drops.
 
 ## Not supported yet
 

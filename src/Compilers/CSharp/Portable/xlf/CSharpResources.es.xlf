@@ -2597,6 +2597,11 @@
         <target state="translated">"{0}" no puede estar sellado porque el registro contenedor no está sellado.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperCantChangeFunctionTypeNamesOnOverride">
+        <source>'{0}': cannot change function type parameter names when overriding inherited member '{1}'</source>
+        <target state="new">'{0}': cannot change function type parameter names when overriding inherited member '{1}'</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperFunctionToInterfaceInExpressionTree">
         <source>An expression tree cannot contain a lambda or method group converted to the interface '{0}'.</source>
         <target state="new">An expression tree cannot contain a lambda or method group converted to the interface '{0}'.</target>
@@ -2635,6 +2640,11 @@
       <trans-unit id="ERR_SharperImmutableNotProven">
         <source>'{0}' is marked [Immutable], but it cannot be proven immutable: {1}.</source>
         <target state="new">'{0}' is marked [Immutable], but it cannot be proven immutable: {1}.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperImplBadFunctionTypeNames">
+        <source>The function type parameter names in the signature of '{0}' must match the function type parameter names of interface member '{1}' (including on the return type).</source>
+        <target state="new">The function type parameter names in the signature of '{0}' must match the function type parameter names of interface member '{1}' (including on the return type).</target>
         <note />
       </trans-unit>
       <trans-unit id="ERR_SharperInferAmbiguousOverriddenMember">
@@ -2762,6 +2772,11 @@
         <target state="new">The operand of a pattern that is not a constant must be pure, but it is not: {0}.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperPartialMemberInconsistentFunctionTypeNames">
+        <source>Both partial member declarations, '{0}' and '{1}', must use the same function type parameter names.</source>
+        <target state="new">Both partial member declarations, '{0}' and '{1}', must use the same function type parameter names.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperPhantomTypeParameterInState">
         <source>Type parameter '{0}' is marked [Phantom], but '{1}' uses it in the state of the type.</source>
         <target state="new">Type parameter '{0}' is marked [Phantom], but '{1}' uses it in the state of the type.</target>
@@ -2787,19 +2802,24 @@
         <target state="new">The stage after '|&gt;' must be a function, such as a method group or a delegate, or an expression that uses 'it', but it is {0}.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperPredicatePatternNotPure">
+        <source>The method of a predicate pattern must be pure, but it is not: {0}.</source>
+        <target state="new">The method of a predicate pattern must be pure, but it is not: {0}.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperPureNotPure">
         <source>'{0}' is marked [Pure], but it is not pure: {1}.</source>
         <target state="new">'{0}' is marked [Pure], but it is not pure: {1}.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperPureOverrideNotPure">
+        <source>'{0}' overrides or implements the [Pure] member '{1}', so it must be marked [Pure] too.</source>
+        <target state="new">'{0}' overrides or implements the [Pure] member '{1}', so it must be marked [Pure] too.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperPureStructMemberNotReadOnly">
         <source>'{0}' is marked [Pure], so it must be readonly: declare it 'readonly', or make the struct 'readonly'.</source>
         <target state="new">'{0}' is marked [Pure], so it must be readonly: declare it 'readonly', or make the struct 'readonly'.</target>
-        <note />
-      </trans-unit>
-      <trans-unit id="ERR_SharperPureVirtual">
-        <source>'{0}' cannot be marked [Pure] yet: [Pure] is not supported on virtual, abstract and override members.</source>
-        <target state="new">'{0}' cannot be marked [Pure] yet: [Pure] is not supported on virtual, abstract and override members.</target>
         <note />
       </trans-unit>
       <trans-unit id="ERR_SharperReadOnlyLocalWithNoInitializer">
@@ -4705,6 +4725,16 @@
       <trans-unit id="WRN_SharperPureOutArgumentNotFresh_Title">
         <source>The out argument of a [Pure] member is not a fresh local</source>
         <target state="new">The out argument of a [Pure] member is not a fresh local</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WRN_SharperPureOverrideNotPure">
+        <source>'{0}' overrides or implements the [Pure] member '{1}', so it must be pure too, but it is not marked [Pure], and a C# file is not checked. Move it to a Sharper file and mark it [Pure].</source>
+        <target state="new">'{0}' overrides or implements the [Pure] member '{1}', so it must be pure too, but it is not marked [Pure], and a C# file is not checked. Move it to a Sharper file and mark it [Pure].</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WRN_SharperPureOverrideNotPure_Title">
+        <source>A member in a C# file overrides or implements a [Pure] member</source>
+        <target state="new">A member in a C# file overrides or implements a [Pure] member</target>
         <note />
       </trans-unit>
       <trans-unit id="WRN_SharperReadOnlyLocalMemberCallOnCopy">

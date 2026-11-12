@@ -344,7 +344,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (11,31): warning CS8603: Possible null reference return.
                 //         IName bad = prefix => prefix;
                 Diagnostic(ErrorCode.WRN_NullReferenceReturn, "prefix").WithLocation(11, 31),
-                // (13,46): error CS20064: An expression tree cannot contain a lambda or method group converted to the interface 'IName'.
+                // (13,46): error CS20070: An expression tree cannot contain a lambda or method group converted to the interface 'IName'.
                 //         Expression<Func<IName>> tree = () => p => "x";
                 Diagnostic(ErrorCode.ERR_SharperFunctionToInterfaceInExpressionTree, @"p => ""x""").WithArguments("IName").WithLocation(13, 46));
         }

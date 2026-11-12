@@ -82,8 +82,8 @@ shows an `IRelationalPatternOperation` or `IConstantPatternOperation` whose valu
 - Refinements: a [refined parameter](refined-types.md) `int i is > max` is CS20058, since a declared domain must stay
   closed over constants; the operand's purity is not checked there.
 - Symbolic reasoning over the same operand, such as `<= max` then `> max` being exhaustive.
-- The predicate form `x is IsEven` and extractors `s is Parse(val n)` (slices 2 and 3,
-  [#35](https://github.com/ok3mad/roslyn/issues/35)).
+- The predicate form `x is IsEven` is slice 2, on its own page: [predicate patterns](predicate-patterns.md). Extractors
+  `s is Parse(val n)` are slice 3 ([#35](https://github.com/ok3mad/roslyn/issues/35)).
 
 ## Code
 

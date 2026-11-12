@@ -22,6 +22,10 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
     /// </summary>
     internal abstract class WrappedMethodSymbol : MethodSymbol
     {
+        internal override SharperRefinement SharperReturnRefinement => UnderlyingMethod.SharperReturnRefinement;
+
+        internal override string SharperReturnRefinementAttributeText => UnderlyingMethod.SharperReturnRefinementAttributeText;
+
         public WrappedMethodSymbol()
         {
         }

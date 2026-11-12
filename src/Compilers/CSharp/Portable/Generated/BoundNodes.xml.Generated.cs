@@ -5667,8 +5667,8 @@ namespace Microsoft.CodeAnalysis.CSharp
 
     internal sealed partial class BoundDagOpaqueTest : BoundDagTest
     {
-        public BoundDagOpaqueTest(SyntaxNode syntax, BinaryOperatorKind operatorKind, BoundExpression value, BoundDagTemp input, bool hasErrors = false)
-            : base(BoundKind.DagOpaqueTest, syntax, input, hasErrors || value.HasErrors() || input.HasErrors())
+        public BoundDagOpaqueTest(SyntaxNode syntax, BinaryOperatorKind operatorKind, BoundExpression value, BoundValuePlaceholder? predicateArgument, BoundDagTemp input, bool hasErrors = false)
+            : base(BoundKind.DagOpaqueTest, syntax, input, hasErrors || value.HasErrors() || predicateArgument.HasErrors() || input.HasErrors())
         {
 
             RoslynDebug.Assert(value is object, "Field 'value' cannot be null (make the type nullable in BoundNodes.xml to remove this check)");
@@ -5676,19 +5676,21 @@ namespace Microsoft.CodeAnalysis.CSharp
 
             this.OperatorKind = operatorKind;
             this.Value = value;
+            this.PredicateArgument = predicateArgument;
         }
 
         public BinaryOperatorKind OperatorKind { get; }
         public BoundExpression Value { get; }
+        public BoundValuePlaceholder? PredicateArgument { get; }
 
         [DebuggerStepThrough]
         public override BoundNode? Accept(BoundTreeVisitor visitor) => visitor.VisitDagOpaqueTest(this);
 
-        public BoundDagOpaqueTest Update(BinaryOperatorKind operatorKind, BoundExpression value, BoundDagTemp input)
+        public BoundDagOpaqueTest Update(BinaryOperatorKind operatorKind, BoundExpression value, BoundValuePlaceholder? predicateArgument, BoundDagTemp input)
         {
-            if (operatorKind != this.OperatorKind || value != this.Value || input != this.Input)
+            if (operatorKind != this.OperatorKind || value != this.Value || predicateArgument != this.PredicateArgument || input != this.Input)
             {
-                var result = new BoundDagOpaqueTest(this.Syntax, operatorKind, value, input, this.HasErrors);
+                var result = new BoundDagOpaqueTest(this.Syntax, operatorKind, value, predicateArgument, input, this.HasErrors);
                 result.CopyAttributes(this);
                 return result;
             }
@@ -9029,8 +9031,8 @@ namespace Microsoft.CodeAnalysis.CSharp
 
     internal sealed partial class BoundOpaquePattern : BoundPattern
     {
-        public BoundOpaquePattern(SyntaxNode syntax, BinaryOperatorKind relation, BoundExpression value, bool isConstantPattern, TypeSymbol inputType, TypeSymbol narrowedType, bool hasErrors = false)
-            : base(BoundKind.OpaquePattern, syntax, inputType, narrowedType, hasErrors || value.HasErrors())
+        public BoundOpaquePattern(SyntaxNode syntax, BinaryOperatorKind relation, BoundExpression value, bool isConstantPattern, BoundValuePlaceholder? predicateArgument, TypeSymbol inputType, TypeSymbol narrowedType, bool hasErrors = false)
+            : base(BoundKind.OpaquePattern, syntax, inputType, narrowedType, hasErrors || value.HasErrors() || predicateArgument.HasErrors())
         {
 
             RoslynDebug.Assert(value is object, "Field 'value' cannot be null (make the type nullable in BoundNodes.xml to remove this check)");
@@ -9040,20 +9042,22 @@ namespace Microsoft.CodeAnalysis.CSharp
             this.Relation = relation;
             this.Value = value;
             this.IsConstantPattern = isConstantPattern;
+            this.PredicateArgument = predicateArgument;
         }
 
         public BinaryOperatorKind Relation { get; }
         public BoundExpression Value { get; }
         public bool IsConstantPattern { get; }
+        public BoundValuePlaceholder? PredicateArgument { get; }
 
         [DebuggerStepThrough]
         public override BoundNode? Accept(BoundTreeVisitor visitor) => visitor.VisitOpaquePattern(this);
 
-        public BoundOpaquePattern Update(BinaryOperatorKind relation, BoundExpression value, bool isConstantPattern, TypeSymbol inputType, TypeSymbol narrowedType)
+        public BoundOpaquePattern Update(BinaryOperatorKind relation, BoundExpression value, bool isConstantPattern, BoundValuePlaceholder? predicateArgument, TypeSymbol inputType, TypeSymbol narrowedType)
         {
-            if (relation != this.Relation || value != this.Value || isConstantPattern != this.IsConstantPattern || !TypeSymbol.Equals(inputType, this.InputType, TypeCompareKind.ConsiderEverything) || !TypeSymbol.Equals(narrowedType, this.NarrowedType, TypeCompareKind.ConsiderEverything))
+            if (relation != this.Relation || value != this.Value || isConstantPattern != this.IsConstantPattern || predicateArgument != this.PredicateArgument || !TypeSymbol.Equals(inputType, this.InputType, TypeCompareKind.ConsiderEverything) || !TypeSymbol.Equals(narrowedType, this.NarrowedType, TypeCompareKind.ConsiderEverything))
             {
-                var result = new BoundOpaquePattern(this.Syntax, relation, value, isConstantPattern, inputType, narrowedType, this.HasErrors);
+                var result = new BoundOpaquePattern(this.Syntax, relation, value, isConstantPattern, predicateArgument, inputType, narrowedType, this.HasErrors);
                 result.CopyAttributes(this);
                 return result;
             }
@@ -12461,8 +12465,9 @@ namespace Microsoft.CodeAnalysis.CSharp
         public override BoundNode? VisitDagOpaqueTest(BoundDagOpaqueTest node)
         {
             BoundExpression value = (BoundExpression)this.Visit(node.Value);
+            BoundValuePlaceholder? predicateArgument = node.PredicateArgument;
             BoundDagTemp input = (BoundDagTemp)this.Visit(node.Input);
-            return node.Update(node.OperatorKind, value, input);
+            return node.Update(node.OperatorKind, value, predicateArgument, input);
         }
         public override BoundNode? VisitDagDeconstructEvaluation(BoundDagDeconstructEvaluation node)
         {
@@ -13093,9 +13098,10 @@ namespace Microsoft.CodeAnalysis.CSharp
         public override BoundNode? VisitOpaquePattern(BoundOpaquePattern node)
         {
             BoundExpression value = (BoundExpression)this.Visit(node.Value);
+            BoundValuePlaceholder? predicateArgument = node.PredicateArgument;
             TypeSymbol? inputType = this.VisitType(node.InputType);
             TypeSymbol? narrowedType = this.VisitType(node.NarrowedType);
-            return node.Update(node.Relation, value, node.IsConstantPattern, inputType, narrowedType);
+            return node.Update(node.Relation, value, node.IsConstantPattern, predicateArgument, inputType, narrowedType);
         }
         public override BoundNode? VisitDiscardExpression(BoundDiscardExpression node)
         {
@@ -15894,7 +15900,8 @@ namespace Microsoft.CodeAnalysis.CSharp
             TypeSymbol inputType = GetUpdatedSymbol(node, node.InputType);
             TypeSymbol narrowedType = GetUpdatedSymbol(node, node.NarrowedType);
             BoundExpression value = (BoundExpression)this.Visit(node.Value);
-            return node.Update(node.Relation, value, node.IsConstantPattern, inputType, narrowedType);
+            BoundValuePlaceholder? predicateArgument = node.PredicateArgument;
+            return node.Update(node.Relation, value, node.IsConstantPattern, predicateArgument, inputType, narrowedType);
         }
 
         public override BoundNode? VisitDiscardExpression(BoundDiscardExpression node)
@@ -17354,6 +17361,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         {
             new TreeDumperNode("operatorKind", node.OperatorKind, null),
             new TreeDumperNode("value", null, new TreeDumperNode[] { Visit(node.Value, null) }),
+            new TreeDumperNode("predicateArgument", null, new TreeDumperNode[] { Visit(node.PredicateArgument, null) }),
             new TreeDumperNode("input", null, new TreeDumperNode[] { Visit(node.Input, null) }),
             new TreeDumperNode("hasErrors", node.HasErrors, null)
         }
@@ -18259,6 +18267,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             new TreeDumperNode("relation", node.Relation, null),
             new TreeDumperNode("value", null, new TreeDumperNode[] { Visit(node.Value, null) }),
             new TreeDumperNode("isConstantPattern", node.IsConstantPattern, null),
+            new TreeDumperNode("predicateArgument", null, new TreeDumperNode[] { Visit(node.PredicateArgument, null) }),
             new TreeDumperNode("inputType", node.InputType, null),
             new TreeDumperNode("narrowedType", node.NarrowedType, null),
             new TreeDumperNode("hasErrors", node.HasErrors, null)

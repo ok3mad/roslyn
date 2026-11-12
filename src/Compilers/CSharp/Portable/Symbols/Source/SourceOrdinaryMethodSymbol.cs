@@ -344,6 +344,13 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 return type;
             }
 
+            /// <summary>Callers bind to the definition, and the implementation is the only body.</summary>
+            internal override SharperRefinement? GetReturnRefinement()
+                => ((SourceOrdinaryMethodSymbol)Method).SourcePartialImplementation?.SharperReturnRefinement;
+
+            /// <summary>The implementation part is the one that is emitted.</summary>
+            internal override string? GetReturnRefinementAttributeText() => null;
+
             protected override Binder? GetBodyBinder(CSharpSyntaxNode body)
                 => throw ExceptionUtilities.Unreachable();
 
@@ -675,7 +682,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             else if (MemberSignatureComparer.ConsideringTupleNamesCreatesDifference(definition, implementation))
             {
                 hasTypeDifferences = true;
-                diagnostics.Add(ErrorCode.ERR_PartialMemberInconsistentTupleNames, implementation.GetFirstLocation(), definition, implementation);
+                diagnostics.Add(SymbolExtensions.TupleOrSharperFunctionTypeNamesError(definition, implementation, ErrorCode.ERR_PartialMemberInconsistentTupleNames, ErrorCode.ERR_SharperPartialMemberInconsistentFunctionTypeNames), implementation.GetFirstLocation(), definition, implementation);
             }
 
             if (definition.RefKind != implementation.RefKind)

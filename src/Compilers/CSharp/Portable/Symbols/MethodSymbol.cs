@@ -1163,6 +1163,20 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             RequiresInstanceReceiver ? CodeAnalysis.NullableAnnotation.NotAnnotated : CodeAnalysis.NullableAnnotation.None;
 
         /// <summary>
+        /// Sharper: the refinement of the returned value, inferred from the body of a method or local function declared
+        /// with <c>infer</c> (<see cref="SharperInferredReturnType.GetReturnRefinement"/>) or read from metadata; null if
+        /// there is none. Nothing is written on a return (Feature 11 of the implementation plan, step 3).
+        /// </summary>
+        internal virtual SharperRefinement SharperReturnRefinement => null;
+
+        /// <summary>
+        /// Sharper: the text of the embedded <c>Sharper.SharperRefinementAttribute</c> that the return carries, or null
+        /// for none: the return refinement, or <see cref="SharperRefinement.AnyValueText"/> for an inferred return
+        /// that could have one and has none.
+        /// </summary>
+        internal virtual string SharperReturnRefinementAttributeText => null;
+
+        /// <summary>
         /// Build and add synthesized return type attributes for this method symbol.
         /// </summary>
         internal virtual void AddSynthesizedReturnTypeAttributes(PEModuleBuilder moduleBuilder, ref ArrayBuilder<CSharpAttributeData> attributes)
@@ -1193,6 +1207,12 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             if (compilation.ShouldEmitNullableAttributes(this))
             {
                 AddSynthesizedAttribute(ref attributes, moduleBuilder.SynthesizeNullableAttributeIfNecessary(this, GetNullableContextValue(), type));
+            }
+
+            // Sharper: an inferred return refinement goes where the inferred return type goes (Feature 11, step 3).
+            if (this.SharperReturnRefinementAttributeText is { } refinementText)
+            {
+                AddSynthesizedAttribute(ref attributes, SharperRefinement.SynthesizeAttribute(compilation, refinementText));
             }
         }
 

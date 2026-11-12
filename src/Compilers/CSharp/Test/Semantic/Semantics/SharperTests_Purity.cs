@@ -460,21 +460,6 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             CreateImmutableCompilation(source).VerifyDiagnostics(
-                // (3,31): error CS20052: 'Base.V()' cannot be marked [Pure] yet: [Pure] is not supported on virtual, abstract and override members.
-                //     [Pure] public virtual int V() => 1;
-                Diagnostic(ErrorCode.ERR_SharperPureVirtual, "V").WithArguments("Base.V()").WithLocation(3, 31),
-                // (4,32): error CS20052: 'Base.A()' cannot be marked [Pure] yet: [Pure] is not supported on virtual, abstract and override members.
-                //     [Pure] public abstract int A();
-                Diagnostic(ErrorCode.ERR_SharperPureVirtual, "A").WithArguments("Base.A()").WithLocation(4, 32),
-                // (10,32): error CS20052: 'Derived.A()' cannot be marked [Pure] yet: [Pure] is not supported on virtual, abstract and override members.
-                //     [Pure] public override int A() => 1;
-                Diagnostic(ErrorCode.ERR_SharperPureVirtual, "A").WithArguments("Derived.A()").WithLocation(10, 32),
-                // (11,39): error CS20052: 'Derived.O()' cannot be marked [Pure] yet: [Pure] is not supported on virtual, abstract and override members.
-                //     [Pure] public sealed override int O() => 1;
-                Diagnostic(ErrorCode.ERR_SharperPureVirtual, "O").WithArguments("Derived.O()").WithLocation(11, 39),
-                // (16,16): error CS20052: 'I.M()' cannot be marked [Pure] yet: [Pure] is not supported on virtual, abstract and override members.
-                //     [Pure] int M();
-                Diagnostic(ErrorCode.ERR_SharperPureVirtual, "M").WithArguments("I.M()").WithLocation(16, 16),
                 // (23,23): error CS20051: 'S.Get()' is marked [Pure], so it must be readonly: declare it 'readonly', or make the struct 'readonly'.
                 //     [Pure] public int Get() => _x;
                 Diagnostic(ErrorCode.ERR_SharperPureStructMemberNotReadOnly, "Get").WithArguments("S.Get()").WithLocation(23, 23),
@@ -679,6 +664,666 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 var twice = module.GlobalNamespace.GetMember<MethodSymbol>("Lib.Twice");
                 Assert.True(SharperImmutability.IsDeclaredPure(twice));
             });
+        }
+
+        private static CSharpCompilation CreateMixedPurityCompilation(string sharper, string csharp, MetadataReference[]? references = null)
+            => CreateCompilation(
+                [CSharpTestSource.Parse(sharper, "a.cx", s_sharperOptions), CSharpTestSource.Parse(csharp, "b.cs", TestOptions.Regular)],
+                targetFramework: TargetFramework.Net90,
+                references: references);
+
+        [Fact]
+        public void PureSlot_InterfaceCall()
+        {
+            var source = """
+                using System;
+
+                Console.Write(C.Total([new Square(2), new Square(3)]) + C.Generic(new Square(1)));
+
+                interface IShape
+                {
+                    [Pure] int Area();
+                    [Pure] int Sides { get; }
+                    int Unmarked();
+                }
+
+                sealed class Square(int side) : IShape
+                {
+                    [Pure] public int Area() => side * side;
+                    [Pure] public int Sides => 4;
+                    public int Unmarked() => 0;
+                }
+
+                static class C
+                {
+                    [Pure] public static int Total(IShape[] shapes)
+                    {
+                        int sum = 0;
+                        foreach (var shape in shapes) sum += shape.Area() * shape.Sides;
+                        return sum;
+                    }
+
+                    [Pure] public static int Generic<T>(T shape) where T : IShape => shape.Area();
+                }
+                """;
+            var comp = CreateImmutableCompilation(source);
+            comp.VerifyDiagnostics();
+            CompileAndVerify(comp, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "53" : null);
+        }
+
+        [Fact]
+        public void PureSlot_CSharpTwin()
+        {
+            // The flag off: the attribute does not exist, and nothing else is reported.
+            var source = """
+                interface I { [Pure] int M(); }
+                abstract class Base { [Pure] public abstract int A(); }
+                class Derived : Base, I
+                {
+                    public override int A() => 1;
+                    public int M() => 2;
+                }
+                """;
+            CreateImmutableCompilation(source, parseOptions: TestOptions.Regular).VerifyDiagnostics(
+                // (1,16): error CS0246: The type or namespace name 'PureAttribute' could not be found (are you missing a using directive or an assembly reference?)
+                // interface I { [Pure] int M(); }
+                Diagnostic(ErrorCode.ERR_SingleTypeNameNotFound, "Pure").WithArguments("PureAttribute").WithLocation(1, 16),
+                // (1,16): error CS0246: The type or namespace name 'Pure' could not be found (are you missing a using directive or an assembly reference?)
+                // interface I { [Pure] int M(); }
+                Diagnostic(ErrorCode.ERR_SingleTypeNameNotFound, "Pure").WithArguments("Pure").WithLocation(1, 16),
+                // (2,24): error CS0246: The type or namespace name 'PureAttribute' could not be found (are you missing a using directive or an assembly reference?)
+                // abstract class Base { [Pure] public abstract int A(); }
+                Diagnostic(ErrorCode.ERR_SingleTypeNameNotFound, "Pure").WithArguments("PureAttribute").WithLocation(2, 24),
+                // (2,24): error CS0246: The type or namespace name 'Pure' could not be found (are you missing a using directive or an assembly reference?)
+                // abstract class Base { [Pure] public abstract int A(); }
+                Diagnostic(ErrorCode.ERR_SingleTypeNameNotFound, "Pure").WithArguments("Pure").WithLocation(2, 24));
+
+            // Nor when the compilation declares the attribute itself.
+            var declared = """
+                namespace Sharper { [System.AttributeUsage(System.AttributeTargets.Method)] public sealed class PureAttribute : System.Attribute { } }
+                interface I { [Sharper.Pure] int M(); }
+                abstract class Base { [Sharper.Pure] public abstract int A(); }
+                class Derived : Base, I
+                {
+                    static int s_count;
+                    public override int A() => s_count++;
+                    public int M() => s_count++;
+                }
+                """;
+            CreateImmutableCompilation(declared, parseOptions: TestOptions.Regular).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void PureSlot_VirtualCall()
+        {
+            var source = """
+                abstract class Base
+                {
+                    [Pure] public virtual int V() => 1;
+                    [Pure] public abstract int A();
+                    [Pure] public abstract int P { get; }
+                    public abstract int Q { [Pure] get; }
+                    [Pure] public abstract int this[int i] { get; }
+                    [Pure] public abstract T G<T>(T x);
+                    public virtual int Unmarked() => 1;
+                    public virtual int Auto { get; }
+
+                    [Pure] public int Calls() => V() + A() + P + Q + this[0] + G(1);
+                    [Pure] public static int CallsOn(Base b) => b.V() + b.A() + b.P + b.Q + b[0] + b.G(1);
+                    [Pure] public int CallsUnmarked() => Unmarked();
+                    [Pure] public int ReadsAuto() => Auto;
+                }
+
+                class Derived : Base
+                {
+                    [Pure] public override int V() => base.V() + 1;
+                    [Pure] public override int A() => 2;
+                    [Pure] public override int P => 3;
+                    public override int Q { [Pure] get => 4; }
+                    [Pure] public override int this[int i] => i;
+                    [Pure] public override T G<T>(T x) => x;
+                    [Pure] public override int Unmarked() => 5;
+
+                    [Pure] public static int CallsOn(Derived d) => d.V() + d.A() + d.P + d.Q + d[0] + d.G(1) + d.Unmarked();
+                }
+                """;
+            CreateImmutableCompilation(source).VerifyDiagnostics(
+                // (14,42): error CS20050: 'Base.CallsUnmarked()' is marked [Pure], but it is not pure: 'Unmarked()' calls 'Base.Unmarked()', which is not known to be pure.
+                //     [Pure] public int CallsUnmarked() => Unmarked();
+                Diagnostic(ErrorCode.ERR_SharperPureNotPure, "Unmarked()").WithArguments("Base.CallsUnmarked()", "'Unmarked()' calls 'Base.Unmarked()', which is not known to be pure").WithLocation(14, 42),
+                // (15,38): error CS20050: 'Base.ReadsAuto()' is marked [Pure], but it is not pure: 'Auto' calls 'Base.Auto', which is not known to be pure.
+                //     [Pure] public int ReadsAuto() => Auto;
+                Diagnostic(ErrorCode.ERR_SharperPureNotPure, "Auto").WithArguments("Base.ReadsAuto()", "'Auto' calls 'Base.Auto', which is not known to be pure").WithLocation(15, 38));
+        }
+
+        [Fact]
+        public void PureSlot_OverrideNotPure()
+        {
+            var source = """
+                abstract class Base
+                {
+                    [Pure] public virtual int V() => 1;
+                    [Pure] public abstract int A();
+                    [Pure] public abstract int P { get; }
+                    public abstract int Q { [Pure] get; set; }
+                    [Pure] public abstract int this[int i] { get; }
+                    [Pure] public abstract T G<T>(T x);
+                    public virtual int Unmarked() => 1;
+                }
+
+                abstract class Middle : Base
+                {
+                    public abstract override int A();
+                    [Pure] public sealed override int V() => 2;
+                }
+
+                class Derived : Middle
+                {
+                    static int s_count;
+                    public override int A() => 2;
+                    public override int P => 3;
+                    public override int Q { get => 4; set { } }
+                    public override int this[int i] => i;
+                    public override T G<T>(T x) => x;
+                    public override int Unmarked() => s_count++;
+                }
+
+                class Impure : Middle
+                {
+                    static int s_count;
+                    [Pure] public override int A() => s_count++;
+                    [Pure] public override int P => s_count;
+                    [AssumePure] public override int Q { get => s_count++; set { } }
+                    [AssumePure] public override int this[int i] => s_count++;
+                    [Pure] public override T G<T>(T x) => x;
+                }
+
+                static class C
+                {
+                    [Pure] static int Calls(Derived d, Impure i) => d.A() + d.P + i.Q + i[0];
+                }
+                """;
+            CreateImmutableCompilation(source).VerifyDiagnostics(
+                // (14,34): error CS20064: 'Middle.A()' overrides or implements the [Pure] member 'Base.A()', so it must be marked [Pure] too.
+                //     public abstract override int A();
+                Diagnostic(ErrorCode.ERR_SharperPureOverrideNotPure, "A").WithArguments("Middle.A()", "Base.A()").WithLocation(14, 34),
+                // (21,25): error CS20064: 'Derived.A()' overrides or implements the [Pure] member 'Base.A()', so it must be marked [Pure] too.
+                //     public override int A() => 2;
+                Diagnostic(ErrorCode.ERR_SharperPureOverrideNotPure, "A").WithArguments("Derived.A()", "Base.A()").WithLocation(21, 25),
+                // (22,25): error CS20064: 'Derived.P' overrides or implements the [Pure] member 'Base.P', so it must be marked [Pure] too.
+                //     public override int P => 3;
+                Diagnostic(ErrorCode.ERR_SharperPureOverrideNotPure, "P").WithArguments("Derived.P", "Base.P").WithLocation(22, 25),
+                // (23,25): error CS20064: 'Derived.Q' overrides or implements the [Pure] member 'Base.Q', so it must be marked [Pure] too.
+                //     public override int Q { get => 4; set { } }
+                Diagnostic(ErrorCode.ERR_SharperPureOverrideNotPure, "Q").WithArguments("Derived.Q", "Base.Q").WithLocation(23, 25),
+                // (24,25): error CS20064: 'Derived.this[int]' overrides or implements the [Pure] member 'Base.this[int]', so it must be marked [Pure] too.
+                //     public override int this[int i] => i;
+                Diagnostic(ErrorCode.ERR_SharperPureOverrideNotPure, "this").WithArguments("Derived.this[int]", "Base.this[int]").WithLocation(24, 25),
+                // (25,23): error CS20064: 'Derived.G<T>(T)' overrides or implements the [Pure] member 'Base.G<T>(T)', so it must be marked [Pure] too.
+                //     public override T G<T>(T x) => x;
+                Diagnostic(ErrorCode.ERR_SharperPureOverrideNotPure, "G").WithArguments("Derived.G<T>(T)", "Base.G<T>(T)").WithLocation(25, 23),
+                // (32,39): error CS20050: 'Impure.A()' is marked [Pure], but it is not pure: 's_count++' writes state outside the member.
+                //     [Pure] public override int A() => s_count++;
+                Diagnostic(ErrorCode.ERR_SharperPureNotPure, "s_count++").WithArguments("Impure.A()", "'s_count++' writes state outside the member").WithLocation(32, 39),
+                // (33,37): error CS20050: 'Impure.P.get' is marked [Pure], but it is not pure: 's_count' reads static state that can change.
+                //     [Pure] public override int P => s_count;
+                Diagnostic(ErrorCode.ERR_SharperPureNotPure, "s_count").WithArguments("Impure.P.get", "'s_count' reads static state that can change").WithLocation(33, 37));
+        }
+
+        [Fact]
+        public void PureSlot_OverrideInCSharpFile()
+        {
+            var sharper = """
+                public abstract class Base
+                {
+                    [Pure] public abstract int A();
+                    [Pure] public abstract int P { get; }
+                }
+
+                public interface I
+                {
+                    [Pure] int M();
+                }
+
+                static class C
+                {
+                    [Pure] static int Calls(Derived d, I i) => d.A() + d.P + i.M() + d.M();
+                }
+                """;
+            var csharp = """
+                public class Derived : Base, I
+                {
+                    public override int A() => 1;
+                    public override int P => 2;
+                    public int M() => 3;
+                }
+
+                public class Explicit : I
+                {
+                    int I.M() => 3;
+                }
+                """;
+            CreateMixedPurityCompilation(sharper, csharp).VerifyDiagnostics(
+                // b.cs(3,25): warning CS20065: 'Derived.A()' overrides or implements the [Pure] member 'Base.A()', so it must be pure too, but it is not marked [Pure], and a C# file is not checked. Move it to a Sharper file and mark it [Pure].
+                //     public override int A() => 1;
+                Diagnostic(ErrorCode.WRN_SharperPureOverrideNotPure, "A").WithArguments("Derived.A()", "Base.A()").WithLocation(3, 25),
+                // b.cs(4,25): warning CS20065: 'Derived.P' overrides or implements the [Pure] member 'Base.P', so it must be pure too, but it is not marked [Pure], and a C# file is not checked. Move it to a Sharper file and mark it [Pure].
+                //     public override int P => 2;
+                Diagnostic(ErrorCode.WRN_SharperPureOverrideNotPure, "P").WithArguments("Derived.P", "Base.P").WithLocation(4, 25),
+                // b.cs(5,16): warning CS20065: 'Derived.M()' overrides or implements the [Pure] member 'I.M()', so it must be pure too, but it is not marked [Pure], and a C# file is not checked. Move it to a Sharper file and mark it [Pure].
+                //     public int M() => 3;
+                Diagnostic(ErrorCode.WRN_SharperPureOverrideNotPure, "M").WithArguments("Derived.M()", "I.M()").WithLocation(5, 16),
+                // b.cs(10,11): warning CS20065: 'Explicit.I.M()' overrides or implements the [Pure] member 'I.M()', so it must be pure too, but it is not marked [Pure], and a C# file is not checked. Move it to a Sharper file and mark it [Pure].
+                //     int I.M() => 3;
+                Diagnostic(ErrorCode.WRN_SharperPureOverrideNotPure, "M").WithArguments("Explicit.I.M()", "I.M()").WithLocation(10, 11));
+        }
+
+        [Fact]
+        public void PureSlot_Implementations()
+        {
+            var source = """
+                interface I
+                {
+                    [Pure] int M();
+                    [Pure] int P { get; }
+                    [Pure] int D() => 1;
+                    [Pure] static abstract int S();
+                    void Unmarked();
+                }
+
+                class Implicit : I
+                {
+                    public int M() => 1;
+                    public int P => 2;
+                    public static int S() => 3;
+                    public void Unmarked() { }
+                }
+
+                class Explicit : I
+                {
+                    int I.M() => 1;
+                    int I.P => 2;
+                    int I.D() => 3;
+                    static int I.S() => 4;
+                    void I.Unmarked() { }
+                }
+
+                class Marked : I
+                {
+                    static int s_count;
+                    [Pure] public int M() => s_count++;
+                    [Pure] int I.P => 2;
+                    [AssumePure] int I.D() => s_count++;
+                    [Pure] public static int S() => 3;
+                    public void Unmarked() { }
+                }
+
+                struct Struct : I
+                {
+                    [Pure] public int M() => 1;
+                    [Pure] public readonly int P => 2;
+                    [Pure] public static int S() => 3;
+                    public void Unmarked() { }
+                }
+
+                class BaseImplementation
+                {
+                    public int M() => 1;
+                    [Pure] public int P => 2;
+                    [Pure] public static int S() => 3;
+                    public void Unmarked() { }
+                }
+
+                class Inherits : BaseImplementation, I
+                {
+                }
+
+                class InheritsAgain : Inherits
+                {
+                }
+
+                interface IDerived : I
+                {
+                    int I.M() => 1;
+                    [Pure] int I.P => 2;
+                }
+
+                static class C
+                {
+                    [Pure] static int Calls<T>(T x) where T : I => x.M() + x.P + x.D() + T.S();
+                    [Pure] static int CallsImplicit(Implicit x) => x.M();
+                    [Pure] static int CallsUnmarked(I x) { x.Unmarked(); return 0; }
+                }
+                """;
+            CreateImmutableCompilation(source).VerifyDiagnostics(
+                // (12,16): error CS20064: 'Implicit.M()' overrides or implements the [Pure] member 'I.M()', so it must be marked [Pure] too.
+                //     public int M() => 1;
+                Diagnostic(ErrorCode.ERR_SharperPureOverrideNotPure, "M").WithArguments("Implicit.M()", "I.M()").WithLocation(12, 16),
+                // (13,16): error CS20064: 'Implicit.P' overrides or implements the [Pure] member 'I.P', so it must be marked [Pure] too.
+                //     public int P => 2;
+                Diagnostic(ErrorCode.ERR_SharperPureOverrideNotPure, "P").WithArguments("Implicit.P", "I.P").WithLocation(13, 16),
+                // (14,23): error CS20064: 'Implicit.S()' overrides or implements the [Pure] member 'I.S()', so it must be marked [Pure] too.
+                //     public static int S() => 3;
+                Diagnostic(ErrorCode.ERR_SharperPureOverrideNotPure, "S").WithArguments("Implicit.S()", "I.S()").WithLocation(14, 23),
+                // (20,11): error CS20064: 'Explicit.I.M()' overrides or implements the [Pure] member 'I.M()', so it must be marked [Pure] too.
+                //     int I.M() => 1;
+                Diagnostic(ErrorCode.ERR_SharperPureOverrideNotPure, "M").WithArguments("Explicit.I.M()", "I.M()").WithLocation(20, 11),
+                // (21,11): error CS20064: 'Explicit.I.P' overrides or implements the [Pure] member 'I.P', so it must be marked [Pure] too.
+                //     int I.P => 2;
+                Diagnostic(ErrorCode.ERR_SharperPureOverrideNotPure, "P").WithArguments("Explicit.I.P", "I.P").WithLocation(21, 11),
+                // (22,11): error CS20064: 'Explicit.I.D()' overrides or implements the [Pure] member 'I.D()', so it must be marked [Pure] too.
+                //     int I.D() => 3;
+                Diagnostic(ErrorCode.ERR_SharperPureOverrideNotPure, "D").WithArguments("Explicit.I.D()", "I.D()").WithLocation(22, 11),
+                // (23,18): error CS20064: 'Explicit.I.S()' overrides or implements the [Pure] member 'I.S()', so it must be marked [Pure] too.
+                //     static int I.S() => 4;
+                Diagnostic(ErrorCode.ERR_SharperPureOverrideNotPure, "S").WithArguments("Explicit.I.S()", "I.S()").WithLocation(23, 18),
+                // (30,30): error CS20050: 'Marked.M()' is marked [Pure], but it is not pure: 's_count++' writes state outside the member.
+                //     [Pure] public int M() => s_count++;
+                Diagnostic(ErrorCode.ERR_SharperPureNotPure, "s_count++").WithArguments("Marked.M()", "'s_count++' writes state outside the member").WithLocation(30, 30),
+                // (39,23): error CS20051: 'Struct.M()' is marked [Pure], so it must be readonly: declare it 'readonly', or make the struct 'readonly'.
+                //     [Pure] public int M() => 1;
+                Diagnostic(ErrorCode.ERR_SharperPureStructMemberNotReadOnly, "M").WithArguments("Struct.M()").WithLocation(39, 23),
+                // (53,7): error CS20064: 'BaseImplementation.M()' overrides or implements the [Pure] member 'I.M()', so it must be marked [Pure] too.
+                // class Inherits : BaseImplementation, I
+                Diagnostic(ErrorCode.ERR_SharperPureOverrideNotPure, "Inherits").WithArguments("BaseImplementation.M()", "I.M()").WithLocation(53, 7),
+                // (63,11): error CS20064: 'IDerived.I.M()' overrides or implements the [Pure] member 'I.M()', so it must be marked [Pure] too.
+                //     int I.M() => 1;
+                Diagnostic(ErrorCode.ERR_SharperPureOverrideNotPure, "M").WithArguments("IDerived.I.M()", "I.M()").WithLocation(63, 11),
+                // (71,44): error CS20050: 'C.CallsUnmarked(I)' is marked [Pure], but it is not pure: 'x.Unmarked()' calls 'I.Unmarked()', which is not known to be pure.
+                //     [Pure] static int CallsUnmarked(I x) { x.Unmarked(); return 0; }
+                Diagnostic(ErrorCode.ERR_SharperPureNotPure, "x.Unmarked()").WithArguments("C.CallsUnmarked(I)", "'x.Unmarked()' calls 'I.Unmarked()', which is not known to be pure").WithLocation(71, 44));
+        }
+
+        [Fact]
+        public void PureSlot_ImplicitImplementationCall()
+        {
+            // An implicit implementation fills the [Pure] slot, so a direct call of it is pure too, also when it is only
+            // trusted (a C# file). An explicit [Pure] implementation takes the slot and frees the public member of that
+            // name. A member that filled the slot stays one for its overrides, even where a derived type implements the
+            // interface member explicitly.
+            var sharper = """
+                public interface I
+                {
+                    [Pure] int M();
+                    [Pure] int P { get; }
+                }
+
+                public class Explicit : I
+                {
+                    static int s_count;
+                    [Pure] int I.M() => 1;
+                    [Pure] int I.P => 2;
+                    public int M() => s_count++;
+                    public int P => s_count++;
+                }
+
+                class Reimplements : Implicit, I
+                {
+                    [Pure] int I.M() => 1;
+                    [Pure] int I.P => 2;
+                    public override int M() => 3;
+                    public override int P => 4;
+                }
+
+                static class C
+                {
+                    [Pure] static int Calls(Implicit x) => x.M() + x.P;
+                    [Pure] static int CallsExplicit(Explicit e) => ((I)e).M() + ((I)e).P;
+                    [Pure] static int CallsFree(Explicit e) => e.M();
+                }
+                """;
+            var csharp = """
+                public class Implicit : I
+                {
+                    public virtual int M() => 1;
+                    public virtual int P => 2;
+                }
+                """;
+            CreateMixedPurityCompilation(sharper, csharp).VerifyDiagnostics(
+                // b.cs(3,24): warning CS20065: 'Implicit.M()' overrides or implements the [Pure] member 'I.M()', so it must be pure too, but it is not marked [Pure], and a C# file is not checked. Move it to a Sharper file and mark it [Pure].
+                //     public virtual int M() => 1;
+                Diagnostic(ErrorCode.WRN_SharperPureOverrideNotPure, "M").WithArguments("Implicit.M()", "I.M()").WithLocation(3, 24),
+                // b.cs(4,24): warning CS20065: 'Implicit.P' overrides or implements the [Pure] member 'I.P', so it must be pure too, but it is not marked [Pure], and a C# file is not checked. Move it to a Sharper file and mark it [Pure].
+                //     public virtual int P => 2;
+                Diagnostic(ErrorCode.WRN_SharperPureOverrideNotPure, "P").WithArguments("Implicit.P", "I.P").WithLocation(4, 24),
+                // a.cx(20,25): error CS20064: 'Reimplements.M()' overrides or implements the [Pure] member 'I.M()', so it must be marked [Pure] too.
+                //     public override int M() => 3;
+                Diagnostic(ErrorCode.ERR_SharperPureOverrideNotPure, "M").WithArguments("Reimplements.M()", "I.M()").WithLocation(20, 25),
+                // a.cx(21,25): error CS20064: 'Reimplements.P' overrides or implements the [Pure] member 'I.P', so it must be marked [Pure] too.
+                //     public override int P => 4;
+                Diagnostic(ErrorCode.ERR_SharperPureOverrideNotPure, "P").WithArguments("Reimplements.P", "I.P").WithLocation(21, 25),
+                // a.cx(28,48): error CS20050: 'C.CallsFree(Explicit)' is marked [Pure], but it is not pure: 'e.M()' calls 'Explicit.M()', which is not known to be pure.
+                //     [Pure] static int CallsFree(Explicit e) => e.M();
+                Diagnostic(ErrorCode.ERR_SharperPureNotPure, "e.M()").WithArguments("C.CallsFree(Explicit)", "'e.M()' calls 'Explicit.M()', which is not known to be pure").WithLocation(28, 48));
+        }
+
+        [Fact]
+        public void PureSlot_HidingMember()
+        {
+            // A 'new' member hides the slot's member without overriding or implementing it, so it is free. Only a type that
+            // re-declares the interface makes its 'new' member the implementation (re-implementation), which then fills
+            // the slot.
+            var source = """
+                interface I { [Pure] int M(); }
+
+                abstract class Base { [Pure] public virtual int V() => 1; }
+
+                class C : Base, I
+                {
+                    [Pure] public virtual int M() => 1;
+                }
+
+                class Hides : C
+                {
+                    static int s_count;
+                    public new int M() => s_count++;
+                    public new int V() => s_count++;
+                }
+
+                class HidesVirtual : C
+                {
+                    static int s_count;
+                    public new virtual int M() => s_count++;
+                }
+
+                class OverridesHiding : HidesVirtual
+                {
+                    static int s_count;
+                    public override int M() => s_count++;
+                }
+
+                class Reimplements : C, I
+                {
+                    public new int M() => 2;
+                }
+
+                static class Calls
+                {
+                    [Pure] static int ThroughSlots(Hides h) => ((C)h).M() + ((I)h).M() + ((Base)h).V();
+                    [Pure] static int Hidden(Hides h) => h.M();
+                    [Pure] static int HiddenV(Hides h) => h.V();
+                    [Pure] static int HiddenVirtual(OverridesHiding o) => o.M();
+                    [Pure] static int ThroughBase(OverridesHiding o) => ((C)o).M();
+                    [Pure] static int Reimplemented(Reimplements r) => r.M() + ((I)r).M();
+                }
+                """;
+            CreateImmutableCompilation(source).VerifyDiagnostics(
+                // (31,20): error CS20064: 'Reimplements.M()' overrides or implements the [Pure] member 'I.M()', so it must be marked [Pure] too.
+                //     public new int M() => 2;
+                Diagnostic(ErrorCode.ERR_SharperPureOverrideNotPure, "M").WithArguments("Reimplements.M()", "I.M()").WithLocation(31, 20),
+                // (37,42): error CS20050: 'Calls.Hidden(Hides)' is marked [Pure], but it is not pure: 'h.M()' calls 'Hides.M()', which is not known to be pure.
+                //     [Pure] static int Hidden(Hides h) => h.M();
+                Diagnostic(ErrorCode.ERR_SharperPureNotPure, "h.M()").WithArguments("Calls.Hidden(Hides)", "'h.M()' calls 'Hides.M()', which is not known to be pure").WithLocation(37, 42),
+                // (38,43): error CS20050: 'Calls.HiddenV(Hides)' is marked [Pure], but it is not pure: 'h.V()' calls 'Hides.V()', which is not known to be pure.
+                //     [Pure] static int HiddenV(Hides h) => h.V();
+                Diagnostic(ErrorCode.ERR_SharperPureNotPure, "h.V()").WithArguments("Calls.HiddenV(Hides)", "'h.V()' calls 'Hides.V()', which is not known to be pure").WithLocation(38, 43),
+                // (39,59): error CS20050: 'Calls.HiddenVirtual(OverridesHiding)' is marked [Pure], but it is not pure: 'o.M()' calls 'OverridesHiding.M()', which is not known to be pure.
+                //     [Pure] static int HiddenVirtual(OverridesHiding o) => o.M();
+                Diagnostic(ErrorCode.ERR_SharperPureNotPure, "o.M()").WithArguments("Calls.HiddenVirtual(OverridesHiding)", "'o.M()' calls 'OverridesHiding.M()', which is not known to be pure").WithLocation(39, 59));
+        }
+
+        [Fact]
+        public void PureSlot_Metadata()
+        {
+            var library = """
+                public abstract class Base
+                {
+                    [Pure] public abstract int A();
+                    [Pure] public virtual int P => 1;
+                    public virtual int Unmarked() => 1;
+                }
+
+                public interface I
+                {
+                    [Pure] int M();
+                }
+
+                public class Trusted : Base
+                {
+                    [Pure] public override int A() => 1;
+                }
+                """;
+            var libraryComp = CreateImmutableCompilation(library);
+            libraryComp.VerifyDiagnostics();
+
+            var source = """
+                class Derived : Trusted, I
+                {
+                    public override int A() => 2;
+                    public override int P => 3;
+                    public int M() => 4;
+                }
+
+                class Marked : Base, I
+                {
+                    [Pure] public override int A() => 2;
+                    [Pure] public override int P => 3;
+                    [Pure] public int M() => 4;
+                }
+
+                static class C
+                {
+                    [Pure] static int Calls(Base b, I i, Trusted t, Derived d) => b.A() + b.P + i.M() + t.A() + t.P + d.A();
+                    [Pure] static int CallsUnmarked(Base b) => b.Unmarked();
+                }
+                """;
+            foreach (var reference in new[] { libraryComp.EmitToImageReference(), libraryComp.ToMetadataReference() })
+            {
+                CreateImmutableCompilation(source, references: [reference]).VerifyDiagnostics(
+                // (3,25): error CS20064: 'Derived.A()' overrides or implements the [Pure] member 'Trusted.A()', so it must be marked [Pure] too.
+                //     public override int A() => 2;
+                Diagnostic(ErrorCode.ERR_SharperPureOverrideNotPure, "A").WithArguments("Derived.A()", "Trusted.A()").WithLocation(3, 25),
+                // (4,25): error CS20064: 'Derived.P' overrides or implements the [Pure] member 'Base.P', so it must be marked [Pure] too.
+                //     public override int P => 3;
+                Diagnostic(ErrorCode.ERR_SharperPureOverrideNotPure, "P").WithArguments("Derived.P", "Base.P").WithLocation(4, 25),
+                // (5,16): error CS20064: 'Derived.M()' overrides or implements the [Pure] member 'I.M()', so it must be marked [Pure] too.
+                //     public int M() => 4;
+                Diagnostic(ErrorCode.ERR_SharperPureOverrideNotPure, "M").WithArguments("Derived.M()", "I.M()").WithLocation(5, 16),
+                // (18,48): error CS20050: 'C.CallsUnmarked(Base)' is marked [Pure], but it is not pure: 'b.Unmarked()' calls 'Base.Unmarked()', which is not known to be pure.
+                //     [Pure] static int CallsUnmarked(Base b) => b.Unmarked();
+                Diagnostic(ErrorCode.ERR_SharperPureNotPure, "b.Unmarked()").WithArguments("C.CallsUnmarked(Base)", "'b.Unmarked()' calls 'Base.Unmarked()', which is not known to be pure").WithLocation(18, 48));
+            }
+
+            // A C# compilation is not checked, and its override is trusted by a Sharper consumer.
+            var csharp = """
+                public class CSharpDerived : Base, I
+                {
+                    public override int A() => 2;
+                    public int M() => 4;
+                }
+                """;
+            var csharpComp = CreateImmutableCompilation(csharp, parseOptions: TestOptions.Regular, references: [libraryComp.EmitToImageReference()]);
+            csharpComp.VerifyDiagnostics();
+
+            var consumer = """
+                static class C
+                {
+                    [Pure] static int Calls(CSharpDerived d) => d.A() + ((I)d).M();
+                    [Pure] static int CallsImplementation(CSharpDerived d) => d.M();
+                }
+                """;
+            CreateImmutableCompilation(consumer, references: [libraryComp.EmitToImageReference(), csharpComp.EmitToImageReference()]).VerifyDiagnostics();
+
+            // In a mixed compilation, the C# file gets the warning for a slot from metadata too.
+            CreateMixedPurityCompilation("class Sharper { }", csharp, references: [libraryComp.EmitToImageReference()]).VerifyDiagnostics(
+                // b.cs(3,25): warning CS20065: 'CSharpDerived.A()' overrides or implements the [Pure] member 'Base.A()', so it must be pure too, but it is not marked [Pure], and a C# file is not checked. Move it to a Sharper file and mark it [Pure].
+                //     public override int A() => 2;
+                Diagnostic(ErrorCode.WRN_SharperPureOverrideNotPure, "A").WithArguments("CSharpDerived.A()", "Base.A()").WithLocation(3, 25),
+                // b.cs(4,16): warning CS20065: 'CSharpDerived.M()' overrides or implements the [Pure] member 'I.M()', so it must be pure too, but it is not marked [Pure], and a C# file is not checked. Move it to a Sharper file and mark it [Pure].
+                //     public int M() => 4;
+                Diagnostic(ErrorCode.WRN_SharperPureOverrideNotPure, "M").WithArguments("CSharpDerived.M()", "I.M()").WithLocation(4, 16));
+        }
+
+        [Fact]
+        public void PureSlot_Observers()
+        {
+            // An observer of an immutable type calls [Pure] members, virtual ones too: the same IsPure as a [Pure] body.
+            var source = """
+                [Immutable]
+                class Money
+                {
+                    private readonly int _amount;
+                    public Money(int amount) { _amount = amount; }
+
+                    [Pure] protected virtual int Scale() => 2;
+                    [Pure] protected virtual int[] Parts() => new int[1];
+                    [Pure] static int Twice(int x) => 2 * x;
+
+                    public int Scaled => _amount * Scale();
+                    public int Twofold => Twice(_amount);
+                    public int Absolute => System.Math.Abs(_amount);
+                    public int Count => Parts().Length;
+                    public string Text => "x".Substring(Scale());
+                }
+
+                [Immutable]
+                sealed class Euro : Money
+                {
+                    public Euro(int amount) : base(amount) { }
+                    [Pure] protected override int Scale() => 100;
+                }
+
+                [Immutable]
+                sealed class Unmarked
+                {
+                    private readonly int _amount = 1;
+                    int Helper() => 2;
+                    public int Wrong => _amount * Helper();
+                }
+
+                [Immutable]
+                sealed class Fresh
+                {
+                    [Pure] static int[] Parts() => new int[1];
+                    public int[] Mutable => Parts();
+                }
+                """;
+            CreateImmutableCompilation(source).VerifyDiagnostics(
+                // (26,14): error CS20035: 'Unmarked' is marked [Immutable], but it cannot be proven immutable: the observer 'Unmarked.Wrong' does more than read fields and pure observers: 'Helper()'.
+                // sealed class Unmarked
+                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "Unmarked").WithArguments("Unmarked", "the observer 'Unmarked.Wrong' does more than read fields and pure observers: 'Helper()'").WithLocation(26, 14),
+                // (34,14): error CS20035: 'Fresh' is marked [Immutable], but it cannot be proven immutable: the observer 'Fresh.Mutable' does more than read fields and pure observers: 'Parts()'.
+                // sealed class Fresh
+                Diagnostic(ErrorCode.ERR_SharperImmutableNotProven, "Fresh").WithArguments("Fresh", "the observer 'Fresh.Mutable' does more than read fields and pure observers: 'Parts()'").WithLocation(34, 14));
+        }
+
+        [Fact]
+        public void PureSlot_Operators()
+        {
+            var source = """
+                struct V
+                {
+                    public int X;
+                    [Pure] public static V operator +(V a, V b) => new V { X = a.X + b.X };
+                    public static V operator -(V a, V b) => new V { X = a.X - b.X };
+                    [Pure] public static V Add(V a, V b) => a + b;
+                    [Pure] public static V Subtract(V a, V b) => a - b;
+                }
+                """;
+            CreateImmutableCompilation(source).VerifyDiagnostics(
+                // (7,50): error CS20050: 'V.Subtract(V, V)' is marked [Pure], but it is not pure: 'a - b' calls 'V.operator -(V, V)', which is not known to be pure.
+                //     [Pure] public static V Subtract(V a, V b) => a - b;
+                Diagnostic(ErrorCode.ERR_SharperPureNotPure, "a - b").WithArguments("V.Subtract(V, V)", "'a - b' calls 'V.operator -(V, V)', which is not known to be pure").WithLocation(7, 50));
         }
     }
 }

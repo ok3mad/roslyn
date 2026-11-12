@@ -40,6 +40,24 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             }
         }
 
+        internal sealed override SharperRefinement? SharperReturnRefinement
+        {
+            get
+            {
+                LazyMethodChecks();
+                return _lazySharperInferredReturnType?.GetReturnRefinement();
+            }
+        }
+
+        internal sealed override string? SharperReturnRefinementAttributeText
+        {
+            get
+            {
+                LazyMethodChecks();
+                return _lazySharperInferredReturnType?.GetReturnRefinementAttributeText();
+            }
+        }
+
         /// <summary>
         /// True if the return type is Sharper's <c>infer</c>. The type is then inferred from the body on first use,
         /// after <c>MethodChecks</c>, which must not read it.

@@ -51,7 +51,7 @@ Render(user, new Profiles(id => new Profile("Pro")));
 - **Errors.** A lambda whose parameters do not match the method keeps C#'s CS1660. One whose parameters match but whose
   body has errors reports the body's errors, as for a delegate. In a call, if the retry finds applicable candidates,
   its errors are reported (CS0121 between two interface overloads); otherwise C#'s are. An expression tree cannot
-  contain the conversion (CS20064).
+  contain the conversion (CS20070).
 - **Type inference.** Not yet (step b): a type parameter that appears only in the interface must be fixed by another
   argument. `Apply<T>(T x, IMap<T> map)` works with `Apply(3, x => x + 1)`, because `3` fixes `T`.
 

@@ -578,6 +578,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 case ErrorCode.WRN_SharperTryExpressionAwaitableBody:
                 case ErrorCode.WRN_SharperImmutableHierarchyViolated:
                 case ErrorCode.WRN_SharperPureOutArgumentNotFresh:
+                case ErrorCode.WRN_SharperPureOverrideNotPure:
                     return 1;
                 default:
                     return 0;
@@ -2619,6 +2620,9 @@ namespace Microsoft.CodeAnalysis.CSharp
                 or ErrorCode.ERR_SharperValRefReassignment
                 or ErrorCode.ERR_SharperFunctionTypeParameterModifier
                 or ErrorCode.ERR_SharperFunctionTypeTooManyParameters
+                or ErrorCode.ERR_SharperCantChangeFunctionTypeNamesOnOverride
+                or ErrorCode.ERR_SharperImplBadFunctionTypeNames
+                or ErrorCode.ERR_SharperPartialMemberInconsistentFunctionTypeNames
                 or ErrorCode.WRN_SharperReadOnlyLocalMemberCallOnCopy
                 or ErrorCode.ERR_SharperReadOnlyLocalWithNoInitializer
                 or ErrorCode.ERR_SharperSpreadRefStructEnumerator
@@ -2660,12 +2664,13 @@ namespace Microsoft.CodeAnalysis.CSharp
                 or ErrorCode.ERR_SharperPipeInExpressionTree
                 or ErrorCode.ERR_SharperPureNotPure
                 or ErrorCode.ERR_SharperPureStructMemberNotReadOnly
-                or ErrorCode.ERR_SharperPureVirtual
                 or ErrorCode.WRN_SharperPureOutArgumentNotFresh
                 or ErrorCode.ERR_SharperItClaimedByInnerCall
                 or ErrorCode.ERR_SharperInferEventNoOverriddenMember
                 or ErrorCode.ERR_SharperInferParameterBodyCycle
                 or ErrorCode.ERR_SharperInferParameterConversionCycle
+                or ErrorCode.ERR_SharperPureOverrideNotPure
+                or ErrorCode.WRN_SharperPureOverrideNotPure
                 or ErrorCode.ERR_SharperFunctionToInterfaceInExpressionTree
                 or ErrorCode.ERR_SharperInferParameterUsesDisagree
                 or ErrorCode.ERR_SharperRefinementNotClosed
@@ -2673,6 +2678,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 or ErrorCode.ERR_SharperRefinementDefaultValueDisproven
                 or ErrorCode.ERR_SharperRefinementNotSupportedYet
                 or ErrorCode.ERR_SharperOpaquePatternNotPure
+                or ErrorCode.ERR_SharperPredicatePatternNotPure
                     => false,
             };
 #pragma warning restore CS8524 // The switch expression does not handle some values of its input type (it is not exhaustive) involving an unnamed enum value.

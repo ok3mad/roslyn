@@ -392,7 +392,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             {
                 // it is ok to explicitly implement with no tuple names, for compatibility with C# 6, but otherwise names should match
                 var memberLocation = implementingMember.GetFirstLocation();
-                diagnostics.Add(ErrorCode.ERR_ImplBadTupleNames, memberLocation, implementingMember, implementedMember);
+                diagnostics.Add(SymbolExtensions.TupleOrSharperFunctionTypeNamesError(implementingMember, implementedMember, ErrorCode.ERR_ImplBadTupleNames, ErrorCode.ERR_SharperImplBadFunctionTypeNames), memberLocation, implementingMember, implementedMember);
             }
 
             // In constructed types, it is possible that two method signatures could differ by only ref/out

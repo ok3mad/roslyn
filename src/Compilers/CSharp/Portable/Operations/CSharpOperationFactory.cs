@@ -2640,14 +2640,28 @@ namespace Microsoft.CodeAnalysis.Operations
 
         /// <summary>
         /// Sharper: an opaque pattern (Feature 13) is a relational or constant pattern whose value is not a constant.
+        /// A predicate pattern (slice 2), <c>x is IsEven</c>, is a constant pattern whose value is a reference to the method
+        /// it calls with the input, as the pattern is written.
         /// </summary>
         private IPatternOperation CreateBoundOpaquePatternOperation(BoundOpaquePattern boundOpaquePattern)
         {
-            IOperation value = Create(boundOpaquePattern.Value);
             SyntaxNode syntax = boundOpaquePattern.Syntax;
             bool isImplicit = boundOpaquePattern.WasCompilerGenerated;
             ITypeSymbol? inputType = boundOpaquePattern.InputType.GetPublicSymbol();
             ITypeSymbol? narrowedType = boundOpaquePattern.NarrowedType.GetPublicSymbol();
+            if (boundOpaquePattern is { PredicateArgument: not null, Value: BoundCall call })
+            {
+                MethodSymbol method = call.Method;
+                BoundExpression? receiver = call.InvokedAsExtensionMethod ? call.Arguments[0] : call.ReceiverOpt;
+                TypeParameterSymbol? constrainedToType = GetConstrainedToType(method, receiver);
+                bool isVirtual = constrainedToType is not null ||
+                    ((method.IsAbstract || method.IsOverride || method.IsVirtual) && receiver is not BoundBaseReference);
+                IOperation? instance = call.InvokedAsExtensionMethod ? Create(receiver) : CreateReceiverOperation(receiver, method);
+                var reference = new MethodReferenceOperation(method.GetPublicSymbol(), constrainedToType.GetPublicSymbol(), isVirtual, instance, _semanticModel, call.Syntax, type: null, isImplicit: false);
+                return new ConstantPatternOperation(reference, inputType, narrowedType, _semanticModel, syntax, isImplicit);
+            }
+
+            IOperation value = Create(boundOpaquePattern.Value);
             if (boundOpaquePattern.IsConstantPattern)
             {
                 return new ConstantPatternOperation(value, inputType, narrowedType, _semanticModel, syntax, isImplicit);
