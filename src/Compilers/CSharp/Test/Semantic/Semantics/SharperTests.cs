@@ -1477,34 +1477,34 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "00000False00;12;0" : null).VerifyDiagnostics(
                 // (6,1): warning CS20003: Call to non-readonly member 'S.Mutate()' on val variable 'v' runs on a copy, so 'v' is not changed.
                 // v.Mutate();
-                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v").WithLocation(6, 1),
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v", "val variable").WithLocation(6, 1),
                 // (8,5): warning CS20003: Call to non-readonly member 'S.Getter.get' on val variable 'v' runs on a copy, so 'v' is not changed.
                 // _ = v.Getter;
-                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Getter.get", "v").WithLocation(8, 5),
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Getter.get", "v", "val variable").WithLocation(8, 5),
                 // (10,5): warning CS20003: Call to non-readonly member 'S.this[int].get' on val variable 'v' runs on a copy, so 'v' is not changed.
                 // _ = v[0];
-                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.this[int].get", "v").WithLocation(10, 5),
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.this[int].get", "v", "val variable").WithLocation(10, 5),
                 // (12,19): warning CS20003: Call to non-readonly member 'S.GetEnumerator()' on val variable 'v' runs on a copy, so 'v' is not changed.
                 // foreach (var x in v) { }
-                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.GetEnumerator()", "v").WithLocation(12, 19),
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.GetEnumerator()", "v", "val variable").WithLocation(12, 19),
                 // (14,14): warning CS20003: Call to non-readonly member 'S.Deconstruct(out int, out int)' on val variable 'v' runs on a copy, so 'v' is not changed.
                 // var (a, b) = v;
-                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Deconstruct(out int, out int)", "v").WithLocation(14, 14),
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Deconstruct(out int, out int)", "v", "val variable").WithLocation(14, 14),
                 // (16,1): warning CS20003: Call to non-readonly member 'S.E.add' on val variable 'v' runs on a copy, so 'v' is not changed.
                 // v.E += () => { };
-                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.E.add", "v").WithLocation(16, 1),
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.E.add", "v", "val variable").WithLocation(16, 1),
                 // (21,20): warning CS20003: Call to non-readonly member 'S.Mutate()' on val variable 'v' runs on a copy, so 'v' is not changed.
                 // Action f = () => { v.Mutate(); Console.Write(v.F); };
-                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v").WithLocation(21, 20),
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v", "val variable").WithLocation(21, 20),
                 // (24,1): warning CS20003: Call to non-readonly member 'S.Mutate()' on val variable 'v' runs on a copy, so 'v' is not changed.
                 // v.Mutate();
-                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v").WithLocation(24, 1),
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v", "val variable").WithLocation(24, 1),
                 // (40,5): warning CS20003: Call to non-readonly member 'IMutable.Mutate()' on val variable 'g' runs on a copy, so 'g' is not changed.
                 //     g.Mutate();
-                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "g").WithArguments("IMutable.Mutate()", "g").WithLocation(40, 5),
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "g").WithArguments("IMutable.Mutate()", "g", "val variable").WithLocation(40, 5),
                 // (41,19): warning CS20003: Call to non-readonly member 'IMutable.Get()' on val variable 'g' runs on a copy, so 'g' is not changed.
                 //     Console.Write(g.Get());
-                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "g").WithArguments("IMutable.Get()", "g").WithLocation(41, 19));
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "g").WithArguments("IMutable.Get()", "g", "val variable").WithLocation(41, 19));
         }
 
         [Fact]
@@ -1554,25 +1554,25 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "0000000" : null).VerifyDiagnostics(
                 // (6,7): warning CS20003: Call to non-readonly member 'S.GetAwaiter()' on val variable 'v' runs on a copy, so 'v' is not changed.
                 // await v;
-                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.GetAwaiter()", "v").WithLocation(6, 7),
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.GetAwaiter()", "v", "val variable").WithLocation(6, 7),
                 // (8,5): warning CS20003: Call to non-readonly member 'S.Length.get' on val variable 'v' runs on a copy, so 'v' is not changed.
                 // _ = v[^1];
-                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Length.get", "v").WithLocation(8, 5),
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Length.get", "v", "val variable").WithLocation(8, 5),
                 // (8,5): warning CS20003: Call to non-readonly member 'S.this[int].get' on val variable 'v' runs on a copy, so 'v' is not changed.
                 // _ = v[^1];
-                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.this[int].get", "v").WithLocation(8, 5),
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.this[int].get", "v", "val variable").WithLocation(8, 5),
                 // (10,5): warning CS20003: Call to non-readonly member 'S.Length.get' on val variable 'v' runs on a copy, so 'v' is not changed.
                 // _ = v[1..];
-                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Length.get", "v").WithLocation(10, 5),
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Length.get", "v", "val variable").WithLocation(10, 5),
                 // (10,5): warning CS20003: Call to non-readonly member 'S.Slice(int, int)' on val variable 'v' runs on a copy, so 'v' is not changed.
                 // _ = v[1..];
-                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Slice(int, int)", "v").WithLocation(10, 5),
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Slice(int, int)", "v", "val variable").WithLocation(10, 5),
                 // (12,5): warning CS20003: Call to non-readonly member 'S.Length.get' on val variable 'v' runs on a copy, so 'v' is not changed.
                 // _ = v is [_, ..];
-                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Length.get", "v").WithLocation(12, 5),
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Length.get", "v", "val variable").WithLocation(12, 5),
                 // (14,5): warning CS20003: Call to non-readonly member 'S.P.get' on val variable 'v' runs on a copy, so 'v' is not changed.
                 // _ = v is { P: 0 };
-                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.P.get", "v").WithLocation(14, 5));
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.P.get", "v", "val variable").WithLocation(14, 5));
         }
 
         [Fact]
@@ -2093,13 +2093,13 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "000" : null).VerifyDiagnostics(
                 // (5,5): warning CS20003: Call to non-readonly member 'S.Mutate()' on val variable 's' runs on a copy, so 's' is not changed.
                 //     s.Mutate();
-                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "s").WithArguments("S.Mutate()", "s").WithLocation(5, 5),
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "s").WithArguments("S.Mutate()", "s", "val variable").WithLocation(5, 5),
                 // (9,1): warning CS20003: Call to non-readonly member 'S.Mutate()' on val variable 't' runs on a copy, so 't' is not changed.
                 // t.Mutate();
-                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "t").WithArguments("S.Mutate()", "t").WithLocation(9, 1),
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "t").WithArguments("S.Mutate()", "t", "val variable").WithLocation(9, 1),
                 // (12,1): warning CS20003: Call to non-readonly member 'S.Mutate()' on val variable 'o' runs on a copy, so 'o' is not changed.
                 // o.Mutate();
-                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "o").WithArguments("S.Mutate()", "o").WithLocation(12, 1));
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "o").WithArguments("S.Mutate()", "o", "val variable").WithLocation(12, 1));
         }
 
         [Fact]
@@ -2350,7 +2350,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "0" : null).VerifyDiagnostics(
                 // (6,5): warning CS20003: Call to non-readonly member 'S.Mutate()' on val variable 't' runs on a copy, so 't' is not changed.
                 //     t.Mutate();
-                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "t").WithArguments("S.Mutate()", "t").WithLocation(6, 5));
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "t").WithArguments("S.Mutate()", "t", "val variable").WithLocation(6, 5));
         }
 
         [Fact]
@@ -2578,7 +2578,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             CompileAndVerify(source, parseOptions: s_sharperScriptOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "123450" : null).VerifyDiagnostics(
                 // (9,1): warning CS20003: Call to non-readonly member 'S.Mutate()' on val variable 's' runs on a copy, so 's' is not changed.
                 // s.Mutate();
-                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "s").WithArguments("S.Mutate()", "s").WithLocation(9, 1));
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "s").WithArguments("S.Mutate()", "s", "val variable").WithLocation(9, 1));
         }
 
         [Fact]
@@ -2615,9 +2615,47 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
                 // (6,1): warning CS20003: Call to non-readonly member 'S.Mutate()' on val variable 'v' runs on a copy, so 'v' is not changed.
                 // v.Mutate();
-                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v").WithLocation(6, 1));
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v", "val variable").WithLocation(6, 1));
             CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90,
                 options: TestOptions.DebugExe.WithSpecificDiagnosticOptions("CS20003", ReportDiagnostic.Suppress)).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void SharperDiagnostics_OneCodeForStructCopies()
+        {
+            // val, readonly locals and readonly parameters share CS20003; the message names what the user wrote (#228).
+            var source = """
+                class C
+                {
+                    void M(readonly S p)
+                    {
+                        S s = new S();
+                        val v = s;
+                        readonly var r = s;
+                        System.Action<S> f = (val l) => l.Mutate();
+                        v.Mutate();
+                        r.Mutate();
+                        p.Mutate();
+                    }
+                }
+
+                struct S { public void Mutate() { } }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (8,41): warning CS20003: Call to non-readonly member 'S.Mutate()' on val variable 'l' runs on a copy, so 'l' is not changed.
+                //         System.Action<S> f = (val l) => l.Mutate();
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "l").WithArguments("S.Mutate()", "l", "val variable").WithLocation(8, 41),
+                // (9,9): warning CS20003: Call to non-readonly member 'S.Mutate()' on val variable 'v' runs on a copy, so 'v' is not changed.
+                //         v.Mutate();
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v", "val variable").WithLocation(9, 9),
+                // (10,9): warning CS20003: Call to non-readonly member 'S.Mutate()' on readonly local 'r' runs on a copy, so 'r' is not changed.
+                //         r.Mutate();
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "r").WithArguments("S.Mutate()", "r", "readonly local").WithLocation(10, 9),
+                // (11,9): warning CS20003: Call to non-readonly member 'S.Mutate()' on readonly parameter 'p' runs on a copy, so 'p' is not changed.
+                //         p.Mutate();
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "p").WithArguments("S.Mutate()", "p", "readonly parameter").WithLocation(11, 9));
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90,
+                options: TestOptions.DebugDll.WithSpecificDiagnosticOptions("CS20003", ReportDiagnostic.Suppress)).VerifyDiagnostics();
         }
 
         [Fact]
@@ -5415,7 +5453,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 Diagnostic(ErrorCode.ERR_AssgReadonlyLocal2Cause, "v.P").WithArguments("v", "val variable").WithLocation(15, 45),
                 // (15,54): warning CS20003: Call to non-readonly member 'S.Mutate()' on val variable 'v' runs on a copy, so 'v' is not changed.
                 //         Action<S> c = (val v) => { v.F = 1; v.P = 1; v.Mutate(); };
-                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v").WithLocation(15, 54),
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v", "val variable").WithLocation(15, 54),
                 // (17,41): error CS1656: Cannot assign to 's' because it is a 'val variable'
                 //         Action<string> n = (val s) => { s ??= ""; };
                 Diagnostic(ErrorCode.ERR_AssgReadonlyLocalCause, "s").WithArguments("s", "val variable").WithLocation(17, 41));
@@ -5786,16 +5824,16 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "000011" : null).VerifyDiagnostics(
                 // (4,28): warning CS20003: Call to non-readonly member 'S.Mutate()' on val variable 's' runs on a copy, so 's' is not changed.
                 // Action<S> m = (val s) => { s.Mutate(); Console.Write(s.F); Func<int> c = () => { s.Mutate(); return s.F; }; Console.Write(c()); };
-                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "s").WithArguments("S.Mutate()", "s").WithLocation(4, 28),
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "s").WithArguments("S.Mutate()", "s", "val variable").WithLocation(4, 28),
                 // (4,82): warning CS20003: Call to non-readonly member 'S.Mutate()' on val variable 's' runs on a copy, so 's' is not changed.
                 // Action<S> m = (val s) => { s.Mutate(); Console.Write(s.F); Func<int> c = () => { s.Mutate(); return s.F; }; Console.Write(c()); };
-                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "s").WithArguments("S.Mutate()", "s").WithLocation(4, 82),
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "s").WithArguments("S.Mutate()", "s", "val variable").WithLocation(4, 82),
                 // (6,63): warning CS20003: Call to non-readonly member 'S.Mutate()' on val variable 's' runs on a copy, so 's' is not changed.
                 // Func<S, Task<int>> t = async (val s) => { await Task.Yield(); s.Mutate(); return s.F; };
-                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "s").WithArguments("S.Mutate()", "s").WithLocation(6, 63),
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "s").WithArguments("S.Mutate()", "s", "val variable").WithLocation(6, 63),
                 // (8,29): warning CS20003: Call to non-readonly member 'S.P.get' on val variable 's' runs on a copy, so 's' is not changed.
                 // Func<S, int> p = (val s) => s is { P: 1 } ? s.F : -1;
-                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "s").WithArguments("S.P.get", "s").WithLocation(8, 29));
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "s").WithArguments("S.P.get", "s", "val variable").WithLocation(8, 29));
         }
 
         [Fact]
@@ -6278,27 +6316,27 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "0000000;1" : null).VerifyDiagnostics(
-                // (6,1): warning CS20010: Call to non-readonly member 'S.Mutate()' on readonly local 'v' runs on a copy, so 'v' is not changed.
+                // (6,1): warning CS20003: Call to non-readonly member 'S.Mutate()' on readonly local 'v' runs on a copy, so 'v' is not changed.
                 // v.Mutate();
-                Diagnostic(ErrorCode.WRN_SharperReadOnlyLocalMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v").WithLocation(6, 1),
-                // (8,5): warning CS20010: Call to non-readonly member 'S.Getter.get' on readonly local 'v' runs on a copy, so 'v' is not changed.
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v", "readonly local").WithLocation(6, 1),
+                // (8,5): warning CS20003: Call to non-readonly member 'S.Getter.get' on readonly local 'v' runs on a copy, so 'v' is not changed.
                 // _ = v.Getter;
-                Diagnostic(ErrorCode.WRN_SharperReadOnlyLocalMemberCallOnCopy, "v").WithArguments("S.Getter.get", "v").WithLocation(8, 5),
-                // (10,19): warning CS20010: Call to non-readonly member 'S.GetEnumerator()' on readonly local 'v' runs on a copy, so 'v' is not changed.
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Getter.get", "v", "readonly local").WithLocation(8, 5),
+                // (10,19): warning CS20003: Call to non-readonly member 'S.GetEnumerator()' on readonly local 'v' runs on a copy, so 'v' is not changed.
                 // foreach (var x in v) { }
-                Diagnostic(ErrorCode.WRN_SharperReadOnlyLocalMemberCallOnCopy, "v").WithArguments("S.GetEnumerator()", "v").WithLocation(10, 19),
-                // (13,20): warning CS20010: Call to non-readonly member 'S.Mutate()' on readonly local 'v' runs on a copy, so 'v' is not changed.
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.GetEnumerator()", "v", "readonly local").WithLocation(10, 19),
+                // (13,20): warning CS20003: Call to non-readonly member 'S.Mutate()' on readonly local 'v' runs on a copy, so 'v' is not changed.
                 // Action f = () => { v.Mutate(); Console.Write(v.F); };
-                Diagnostic(ErrorCode.WRN_SharperReadOnlyLocalMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v").WithLocation(13, 20),
-                // (16,1): warning CS20010: Call to non-readonly member 'S.Mutate()' on readonly local 'v' runs on a copy, so 'v' is not changed.
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v", "readonly local").WithLocation(13, 20),
+                // (16,1): warning CS20003: Call to non-readonly member 'S.Mutate()' on readonly local 'v' runs on a copy, so 'v' is not changed.
                 // v.Mutate();
-                Diagnostic(ErrorCode.WRN_SharperReadOnlyLocalMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v").WithLocation(16, 1),
-                // (18,5): warning CS20010: Call to non-readonly member 'S.Getter.get' on readonly local 'v' runs on a copy, so 'v' is not changed.
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v", "readonly local").WithLocation(16, 1),
+                // (18,5): warning CS20003: Call to non-readonly member 'S.Getter.get' on readonly local 'v' runs on a copy, so 'v' is not changed.
                 // if (v is { Getter: 1 }) { }
-                Diagnostic(ErrorCode.WRN_SharperReadOnlyLocalMemberCallOnCopy, "v").WithArguments("S.Getter.get", "v").WithLocation(18, 5),
-                // (21,1): warning CS20010: Call to non-readonly member 'S.Mutate()' on readonly local 'u' runs on a copy, so 'u' is not changed.
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Getter.get", "v", "readonly local").WithLocation(18, 5),
+                // (21,1): warning CS20003: Call to non-readonly member 'S.Mutate()' on readonly local 'u' runs on a copy, so 'u' is not changed.
                 // u.Mutate();
-                Diagnostic(ErrorCode.WRN_SharperReadOnlyLocalMemberCallOnCopy, "u").WithArguments("S.Mutate()", "u").WithLocation(21, 1));
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "u").WithArguments("S.Mutate()", "u", "readonly local").WithLocation(21, 1));
         }
 
         [Fact]
@@ -7115,27 +7153,27 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "0000001;0" : null).VerifyDiagnostics(
-                // (12,5): warning CS20013: Call to non-readonly member 'S.Mutate()' on readonly parameter 'v' runs on a copy, so 'v' is not changed.
+                // (12,5): warning CS20003: Call to non-readonly member 'S.Mutate()' on readonly parameter 'v' runs on a copy, so 'v' is not changed.
                 //     v.Mutate();
-                Diagnostic(ErrorCode.WRN_SharperReadOnlyParameterMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v").WithLocation(12, 5),
-                // (14,9): warning CS20013: Call to non-readonly member 'S.Getter.get' on readonly parameter 'v' runs on a copy, so 'v' is not changed.
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v", "readonly parameter").WithLocation(12, 5),
+                // (14,9): warning CS20003: Call to non-readonly member 'S.Getter.get' on readonly parameter 'v' runs on a copy, so 'v' is not changed.
                 //     _ = v.Getter;
-                Diagnostic(ErrorCode.WRN_SharperReadOnlyParameterMemberCallOnCopy, "v").WithArguments("S.Getter.get", "v").WithLocation(14, 9),
-                // (16,23): warning CS20013: Call to non-readonly member 'S.GetEnumerator()' on readonly parameter 'v' runs on a copy, so 'v' is not changed.
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Getter.get", "v", "readonly parameter").WithLocation(14, 9),
+                // (16,23): warning CS20003: Call to non-readonly member 'S.GetEnumerator()' on readonly parameter 'v' runs on a copy, so 'v' is not changed.
                 //     foreach (var x in v) { }
-                Diagnostic(ErrorCode.WRN_SharperReadOnlyParameterMemberCallOnCopy, "v").WithArguments("S.GetEnumerator()", "v").WithLocation(16, 23),
-                // (19,24): warning CS20013: Call to non-readonly member 'S.Mutate()' on readonly parameter 'v' runs on a copy, so 'v' is not changed.
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.GetEnumerator()", "v", "readonly parameter").WithLocation(16, 23),
+                // (19,24): warning CS20003: Call to non-readonly member 'S.Mutate()' on readonly parameter 'v' runs on a copy, so 'v' is not changed.
                 //     Action f = () => { v.Mutate(); Console.Write(v.F); };
-                Diagnostic(ErrorCode.WRN_SharperReadOnlyParameterMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v").WithLocation(19, 24),
-                // (22,5): warning CS20013: Call to non-readonly member 'S.Mutate()' on readonly parameter 'v' runs on a copy, so 'v' is not changed.
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v", "readonly parameter").WithLocation(19, 24),
+                // (22,5): warning CS20003: Call to non-readonly member 'S.Mutate()' on readonly parameter 'v' runs on a copy, so 'v' is not changed.
                 //     v.Mutate();
-                Diagnostic(ErrorCode.WRN_SharperReadOnlyParameterMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v").WithLocation(22, 5),
-                // (24,9): warning CS20013: Call to non-readonly member 'S.Getter.get' on readonly parameter 'v' runs on a copy, so 'v' is not changed.
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Mutate()", "v", "readonly parameter").WithLocation(22, 5),
+                // (24,9): warning CS20003: Call to non-readonly member 'S.Getter.get' on readonly parameter 'v' runs on a copy, so 'v' is not changed.
                 //     if (v is { Getter: 1 }) { }
-                Diagnostic(ErrorCode.WRN_SharperReadOnlyParameterMemberCallOnCopy, "v").WithArguments("S.Getter.get", "v").WithLocation(24, 9),
-                // (32,25): warning CS20013: Call to non-readonly member 'S.Mutate()' on readonly parameter 's' runs on a copy, so 's' is not changed.
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "v").WithArguments("S.Getter.get", "v", "readonly parameter").WithLocation(24, 9),
+                // (32,25): warning CS20003: Call to non-readonly member 'S.Mutate()' on readonly parameter 's' runs on a copy, so 's' is not changed.
                 //     public void Run() { s.Mutate(); Console.Write(s.F); }
-                Diagnostic(ErrorCode.WRN_SharperReadOnlyParameterMemberCallOnCopy, "s").WithArguments("S.Mutate()", "s").WithLocation(32, 25));
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "s").WithArguments("S.Mutate()", "s", "readonly parameter").WithLocation(32, 25));
         }
 
         [Fact]

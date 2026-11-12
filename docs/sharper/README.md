@@ -168,17 +168,17 @@ in `#pragma warning`, `/nowarn` and `.editorconfig`.
 | --- | --- | --- |
 | CS20001 | Error | A spread 'yield return ..' cannot enumerate the asynchronous sequence '{0}', because that would need an 'await' that is not written. Use 'await foreach' with 'yield return' instead. |
 | CS20002 | Warning | '..{0}' is a range here, not a spread, because '{0}' is dynamic. |
-| CS20003 | Warning | Call to non-readonly member '{0}' on val variable '{1}' runs on a copy, so '{1}' is not changed. |
+| CS20003 | Warning | Call to non-readonly member '{0}' on {2} '{1}' runs on a copy, so '{1}' is not changed. ({2} is 'val variable', 'readonly local' or 'readonly parameter'.) |
 | CS20004 | Error | The syntax 'val' for a pattern is not permitted to refer to a type, but '{0}' is in scope here. Use '@val' for the type. |
 | CS20005 | Error | Deconstruction 'val (...)' form disallows a specific type for 'val'. Use '@val' for the type. |
 | CS20006 | Error | Cannot ref-assign '{0}' because it is a ref val: it always refers to the same variable. Writes through '{0}' are allowed. |
 | CS20007 | | Retired in step N1 of function type parameter names, which keeps the names. Was: "A function type cannot name its parameters. Remove the name '{0}'." |
 | CS20008 | Error | A function type parameter cannot be '{0}', because a function type is a 'System.Func' or 'System.Action' delegate. |
 | CS20009 | Error | A function type cannot have more than {0} parameters, because no 'System.Func' or 'System.Action' delegate has more. |
-| CS20010 | Warning | Call to non-readonly member '{0}' on readonly local '{1}' runs on a copy, so '{1}' is not changed. |
+| CS20010 | | Retired in [#228](https://github.com/ok3mad/roslyn/issues/228): CS20003 names the cause. Was: "Call to non-readonly member '{0}' on readonly local '{1}' runs on a copy, so '{1}' is not changed." |
 | CS20011 | Error | A readonly local must be initialized in its declaration, because it cannot be assigned later. |
 | CS20012 | Error | A spread 'yield return ..' cannot enumerate '{0}' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead. |
-| CS20013 | Warning | Call to non-readonly member '{0}' on readonly parameter '{1}' runs on a copy, so '{1}' is not changed. |
+| CS20013 | | Retired in [#228](https://github.com/ok3mad/roslyn/issues/228): CS20003 names the cause. Was: "Call to non-readonly member '{0}' on readonly parameter '{1}' runs on a copy, so '{1}' is not changed." |
 | CS20014 | Error | Cannot infer the return type of '{0}', because the value it returns ({1}) has no type. Write the return type. |
 | CS20015 | Error | An inferred return type ('infer') is not supported {0} yet. Write the return type. |
 | CS20016 | Error | '{0}' has no body to infer its return type from. Write the return type. |

@@ -164,7 +164,7 @@ class Square(double side) : Shape
 
 - **The rules of both.** The type is inferred as without `readonly`, and the parameter follows the `readonly` parameter
   rules, with the same diagnostics as its twin with the type written out: writes are CS1656, CS1657 and CS1654, also
-  from lambdas and local functions, and a non-readonly member of a struct runs on a copy and warns (CS20013).
+  from lambdas and local functions, and a non-readonly member of a struct runs on a copy and warns (CS20003).
 - **Every member.** Methods, local functions, constructors, primary constructors and lambdas with a default value (P1),
   and overrides and implementations (P2).
 - **`ref`, `in` and `out`.** A ref kind copied from the overridden member (P2) reads like a written one:

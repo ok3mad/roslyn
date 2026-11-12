@@ -32,8 +32,8 @@ parameters (`readonly this int x`). With an [inferred type](inferred-parameter-t
 - Every write is an error: assignment, compound assignment, `++`/`--`, deconstruction, passing as `ref` or `out`,
   `ref` locals, and writes to fields of a struct parameter (CS1656, CS1657, CS1654), also from lambdas and local
   functions.
-- A non-readonly member of a struct `readonly` parameter runs on a copy and warns: CS20013, the parameter form of
-  CS20010. Members found by pattern (`GetEnumerator`, property patterns, `await`) do the same, also in async methods.
+- A non-readonly member of a struct `readonly` parameter runs on a copy and warns: CS20003, as for `val`, with the
+  cause 'readonly parameter'. Members found by pattern (`GetEnumerator`, property patterns, `await`) do the same, also in async methods.
 - `(readonly x) => ...` is an implicitly typed lambda parameter that cannot be reassigned, the same as `(val x) => ...`.
 
 ## Not part of the signature
@@ -82,7 +82,7 @@ the rule. A record's `readonly` parameter is only read by the generated property
 - `IParameterSymbol` has no read-only flag, and will not get one: `readonly` is not part of the signature, so it is
   no contract, and tooling asks `SharperFacts` instead, as for `val` and `readonly` locals
   ([#88](https://github.com/ok3mad/roslyn/issues/88)). The IDE does not know `readonly` parameters yet.
-- CS20013 warns for every non-readonly member, like CS20003 and CS20010
+- CS20003 warns for every non-readonly member
   ([#84](https://github.com/ok3mad/roslyn/issues/84)).
 - Immutable-by-default parameters, with a marker for mutable ones, are a strictness ladder setting for later, not
   syntax ([#23](https://github.com/ok3mad/roslyn/issues/23)). `readonly` stays the opt-in form either way.

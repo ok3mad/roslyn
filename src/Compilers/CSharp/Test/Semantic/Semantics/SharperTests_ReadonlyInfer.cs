@@ -318,7 +318,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         [Fact]
         public void ReadonlyInfer_StructMemberCallOnCopy()
         {
-            // A non-readonly member of a struct readonly infer parameter runs on a copy and warns (CS20013), whichever
+            // A non-readonly member of a struct readonly infer parameter runs on a copy and warns (CS20003), whichever
             // source gave the type.
             var source = """
                 using System;
@@ -357,12 +357,12 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 """;
             CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90,
                 expectedOutput: ExecutionConditionUtil.IsCoreClr ? "0;0" : null).VerifyDiagnostics(
-                // (23,9): warning CS20013: Call to non-readonly member 'S.Mutate()' on readonly parameter 's' runs on a copy, so 's' is not changed.
+                // (23,9): warning CS20003: Call to non-readonly member 'S.Mutate()' on readonly parameter 's' runs on a copy, so 's' is not changed.
                 //         s.Mutate();
-                Diagnostic(ErrorCode.WRN_SharperReadOnlyParameterMemberCallOnCopy, "s").WithArguments("S.Mutate()", "s").WithLocation(23, 9),
-                // (30,9): warning CS20013: Call to non-readonly member 'S.Mutate()' on readonly parameter 's' runs on a copy, so 's' is not changed.
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "s").WithArguments("S.Mutate()", "s", "readonly parameter").WithLocation(23, 9),
+                // (30,9): warning CS20003: Call to non-readonly member 'S.Mutate()' on readonly parameter 's' runs on a copy, so 's' is not changed.
                 //         s.Mutate();
-                Diagnostic(ErrorCode.WRN_SharperReadOnlyParameterMemberCallOnCopy, "s").WithArguments("S.Mutate()", "s").WithLocation(30, 9));
+                Diagnostic(ErrorCode.WRN_SharperValMemberCallOnCopy, "s").WithArguments("S.Mutate()", "s", "readonly parameter").WithLocation(30, 9));
         }
 
         [Fact]

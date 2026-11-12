@@ -18,9 +18,9 @@ total = 0;   // error CS1656: Cannot assign to 'total' because it is a 'val vari
 It is `var` plus the read-only rule that C# already applies to `foreach` and `using` variables, and the same as
 [`readonly var x = e;`](readonly-locals.md), which also has an explicitly typed form, `readonly int x = e;`. `val` is
 sugar: `readonly` plus the type inference of its position, so `(val x) => ...` is `(readonly x) => ...`. Only the
-spelling differs, which shows in the messages ('val variable' instead of 'readonly local'), the struct-copy warning
-code (CS20003 instead of CS20010, [#228](https://github.com/ok3mad/roslyn/issues/228)), and the places where it can be
-written: `val` also works where C# has no modifier slot (`foreach`, deconstruction, `out`, patterns).
+spelling differs, which shows in the messages ('val variable' instead of 'readonly local'; the struct-copy warning is
+CS20003 for both, [#228](https://github.com/ok3mad/roslyn/issues/228)) and in the places where it can be written:
+`val` also works where C# has no modifier slot (`foreach`, deconstruction, `out`, patterns).
 
 ## Rules
 
@@ -98,8 +98,8 @@ without a designation is still a type test.
 ## Not covered yet
 
 - **Noisy CS20003:** every non-readonly member of a struct `val` warns, even one that does not mutate. Inferring which
-  members mutate is [#84](https://github.com/ok3mad/roslyn/issues/84). Until then CS20003, CS20010 and CS20013 stay
-  default warnings ([#85](https://github.com/ok3mad/roslyn/issues/85)): the copy changes behavior (a `MoveNext` on a
+  members mutate is [#84](https://github.com/ok3mad/roslyn/issues/84). Until then CS20003, for `val` and `readonly`
+  alike, stays a default warning ([#85](https://github.com/ok3mad/roslyn/issues/85)): the copy changes behavior (a `MoveNext` on a
   `val` enumerator never advances), and inference can then only remove warnings, never add them. Metadata members
   marked `[IsReadOnly]` and `[Pure]` members (which must be `readonly`) already do not warn. Code where the noise is
   not worth it can mark struct members `readonly` or use `/nowarn`.
