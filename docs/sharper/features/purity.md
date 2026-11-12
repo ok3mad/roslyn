@@ -202,6 +202,12 @@ one from source: its overrides and implementations here must be `[Pure]`, and ov
 trusted to honour it.
 `System.Diagnostics.Contracts.PureAttribute` is not trusted, because nothing checks it.
 
+## Where purity is required
+
+Besides `[Pure]` bodies, the operand of an [opaque pattern](opaque-patterns.md) (`x is > max`) and the call of a
+[predicate pattern](predicate-patterns.md) (`x is IsEven`) are checked by the same rules (CS20062, CS20069), so a pattern
+can only call `[Pure]`, `[AssumePure]` and attested members.
+
 ## Diagnostics
 
 | Code | Severity | When |

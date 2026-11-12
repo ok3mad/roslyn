@@ -383,7 +383,13 @@ implementation plan, "Feature 3"):
    (`SkipInVisitor`), so an expression a DAG test evaluates is seen by flow analysis only through its pattern: read it
    in the state before the match (no pattern variable is assigned yet), and let the nullable walker analyze it at the
    DAG node, as it does a `when` clause. The decision DAG rewriter lowers it (`_localRewriter.VisitExpression`), which
-   can change `_factory.Syntax`.
+   can change `_factory.Syntax`. An expression over the pattern's input (the predicate pattern's call `IsEven(x)`) uses
+   a `BoundValuePlaceholder` for the input, which every pass that reaches it must register: the decision DAG rewriter
+   (`AddPlaceholderReplacement` with the DAG temp), the nullable walker (with the temp's state at the DAG node, and once
+   more for the semantic model's visit of the pattern), `RefSafetyAnalysis` (the pattern input's escape scope) and the
+   `PurityWalker` allow list. A call whose syntax is a bare name trips `InterceptableNameSyntax`'s assert, as the pipe's
+   bare stage did. Comparing two such tests structurally (`IsSameComparison`) must treat the two placeholders as one
+   input and compare a static call's type receiver, or two identical tests never share.
 
 43. **A prologue belongs to the emitted method, after state machine rewriting.** Code that must run when a method is
    called (the refinement guard) cannot go into the bound body: an iterator's or `async` method's body becomes

@@ -1706,9 +1706,12 @@
   <Node Name="BoundDagOpaqueTest" Base="BoundDagTest">
     <!--Sharper: check that the input is related to the value of a pure, non-constant expression (an opaque pattern).
         Nothing is known of its outcome but that an identical test has the same one; value sets are left alone.
-        Value is not lowered: the decision DAG rewriter lowers it where the test is evaluated.-->
+        Value is not lowered: the decision DAG rewriter lowers it where the test is evaluated.
+        For a predicate pattern (`x is IsEven`), PredicateArgument is not null: Value is the boolean call over it, which
+        stands for the input, and the test is that the call returns true. OperatorKind is then BoolEqual.-->
     <Field Name="OperatorKind" Type="BinaryOperatorKind"/>
     <Field Name="Value" Type="BoundExpression" Null="disallow"/>
+    <Field Name="PredicateArgument" Type="BoundValuePlaceholder?" SkipInVisitor="true"/>
   </Node>
   <!-- As a decision, an evaluation is considered to always succeed. -->
   <AbstractNode Name="BoundDagEvaluation" Base="BoundDagTest">
@@ -2723,11 +2726,15 @@
     Relation is the comparison (Equal for a constant pattern) with its operand type, as for BoundRelationalPattern.
     Value is converted to NarrowedType, the input type or, for an input of type object or a type parameter, the
     operand's own type, which the match tests for first.
+    A predicate pattern (`x is IsEven`, slice 2) is an opaque pattern with a PredicateArgument: Value is the call of a
+    `bool M(T)` with that placeholder, which stands for the input, as its argument; the pattern matches when the call
+    returns true. Relation is then BoolEqual and NarrowedType is the input type.
   -->
   <Node Name="BoundOpaquePattern" Base="BoundPattern">
     <Field Name="Relation" Type="BinaryOperatorKind"/>
     <Field Name="Value" Type="BoundExpression" Null="disallow"/>
     <Field Name="IsConstantPattern" Type="bool"/>
+    <Field Name="PredicateArgument" Type="BoundValuePlaceholder?" SkipInVisitor="true"/>
   </Node>
 
   <Node Name="BoundDiscardExpression" Base="BoundExpression">

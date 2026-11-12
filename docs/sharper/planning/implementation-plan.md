@@ -1,4 +1,4 @@
-# Sharper: Roslyn Implementation Plan
+﻿# Sharper: Roslyn Implementation Plan
 
 > [!NOTE]
 > This plan is maintained here; it started as the "Sharper: Roslyn Implementation Plan" planning doc. For a quick
@@ -143,7 +143,7 @@ The brainstorm proposes 26 pieces of syntax, and row 28, discard arguments, was 
 | 20 | Lifting in pipes and arguments | `users.Find(id) \|> Render(it, p)` | await, `Select`, or passing a `Fail<...>` case through | none | XL | Low | Decided: failures are tagged with `Fail<T>` from the runtime library, and only that case passes through (see [Decisions](#decisions)). Open: implicit versus an explicit marker; breaks down at generic and `object` parameters | [#32](https://github.com/ok3mad/roslyn/issues/32) |
 | 21 | Refined types and members | `decimal Amount is >0`, `int is >=0` | plain type plus boundary checks | yes (pattern in a type position) | XL | Low–Med | Proof obligations at call sites; runtime guards for C# callers | [#33](https://github.com/ok3mad/roslyn/issues/33) |
 | 22 | Opaque patterns | `is > 0 and <= max` | an opaque test in the decision DAG | none (relational patterns already parse any expression) | M, plus purity | Med; slice 1 prototyped on `sharper/opaque-patterns` | Decided: any pure non-constant operand of a relational or constant pattern, in every pattern context except refinements; pure is enough, as for `Deconstruct` in C#. See [Feature 13](#feature-13-patterns-on-pure-functions-design) | [#34](https://github.com/ok3mad/roslyn/issues/34) |
-| 23 | Extractor patterns | `s is Parse(val n and >0)` | call plus a sub-pattern, an evaluation in the decision DAG | none | M–L | Low; designed | Decided: a method only where type lookup fails (a type named `Parse` wins); the predicate form first, then `bool TryX(T, out U)`, then `U F(T)`, unions last. See [Feature 13](#feature-13-patterns-on-pure-functions-design) | [#35](https://github.com/ok3mad/roslyn/issues/35) |
+| 23 | Extractor patterns | `s is Parse(val n and >0)` | call plus a sub-pattern, an evaluation in the decision DAG | none | M–L | Low; designed; the predicate form (slice 2) prototyped on `sharper/predicate-patterns` | Decided: a method only where type lookup fails (a type named `Parse` wins); the predicate form first, then `bool TryX(T, out U)`, then `U F(T)`, unions last. See [Feature 13](#feature-13-patterns-on-pure-functions-design) | [#35](https://github.com/ok3mad/roslyn/issues/35) |
 | 24 | `pure` and `total` modifiers | `total int Fib(...)`, `pure(provider)` | erased, plus attributes | small | XL (syntax alone S) | Low | Needs the whole effect checker and bindings for existing .NET code | [#36](https://github.com/ok3mad/roslyn/issues/36) |
 | 25 | Member declared on another type | `static infer Currency.Parse(string s)` | C# 14 extension block | yes | M | Deferred | C# 14 `extension(Currency) { ... }` blocks already cover it, with `infer` and `[Pure]` on their members, so the shorthand only saves a wrapper class. If revived: file level only, where the dotted form is never valid C# (CS0116 or CS9348, plus CS0538); inside a type it stays an explicit interface implementation. See [Parked](brainstorm.md#parked) | [#37](https://github.com/ok3mad/roslyn/issues/37) |
 | 27 | `assume` escape hatch | `assume x is >0` | runtime check | yes | S–M | Low | Only an open question so far | [#39](https://github.com/ok3mad/roslyn/issues/39) |
@@ -1582,6 +1582,34 @@ Prototype on `sharper/opaque-patterns` ([feature page](../features/opaque-patter
 | Union matching | Not covered: a union input keeps C#'s error, since `UnionMatchingRewriter` rewrites the pattern before the DAG is built |
 | Refinements rejecting opaque patterns | A refinement binds its pattern with the same binder, so `int i is > s_max` makes an opaque pattern, which `SharperRefinement.FindOpenPattern` rejects as not closed (CS20058). The operand's purity is not checked inside a refinement clause, so an impure operand gets CS20058 alone (`Opaque_RefinementRejects`) |
 | Pointers | `e is p->F` was CS0150 under Sharper and is now CS20062, since reading through a pointer is not pure (`FunctionType_Pattern_PointerMemberAccess`) |
+
+### Slice 2, as built
+
+The predicate form `x is IsEven`, shape 1 of the extractor shapes. Prototype on `sharper/predicate-patterns`
+([feature page](../features/predicate-patterns.md), tests in `SharperTests_PredicatePatterns.cs`).
+
+**Probe.** With the flag off, `x is IsEven` is CS0428 ("Cannot convert method group 'IsEven' to non-delegate type
+'int'") for a typed input and CS8974 plus CS0150 for an `object` input, in `is`, switch arms, `case` labels and under
+`not`. The parser makes a constant pattern of a simple name, a qualified name and a generic name alike, so the binder
+sees a method group in `BindConstantPatternWithFallbackToTypePattern` (which C# reaches through `BindTypeOrRValue`) and
+in `BindExpressionForPattern` (`x is M` after type binding failed). A type of that name binds as a type before either,
+and a constant or a local is no method group, so C# keeps its meaning without a trial.
+
+| Question | As built |
+| --- | --- |
+| Where it binds | A constant pattern, `case` label or `is` right side whose expression binds to a method group, in a Sharper file, before `CheckValue` would report the C# error (`TryBindSharperPredicatePattern`). Not for relational operands |
+| Node | No new node: `BoundOpaquePattern` and `BoundDagOpaqueTest` take an optional `PredicateArgument`, a `BoundValuePlaceholder` for the input, and `Value` is the `BoundCall` over it with `Relation` `BoolEqual`. The dozen switches of slice 1 (trap 41) needed no new cases; the placeholder needed registering in `LocalRewriter` (`LowerTest`), `NullableWalker` (the DAG node, and `VisitOpaquePattern` for the semantic model), `RefSafetyAnalysis` (the input's escape scope) and the `PurityWalker` allow list |
+| The call | Bound as `M(x)` would be (`BindMethodGroupInvocation` with the placeholder as the only argument), with the method's name as the call's syntax, as the pipe's bare stage does, so `GetSymbolInfo` on the name finds the method. `InterceptableNameSyntax` accepts that syntax (`IsSharperPredicatePatternName`) and returns no name: the call is not one the user wrote |
+| Which methods | Overload resolution on that call. A `BoundCall` without errors whose method returns `bool` by value and takes no default values and no `params` expansion is a predicate. No applicable method, or another shape (`int F(T)`, `bool M(T, int y = 0)`), keeps C#'s error (CS0428 or CS0150); an applicable call with an error, such as an ambiguity (CS0121), is reported |
+| Generic, instance, extension methods | Type inference from the input; explicit type arguments work too. Instance methods on `this` or any receiver (`x is rule.Accepts`); an instance method from a static context keeps C#'s error. The input is never the receiver: an extension method counts when called on another receiver or by name |
+| Input conversion | As an argument: implicit conversions only (`int` to `long`, `int?` or `object`). No type test: `object o is IsEven` with `bool IsEven(int)` keeps C#'s error |
+| `null` | The method is called with the input as it is, `null` included: the DAG test is made on the input temp with no null or type test before it (`MakeTestsForOpaquePattern`), so `s is string.IsNullOrEmpty` matches `null`. A null test first would make the pattern disagree with the call it is written as. (The check of `or` operands, which widens a pattern's input type, still tests for the predicate's input type first) |
+| Purity | A new error, CS20069 ("The method of a predicate pattern must be pure, but it is not: {0}."), from the same member-mode `PurityWalker` over the call, so `[Pure]`, `[AssumePure]`, attested members and `[Pure]` virtual and interface slots (#225) are accepted. CS20062's text speaks of an operand, which a method is not. CS20066 to CS20068 are taken by #227 |
+| Shared tests | `IsSameComparison` treats the two tests' placeholders as the same input, so two calls of the same method on the same value are one test (`IsEven => 1, not IsEven => 2` is exhaustive). It also compares type receivers now (`BoundTypeExpression`), which slice 1 missed: two `> Limits.Max()` operands were never the same test |
+| Nullable | The placeholder has the input's state where the DAG calls the method, so `string? s is IsEmpty` warns CS8604 as the twin `IsEmpty(s)` does, and `s is not null and IsEmpty` does not |
+| IOperation | `IConstantPatternOperation` whose value is an `IMethodReferenceOperation` (the method, its receiver as the instance, `Type: null`), as the pattern is written. The call and its placeholder argument do not appear, so the control flow graph needs nothing new |
+| Refinements | `int i is IsEven` is an opaque pattern, which `SharperRefinement.FindOpenPattern` rejects (CS20058); the call's purity is not checked there, as for slice 1 |
+| Left out | Union matching, `dynamic` inputs, lambdas and delegate-typed values, extractors with sub-patterns (slice 3) |
 
 ## Feature 14: purity, slice 1, second part: virtual and interface members
 

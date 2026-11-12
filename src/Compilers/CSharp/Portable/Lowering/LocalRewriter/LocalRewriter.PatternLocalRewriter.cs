@@ -388,6 +388,17 @@ namespace Microsoft.CodeAnalysis.CSharp
                         Debug.Assert(input.Type.IsValueType);
                         return MakeRelationalTest(d.Syntax, input, d.OperatorKind, d.Value);
 
+                    case BoundDagOpaqueTest { PredicateArgument: { } argument } d:
+                        {
+                            // Sharper: a predicate pattern (Feature 13, slice 2) calls its method with the input.
+                            Debug.Assert(argument.Type.Equals(input.Type, TypeCompareKind.AllIgnoreOptions));
+                            _localRewriter.AddPlaceholderReplacement(argument, input);
+                            BoundExpression call = _localRewriter.VisitExpression(d.Value);
+                            _localRewriter.RemovePlaceholderReplacement(argument);
+                            _factory.Syntax = d.Syntax;
+                            return call;
+                        }
+
                     case BoundDagOpaqueTest d:
                         // Sharper: the operand is evaluated where the test is (Feature 13).
                         Debug.Assert(!input.Type.IsNullableType());

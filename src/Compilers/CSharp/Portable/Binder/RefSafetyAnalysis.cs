@@ -739,6 +739,20 @@ namespace Microsoft.CodeAnalysis.CSharp
             }
         }
 
+        public override BoundNode? VisitOpaquePattern(BoundOpaquePattern node)
+        {
+            // Sharper: the argument of a predicate pattern's call is the pattern's input (Feature 13, slice 2).
+            if (node.PredicateArgument is { } argument)
+            {
+                AddPlaceholderScope(argument, SafeContextAndLocation.Create(_patternInputValEscape));
+                base.VisitOpaquePattern(node);
+                RemovePlaceholderScope(argument);
+                return null;
+            }
+
+            return base.VisitOpaquePattern(node);
+        }
+
         public override BoundNode? VisitPropertySubpattern(BoundPropertySubpattern node)
         {
             using var _ = new PatternInput(this, getMemberValEscape(node.Member, _patternInputValEscape));

@@ -108,7 +108,121 @@ namespace Microsoft.CodeAnalysis.CSharp
                 hasErrors = true;
             }
 
-            return new BoundOpaquePattern(node, relation, value, isConstantPattern, inputType: inputType, narrowedType: type, hasErrors);
+            return new BoundOpaquePattern(node, relation, value, isConstantPattern, predicateArgument: null, inputType: inputType, narrowedType: type, hasErrors);
+        }
+
+        /// <summary>
+        /// Whether <paramref name="syntax"/> is the method of a predicate pattern, which is also the syntax of its call:
+        /// the expression of a constant pattern or a <c>case</c> label, or the right side of <c>is</c>, in parentheses or not.
+        /// </summary>
+        internal static bool IsSharperPredicatePatternName(SyntaxNode syntax)
+        {
+            if (syntax is not (SimpleNameSyntax or MemberAccessExpressionSyntax or QualifiedNameSyntax or AliasQualifiedNameSyntax))
+            {
+                return false;
+            }
+
+            SyntaxNode node = syntax;
+            while (node.Parent is ParenthesizedExpressionSyntax or PostfixUnaryExpressionSyntax { RawKind: (int)SyntaxKind.SuppressNullableWarningExpression })
+            {
+                node = node.Parent;
+            }
+
+            return node.Parent switch
+            {
+                ConstantPatternSyntax or CaseSwitchLabelSyntax => true,
+                BinaryExpressionSyntax { RawKind: (int)SyntaxKind.IsExpression } isExpression => isExpression.Right == node,
+                _ => false,
+            } && syntax.IsFeatureEnabled(MessageID.IDS_FeatureSharper);
+        }
+
+        /// <summary>
+        /// Sharper: the predicate form of patterns on pure functions (Feature 13, slice 2, #35). A constant pattern that
+        /// binds to a method group, <c>x is IsEven</c> or <c>x is Checks.IsEven</c>, is an error in C#: a method group is
+        /// neither a constant nor a type. In a Sharper file it is the call <c>IsEven(x)</c>, bound as a call with the input
+        /// as its only argument would be, if that call is applicable and finds a method with one parameter that returns
+        /// <c>bool</c>; the pattern matches when the call returns true. Returns null where C#'s error stays: no applicable
+        /// method, another shape, union matching or a <c>dynamic</c> input. The callee must be pure (CS20069).
+        /// </summary>
+        private BoundOpaquePattern? TryBindSharperPredicatePattern(
+            SyntaxNode node,
+            ExpressionSyntax expression,
+            BoundMethodGroup methodGroup,
+            NamedTypeSymbol? unionType,
+            TypeSymbol? inputType,
+            bool hasErrors,
+            BindingDiagnosticBag diagnostics)
+        {
+            if (unionType is not null ||
+                inputType is null ||
+                !expression.IsFeatureEnabled(MessageID.IDS_FeatureSharper) ||
+                inputType.IsErrorType() ||
+                inputType.IsDynamic() ||
+                inputType.IsVoidType() ||
+                inputType.StrippedType() is NamedTypeSymbol { IsUnionType: true })
+            {
+                return null;
+            }
+
+            // The input is the argument, never a receiver: 'x is IsEven' is 'IsEven(x)', not 'x.IsEven()'. The call's
+            // syntax is the method's name, so the semantic model finds the method there; the argument is compiler generated.
+            var argument = new BoundValuePlaceholder(expression, inputType) { WasCompilerGenerated = true };
+            var analyzedArguments = AnalyzedArguments.GetInstance();
+            analyzedArguments.Arguments.Add(argument);
+            var trial = BindingDiagnosticBag.GetInstance(withDiagnostics: true, withDependencies: diagnostics.AccumulatesDependencies);
+            BoundExpression bound = BindMethodGroupInvocation(
+                expression, expression, GetName(expression), methodGroup, analyzedArguments, trial, queryClause: null,
+                ignoreNormalFormIfHasValidParamsParameter: false, out bool anyApplicableCandidates,
+                disallowExpandedNonArrayParams: false, acceptOnlyMethods: true);
+            analyzedArguments.Free();
+
+            if (bound is not BoundCall call ||
+                (call.HasAnyErrors ? !anyApplicableCandidates : !isPredicate(call)))
+            {
+                // Nothing applies, or the method found is not a predicate: C#'s error stays.
+                trial.Free();
+                return null;
+            }
+
+            // An applicable call with an error, such as an ambiguity, reports it.
+            hasErrors |= call.HasAnyErrors;
+            diagnostics.AddRangeAndFree(trial);
+
+            // A refinement rejects every opaque pattern as not closed (CS20058), so its call is not checked there.
+            if (!hasErrors &&
+                node.FirstAncestorOrSelf<RefinementClauseSyntax>() is null &&
+                !SharperImmutability.CheckPredicatePatternCall(Compilation, ContainingMemberOrLambda as MethodSymbol, call, diagnostics))
+            {
+                hasErrors = true;
+            }
+
+            return new BoundOpaquePattern(
+                node, BinaryOperatorKind.BoolEqual, call, isConstantPattern: true, predicateArgument: argument,
+                inputType: inputType, narrowedType: inputType, hasErrors);
+
+            // 'bool M(T)': the input is the only argument, with no 'params' expansion and no default values. An extension
+            // method called on a receiver ('x is checker.IsValid') takes the receiver as its first parameter.
+            static bool isPredicate(BoundCall call)
+            {
+                MethodSymbol method = call.Method;
+                if (method.ReturnType.SpecialType != SpecialType.System_Boolean || method.RefKind != RefKind.None || call.Expanded)
+                {
+                    return false;
+                }
+
+                if (!call.DefaultArguments.IsNull)
+                {
+                    for (int i = 0; i < call.Arguments.Length; i++)
+                    {
+                        if (call.DefaultArguments[i])
+                        {
+                            return false;
+                        }
+                    }
+                }
+
+                return true;
+            }
         }
     }
 }
