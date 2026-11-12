@@ -1238,7 +1238,8 @@ built after P7b. No syntax, bound node, public API or lowering.
 Diagnostics: none new. Tests: 9 `ValParameter_*` tests in `SharperTests_ValParameters.cs` (every source next to the
 written twins, writes, ref kinds with runtime output, struct copies, no source, a type named `val`, the positions that
 keep `val` a type name, the semantic model, flag off); `ValLambda_NotInAnonymousMethodsOrLocalFunctions` now expects
-CS20027 for a local function's `val x`. All 564 Sharper test cases pass, also with `ROSLYN_TEST_IOPERATION=1`.
+CS20027 for a local function's `val x`. All 564 Sharper test cases pass, also with `ROSLYN_TEST_IOPERATION=1`. Regression
+run (net10.0, Debug): Semantic 20,386 passed, Symbol 13,923 and Emit 7,312, none failed.
 
 Follow-ups: IDE support with `val` locals ([#87](https://github.com/ok3mad/roslyn/issues/87)); `val` as a keyword in
 every position ([#232](https://github.com/ok3mad/roslyn/issues/232)).
