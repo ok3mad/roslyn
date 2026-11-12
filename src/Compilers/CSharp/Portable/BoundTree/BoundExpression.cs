@@ -25,11 +25,13 @@ namespace Microsoft.CodeAnalysis.CSharp
                                 or PrimaryConstructorBaseTypeSyntax { ArgumentList: { } }
                                 or WithElementSyntax
                                 or CollectionExpressionSyntax
-                                || this.Syntax.Parent is PipeExpressionSyntax,
+                                || this.Syntax.Parent is PipeExpressionSyntax
+                                || Binder.IsSharperPredicatePatternName(this.Syntax),
                     $"Unexpected syntax kind for BoundCall: {this.Syntax.Kind()}");
 
                 // PROTOTYPE(sharper): the call of a bare pipe stage ('x |> F') has the stage as its syntax, and cannot be
-                // intercepted yet (#158).
+                // intercepted yet (#158). The call of a predicate pattern ('x is IsEven') is not a call the user wrote, and
+                // is not intercepted, as the target of a method group conversion is not.
 
                 if (this.WasCompilerGenerated || this.Syntax is not InvocationExpressionSyntax syntax)
                 {

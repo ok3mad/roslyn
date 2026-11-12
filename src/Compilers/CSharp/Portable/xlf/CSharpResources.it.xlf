@@ -2797,6 +2797,11 @@
         <target state="new">The stage after '|&gt;' must be a function, such as a method group or a delegate, or an expression that uses 'it', but it is {0}.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperPredicatePatternNotPure">
+        <source>The method of a predicate pattern must be pure, but it is not: {0}.</source>
+        <target state="new">The method of a predicate pattern must be pure, but it is not: {0}.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperPureNotPure">
         <source>'{0}' is marked [Pure], but it is not pure: {1}.</source>
         <target state="new">'{0}' is marked [Pure], but it is not pure: {1}.</target>

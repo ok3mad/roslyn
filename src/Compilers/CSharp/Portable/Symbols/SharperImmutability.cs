@@ -1206,6 +1206,10 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     case BoundWithExpression withExpression:
                         return IsPureWith(withExpression);
 
+                    case BoundValuePlaceholder:
+                        // The input of a predicate pattern (Feature 13, slice 2), a value the match already has.
+                        return true;
+
                     case BoundObjectInitializerExpression:
                     case BoundObjectOrCollectionValuePlaceholder:
                         // Only reached from a pure creation or 'with': the setters are checked by the assignments, and the

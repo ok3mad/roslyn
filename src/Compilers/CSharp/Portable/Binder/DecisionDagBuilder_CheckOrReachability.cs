@@ -1101,7 +1101,7 @@ start:
 
                 if (pattern is BoundOpaquePattern opaquePattern)
                 {
-                    return opaquePattern.Update(opaquePattern.Relation, opaquePattern.Value, opaquePattern.IsConstantPattern, inputType, opaquePattern.NarrowedType);
+                    return opaquePattern.Update(opaquePattern.Relation, opaquePattern.Value, opaquePattern.IsConstantPattern, opaquePattern.PredicateArgument, inputType, opaquePattern.NarrowedType);
                 }
 
                 if (pattern is BoundDeclarationPattern declarationPattern)
