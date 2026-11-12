@@ -63,6 +63,10 @@ namespace Microsoft.CodeAnalysis.CSharp
             BindingDiagnosticBag diagnostics,
             bool hasErrors = false)
         {
+            if (conversion.Kind == ConversionKind.SharperFunctionToInterface)
+            {
+                return CreateSharperFunctionToInterfaceConversion(syntax, source, conversion, destination, diagnostics);
+            }
 
             var result = createConversion(syntax, source, conversion, isCast, conversionGroupOpt, inConversionGroupFlags, wasCompilerGenerated, destination, diagnostics, hasErrors);
 

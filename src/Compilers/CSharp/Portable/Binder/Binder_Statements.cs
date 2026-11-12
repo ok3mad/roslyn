@@ -2146,6 +2146,12 @@ namespace Microsoft.CodeAnalysis.CSharp
                                  this.Conversions.ClassifyConversionFromExpression(expression, targetType, isChecked: CheckOverflowAtRuntime, ref useSiteInfo) :
                                  this.Conversions.ClassifyConversionFromType(expression.Type, targetType, isChecked: CheckOverflowAtRuntime, ref useSiteInfo);
 
+            if (!conversion.Exists && flags == ConversionForAssignmentFlags.None)
+            {
+                // Sharper: a lambda or method group converts to a single-method interface where C# finds no conversion.
+                conversion = ClassifySharperFunctionToInterfaceAfterError(expression, targetType, ref useSiteInfo);
+            }
+
             diagnostics.Add(expression.Syntax, useSiteInfo);
 
             if ((flags & ConversionForAssignmentFlags.RefAssignment) != 0)
@@ -3417,6 +3423,12 @@ namespace Microsoft.CodeAnalysis.CSharp
             else
             {
                 conversion = this.Conversions.ClassifyConversionFromExpression(argument, returnType, isChecked: CheckOverflowAtRuntime, ref useSiteInfo);
+            }
+
+            if (!conversion.Exists && returnRefKind == RefKind.None && !badAsyncReturnAlreadyReported)
+            {
+                // Sharper: a lambda or method group converts to a single-method interface where C# finds no conversion.
+                conversion = ClassifySharperFunctionToInterfaceAfterError(argument, returnType, ref useSiteInfo);
             }
 
             diagnostics.Add(syntax, useSiteInfo);

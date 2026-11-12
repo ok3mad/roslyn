@@ -316,6 +316,9 @@ namespace Microsoft.CodeAnalysis.Operations
                 // whose only child is the left side. The stage cannot be a child, because the control flow graph has no
                 // region for its 'it' (#155).
                 case BoundKind.SharperPipe:
+                // PROTOTYPE(sharper): Sharper's lambda to single-method interface has no IOperation shape yet: analyzers see
+                // an OperationKind.None node, typed as the interface, whose only child is the delegate creation (#29).
+                case BoundKind.SharperFunctionToInterface:
                     ConstantValue? constantValue = (boundNode as BoundExpression)?.ConstantValueOpt;
                     bool isImplicit = boundNode.WasCompilerGenerated;
 
@@ -324,6 +327,8 @@ namespace Microsoft.CodeAnalysis.Operations
                         switch (boundNode.Kind)
                         {
                             case BoundKind.FixedLocalCollectionInitializer:
+                            // The lambda or method group under it has the same syntax.
+                            case BoundKind.SharperFunctionToInterface:
                                 isImplicit = true;
                                 break;
                         }

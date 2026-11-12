@@ -696,7 +696,10 @@ namespace Microsoft.CodeAnalysis.CSharp
                 type = ((NamedTypeSymbol)type).TypeArgumentsWithAnnotationsNoUseSiteDiagnostics[0].Type;
             }
 
-            return type is NamedTypeSymbol { TypeKind: TypeKind.Delegate, DelegateInvokeMethod.ParameterCount: 1 };
+            // A single-method interface with one parameter takes a function too (#29).
+            return type is NamedTypeSymbol { TypeKind: TypeKind.Delegate, DelegateInvokeMethod.ParameterCount: 1 } ||
+                type is NamedTypeSymbol { TypeKind: TypeKind.Interface } interfaceType &&
+                    GetSharperSingleAbstractMethod(interfaceType.OriginalDefinition) is { ParameterCount: 1 };
         }
 
         private IdentifierNameSyntax? FindSharperFirstFreeIt(BaseArgumentListSyntax argumentList)

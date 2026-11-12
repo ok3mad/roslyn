@@ -156,6 +156,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         ConvertedTryExpression,
         UnconvertedSharperPipe,
         SharperPipe,
+        SharperFunctionToInterface,
         DecisionDag,
         EvaluationDecisionDagNode,
         TestDecisionDagNode,
@@ -5258,6 +5259,42 @@ namespace Microsoft.CodeAnalysis.CSharp
         }
     }
 
+    internal sealed partial class BoundSharperFunctionToInterface : BoundExpression
+    {
+        public BoundSharperFunctionToInterface(SyntaxNode syntax, BoundExpression function, MethodSymbol interfaceMethod, TypeSymbol delegateTypeOverDefinition, TypeSymbol type, bool hasErrors = false)
+            : base(BoundKind.SharperFunctionToInterface, syntax, type, hasErrors || function.HasErrors())
+        {
+
+            RoslynDebug.Assert(function is object, "Field 'function' cannot be null (make the type nullable in BoundNodes.xml to remove this check)");
+            RoslynDebug.Assert(interfaceMethod is object, "Field 'interfaceMethod' cannot be null (make the type nullable in BoundNodes.xml to remove this check)");
+            RoslynDebug.Assert(delegateTypeOverDefinition is object, "Field 'delegateTypeOverDefinition' cannot be null (make the type nullable in BoundNodes.xml to remove this check)");
+            RoslynDebug.Assert(type is object, "Field 'type' cannot be null (make the type nullable in BoundNodes.xml to remove this check)");
+
+            this.Function = function;
+            this.InterfaceMethod = interfaceMethod;
+            this.DelegateTypeOverDefinition = delegateTypeOverDefinition;
+        }
+
+        public new TypeSymbol Type => base.Type!;
+        public BoundExpression Function { get; }
+        public MethodSymbol InterfaceMethod { get; }
+        public TypeSymbol DelegateTypeOverDefinition { get; }
+
+        [DebuggerStepThrough]
+        public override BoundNode? Accept(BoundTreeVisitor visitor) => visitor.VisitSharperFunctionToInterface(this);
+
+        public BoundSharperFunctionToInterface Update(BoundExpression function, MethodSymbol interfaceMethod, TypeSymbol delegateTypeOverDefinition, TypeSymbol type)
+        {
+            if (function != this.Function || !Symbols.SymbolEqualityComparer.ConsiderEverything.Equals(interfaceMethod, this.InterfaceMethod) || !TypeSymbol.Equals(delegateTypeOverDefinition, this.DelegateTypeOverDefinition, TypeCompareKind.ConsiderEverything) || !TypeSymbol.Equals(type, this.Type, TypeCompareKind.ConsiderEverything))
+            {
+                var result = new BoundSharperFunctionToInterface(this.Syntax, function, interfaceMethod, delegateTypeOverDefinition, type, this.HasErrors);
+                result.CopyAttributes(this);
+                return result;
+            }
+            return this;
+        }
+    }
+
     internal sealed partial class BoundDecisionDag : BoundNode
     {
         public BoundDecisionDag(SyntaxNode syntax, BoundDecisionDagNode rootNode, bool suitableForLowering, bool hasErrors = false)
@@ -9632,6 +9669,8 @@ namespace Microsoft.CodeAnalysis.CSharp
                     return VisitUnconvertedSharperPipe((BoundUnconvertedSharperPipe)node, arg);
                 case BoundKind.SharperPipe:
                     return VisitSharperPipe((BoundSharperPipe)node, arg);
+                case BoundKind.SharperFunctionToInterface:
+                    return VisitSharperFunctionToInterface((BoundSharperFunctionToInterface)node, arg);
                 case BoundKind.DecisionDag:
                     return VisitDecisionDag((BoundDecisionDag)node, arg);
                 case BoundKind.EvaluationDecisionDagNode:
@@ -9992,6 +10031,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         public virtual R VisitConvertedTryExpression(BoundConvertedTryExpression node, A arg) => this.DefaultVisit(node, arg);
         public virtual R VisitUnconvertedSharperPipe(BoundUnconvertedSharperPipe node, A arg) => this.DefaultVisit(node, arg);
         public virtual R VisitSharperPipe(BoundSharperPipe node, A arg) => this.DefaultVisit(node, arg);
+        public virtual R VisitSharperFunctionToInterface(BoundSharperFunctionToInterface node, A arg) => this.DefaultVisit(node, arg);
         public virtual R VisitDecisionDag(BoundDecisionDag node, A arg) => this.DefaultVisit(node, arg);
         public virtual R VisitEvaluationDecisionDagNode(BoundEvaluationDecisionDagNode node, A arg) => this.DefaultVisit(node, arg);
         public virtual R VisitTestDecisionDagNode(BoundTestDecisionDagNode node, A arg) => this.DefaultVisit(node, arg);
@@ -10240,6 +10280,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         public virtual BoundNode? VisitConvertedTryExpression(BoundConvertedTryExpression node) => this.DefaultVisit(node);
         public virtual BoundNode? VisitUnconvertedSharperPipe(BoundUnconvertedSharperPipe node) => this.DefaultVisit(node);
         public virtual BoundNode? VisitSharperPipe(BoundSharperPipe node) => this.DefaultVisit(node);
+        public virtual BoundNode? VisitSharperFunctionToInterface(BoundSharperFunctionToInterface node) => this.DefaultVisit(node);
         public virtual BoundNode? VisitDecisionDag(BoundDecisionDag node) => this.DefaultVisit(node);
         public virtual BoundNode? VisitEvaluationDecisionDagNode(BoundEvaluationDecisionDagNode node) => this.DefaultVisit(node);
         public virtual BoundNode? VisitTestDecisionDagNode(BoundTestDecisionDagNode node) => this.DefaultVisit(node);
@@ -10900,6 +10941,11 @@ namespace Microsoft.CodeAnalysis.CSharp
         {
             this.Visit(node.Left);
             this.Visit(node.Stage);
+            return null;
+        }
+        public override BoundNode? VisitSharperFunctionToInterface(BoundSharperFunctionToInterface node)
+        {
+            this.Visit(node.Function);
             return null;
         }
         public override BoundNode? VisitDecisionDag(BoundDecisionDag node)
@@ -12345,6 +12391,14 @@ namespace Microsoft.CodeAnalysis.CSharp
             TypeSymbol? naturalTypeOpt = this.VisitType(node.NaturalTypeOpt);
             TypeSymbol? type = this.VisitType(node.Type);
             return node.Update(node.IsBareStage, naturalTypeOpt, node.WasTargetTyped, local, left, locals, stage, type);
+        }
+        public override BoundNode? VisitSharperFunctionToInterface(BoundSharperFunctionToInterface node)
+        {
+            MethodSymbol interfaceMethod = this.VisitMethodSymbol(node.InterfaceMethod);
+            BoundExpression function = (BoundExpression)this.Visit(node.Function);
+            TypeSymbol? delegateTypeOverDefinition = this.VisitType(node.DelegateTypeOverDefinition);
+            TypeSymbol? type = this.VisitType(node.Type);
+            return node.Update(function, interfaceMethod, delegateTypeOverDefinition, type);
         }
         public override BoundNode? VisitDecisionDag(BoundDecisionDag node)
         {
@@ -14659,6 +14713,25 @@ namespace Microsoft.CodeAnalysis.CSharp
             else
             {
                 updatedNode = node.Update(node.IsBareStage, naturalTypeOpt, node.WasTargetTyped, local, left, locals, stage, node.Type);
+            }
+            return updatedNode;
+        }
+
+        public override BoundNode? VisitSharperFunctionToInterface(BoundSharperFunctionToInterface node)
+        {
+            MethodSymbol interfaceMethod = GetUpdatedSymbol(node, node.InterfaceMethod);
+            TypeSymbol delegateTypeOverDefinition = GetUpdatedSymbol(node, node.DelegateTypeOverDefinition);
+            BoundExpression function = (BoundExpression)this.Visit(node.Function);
+            BoundSharperFunctionToInterface updatedNode;
+
+            if (_updatedNullabilities.TryGetValue(node, out (NullabilityInfo Info, TypeSymbol? Type) infoAndType))
+            {
+                updatedNode = node.Update(function, interfaceMethod, delegateTypeOverDefinition, infoAndType.Type!);
+                updatedNode.TopLevelNullability = infoAndType.Info;
+            }
+            else
+            {
+                updatedNode = node.Update(function, interfaceMethod, delegateTypeOverDefinition, node.Type);
             }
             return updatedNode;
         }
@@ -17194,6 +17267,16 @@ namespace Microsoft.CodeAnalysis.CSharp
             new TreeDumperNode("hasErrors", node.HasErrors, null)
         }
         );
+        public override TreeDumperNode VisitSharperFunctionToInterface(BoundSharperFunctionToInterface node, object? arg) => new TreeDumperNode("sharperFunctionToInterface", null, new TreeDumperNode[]
+        {
+            new TreeDumperNode("function", null, new TreeDumperNode[] { Visit(node.Function, null) }),
+            new TreeDumperNode("interfaceMethod", node.InterfaceMethod, null),
+            new TreeDumperNode("delegateTypeOverDefinition", node.DelegateTypeOverDefinition, null),
+            new TreeDumperNode("type", node.Type, null),
+            new TreeDumperNode("isSuppressed", node.IsSuppressed, null),
+            new TreeDumperNode("hasErrors", node.HasErrors, null)
+        }
+        );
         public override TreeDumperNode VisitDecisionDag(BoundDecisionDag node, object? arg) => new TreeDumperNode("decisionDag", null, new TreeDumperNode[]
         {
             new TreeDumperNode("rootNode", null, new TreeDumperNode[] { Visit(node.RootNode, null) }),
@@ -18315,6 +18398,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 BoundKind.ConvertedTryExpression => PipelinePhase.LocalRewriting,
                 BoundKind.UnconvertedSharperPipe => PipelinePhase.InitialBinding,
                 BoundKind.SharperPipe => PipelinePhase.LocalRewriting,
+                BoundKind.SharperFunctionToInterface => PipelinePhase.LocalRewriting,
                 BoundKind.SpillSequence => PipelinePhase.Spilling,
                 BoundKind.UnconvertedObjectCreationExpression => PipelinePhase.InitialBinding,
                 BoundKind.UnconvertedCollectionExpression => PipelinePhase.InitialBinding,

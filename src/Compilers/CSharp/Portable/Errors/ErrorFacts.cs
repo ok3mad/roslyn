@@ -2667,6 +2667,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 or ErrorCode.ERR_SharperInferParameterConversionCycle
                 or ErrorCode.ERR_SharperPureOverrideNotPure
                 or ErrorCode.WRN_SharperPureOverrideNotPure
+                or ErrorCode.ERR_SharperFunctionToInterfaceInExpressionTree
                 or ErrorCode.ERR_SharperInferParameterUsesDisagree
                 or ErrorCode.ERR_SharperRefinementNotClosed
                 or ErrorCode.ERR_SharperRefinementTypeNotSupported

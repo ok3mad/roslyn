@@ -628,6 +628,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 case ConversionKind.ConditionalExpression:
                 case ConversionKind.SharperTryExpression:
                 case ConversionKind.SharperPipe:
+                case ConversionKind.SharperFunctionToInterface:
                 case ConversionKind.ImplicitEnumeration:
                 case ConversionKind.StackAllocToPointerType:
                 case ConversionKind.StackAllocToSpanType:

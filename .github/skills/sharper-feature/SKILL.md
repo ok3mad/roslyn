@@ -489,6 +489,20 @@ its own inference, bind the same body again and find the first in progress, a cy
 these bindings apart by their root binder (`ConversionFrame.IsInBinding`), not by the containing member: a nested
 inferred return type binds the same body with the same member.
 
+46. **A conversion that only applies where C# fails needs a retry, not a classification.** Classifying a new conversion
+   everywhere changes valid C#: `N(object)` next to `N(IF)` would pick the interface by betterness, and an instance method
+   would hide an extension method in an outer scope. Lambda to interface (#29) classifies its kind only in conversions made
+   by `Conversions.WithSharperFunctionToInterface()`, used by a retry after C# found no conversion or no applicable
+   candidate. Retry the whole method group resolution (`ResolveMethodGroup`, instance and extension scopes together), not
+   one scope's overload resolution. A lambda converted to a delegate whose body fails to bind has no conversion
+   (`LambdaConversionResult.BindingFailed`); accept it in the retry so the body's own errors are reported.
+47. **A synthesized class that copies an interface's type parameters must drop their variance.** The runtime refuses a
+   class with `in` or `out` type parameters (`TypeLoadException`); `SynthesizedTypeParameterSymbol.Variance` is invariant
+   on classes. Keep the constraints: the runtime checks them on the implemented interface. Nest such a class in the type
+   being compiled (`ModuleBuilderOpt.AddSynthesizedDefinition`, bodies through `TypeCompilationState.AddSynthesizedMethod`):
+   a top-level class cannot implement a private or protected interface. A `None` operation whose child has the same syntax
+   must be implicit, or the IOperation test hook reports a duplicate node.
+
 ## Testing
 
 - Tests live in `src/Compilers/CSharp/Test/Semantic/Semantics/SharperTests.cs`; `SharperTests` is partial, so a large

@@ -413,6 +413,15 @@ namespace Microsoft.CodeAnalysis.CSharp
             return new Conversion(ConversionKind.SharperPipe, ImmutableArray.Create(stageConversion));
         }
 
+        /// <summary>
+        /// A conversion of a lambda or method group to a Sharper single-method interface: the conversion of the
+        /// function to the delegate type of the interface's method.
+        /// </summary>
+        internal static Conversion MakeSharperFunctionToInterface(Conversion functionConversion)
+        {
+            return new Conversion(ConversionKind.SharperFunctionToInterface, ImmutableArray.Create(functionConversion));
+        }
+
         internal ConversionKind Kind
         {
             get

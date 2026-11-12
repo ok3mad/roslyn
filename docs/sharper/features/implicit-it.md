@@ -27,7 +27,8 @@ The decisions are in the brainstorm's [Decided](../planning/brainstorm.md#decide
   and `@it` always does. With the flag off, an unknown `it` is CS0103; with it on, an `it` that no argument claims is
   CS20019.
 - **The innermost function argument.** An `it` belongs to the innermost argument around it whose parameter, in the
-  chosen overload, is a delegate (or an expression tree of one) with one parameter. That whole argument is the lambda.
+  chosen overload, is a delegate (or an expression tree of one) with one parameter, or a single-method interface whose
+  method has one parameter ([lambda to interface](lambda-to-interface.md)). That whole argument is the lambda.
   `Process(it, a)` goes to `Select`, because `Process` takes a value. A bare `it` argument is never a lambda by
   itself.
 - **Explicit lambdas never supply `it`.** In `x => ... it ...`, `it` belongs to a slot further out, so naming the
@@ -76,7 +77,7 @@ parser change:
    only as the parameter of an outer implicit lambda. `it` declared inside the argument and member names (`x.it`,
    `it:`) do not count.
 2. `SharperCandidateTakesFunction` keeps only the arguments where some candidate, instance or extension, has a
-   one-parameter delegate at that position; for constructors and indexers, `SharperCandidatesTakeFunction` checks the
+   one-parameter delegate or single-method interface at that position; for constructors and indexers, `SharperCandidatesTakeFunction` checks the
    type's instance constructors or the receiver's indexers. Without this filter every call with an `it` would bind twice, and a failed
    call binds its lambdas again for error recovery, which multiplied with the nesting depth.
 3. The call binds with those arguments as implicit lambdas (`SharperImplicitItUnboundLambdaState`, modeled on query
