@@ -164,18 +164,21 @@ class Square(double side) : Shape
 
 - **The rules of both.** The type is inferred as without `readonly`, and the parameter follows the `readonly` parameter
   rules, with the same diagnostics as its twin with the type written out: writes are CS1656, CS1657 and CS1654, also
-  from lambdas and local functions, and a non-readonly member of a struct runs on a copy and warns (CS20013).
+  from lambdas and local functions, and a non-readonly member of a struct runs on a copy and warns (CS20003).
 - **Every member.** Methods, local functions, constructors, primary constructors and lambdas with a default value (P1),
   and overrides and implementations (P2).
 - **`ref`, `in` and `out`.** A ref kind copied from the overridden member (P2) reads like a written one:
   `readonly infer r` over `ref int r` is `readonly ref int r`, which forbids ref reassignment and allows writes through
   the ref. With a default value, `readonly in infer i = 1` works, and `ref` and `out` keep CS1741 as in C#.
 - **Flag off.** `readonly` keeps C#'s CS9190 and `infer` is a type name (CS0246).
-- **No `val` shorthand.** `val x` is not accepted on method parameters; whether it should be is
-  [#178](https://github.com/ok3mad/roslyn/issues/178).
+- **`val x` is its shorthand** ([#178](https://github.com/ok3mad/roslyn/issues/178)), as `(val x)` is for
+  `(readonly x)` on lambdas: `public override infer Area(val scale)`. The messages then name 'val variable'. See
+  [`val` method parameters](val-locals.md#method-parameters).
 
-Nothing is added for it: `readonly` is read from the parameter syntax (`ParameterHelpers.IsSharperReadOnly`), the type
-from the `infer` branch of `MakeParameter`, and the two never meet.
+Nothing is added for `readonly infer x`: `readonly` is read from the parameter syntax (`ParameterHelpers.IsSharperReadOnly`),
+the type from the `infer` branch of `MakeParameter`, and the two never meet. `val x` takes the same branch
+(`TypeSyntax.IsInferOrValParameterType`), and `SourceParameterSymbol.Create` marks the parameter readonly and `val`
+(`SourceComplexParameterSymbolBase.IsSharperVal`) when no type named `val` is in scope.
 
 ## From uses in the body (step P4)
 

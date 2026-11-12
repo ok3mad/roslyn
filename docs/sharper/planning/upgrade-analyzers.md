@@ -385,7 +385,7 @@ int Clamp(int value, int max)                      int Clamp(readonly int value,
 ```
 
 **Reported when** a by-value parameter of a member with a body is never written, under the same rules as IDE20001
-(struct copies included, CS20013). `readonly` is [not part of the signature](../features/readonly-parameters.md#not-part-of-the-signature),
+(struct copies included, CS20003). `readonly` is [not part of the signature](../features/readonly-parameters.md#not-part-of-the-signature),
 so it is safe on public members, overrides and implementations.
 
 **Off by default.** Marking every parameter is noisy, and immutable-by-default parameters are a
@@ -425,7 +425,7 @@ Not upgrades, but the same infrastructure, and cheap next to it:
 | CS20034 (`val x => x`) | Add the parentheses: `(val x) => x`. |
 | CS20030 (try expression over a task) | Insert `await` after `try`. |
 | CS20011 (`readonly` local without initializer) | Remove `readonly`. |
-| CS20003, CS20010, CS20013 (member runs on a copy) | Change `val`/`readonly` back to `var` or the type, or remove `readonly` from the parameter. |
+| CS20003 (member runs on a copy) | Change `val`/`readonly` back to `var` or the type, or remove `readonly` from the parameter. |
 | CS20014, CS20024, CS20026, CS20027 (nothing to infer) | Write the type (the type the error message lists, or the best guess). Built without the upgrade infrastructure ([IDE](../features/inferred-return-type.md#ide-step-r5)): for CS20027 and CS20057 in step R5, with CS20027's exact list and for CS20014, CS20024 (each listed type, a common base class, `object`) and CS20026 (`object`) in [#201](https://github.com/ok3mad/roslyn/issues/201). |
 | CS20027 (nothing pins the parameter) | Make the method generic: `void F<T>(T x)`. Built in [#201](https://github.com/ok3mad/roslyn/issues/201); not on overrides, implementations, `virtual` or `partial` methods, where the type parameter name would clash, or where it adds errors in the document. |
 | CS20019 (`it` with no lambda) | Turn the enclosing argument into `x => ...` where one call is close. |

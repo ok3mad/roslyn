@@ -18,9 +18,9 @@ total = 0;   // error CS1656: Cannot assign to 'total' because it is a 'val vari
 It is `var` plus the read-only rule that C# already applies to `foreach` and `using` variables, and the same as
 [`readonly var x = e;`](readonly-locals.md), which also has an explicitly typed form, `readonly int x = e;`. `val` is
 sugar: `readonly` plus the type inference of its position, so `(val x) => ...` is `(readonly x) => ...`. Only the
-spelling differs, which shows in the messages ('val variable' instead of 'readonly local'), the struct-copy warning
-code (CS20003 instead of CS20010, [#228](https://github.com/ok3mad/roslyn/issues/228)), and the places where it can be
-written: `val` also works where C# has no modifier slot (`foreach`, deconstruction, `out`, patterns).
+spelling differs, which shows in the messages ('val variable' instead of 'readonly local'; the struct-copy warning is
+CS20003 for both, [#228](https://github.com/ok3mad/roslyn/issues/228)) and in the places where it can be written:
+`val` also works where C# has no modifier slot (`foreach`, deconstruction, `out`, patterns).
 
 ## Rules
 
@@ -74,8 +74,40 @@ Func<int, int> f = (val x) => { x = 0; return x; };   // error CS1656: Cannot as
 - The parentheses are required, as for C#'s modifiers: `val x => x` is error CS20034, which suggests `(val x) => x`
   ([#98](https://github.com/ok3mad/roslyn/issues/98)). The parser recovers as `(val x) => x`, so the body binds as
   there and reports nothing more. Without Sharper, it is the C# syntax error.
-- Anonymous methods (`delegate (val x) { }`) and local functions take only explicitly typed parameters, so `val` is
-  a type name there, as in C#.
+- Anonymous methods (`delegate (val x) { }`) take only explicitly typed parameters, so `val` is a type name there, as
+  in C#. A local function's `val x` is a method parameter (below).
+
+## Method parameters
+
+On a method parameter, `val x` is `readonly infer x` ([#178](https://github.com/ok3mad/roslyn/issues/178)): its type
+is [inferred](inferred-parameter-type.md) and it cannot be reassigned.
+
+```csharp
+class Square(double side) : Shape
+{
+    public override infer Area(val scale) => side * side * scale;   // double Area(readonly double scale)
+}
+
+void Fetch(val retries = 3) { retries = 0; }   // error CS1656: Cannot assign to 'retries' because it is a 'val variable'
+void Log(val message) { }                      // error CS20027: ... nothing else gives its type
+```
+
+- **Every source of `infer`.** A default value, the overridden or implemented member, the uses in the body and the
+  conversions of a local function or private method. Without one it is CS20027, as for `readonly infer x`.
+- **Every member that has `infer` parameters:** methods, local functions, constructors, primary constructors,
+  operators, indexers and delegates. Extension block receivers keep `val` a type name, as they keep CS9190 for
+  `readonly`.
+- The messages name `val`, as for a `val` local: CS1656, CS1657 and CS1654 say 'val variable', and a non-readonly
+  struct member runs on a copy with CS20003.
+- `ref val`, `in val`, `out val` and `scoped val` are allowed, as for `(ref val x)`: writes through the ref keep their
+  C# rules, and `x = ref y` is CS20006. A `val` parameter of an override copies the ref kind it does not write, as
+  `infer` does. `readonly val x` is `val x`, as for locals.
+- **C# wins.** With a type named `val` in scope, `val x` is a parameter of that type, which can be reassigned; with the
+  flag off, `val` is an unknown type (CS0246). The same lookup as `infer` decides it, in one place
+  (`Binder.BindTypeOrSharperInferKeyword`), so making `val` a keyword everywhere
+  ([#232](https://github.com/ok3mad/roslyn/issues/232)) changes one line here.
+- The IDE does not know `val` parameters yet ([#87](https://github.com/ok3mad/roslyn/issues/87)); the semantic model
+  does: `GetTypeInfo` and `GetSymbolInfo` on the `val` give the inferred type, as for `infer`.
 
 ## Scripts
 
@@ -98,8 +130,8 @@ without a designation is still a type test.
 ## Not covered yet
 
 - **Noisy CS20003:** every non-readonly member of a struct `val` warns, even one that does not mutate. Inferring which
-  members mutate is [#84](https://github.com/ok3mad/roslyn/issues/84). Until then CS20003, CS20010 and CS20013 stay
-  default warnings ([#85](https://github.com/ok3mad/roslyn/issues/85)): the copy changes behavior (a `MoveNext` on a
+  members mutate is [#84](https://github.com/ok3mad/roslyn/issues/84). Until then CS20003, for `val` and `readonly`
+  alike, stays a default warning ([#85](https://github.com/ok3mad/roslyn/issues/85)): the copy changes behavior (a `MoveNext` on a
   `val` enumerator never advances), and inference can then only remove warnings, never add them. Metadata members
   marked `[IsReadOnly]` and `[Pure]` members (which must be `readonly`) already do not warn. Code where the noise is
   not worth it can mark struct members `readonly` or use `/nowarn`.

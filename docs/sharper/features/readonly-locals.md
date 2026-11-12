@@ -23,8 +23,8 @@ reassigned, `readonly int x` and `readonly var x` cannot, and `val x` is shortha
 
 - Every write is an error: assignment, compound assignment, `++`/`--`, passing as `ref` or `out`, and writes to fields
   of a struct local (CS1656, CS1657, CS1654).
-- A non-readonly member of a struct `readonly` local runs on a copy and warns: CS20010, the readonly-local form of
-  CS20003. Members found by pattern (`GetEnumerator`, property patterns) do the same.
+- A non-readonly member of a struct `readonly` local runs on a copy and warns: CS20003, as for `val`, with the
+  cause 'readonly local'. Members found by pattern (`GetEnumerator`, property patterns) do the same.
 - A `readonly` local must have an initializer (CS20011), because nothing can assign it later. `readonly var x;` reports
   `var`'s CS0818 instead.
 - `readonly var` reports the same errors as `var` where `var` cannot be used (no initializer, `null`, several
@@ -68,8 +68,8 @@ Whether to support them is [#95](https://github.com/ok3mad/roslyn/issues/95).
 
 The IDE does not know `readonly` locals yet ([#96](https://github.com/ok3mad/roslyn/issues/96)). As for `val`, there is
 no public symbol API for them: tooling asks `SharperFacts` ([#88](https://github.com/ok3mad/roslyn/issues/88)). Parameters have their
-own page: [`readonly` parameters](readonly-parameters.md). CS20010 warns for every non-readonly member, like
-CS20003 ([#84](https://github.com/ok3mad/roslyn/issues/84)).
+own page: [`readonly` parameters](readonly-parameters.md). CS20003 warns for every non-readonly member
+([#84](https://github.com/ok3mad/roslyn/issues/84)).
 
 ## Code
 

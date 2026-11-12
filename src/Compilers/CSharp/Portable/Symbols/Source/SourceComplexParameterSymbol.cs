@@ -31,6 +31,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             ExtensionThisParameter = 0x04,
             DefaultParameter = 0x08,
             SharperReadOnly = 0x10,
+            SharperVal = 0x20,
         }
 
         private readonly SyntaxReference _syntaxRef;
@@ -52,7 +53,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             bool hasParamsModifier,
             bool isParams,
             bool isExtensionMethodThis,
-            ScopedKind scope)
+            ScopedKind scope,
+            bool isSharperVal = false)
             : base(owner, ordinal, refKind, scope, name, location)
         {
             Debug.Assert((syntaxRef == null) || (syntaxRef.GetSyntax().IsKind(SyntaxKind.Parameter)));
@@ -87,6 +89,12 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 _parameterSyntaxKind |= ParameterFlags.SharperReadOnly;
             }
 
+            // Sharper: 'val x' is 'readonly infer x' (#178); the messages name 'val'.
+            if (isSharperVal)
+            {
+                _parameterSyntaxKind |= ParameterFlags.SharperReadOnly | ParameterFlags.SharperVal;
+            }
+
             _lazyDefaultSyntaxValue = ConstantValue.Unset;
         }
 
@@ -104,6 +112,13 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         /// It is a rule about the body only: it is not emitted and plays no part in the signature.
         /// </summary>
         internal bool IsSharperReadOnly => (_parameterSyntaxKind & ParameterFlags.SharperReadOnly) != 0;
+
+        /// <summary>
+        /// True if the parameter is declared with Sharper's <c>val</c>, so that messages name <c>val</c>: a method parameter
+        /// <c>val x</c>, which is <c>readonly infer x</c> (#178), or an implicitly typed lambda parameter <c>(val x)</c>.
+        /// <see cref="IsSharperReadOnly"/> is then true too.
+        /// </summary>
+        internal bool IsSharperVal => (_parameterSyntaxKind & ParameterFlags.SharperVal) != 0;
 
 #nullable enable
         private StrongBox<SharperRefinement?>? _lazySharperRefinement;
@@ -440,7 +455,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             Debug.Assert(binder.ContainingMemberOrLambda == ContainingSymbol);
 
             BoundExpression valueBeforeConversion;
-            if (parameterSyntax.Type is { IsInfer: true } && Type.IsErrorType() && parameterSyntax.IsFeatureEnabled(MessageID.IDS_FeatureSharper))
+            if (parameterSyntax.Type is { IsInferOrValParameterType: true } && Type.IsErrorType() && parameterSyntax.IsFeatureEnabled(MessageID.IDS_FeatureSharper))
             {
                 // Sharper: the inference of the type failed and reported why; arguments converted to the error types of
                 // a cycle's members report nothing more.
@@ -459,7 +474,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 return ConstantValue.Bad;
             }
 
-            if (parameterSyntax.Type is { IsInfer: true } && Type.IsErrorType())
+            if (parameterSyntax.Type is { IsInferOrValParameterType: true } && Type.IsErrorType())
             {
                 // Sharper: the inference of the type from this default value failed and reported why.
                 return ConstantValue.Bad;
@@ -1838,8 +1853,9 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             bool hasParamsModifier,
             bool isParams,
             bool isExtensionMethodThis,
-            ScopedKind scope)
-            : base(owner, ordinal, refKind, name, location, syntaxRef, hasParamsModifier: hasParamsModifier, isParams: isParams, isExtensionMethodThis, scope)
+            ScopedKind scope,
+            bool isSharperVal = false)
+            : base(owner, ordinal, refKind, name, location, syntaxRef, hasParamsModifier: hasParamsModifier, isParams: isParams, isExtensionMethodThis, scope, isSharperVal)
         {
             _parameterType = parameterType;
         }
@@ -1865,8 +1881,9 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             bool hasParamsModifier,
             bool isParams,
             bool isExtensionMethodThis,
-            ScopedKind scope)
-            : base(owner, ordinal, refKind, name, location, syntaxRef, hasParamsModifier: hasParamsModifier, isParams: isParams, isExtensionMethodThis, scope)
+            ScopedKind scope,
+            bool isSharperVal = false)
+            : base(owner, ordinal, refKind, name, location, syntaxRef, hasParamsModifier: hasParamsModifier, isParams: isParams, isExtensionMethodThis, scope, isSharperVal)
         {
             Debug.Assert(!refCustomModifiers.IsEmpty);
 

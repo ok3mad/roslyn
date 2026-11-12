@@ -154,7 +154,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         }
 
         private static bool IsInferredFromBody(ParameterSyntax parameter)
-            => parameter is { Type.IsInfer: true, Default: null };
+            => parameter is { Type.IsInferOrValParameterType: true, Default: null };
 
         private static bool HasParameterInferredFromBody(ParameterListSyntax parameterList)
         {

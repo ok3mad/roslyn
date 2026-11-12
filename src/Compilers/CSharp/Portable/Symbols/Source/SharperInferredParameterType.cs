@@ -62,7 +62,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         {
             foreach (var parameter in parameterList?.Parameters ?? default)
             {
-                if (parameter is ParameterSyntax { Type.IsInfer: true, Default: { } } concreteParameter)
+                if (parameter is ParameterSyntax { Type.IsInferOrValParameterType: true, Default: { } } concreteParameter)
                 {
                     Binder binder = GetDefaultValueBinder(owner, concreteParameter);
                     binder.BindTypeOrSharperInferKeyword(concreteParameter.Type, BindingDiagnosticBag.Discarded, out bool isInfer);
@@ -101,7 +101,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         /// </summary>
         internal static TypeWithAnnotations GetType(Symbol owner, ParameterSyntax parameter, Binder binder, BindingDiagnosticBag diagnostics)
         {
-            Debug.Assert(parameter.Type is { IsInfer: true });
+            Debug.Assert(parameter.Type is { IsInferOrValParameterType: true });
 
             if (parameter.Default is null)
             {

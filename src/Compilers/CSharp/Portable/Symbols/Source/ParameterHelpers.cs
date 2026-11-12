@@ -57,7 +57,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                         addRefReadOnlyModifier,
                         scope,
                         declarationDiagnostics,
-                        isParamsFromOverriddenMember: syntax is { Type.IsInfer: true, Default: null } &&
+                        isParamsFromOverriddenMember: syntax is { Type.IsInferOrValParameterType: true, Default: null } &&
                             SharperInferredParameterType.GetOverriddenSignature(owner) is { IsApplicable: true } overridden &&
                             overridden.IsParams(ordinal));
                 });
@@ -310,7 +310,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
             Debug.Assert(parameterSyntax.Type != null);
             TypeWithAnnotations parameterType;
-            if (parameterSyntax is ParameterSyntax { Type.IsInfer: true } inferParameter)
+            if (parameterSyntax is ParameterSyntax { Type.IsInferOrValParameterType: true } inferParameter)
             {
                 // Sharper: 'infer' takes the type of the default value, or else that of the parameter of the member that the
                 // method overrides or implements, with its ref kind unless one is written (step P2).

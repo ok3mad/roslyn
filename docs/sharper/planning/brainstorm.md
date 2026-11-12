@@ -119,8 +119,8 @@ finds the type: `static infer Hello(int id) => ...`, `infer Fetch(infer url, inf
 - **No breaking change.** `infer` is a contextual keyword resolved like `var`: a type named `infer` in scope wins,
   and with the flag off it is an unknown type (CS0246).
 - **Combines with `readonly`:** `readonly infer x` is a parameter whose type is inferred and that cannot be
-  reassigned. Whether `val x` should be accepted as its shorthand on method parameters, as it is on lambda
-  parameters, is open ([#178](https://github.com/ok3mad/roslyn/issues/178)).
+  reassigned. On method parameters `val x` is its shorthand, as it is on lambda parameters
+  ([#178](https://github.com/ok3mad/roslyn/issues/178)).
 
 ### Inferred return type
 

@@ -23,7 +23,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         /// </summary>
         internal TypeWithAnnotations BindSharperInferredParameterType(ParameterSyntax parameter, BindingDiagnosticBag diagnostics)
         {
-            Debug.Assert(parameter.Type is { IsInfer: true } && parameter.Default is not null);
+            Debug.Assert(parameter.Type is { IsInferOrValParameterType: true } && parameter.Default is not null);
 
             ExpressionSyntax valueSyntax = parameter.Default.Value;
             var valueDiagnostics = BindingDiagnosticBag.GetInstance(withDiagnostics: true, withDependencies: diagnostics.AccumulatesDependencies);

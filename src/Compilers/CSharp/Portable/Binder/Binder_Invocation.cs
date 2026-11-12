@@ -2010,13 +2010,14 @@ namespace Microsoft.CodeAnalysis.CSharp
                 BoundParameter parameter => parameter.ParameterSymbol.Name,
                 _ => ((BoundLocal)local).LocalSymbol,
             };
-            ErrorCode code = local switch
+            // One code for every variable that cannot be reassigned; the message names what the user wrote (#228).
+            MessageID cause = local switch
             {
-                BoundLocal { LocalSymbol: SourceLocalSymbol { IsVal: false } } => ErrorCode.WRN_SharperReadOnlyLocalMemberCallOnCopy,
-                BoundParameter { ParameterSymbol: SourceComplexParameterSymbolBase { IsSharperReadOnly: true } } => ErrorCode.WRN_SharperReadOnlyParameterMemberCallOnCopy,
-                _ => ErrorCode.WRN_SharperValMemberCallOnCopy,
+                BoundLocal { LocalSymbol: SourceLocalSymbol { IsVal: false } } => MessageID.IDS_READONLYLOCAL,
+                BoundParameter { ParameterSymbol: SourceComplexParameterSymbolBase { IsSharperVal: false, IsSharperReadOnly: true } } => MessageID.IDS_READONLYPARAMETER,
+                _ => MessageID.IDS_VALLOCAL,
             };
-            Error(diagnostics, code, local.Syntax, method, variable);
+            Error(diagnostics, ErrorCode.WRN_SharperValMemberCallOnCopy, local.Syntax, method, variable, cause.Localize());
             return true;
         }
 

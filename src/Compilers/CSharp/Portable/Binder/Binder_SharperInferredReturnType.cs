@@ -29,7 +29,8 @@ namespace Microsoft.CodeAnalysis.CSharp
         /// <returns>The bound type, or default when the syntax is the <c>infer</c> keyword.</returns>
         internal TypeWithAnnotations BindTypeOrSharperInferKeyword(TypeSyntax syntax, BindingDiagnosticBag diagnostics, out bool isInfer)
         {
-            if (syntax.IsInfer)
+            // On a method parameter, 'val x' is 'readonly infer x' (#178), with the same lookup.
+            if (syntax.IsInfer || syntax.IsSharperValParameterType)
             {
                 var symbol = BindTypeOrAliasOrKeyword((IdentifierNameSyntax)syntax, diagnostics, out isInfer);
                 return isInfer ? default : UnwrapAlias(symbol, diagnostics, syntax).TypeWithAnnotations;
@@ -37,6 +38,17 @@ namespace Microsoft.CodeAnalysis.CSharp
 
             isInfer = false;
             return BindType(syntax, diagnostics);
+        }
+
+        /// <summary>
+        /// True if <paramref name="syntax"/>, a <c>val</c> parameter type (<see cref="TypeSyntax.IsSharperValParameterType"/>),
+        /// is the Sharper keyword: no type named <c>val</c> is in scope. Lookup only; binding the type reports its diagnostics.
+        /// </summary>
+        internal bool IsSharperValKeyword(TypeSyntax syntax)
+        {
+            Debug.Assert(syntax.IsSharperValParameterType);
+            BindTypeOrAliasOrKeyword((IdentifierNameSyntax)syntax, BindingDiagnosticBag.Discarded, out bool isKeyword);
+            return isKeyword;
         }
 
         /// <summary>

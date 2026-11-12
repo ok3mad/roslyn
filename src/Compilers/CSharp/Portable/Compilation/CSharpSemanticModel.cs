@@ -1132,7 +1132,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         /// </summary>
         private IParameterSymbol GetSharperInferredParameter(ExpressionSyntax expression, CancellationToken cancellationToken)
         {
-            if (expression is not TypeSyntax { IsInfer: true, Parent: ParameterSyntax parameter } inferSyntax || parameter.Type != inferSyntax)
+            if (expression is not TypeSyntax { Parent: ParameterSyntax parameter } inferSyntax || parameter.Type != inferSyntax || !(inferSyntax.IsInfer || inferSyntax.IsSharperValParameterType))
             {
                 return null;
             }

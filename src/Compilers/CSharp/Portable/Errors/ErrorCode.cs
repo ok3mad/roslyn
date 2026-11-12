@@ -2524,10 +2524,10 @@ namespace Microsoft.CodeAnalysis.CSharp
         // ERR_SharperFunctionTypeParameterName = SharperErrorCodes.Base + 7,   Retired in step N1 of function type parameter names, which keeps the names.
         ERR_SharperFunctionTypeParameterModifier = SharperErrorCodes.Base + 8,
         ERR_SharperFunctionTypeTooManyParameters = SharperErrorCodes.Base + 9,
-        WRN_SharperReadOnlyLocalMemberCallOnCopy = SharperErrorCodes.Base + 10,
+        // WRN_SharperReadOnlyLocalMemberCallOnCopy = SharperErrorCodes.Base + 10,   Retired in #228: WRN_SharperValMemberCallOnCopy names the cause instead.
         ERR_SharperReadOnlyLocalWithNoInitializer = SharperErrorCodes.Base + 11,
         ERR_SharperSpreadRefStructEnumerator = SharperErrorCodes.Base + 12,
-        WRN_SharperReadOnlyParameterMemberCallOnCopy = SharperErrorCodes.Base + 13,
+        // WRN_SharperReadOnlyParameterMemberCallOnCopy = SharperErrorCodes.Base + 13,   Retired in #228: WRN_SharperValMemberCallOnCopy names the cause instead.
         ERR_SharperInferNoType = SharperErrorCodes.Base + 14,
         ERR_SharperInferNotSupportedYet = SharperErrorCodes.Base + 15,
         ERR_SharperInferNoBody = SharperErrorCodes.Base + 16,
