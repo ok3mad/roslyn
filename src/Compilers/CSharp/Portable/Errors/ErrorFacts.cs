@@ -2668,6 +2668,10 @@ namespace Microsoft.CodeAnalysis.CSharp
                 or ErrorCode.ERR_SharperPureOverrideNotPure
                 or ErrorCode.WRN_SharperPureOverrideNotPure
                 or ErrorCode.ERR_SharperFunctionToInterfaceInExpressionTree
+                or ErrorCode.ERR_SharperInterfaceInitializerMissingMembers
+                or ErrorCode.ERR_SharperInterfaceInitializerBadMember
+                or ErrorCode.ERR_SharperInterfaceInitializerStaticAbstract
+                or ErrorCode.ERR_SharperInterfaceInitializerInExpressionTree
                 or ErrorCode.ERR_SharperInferParameterUsesDisagree
                 or ErrorCode.ERR_SharperRefinementNotClosed
                 or ErrorCode.ERR_SharperRefinementTypeNotSupported

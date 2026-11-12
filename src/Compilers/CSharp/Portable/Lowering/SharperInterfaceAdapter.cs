@@ -170,7 +170,7 @@ namespace Microsoft.CodeAnalysis.CSharp
     /// </summary>
     internal sealed class SharperInterfaceAdapterMethod : SynthesizedImplementationMethod
     {
-        internal SharperInterfaceAdapterMethod(MethodSymbol interfaceMethod, SharperInterfaceAdapterTypeSymbol containingType)
+        internal SharperInterfaceAdapterMethod(MethodSymbol interfaceMethod, SynthesizedContainer containingType)
             : base(interfaceMethod, containingType, name: interfaceMethod.Name, generateDebugInfo: false)
         {
         }

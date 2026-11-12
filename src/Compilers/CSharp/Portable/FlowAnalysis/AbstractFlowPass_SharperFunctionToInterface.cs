@@ -16,5 +16,18 @@ namespace Microsoft.CodeAnalysis.CSharp
             VisitRvalue(node.Function);
             return null;
         }
+
+        /// <summary>
+        /// A Sharper interface initializer evaluates its values in order (#30).
+        /// </summary>
+        public override BoundNode VisitSharperInterfaceCreation(BoundSharperInterfaceCreation node)
+        {
+            foreach (var value in node.Values)
+            {
+                VisitRvalue(value);
+            }
+
+            return null;
+        }
     }
 }
