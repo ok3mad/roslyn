@@ -47,6 +47,13 @@ namespace Microsoft.CodeAnalysis.CSharp
             return new Conversions(_binder, currentRecursionDepth, IncludeNullability, otherNullabilityOpt: null, _sharperFunctionToInterface);
         }
 
+        internal override NamedTypeSymbol GetSharperFunctionToInterfaceDelegateType(BoundExpression source, TypeSymbol destination)
+        {
+            return _sharperFunctionToInterface
+                ? _binder.GetSharperFunctionToInterfaceDelegateType(source, destination)
+                : null;
+        }
+
         protected override Conversion GetSharperFunctionToInterfaceConversion(BoundExpression source, TypeSymbol destination, ref CompoundUseSiteInfo<AssemblySymbol> useSiteInfo)
         {
             return _sharperFunctionToInterface

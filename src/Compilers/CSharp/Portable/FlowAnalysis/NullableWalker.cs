@@ -189,6 +189,12 @@ namespace Microsoft.CodeAnalysis.CSharp
         private readonly Binder _binder;
 
         /// <summary>
+        /// Sharper (#29): the lambdas and method groups that <see cref="RemoveArgumentConversions"/> took out of an argument
+        /// converted to a single-method interface, and the conversions they came from.
+        /// </summary>
+        private Dictionary<BoundExpression, BoundSharperFunctionToInterface>? _sharperFunctionToInterfaceArguments;
+
+        /// <summary>
         /// Conversions with nullability and unknown matching any.
         /// </summary>
         private readonly Conversions _conversions;
@@ -7766,7 +7772,8 @@ namespace Microsoft.CodeAnalysis.CSharp
                 {
                     if (HasImplicitTypeArguments(node))
                     {
-                        member = InferMemberTypeArguments(member, GetArgumentsForMethodTypeInference(results, argumentsNoConversions), refKindsOpt, argsToParamsOpt, expanded);
+                        member = InferMemberTypeArguments(member, GetArgumentsForMethodTypeInference(results, argumentsNoConversions), refKindsOpt, argsToParamsOpt, expanded,
+                            sharperFunctionToInterface: !conversions.IsDefault && conversions.Any(static c => c.Kind == ConversionKind.SharperFunctionToInterface));
                         parametersOpt = member.GetParametersIncludingExtensionParameter(skipExtensionIfStatic: false);
                     }
 
@@ -8761,6 +8768,16 @@ namespace Microsoft.CodeAnalysis.CSharp
                         var before = argument;
                         (argument, conversion) = RemoveConversion(argument, includeExplicitConversions: false);
 
+                        if (argument is BoundSharperFunctionToInterface { Function: BoundConversion { Operand: var function } functionConversion } functionToInterface)
+                        {
+                            // Sharper (#29): like a lambda converted to a delegate, the function is visited on its own, the method's
+                            // type arguments are re-inferred from it, and it is converted to the delegate of the re-inferred
+                            // interface (VisitConversion).
+                            (_sharperFunctionToInterfaceArguments ??= new Dictionary<BoundExpression, BoundSharperFunctionToInterface>(ReferenceEqualityComparer.Instance))[function] = functionToInterface;
+                            argument = function;
+                            conversion = Conversion.MakeSharperFunctionToInterface(functionConversion.Conversion);
+                        }
+
                         if (argument != before)
                         {
                             SnapshotWalkerThroughConversionGroup(before, argument);
@@ -8826,7 +8843,8 @@ namespace Microsoft.CodeAnalysis.CSharp
             ImmutableArray<BoundExpression> arguments,
             ImmutableArray<RefKind> argumentRefKindsOpt,
             ImmutableArray<int> argsToParamsOpt,
-            bool expanded)
+            bool expanded,
+            bool sharperFunctionToInterface = false)
             where TMember : Symbol
         {
             Debug.Assert(member.GetMemberArityIncludingExtension() != 0);
@@ -8864,7 +8882,8 @@ namespace Microsoft.CodeAnalysis.CSharp
 
             var result = MethodTypeInferrer.Infer(
                 _binder,
-                _conversions,
+                // Sharper (#29): an argument converted to a single-method interface is inferred as for its delegate, as in binding.
+                sharperFunctionToInterface ? _conversions.WithSharperFunctionToInterface() : _conversions,
                 typeParameters,
                 definition.ContainingType,
                 parameterTypes,
@@ -9908,6 +9927,12 @@ namespace Microsoft.CodeAnalysis.CSharp
         /// </summary>
         private static BoundConversion? GetConversionIfApplicable(BoundExpression? conversionOpt, BoundExpression convertedNode)
         {
+            if (conversionOpt is BoundSharperFunctionToInterface { Function: BoundConversion { Operand: var function } } && function == convertedNode)
+            {
+                // Sharper (#29): VisitConversion finds the conversion to the interface by its function.
+                return null;
+            }
+
             Debug.Assert(conversionOpt is null
                          || convertedNode == conversionOpt // Note that convertedNode itself can be a BoundConversion, so we do this check explicitly
                                                            // because the below calls to RemoveConversion could potentially strip that conversion.
@@ -10002,6 +10027,27 @@ namespace Microsoft.CodeAnalysis.CSharp
             TypeSymbol targetType = targetTypeWithNullability.Type;
             switch (conversion.Kind)
             {
+                case ConversionKind.SharperFunctionToInterface:
+                    if (_sharperFunctionToInterfaceArguments?.TryGetValue(conversionOperand, out var functionToInterface) == true &&
+                        functionToInterface.Function is BoundConversion functionConversion &&
+                        _binder.TryGetSharperFunctionToInterface(targetType, conversionOperand.Syntax, out _, out var functionDelegateType, out _))
+                    {
+                        // Sharper (#29): an argument's lambda or method group converts to the delegate of the re-inferred
+                        // interface's method, as it would to that delegate, and the result is a new instance of the
+                        // generated class.
+                        VisitConversion(
+                            functionConversion, conversionOperand, conversion.UnderlyingConversions[0], TypeWithAnnotations.Create(functionDelegateType),
+                            operandType, checkConversion, fromExplicitCast, useLegacyWarnings, assignmentKind, parameterOpt,
+                            reportTopLevelWarnings, reportRemainingWarnings, isSuppressed, extensionMethodThisArgument,
+                            stateForLambda, diagnosticLocation: diagnosticLocation);
+                        var interfaceResult = TypeWithState.Create(targetType, NullableFlowState.NotNull);
+                        SetAnalyzedNullability(functionToInterface, interfaceResult);
+                        return interfaceResult;
+                    }
+
+                    resultState = NullableFlowState.NotNull;
+                    break;
+
                 case ConversionKind.MethodGroup:
                     {
                         var group = conversionOperand as BoundMethodGroup;

@@ -167,6 +167,38 @@ namespace Microsoft.CodeAnalysis.CSharp
         /// For error recovery, we allow a mismatch between the number of arguments and parameters
         /// during type inference. This sometimes enables inferring the type for a lambda parameter.
         /// </summary>
+        /// <summary>
+        /// Sharper (#29): in the retry of an overload resolution with the conversion of a lambda or method group to a
+        /// single-method interface, such an argument is inferred as for the delegate of the interface's method, so that
+        /// <c>Apply&lt;T&gt;(IMap&lt;T&gt; map)</c> infers <c>T</c> from <c>(int x) =&gt; x + 1</c> as it would for
+        /// <c>Func&lt;T, T&gt;</c>. Outside the retry the conversions return no delegate, so C# infers as before.
+        /// </summary>
+        private static ImmutableArray<TypeWithAnnotations> MapSharperFunctionToInterfaceParameterTypes(
+            ConversionsBase conversions,
+            ImmutableArray<TypeWithAnnotations> formalParameterTypes,
+            ImmutableArray<BoundExpression> arguments)
+        {
+            ArrayBuilder<TypeWithAnnotations> mapped = null;
+            int count = Math.Min(arguments.Length, formalParameterTypes.Length);
+            for (int i = 0; i < count; i++)
+            {
+                var formal = formalParameterTypes[i];
+                if (formal.Type is NamedTypeSymbol { TypeKind: TypeKind.Interface } &&
+                    conversions.GetSharperFunctionToInterfaceDelegateType(arguments[i], formal.Type) is { } delegateType)
+                {
+                    if (mapped is null)
+                    {
+                        mapped = ArrayBuilder<TypeWithAnnotations>.GetInstance(formalParameterTypes.Length);
+                        mapped.AddRange(formalParameterTypes);
+                    }
+
+                    mapped[i] = TypeWithAnnotations.Create(delegateType, formal.NullableAnnotation);
+                }
+            }
+
+            return mapped is null ? formalParameterTypes : mapped.ToImmutableAndFree();
+        }
+
         private int NumberArgumentsToProcess => System.Math.Min(_arguments.Length, _formalParameterTypes.Length);
 
         public static MethodTypeInferenceResult Infer(
@@ -336,7 +368,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             _conversions = conversions;
             _methodTypeParameters = methodTypeParameters;
             _constructedContainingTypeOfMethod = constructedContainingTypeOfMethod;
-            _formalParameterTypes = formalParameterTypes;
+            _formalParameterTypes = MapSharperFunctionToInterfaceParameterTypes(conversions, formalParameterTypes, arguments);
             _formalParameterRefKinds = formalParameterRefKinds;
             _arguments = arguments;
             _extensions = extensions ?? Extensions.Default;
