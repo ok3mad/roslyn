@@ -42,6 +42,13 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
         public override TypeParameterKind TypeParameterKind => ContainingSymbol is MethodSymbol ? TypeParameterKind.Method : TypeParameterKind.Type;
 
+        /// <summary>
+        /// Only interfaces and delegates have variant type parameters. A class that copies an interface's type
+        /// parameters (Sharper's class for a lambda converted to an interface, #29) gets invariant ones.
+        /// </summary>
+        public override VarianceKind Variance
+            => ContainingSymbol is NamedTypeSymbol { TypeKind: not (TypeKind.Interface or TypeKind.Delegate) } ? VarianceKind.None : base.Variance;
+
         public override TypeParameterSymbol OriginalDefinition => this;
 
         internal override void AddSynthesizedAttributes(PEModuleBuilder moduleBuilder, ref ArrayBuilder<CSharpAttributeData> attributes)

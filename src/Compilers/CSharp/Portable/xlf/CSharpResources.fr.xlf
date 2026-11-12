@@ -2597,6 +2597,11 @@
         <target state="translated">'{0}' ne peut pas être sealed, car l'enregistrement contenant n'est pas sealed.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperFunctionToInterfaceInExpressionTree">
+        <source>An expression tree cannot contain a lambda or method group converted to the interface '{0}'.</source>
+        <target state="new">An expression tree cannot contain a lambda or method group converted to the interface '{0}'.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperFunctionTypeParameterModifier">
         <source>A function type parameter cannot be '{0}', because a function type is a 'System.Func' or 'System.Action' delegate.</source>
         <target state="new">A function type parameter cannot be '{0}', because a function type is a 'System.Func' or 'System.Action' delegate.</target>

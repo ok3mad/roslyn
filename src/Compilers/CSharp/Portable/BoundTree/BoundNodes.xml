@@ -1641,6 +1641,20 @@
     <Field Name="WasTargetTyped" Type="bool"/>
   </Node>
 
+  <!--
+  Sharper's lambda or method group converted to a single-method interface (#29), where C# reports an error. Function is
+  the lambda or method group converted to a delegate for the interface's method; lowering wraps it in a generated class
+  that implements the method by invoking the delegate. Type is the interface.
+  -->
+  <Node Name="BoundSharperFunctionToInterface" Base="BoundExpression" DoesNotSurvive="LocalRewriting">
+    <Field Name="Type" Type="TypeSymbol" Override="true" Null="disallow"/>
+    <Field Name="Function" Type="BoundExpression" Null="disallow"/>
+    <!-- The interface's one abstract method, a member of Type or of one of its base interfaces. -->
+    <Field Name="InterfaceMethod" Type="MethodSymbol"/>
+    <!-- The delegate type of Function written over the type parameters of the interface's definition: the generated class stores the delegate as this type. -->
+    <Field Name="DelegateTypeOverDefinition" Type="TypeSymbol"/>
+  </Node>
+
   <Node Name="BoundDecisionDag" Base="BoundNode">
     <Field Name="RootNode" Type="BoundDecisionDagNode" Null="disallow"/>
     <Field Name="SuitableForLowering" Type="bool"/>

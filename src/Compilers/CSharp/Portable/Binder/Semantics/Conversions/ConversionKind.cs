@@ -75,5 +75,6 @@ namespace Microsoft.CodeAnalysis.CSharp
 
         SharperTryExpression, // a conversion from a Sharper try expression to a type which its body and each arm can convert to
         SharperPipe, // a conversion from a Sharper pipe to a type which its stage can convert to
+        SharperFunctionToInterface, // a conversion from a lambda or method group to a Sharper single-method interface, through a delegate for its method
     }
 }

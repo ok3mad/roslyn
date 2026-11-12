@@ -47,6 +47,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 case ConditionalExpression:
                 case SharperTryExpression:
                 case SharperPipe:
+                case SharperFunctionToInterface:
                 case Deconstruction:
                 case StackAllocToPointerType:
                 case StackAllocToSpanType:

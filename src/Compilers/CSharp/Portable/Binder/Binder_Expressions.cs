@@ -7455,6 +7455,24 @@ namespace Microsoft.CodeAnalysis.CSharp
                 // We have at least one accessible candidate constructor, perform overload resolution with accessible candidateConstructors.
                 this.OverloadResolution.ObjectCreationOverloadResolution(candidateConstructors, analyzedArguments, result, dynamicResolution: false, isEarlyAttributeBinding: IsEarlyAttributeBinder, ref useSiteInfo);
 
+                if (!result.HasAnyApplicableMember && ShouldRetrySharperFunctionToInterface(analyzedArguments))
+                {
+                    // Sharper: retry with the conversion of a lambda or method group to a single-method interface.
+                    OverloadResolutionResult<MethodSymbol> retryResult = OverloadResolutionResult<MethodSymbol>.GetInstance();
+                    var retryUseSiteInfo = new CompoundUseSiteInfo<AssemblySymbol>(useSiteInfo);
+                    GetSharperFunctionToInterfaceBinder().OverloadResolution.ObjectCreationOverloadResolution(candidateConstructors, analyzedArguments, retryResult, dynamicResolution: false, isEarlyAttributeBinding: IsEarlyAttributeBinder, ref retryUseSiteInfo);
+                    if (retryResult.HasAnyApplicableMember)
+                    {
+                        result.Free();
+                        result = retryResult;
+                        useSiteInfo.MergeAndClear(ref retryUseSiteInfo);
+                    }
+                    else
+                    {
+                        retryResult.Free();
+                    }
+                }
+
                 if (result.Succeeded)
                 {
                     succeededConsideringAccessibility = true;

@@ -729,6 +729,12 @@ namespace Microsoft.CodeAnalysis.CSharp
                          (disallowExpandedNonArrayParams ? OverloadResolution.Options.DisallowExpandedNonArrayParams : OverloadResolution.Options.None) |
                          (analyzedArguments.HasDynamicArgument ? OverloadResolution.Options.DynamicResolution : OverloadResolution.Options.None),
                 acceptOnlyMethods: acceptOnlyMethods);
+            resolution = RetryResolveMethodGroupWithSharperFunctionToInterface(
+                resolution, methodGroup, expression, methodName, analyzedArguments, ref useSiteInfo,
+                options: (ignoreNormalFormIfHasValidParamsParameter ? OverloadResolution.Options.IgnoreNormalFormIfHasValidParamsParameter : OverloadResolution.Options.None) |
+                         (disallowExpandedNonArrayParams ? OverloadResolution.Options.DisallowExpandedNonArrayParams : OverloadResolution.Options.None) |
+                         (analyzedArguments.HasDynamicArgument ? OverloadResolution.Options.DynamicResolution : OverloadResolution.Options.None),
+                acceptOnlyMethods: acceptOnlyMethods);
             diagnostics.Add(expression, useSiteInfo);
 
             return BindMethodGroupInvocationCore(syntax, expression, methodName, methodGroup, analyzedArguments, resolution, diagnostics, queryClause, out anyApplicableCandidates);

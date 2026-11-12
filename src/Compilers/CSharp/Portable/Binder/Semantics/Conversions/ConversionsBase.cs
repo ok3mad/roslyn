@@ -82,6 +82,13 @@ namespace Microsoft.CodeAnalysis.CSharp
 
         protected abstract bool IsParameterDefaultValueBinding { get; }
 
+        /// <summary>
+        /// The conversion of a lambda or method group to a Sharper single-method interface, which only the binder's
+        /// retry after a C# error classifies (<see cref="Conversions.WithSharperFunctionToInterface"/>).
+        /// </summary>
+        protected virtual Conversion GetSharperFunctionToInterfaceConversion(BoundExpression source, TypeSymbol destination, ref CompoundUseSiteInfo<AssemblySymbol> useSiteInfo)
+            => Conversion.NoConversion;
+
         internal AssemblySymbol CorLibrary { get { return corLibrary; } }
 
 #nullable enable
@@ -1120,13 +1127,22 @@ namespace Microsoft.CodeAnalysis.CSharp
                     {
                         return Conversion.AnonymousFunction;
                     }
-                    break;
+                    goto case BoundKind.MethodGroup;
 
                 case BoundKind.MethodGroup:
-                    Conversion methodGroupConversion = GetMethodGroupDelegateConversion((BoundMethodGroup)sourceExpression, destination, ref useSiteInfo);
-                    if (methodGroupConversion.Exists)
+                    if (sourceExpression.Kind == BoundKind.MethodGroup)
                     {
-                        return methodGroupConversion;
+                        Conversion methodGroupConversion = GetMethodGroupDelegateConversion((BoundMethodGroup)sourceExpression, destination, ref useSiteInfo);
+                        if (methodGroupConversion.Exists)
+                        {
+                            return methodGroupConversion;
+                        }
+                    }
+
+                    Conversion sharperInterfaceConversion = GetSharperFunctionToInterfaceConversion(sourceExpression, destination, ref useSiteInfo);
+                    if (sharperInterfaceConversion.Exists)
+                    {
+                        return sharperInterfaceConversion;
                     }
                     break;
 
