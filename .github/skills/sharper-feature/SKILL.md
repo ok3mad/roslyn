@@ -432,6 +432,15 @@ comparisons ignore under `TypeCompareKind.IgnoreTupleNames`. For the next thing 
    a warning in a C# file of the same compilation, where the attribute does not bind; skip the members the compiler
    writes.
 
+45. **A fact inferred from a body rides on the inference that already binds it, and its metadata must not depend on the
+   body.** The return refinement is computed from the returned values of the binding that infers the return type and
+   published with the type (`SharperInferredReturnType.Result`), so it needs no second binding and cannot add a cycle:
+   reading it reads the type first. An attribute on a return that comes and goes with the body breaks Edit and
+   Continue: the delta writer pairs a method's `Param` rows with the baseline's by position
+   (`DeltaMetadataWriter.EmitParametersFromOriginalMetadata`) and cannot add or remove the return's row, so a body edit
+   crashed the emit. Emit the attribute whenever the declaration allows the fact, with a value for "nothing known"
+   (`SharperRefinement.AnyValueText`), and write an emit-difference test for a body edit that adds and removes the fact.
+
 ## Inferred Types
 
 Inference from a body (`infer` return types, rows 10 and 15) reuses `var`'s rules for the natural type of an

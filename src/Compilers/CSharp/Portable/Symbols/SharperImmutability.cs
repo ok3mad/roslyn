@@ -31,7 +31,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         Pure,
 
         /// <summary>
-        /// <c>SharperRefinementAttribute(string pattern)</c> on a refined parameter (<see cref="SharperRefinement"/>). The
+        /// <c>SharperRefinementAttribute(string pattern)</c> on a refined parameter or return (<see cref="SharperRefinement"/>). The
         /// compiler writes it; it is not an attribute name that binds in source (<see cref="SharperImmutability.TryGetAttributeKind"/>).
         /// </summary>
         Refinement,

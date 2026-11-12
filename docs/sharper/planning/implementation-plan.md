@@ -146,7 +146,7 @@ The brainstorm proposes 26 pieces of syntax, and row 28, discard arguments, was 
 | 23 | Extractor patterns | `s is Parse(val n and >0)` | call plus a sub-pattern, an evaluation in the decision DAG | none | M–L | Low; designed | Decided: a method only where type lookup fails (a type named `Parse` wins); the predicate form first, then `bool TryX(T, out U)`, then `U F(T)`, unions last. See [Feature 13](#feature-13-patterns-on-pure-functions-design) | [#35](https://github.com/ok3mad/roslyn/issues/35) |
 | 24 | `pure` and `total` modifiers | `total int Fib(...)`, `pure(provider)` | erased, plus attributes | small | XL (syntax alone S) | Low | Needs the whole effect checker and bindings for existing .NET code | [#36](https://github.com/ok3mad/roslyn/issues/36) |
 | 25 | Member declared on another type | `static infer Currency.Parse(string s)` | C# 14 extension block | yes | M | Deferred | C# 14 `extension(Currency) { ... }` blocks already cover it, with `infer` and `[Pure]` on their members, so the shorthand only saves a wrapper class. If revived: file level only, where the dotted form is never valid C# (CS0116 or CS9348, plus CS0538); inside a type it stays an explicit interface implementation. See [Parked](brainstorm.md#parked) | [#37](https://github.com/ok3mad/roslyn/issues/37) |
-| 27 | `assume` escape hatch | `assume x is >0` | runtime check | yes | S–M | Low | Only an open question so far | [#39](https://github.com/ok3mad/roslyn/issues/39) |
+| 27 | `assume` escape hatch | `assume x is >0;` | runtime check | yes | S–M | Med | Designed ([Feature 15](#feature-15-assume-slice-1-design)): readonly targets in block scope until slice 3 of refined types; an always-on check; an already proven assumption is a warning | [#39](https://github.com/ok3mad/roslyn/issues/39) |
 
 Not listed: `union Name(A, B)` comes from C# 15, and `collect`, `Retry` and `Unexpected` are library code. `Fail<T>`, which rows 19 and 20 rely on, is in the [runtime library](../README.md#runtime-library); whether those three go there too is open (see [Follow-ups](#follow-ups)).
 
@@ -1402,7 +1402,43 @@ rules and return inference.
   semantic model inside a refinement.
   Tests: 14 `Refinement_*` tests (`SharperTests_Refinements.cs`). The Syntax project with `ROSLYN_TEST_SHARPER=1` has
   the same 37 expected failures as the last run below, and none new.
-- [ ] Step 3, return refinements.
+- [x] **Step 3, return refinements** (`sharper/refined-returns`). `MethodSymbol.SharperReturnRefinement` and
+  `LocalSymbol.SharperRefinement` are the slots; `SharperRefinement.OfValues` and `OfExpression`
+  (`Symbols/Source/SharperRefinement_Inferred.cs`) compute the union. No new diagnostic. The open points, as decided:
+  - **Without a second binding, without new cycles.** `Binder.BindSharperInferredReturnType` already binds the body
+    once to infer the type; it now hands the returned values on, and the refinement is decided and published with the
+    type (`SharperInferredReturnType.Result`). Reading a refinement reads the return type first, so it is a use R3
+    already counts, and a method in a cycle has none. A `val` local's refinement is set when its declaration is bound
+    (`SourceLocalSymbol.SetSharperRefinement`); a body bound again sets an equal one.
+  - **Sources.** Constants, refined parameters, `val` locals, switch expressions, and beyond the plan's list: calls of
+    methods whose return has a refinement (what `val y = F()` keeps is then also what `=> F()` returns) and
+    conditional expressions. An arm that throws adds nothing.
+  - **Normal form.** `null`, the constants in ascending order, each once, then the other patterns in the order found,
+    each once; constants that another pattern allows are dropped. One refined value passed on unchanged keeps its
+    refinement as written (the same object).
+  - **Given up** (no refinement) when a value has none, when a value's type is not the return type (no constant is
+    converted here; an expression body's switch is already converted by natural typing), over 64 alternatives, and
+    when the union allows every value.
+  - **Nullable reference returns.** `return null;` is the constant `null` in the union and sets `MatchesNull`;
+    `Nullable<T>` returns have no value set, as for parameters.
+  - **Block bodies.** The union over every `return`, from the collector the type inference uses; lambdas and local
+    functions in the body have their own returns.
+  - **Iterators and `async`.** None. The refinement would be of the element or the awaited value, and there is no slot
+    for it on `yield` or `await`.
+  - **The recursion error.** It is R1's: a method that reads its own inferred return is CS20018, a cycle CS20033, and
+    such a method has no refinement. Nothing more was needed.
+  - **Who has one.** Not virtual, abstract or override members or interface members (the Signatures decision). Partial
+    definitions forward to their implementation. Operators and conversions infer, but only calls read a refinement.
+  - **Metadata.** The attribute on the return, on every accessibility, following "the refinement goes where the
+    inferred type goes" and R4; `PEMethodSymbol` reads it through its return parameter with step 5's code.
+  - **Edit and Continue.** A probe showed the delta writer failing (`EmitParametersFromOriginalMetadata`) when a body
+    edit made the return's attribute appear or disappear, since it cannot add or remove the return's `Param` row. So a
+    return that can have a refinement always carries the attribute, with `_` when the body gives none, and a body edit
+    that changes only the refinement is a body update. Left for step 4: once callers depend on a refinement, such an
+    edit must be a rude edit, which needs the IDE to see the refinement.
+  Left as `PROTOTYPE(sharper)`: `val` in deconstructions, patterns, `foreach` and `out`, and locals with a written type.
+  Tests: 15 `ReturnRefinement*` tests (`SharperTests_RefinementReturns.cs`) and one emit-difference test
+  (`EditAndContinueSharperTests`).
 - [ ] Step 4, call sites and switches.
 - [x] **Step 5, guard and metadata** (`sharper/refined-parameters-guard`). `SharperRefinementGuard`
   (`Lowering/SharperRefinementGuard.cs`) builds `if (p is not (pattern)) throw new ArgumentOutOfRangeException(nameof(p),
@@ -1596,6 +1632,49 @@ non-virtual members and rejected the rest with CS20052. Prototype on `sharper/pu
   may be in another assembly, so the diagnostic goes to the type that declares the interface.
 - **Sharing a query between two checkers exposes where their rules differ.** The observer rule forbids creating a
   mutable result, which a pure member may do, so the shared answer needs the observer's creation rule on top.
+
+## Feature 15: `assume`, slice 1 (design)
+
+`assume x is >0;` (issue [#39](https://github.com/ok3mad/roslyn/issues/39)), modeled on TypeScript's
+`@ts-expect-error`: the statement vouches for a fact the compiler cannot prove yet, checks it at run time, and is
+reported once the compiler can prove the fact itself, so escape hatches stay searchable and do not rot. Designed, not
+built.
+
+**Probe.** What the compiler does today:
+
+| Area | What the code shows |
+| --- | --- |
+| Flag off | `IsPossibleLocalDeclarationStatement` (`LanguageParser.cs`) takes `identifier identifier` as a declaration, so `assume x is >0;` is a local `x` of type `assume` followed by CS1002 at `is`. `assume x;` and `assume x = e;` are valid declarations, and `assume(x > 0);` is a valid call |
+| What is checked | Refinements are the only check `assume` needs: step 4 of Feature 11 warns on an argument it cannot prove when its value has no refinement, which is the check `assume` silences. Purity has `[AssumePure]` on members (`SharperImmutability.cs`) and is a fact about members, not values; nullability has `!`; immutability is a fact about types (`[Immutable]`) |
+| Flow state | Flow analysis tracks only definite assignment and null state (Feature 11's probe); narrowing a mutable variable after a statement needs slice 3's value-set state |
+| Runtime check | `SharperRefinementGuard` (`Lowering/SharperRefinementGuard.cs`) builds and lowers `if (p is not (pattern)) throw ...` for refined parameters |
+
+### Decisions
+
+| Question | Decision | Why |
+| --- | --- | --- |
+| Spelling | The statement `assume <expression> is <pattern>;`, behind the flag, taken as Sharper only when `assume` starts the statement, the next token is not `(`, and a whole `is`-pattern follows. No parenthesized form and no expression form | Keeps design rule 2: `assume x;`, `assume x = e;` and `assume(x > 0);` keep their C# meaning, and every accepted form is a syntax error in C# |
+| What it may assume | Refinements only: a closed pattern over constants, as for refined parameters. Not purity, nullability or immutability as separate forms | Those have their escapes already (`[AssumePure]`, `!`, `[Immutable]`). `assume s is not null;` still narrows null state, since it binds like `if (!(s is not null)) throw` |
+| Targets until slice 3 | Only variables that cannot change: refined and `readonly` parameters and `val` locals. The fact holds lexically, from the statement to the end of its block. Mutable variables are an error | No flow state is needed, as for refined parameters, which are readonly for the same reason. Slice 3 widens the targets with flow state, and breaks nothing written before |
+| Runtime check | Always on, also in release builds (not `Debug.Assert`): `if (x is not (pattern)) throw new InvalidOperationException("Assumption 'x is >0' failed")`, lowered with the code of `SharperRefinementGuard`, at the statement | The prover trusts the fact, so a skipped check would be unsound. The exception is the BCL's: #217's runtime library is only for types two assemblies must agree on. `ArgumentOutOfRangeException` would be wrong for locals |
+| Already proven | A warning with its own code ("the assumption is already proven; remove 'assume'") and a fixer that removes the statement. Projects can make it an error | TypeScript makes it an error, but a better prover must never break a build (Feature 11's unreachable-arm rule); a compiler upgrade that proves more only warns |
+| Disproven | An error: the pattern does not intersect the variable's refinement, or rejects its constant value | The statement always throws |
+| Ordering | Can be built now, before Feature 11's step 4 and slice 3. Before step 4 the fact feeds step 3's return and `val` refinements and the null state; step 4 then reads it at call sites through one hook, the refinement of a variable in scope | Nothing waits on a missing piece, and the payoff (a silenced call-site warning) arrives with step 4 |
+
+### Plan
+
+1. **Syntax.** `AssumeStatementSyntax` (kind 9900 or above) and the gated parse; parser tests with the flag on and
+   off, including `assume x;`, `assume x = e;` and `assume(x)`.
+2. **Binding.** The pattern is closed and constant (the checks of `SharperRefinement.Bind`), the target is readonly,
+   and a scope binder makes the assumed refinement visible to the following statements of the block; the proven
+   warning and the disproven error.
+3. **Lowering and analysis.** The check through the guard code; nullable and definite assignment see it as
+   `if (!(...)) throw`; IOperation shows that `if` and `throw`.
+4. **Tests** in `SharperTests_Assume.cs`, next to the C# `if` and `throw` they stand for.
+
+Later: step 4's call-site hook (part of step 4) and mutable targets with slice 3.
+
+**Size:** S–M, about 1k to 1.5k lines with tests.
 
 ## Function type parameter names, step N2
 

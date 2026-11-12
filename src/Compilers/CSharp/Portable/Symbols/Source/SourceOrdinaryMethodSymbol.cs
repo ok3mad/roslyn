@@ -344,6 +344,13 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 return type;
             }
 
+            /// <summary>Callers bind to the definition, and the implementation is the only body.</summary>
+            internal override SharperRefinement? GetReturnRefinement()
+                => ((SourceOrdinaryMethodSymbol)Method).SourcePartialImplementation?.SharperReturnRefinement;
+
+            /// <summary>The implementation part is the one that is emitted.</summary>
+            internal override string? GetReturnRefinementAttributeText() => null;
+
             protected override Binder? GetBodyBinder(CSharpSyntaxNode body)
                 => throw ExceptionUtilities.Unreachable();
 
