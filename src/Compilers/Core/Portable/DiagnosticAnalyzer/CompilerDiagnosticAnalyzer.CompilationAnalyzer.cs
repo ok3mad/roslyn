@@ -67,7 +67,8 @@ namespace Microsoft.CodeAnalysis.Diagnostics
                     if (locationFilter(diagnostic.Location) &&
                         diagnostic.Severity != DiagnosticSeverity.Hidden)
                     {
-                        var current = properties == null ? diagnostic : new CompilerDiagnostic(diagnostic, properties);
+                        // Sharper: keep the diagnostic's own properties (CS20027's candidate types, for its fix).
+                        var current = properties == null ? diagnostic : new CompilerDiagnostic(diagnostic, diagnostic.Properties.IsEmpty ? properties : diagnostic.Properties.SetItems(properties));
                         reportDiagnostic(current);
                     }
                 }

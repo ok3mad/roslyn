@@ -643,7 +643,17 @@ namespace Microsoft.CodeAnalysis.CSharp
         {
             BoundExpression result;
             var methodGroup = MethodGroup.GetInstance();
-            methodGroup.PopulateWithSingleMethod(boundExpression, delegateType.DelegateInvokeMethod);
+            var invokeMethod = delegateType.DelegateInvokeMethod;
+            if (invokeMethod is SharperNamedDelegateInvokeMethodSymbol namedInvokeMethod && analyzedArguments.Names.Count > 0)
+            {
+                // Sharper: the parameter names of a function type are not in metadata yet, so they must not decide
+                // what a call means: a named argument still names a parameter of Func or Action.
+                // PROTOTYPE(sharper): named arguments with the function type's names (https://github.com/ok3mad/roslyn/issues/215).
+                invokeMethod = namedInvokeMethod.WithoutSharperNames;
+                delegateType = delegateType.WithSharperFunctionTypeParameterNames(default);
+            }
+
+            methodGroup.PopulateWithSingleMethod(boundExpression, invokeMethod);
             var overloadResolutionResult = OverloadResolutionResult<MethodSymbol>.GetInstance();
             CompoundUseSiteInfo<AssemblySymbol> useSiteInfo = GetNewCompoundUseSiteInfo(diagnostics);
             OverloadResolution.MethodInvocationOverloadResolution(

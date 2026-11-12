@@ -853,17 +853,42 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         }
 #nullable disable
 
+        /// <summary>
+        /// Whether the signature contains names that a comparison with <see cref="TypeCompareKind.IgnoreTupleNames"/>
+        /// ignores: tuple element names, and the parameter names of Sharper function types.
+        /// </summary>
         internal static bool ContainsTupleNames(this Symbol member)
+        {
+            return member.ContainsTupleNames(static t => t.ContainsTupleNames() || t.ContainsSharperFunctionTypeNames());
+        }
+
+        /// <summary>
+        /// Sharper: picks the error for two members whose signatures differ only in the names that
+        /// <see cref="TypeCompareKind.IgnoreTupleNames"/> ignores. With no tuple element names on either side, the
+        /// difference is in the parameter names of function types, which have errors of their own; the tuple errors
+        /// would name the wrong thing. No comparison tells the two kinds of names apart, so a signature with both
+        /// reports the tuple error.
+        /// </summary>
+        internal static ErrorCode TupleOrSharperFunctionTypeNamesError(Symbol member1, Symbol member2, ErrorCode tupleNamesError, ErrorCode functionTypeNamesError)
+        {
+            return hasTupleNames(member1) || hasTupleNames(member2) ? tupleNamesError : functionTypeNamesError;
+
+            // An indexer's parameters count too, which the check below leaves out.
+            static bool hasTupleNames(Symbol member)
+                => member.ContainsTupleNames(static t => t.ContainsTupleNames()) || member.GetParameters().Any(static p => p.Type.ContainsTupleNames());
+        }
+
+        private static bool ContainsTupleNames(this Symbol member, Func<TypeSymbol, bool> containsNames)
         {
             switch (member.Kind)
             {
                 case SymbolKind.Method:
                     var method = (MethodSymbol)member;
-                    return method.ReturnType.ContainsTupleNames() || method.Parameters.Any(static p => p.Type.ContainsTupleNames());
+                    return containsNames(method.ReturnType) || method.Parameters.Any(static (p, containsNames) => containsNames(p.Type), containsNames);
                 case SymbolKind.Property:
-                    return ((PropertySymbol)member).Type.ContainsTupleNames();
+                    return containsNames(((PropertySymbol)member).Type);
                 case SymbolKind.Event:
-                    return ((EventSymbol)member).Type.ContainsTupleNames();
+                    return containsNames(((EventSymbol)member).Type);
                 default:
                     // We currently don't need to use this method for fields or locals
                     throw ExceptionUtilities.UnexpectedValue(member.Kind);

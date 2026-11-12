@@ -2618,6 +2618,9 @@ namespace Microsoft.CodeAnalysis.CSharp
                 or ErrorCode.ERR_SharperValRefReassignment
                 or ErrorCode.ERR_SharperFunctionTypeParameterModifier
                 or ErrorCode.ERR_SharperFunctionTypeTooManyParameters
+                or ErrorCode.ERR_SharperCantChangeFunctionTypeNamesOnOverride
+                or ErrorCode.ERR_SharperImplBadFunctionTypeNames
+                or ErrorCode.ERR_SharperPartialMemberInconsistentFunctionTypeNames
                 or ErrorCode.ERR_SharperReadOnlyLocalWithNoInitializer
                 or ErrorCode.ERR_SharperSpreadRefStructEnumerator
                 or ErrorCode.ERR_SharperInferNoType
@@ -2670,6 +2673,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 or ErrorCode.ERR_SharperRefinementDefaultValueDisproven
                 or ErrorCode.ERR_SharperRefinementNotSupportedYet
                 or ErrorCode.ERR_SharperOpaquePatternNotPure
+                or ErrorCode.ERR_SharperPredicatePatternNotPure
                     => false,
             };
 #pragma warning restore CS8524 // The switch expression does not handle some values of its input type (it is not exhaustive) involving an unnamed enum value.

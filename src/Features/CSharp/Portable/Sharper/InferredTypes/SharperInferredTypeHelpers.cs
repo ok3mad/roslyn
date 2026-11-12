@@ -20,6 +20,8 @@ internal static class SharperProviderNames
 {
     public const string WriteInferredType = "Sharper Write Inferred Type";
     public const string UseInfer = "Sharper Use Infer";
+    public const string MakeGeneric = "Sharper Make Generic";
+    public const string WriteTypeForNothingToInfer = "Sharper Write Type For Nothing To Infer";
 }
 
 /// <summary>What the Sharper fixers and refactorings for <c>infer</c> share.</summary>

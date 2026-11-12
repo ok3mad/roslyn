@@ -24,8 +24,10 @@ namespace Microsoft.CodeAnalysis.CSharp.Sharper.InferredTypes;
 /// disagree, the error lists the type each candidate takes; the fix offers each.</item>
 /// <item>CS20057 (uses that need different types): the fix offers the type of each use.</item>
 /// </list>
-/// The compiler's list is not public API, so the fix reads it back from the error's additional locations (the use
-/// that pinned nothing, or the disagreeing arguments) and the candidates of the call there.
+/// The fix reads the types from the error's additional locations (the use that pinned nothing, or the disagreeing
+/// arguments) and the candidates of the call there. Where the candidates disagree, CS20027 also lists the types of the
+/// candidates the compiler kept in its <see cref="Diagnostic.Properties"/> (<see cref="CandidateTypesPropertyName"/>),
+/// and the fix offers exactly those, not the types of candidates the other arguments rule out.
 /// </summary>
 [ExportCodeFixProvider(LanguageNames.CSharp, Name = SharperProviderNames.WriteInferredType), Shared]
 [method: ImportingConstructor]
@@ -37,6 +39,12 @@ internal sealed class SharperWriteInferredTypeCodeFixProvider() : CodeFixProvide
 
     /// <summary>Cannot infer the type of parameter '{0}', because its uses need different types.</summary>
     private const string CS20057 = nameof(CS20057);
+
+    /// <summary>
+    /// The property of CS20027 that lists the types of the candidates that disagree, as documentation comment reference
+    /// IDs, one per line. The compiler's <c>SharperInferredParameterType.CandidateTypesPropertyName</c>.
+    /// </summary>
+    internal const string CandidateTypesPropertyName = "SharperInferCandidateTypes";
 
     public override ImmutableArray<string> FixableDiagnosticIds { get; } = [CS20027, CS20057];
 
@@ -78,6 +86,19 @@ internal sealed class SharperWriteInferredTypeCodeFixProvider() : CodeFixProvide
                 var use = root.FindNode(location.SourceSpan, getInnermostNodeForTie: true);
                 if (!TryAddTypeFromConversion(use, semanticModel, inferType, types, cancellationToken))
                     AddTypesFromUse(use, semanticModel, types, cancellationToken);
+            }
+        }
+
+        if (diagnostic.Properties.TryGetValue(CandidateTypesPropertyName, out var ids) && ids is not null)
+        {
+            // The compiler's list is exact. A type the candidates' parameters spell keeps their nullable annotations and
+            // tuple names, which a reference ID does not carry.
+            var rebuilt = types.ToImmutable();
+            types.Clear();
+            foreach (var id in ids.Split('\n'))
+            {
+                if (DocumentationCommentId.GetFirstSymbolForReferenceId(id, semanticModel.Compilation) is ITypeSymbol listed)
+                    types.Add(rebuilt.FirstOrDefault(type => type.Equals(listed, SymbolEqualityComparer.Default)) ?? listed);
             }
         }
 

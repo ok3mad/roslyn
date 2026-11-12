@@ -183,6 +183,17 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         /// lambda the pattern is in, if any.
         /// </summary>
         internal static bool CheckOpaquePatternOperand(CSharpCompilation compilation, MethodSymbol? containingMethod, BoundExpression operand, BindingDiagnosticBag diagnostics)
+            => CheckOpaquePatternOperand(compilation, containingMethod, operand, ErrorCode.ERR_SharperOpaquePatternNotPure, diagnostics);
+
+        /// <summary>
+        /// Checks the call of a predicate pattern (Feature 13, slice 2), such as <c>IsEven(x)</c> for <c>x is IsEven</c>,
+        /// by the rules of a <c>[Pure]</c> body, and reports CS20069 if it is not pure. The call's argument is the
+        /// pattern's input, a placeholder.
+        /// </summary>
+        internal static bool CheckPredicatePatternCall(CSharpCompilation compilation, MethodSymbol? containingMethod, BoundCall call, BindingDiagnosticBag diagnostics)
+            => CheckOpaquePatternOperand(compilation, containingMethod, call, ErrorCode.ERR_SharperPredicatePatternNotPure, diagnostics);
+
+        private static bool CheckOpaquePatternOperand(CSharpCompilation compilation, MethodSymbol? containingMethod, BoundExpression operand, ErrorCode errorCode, BindingDiagnosticBag diagnostics)
         {
             var walker = new PurityWalker(compilation.SharperImmutability, containingMethod, definition: null, localOnly: false, allowsCreation: true, constructorsInProgress: null, isMember: true);
             walker.Visit(operand);
@@ -191,7 +202,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 return true;
             }
 
-            diagnostics.Add(ErrorCode.ERR_SharperOpaquePatternNotPure, walker.Impure.Syntax.Location, GetPureReason(walker));
+            diagnostics.Add(errorCode, walker.Impure.Syntax.Location, GetPureReason(walker));
             return false;
         }
 

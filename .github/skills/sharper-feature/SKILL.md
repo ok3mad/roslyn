@@ -100,6 +100,30 @@ implementation plan, "Feature 3"):
    generic argument and a tuple element in a statement, and the overlapping C# expressions with every token that can
    follow them.
 
+### Data carried on a type symbol, outside its meaning
+
+Function type parameter names (`(int width, int height) -> int`) follow tuple element names: a record on the
+constructed type (`SharperFunctionTypeNames`, on `NamedTypeSymbol.UncommonProperties` next to `TupleExtraData`) that
+comparisons ignore under `TypeCompareKind.IgnoreTupleNames`. For the next thing a type carries this way:
+
+1. **Grep the precedent's threading, and decide each site**: `git grep -n "TupleNames\|TupleElementNames\|WithTupleData"`.
+   The sites fall into four groups: comparison (`NamedTypeSymbol.Equals`), merging (`MergeEquivalentTypes`), copying
+   on a rebuild (`WithTupleDataFrom`, which every rebuild already calls, so put the copy inside it), and emit
+   (`ContainsTupleNames` on a type, the encoders, attribute synthesis), which must not see data that is not emitted.
+   Record the result as a table (implementation plan, "The tuple-name sites").
+2. **Store it only where it can occur.** `Func` and `Action` are always a `ConstructedNamedTypeSymbol`, so one subclass
+   stores the names, not the 28 that override `WithTupleDataCore`.
+3. **An override's types come from the overridden member.** `CustomModifierUtils.CopyTypeCustomModifiers` runs for every
+   override and implementation and re-applies what the runtime ignores from the override's own types; new data must
+   be re-applied there too, or the override silently has the base's and the override check never fires.
+4. **A display string can be metadata.** `SymbolDisplayFormat.ExplicitInterfaceImplementationFormat` names explicit
+   implementations in metadata, and `ILVisualizationFormat` is what IL baselines print; a change to how a type displays
+   opts those out (`SymbolDisplayCompilerInternalOptions.ExcludeSharperFunctionTypeNames`).
+5. **A member that differs only in data** (the named `Invoke`) is the substituted member itself with one override
+   (`SharperNamedDelegateInvokeMethodSymbol : SubstitutedMethodSymbol`), so equality, lowering and emit need nothing.
+6. **Test that nothing is emitted**: compare the IL and the metadata dump (members, attributes, metadata names) with
+   the C# twin's, and read the type back through a metadata reference and a compilation reference.
+
 ## Traps Found So Far
 
 1. **Kind lists outside the visitors.** `ExitPointsWalker` throws on unknown pending-branch kinds, and the lowering
@@ -384,7 +408,13 @@ implementation plan, "Feature 3"):
    (`SkipInVisitor`), so an expression a DAG test evaluates is seen by flow analysis only through its pattern: read it
    in the state before the match (no pattern variable is assigned yet), and let the nullable walker analyze it at the
    DAG node, as it does a `when` clause. The decision DAG rewriter lowers it (`_localRewriter.VisitExpression`), which
-   can change `_factory.Syntax`.
+   can change `_factory.Syntax`. An expression over the pattern's input (the predicate pattern's call `IsEven(x)`) uses
+   a `BoundValuePlaceholder` for the input, which every pass that reaches it must register: the decision DAG rewriter
+   (`AddPlaceholderReplacement` with the DAG temp), the nullable walker (with the temp's state at the DAG node, and once
+   more for the semantic model's visit of the pattern), `RefSafetyAnalysis` (the pattern input's escape scope) and the
+   `PurityWalker` allow list. A call whose syntax is a bare name trips `InterceptableNameSyntax`'s assert, as the pipe's
+   bare stage did. Comparing two such tests structurally (`IsSameComparison`) must treat the two placeholders as one
+   input and compare a static call's type receiver, or two identical tests never share.
 
 43. **A prologue belongs to the emitted method, after state machine rewriting.** Code that must run when a method is
    called (the refinement guard) cannot go into the bound body: an iterator's or `async` method's body becomes

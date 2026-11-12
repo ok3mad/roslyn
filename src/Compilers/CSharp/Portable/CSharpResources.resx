@@ -8423,6 +8423,15 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
   <data name="ERR_SharperFunctionTypeTooManyParameters" xml:space="preserve">
     <value>A function type cannot have more than {0} parameters, because no 'System.Func' or 'System.Action' delegate has more.</value>
   </data>
+  <data name="ERR_SharperCantChangeFunctionTypeNamesOnOverride" xml:space="preserve">
+    <value>'{0}': cannot change function type parameter names when overriding inherited member '{1}'</value>
+  </data>
+  <data name="ERR_SharperImplBadFunctionTypeNames" xml:space="preserve">
+    <value>The function type parameter names in the signature of '{0}' must match the function type parameter names of interface member '{1}' (including on the return type).</value>
+  </data>
+  <data name="ERR_SharperPartialMemberInconsistentFunctionTypeNames" xml:space="preserve">
+    <value>Both partial member declarations, '{0}' and '{1}', must use the same function type parameter names.</value>
+  </data>
   <data name="ERR_SharperReadOnlyLocalWithNoInitializer" xml:space="preserve">
     <value>A readonly local must be initialized in its declaration, because it cannot be assigned later.</value>
   </data>
@@ -8617,6 +8626,9 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
   </data>
   <data name="ERR_SharperOpaquePatternNotPure" xml:space="preserve">
     <value>The operand of a pattern that is not a constant must be pure, but it is not: {0}.</value>
+  </data>
+  <data name="ERR_SharperPredicatePatternNotPure" xml:space="preserve">
+    <value>The method of a predicate pattern must be pure, but it is not: {0}.</value>
   </data>
   <data name="WRN_SharperPureOutArgumentNotFresh_Title" xml:space="preserve">
     <value>The out argument of a [Pure] member is not a fresh local</value>

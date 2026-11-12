@@ -297,6 +297,12 @@ namespace Microsoft.CodeAnalysis
         }
 
         /// <summary>
+        /// Sharper: properties a derived class gives the reported <see cref="Diagnostic"/>, for the fixers that need
+        /// more than the message (as <see cref="Diagnostic.Properties"/> of an analyzer diagnostic).
+        /// </summary>
+        internal virtual ImmutableDictionary<string, string?> Properties => ImmutableDictionary<string, string?>.Empty;
+
+        /// <summary>
         /// Get the message id (for example "CS1001") for the message. This includes both the error number
         /// and a prefix identifying the source.
         /// </summary>

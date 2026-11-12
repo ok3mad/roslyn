@@ -110,7 +110,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             get { return _underlyingParameter.IsImplicitlyDeclared; }
         }
 
-        public sealed override string Name
+        public override string Name
         {
             get { return _underlyingParameter.Name; }
         }

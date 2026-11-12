@@ -823,7 +823,7 @@ What is settled so far, what was tried and dropped, and what waits for a later s
 
 - How are refined parameter types preserved across assembly boundaries, through metadata attributes and runtime guards at C# entry points? Immutability is decided (see [Decided](#decided)): attributes in metadata, trusted by consumers, and a run-time type check where an optimization relies on it.
 - How does the checker's flow analysis tie into the more flexible type inference?
-- What escape hatches are needed to keep the language pragmatic, for example an `assume` that lowers to a runtime check?
+- What escape hatches are needed to keep the language pragmatic, for example an `assume` that lowers to a runtime check? `assume` is designed in [Feature 15](implementation-plan.md#feature-15-assume-slice-1-design) of the plan.
 - How are diagnostics mapped back to original source after lowering?
 - Which effect conversions are safe enough to infer automatically, and which need a manual converter?
 - **Untagged unions and generics (deep dive).** Resolved by tagging failures (see [Decided](#decided)). If a bare error case passed through pipes, generic code over `T | NotFound` could not tell whether `T` is itself `NotFound`, so behavior would change with the instantiation and nested options would collapse; C# 15 unions have the same trap. Over `(T | Fail<NotFound>)` it can, as long as a `Fail<...>` is never a success value. The earlier candidate, to let only declared error cases pass through and reject an unconstrained `T` instantiated with one, needed no library, but an ordinary type could not be a failure.

@@ -107,6 +107,22 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             Debug.Assert(resultType.Equals(sourceType, TypeCompareKind.IgnoreDynamicAndTupleNames | TypeCompareKind.IgnoreNullableModifiersForReferenceTypes | TypeCompareKind.IgnoreNativeIntegers)); // Same custom modifiers as source type.
 
             // Same object/dynamic, nullability, native integers, and tuple names as destination type.
+            if (destinationType.ContainsSharperFunctionTypeNames() || resultType.ContainsSharperFunctionTypeNames())
+            {
+                // Sharper: the result has the parameter names of the source's function types, and must have those of
+                // the destination. Without custom modifiers to copy, which is every override of a member from source,
+                // the destination is the result.
+                if (resultType.Equals(destinationType, TypeCompareKind.IgnoreTupleNames))
+                {
+                    return destinationType;
+                }
+
+                // PROTOTYPE(sharper): with custom modifiers, the destination's names are lost: the source comes from
+                // metadata and has none. Copy them as the tuple names above, with the encoder and decoder of the names'
+                // metadata format (https://github.com/ok3mad/roslyn/issues/215).
+                return resultType;
+            }
+
             Debug.Assert(resultType.Equals(destinationType, TypeCompareKind.IgnoreCustomModifiersAndArraySizesAndLowerBounds));
 
             return resultType;

@@ -40,6 +40,11 @@ namespace Microsoft.CodeAnalysis
             get { return this.Info.AdditionalLocations; }
         }
 
+        public override ImmutableDictionary<string, string?> Properties
+        {
+            get { return this.Info.Properties; }
+        }
+
         internal override ImmutableArray<string> CustomTags
         {
             get
