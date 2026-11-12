@@ -327,6 +327,8 @@ namespace Microsoft.CodeAnalysis.Operations
                         switch (boundNode.Kind)
                         {
                             case BoundKind.FixedLocalCollectionInitializer:
+                            // The lambda or method group under it has the same syntax.
+                            case BoundKind.SharperFunctionToInterface:
                                 isImplicit = true;
                                 break;
                         }

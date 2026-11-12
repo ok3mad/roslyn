@@ -182,6 +182,9 @@ namespace Microsoft.CodeAnalysis.CSharp
                 return Conversion.NoConversion;
             }
 
+            // PROTOTYPE(sharper): method type inference does not look through the interface's method yet (step b of #29),
+            // so a type parameter that only the interface mentions must be fixed by another argument.
+
             if (source is UnboundLambda lambda)
             {
                 // A lambda whose signature matches converts even when its body has errors, unlike a lambda to a delegate
@@ -244,6 +247,9 @@ namespace Microsoft.CodeAnalysis.CSharp
         /// Whether to retry an overload resolution that found no applicable candidate with the conversion to a
         /// single-method interface: some argument is a lambda or method group in Sharper code.
         /// </summary>
+        /// <remarks>
+        /// PROTOTYPE(sharper): delegate invocations, indexers, casts, conditional and switch expressions do not retry yet.
+        /// </remarks>
         private static bool ShouldRetrySharperFunctionToInterface(AnalyzedArguments analyzedArguments)
         {
             foreach (var argument in analyzedArguments.Arguments)
