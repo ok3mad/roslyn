@@ -1358,6 +1358,13 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             type.VisitType((TypeSymbol t, object? _1, bool _2) => !t.TupleElementNames.IsDefault, null) is object;
 
         /// <summary>
+        /// Sharper: return true if the type contains any function type with parameter names. These are apart from
+        /// <see cref="ContainsTupleNames(TypeSymbol)"/>, which decides what is written to metadata.
+        /// </summary>
+        internal static bool ContainsSharperFunctionTypeNames(this TypeSymbol type) =>
+            type.VisitType((TypeSymbol t, object? _1, bool _2) => t is NamedTypeSymbol { SharperFunctionTypeParameterNames.IsDefault: false }, null) is object;
+
+        /// <summary>
         /// Return true if the type contains any function pointer types.
         /// </summary>
         internal static bool ContainsFunctionPointer(this TypeSymbol type) =>

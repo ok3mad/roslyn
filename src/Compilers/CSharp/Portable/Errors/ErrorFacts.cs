@@ -2620,6 +2620,9 @@ namespace Microsoft.CodeAnalysis.CSharp
                 or ErrorCode.ERR_SharperValRefReassignment
                 or ErrorCode.ERR_SharperFunctionTypeParameterModifier
                 or ErrorCode.ERR_SharperFunctionTypeTooManyParameters
+                or ErrorCode.ERR_SharperCantChangeFunctionTypeNamesOnOverride
+                or ErrorCode.ERR_SharperImplBadFunctionTypeNames
+                or ErrorCode.ERR_SharperPartialMemberInconsistentFunctionTypeNames
                 or ErrorCode.WRN_SharperReadOnlyLocalMemberCallOnCopy
                 or ErrorCode.ERR_SharperReadOnlyLocalWithNoInitializer
                 or ErrorCode.ERR_SharperSpreadRefStructEnumerator

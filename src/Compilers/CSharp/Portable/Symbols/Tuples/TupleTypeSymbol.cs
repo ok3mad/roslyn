@@ -112,6 +112,13 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
         internal NamedTypeSymbol WithTupleDataFrom(NamedTypeSymbol original)
         {
+            // Sharper: every caller rebuilds a type and copies what is not in its type arguments, which includes
+            // the parameter names of a function type. A type has tuple data or such names, never both.
+            if (original._lazyUncommonProperties?._sharperFunctionTypeNames is not null || this._lazyUncommonProperties?._sharperFunctionTypeNames is not null)
+            {
+                return WithSharperFunctionTypeParameterNames(original.SharperFunctionTypeParameterNames);
+            }
+
             if (!IsTupleType || (original._lazyUncommonProperties?._lazyTupleData == null && this._lazyUncommonProperties?._lazyTupleData == null) || TupleData!.EqualsIgnoringTupleUnderlyingType(original.TupleData))
             {
                 return this;

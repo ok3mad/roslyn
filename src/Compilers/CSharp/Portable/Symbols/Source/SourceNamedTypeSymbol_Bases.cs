@@ -193,7 +193,9 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                                     diagnostics.Add(ErrorCode.WRN_DuplicateInterfaceWithNullabilityMismatchInBaseList, location, @interface, this);
                                 }
                             }
-                            else if (other.Equals(@interface, TypeCompareKind.IgnoreTupleNames | TypeCompareKind.IgnoreNullableModifiersForReferenceTypes))
+                            else if (other.Equals(@interface, TypeCompareKind.IgnoreTupleNames | TypeCompareKind.IgnoreNullableModifiersForReferenceTypes) &&
+                                // Sharper: without tuple names, the difference is in the parameter names of function types.
+                                (other.ContainsTupleNames() || @interface.ContainsTupleNames()))
                             {
                                 diagnostics.Add(ErrorCode.ERR_DuplicateInterfaceWithTupleNamesInBaseList, location, @interface, other, this);
                             }

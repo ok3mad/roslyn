@@ -115,7 +115,7 @@ Not done yet:
 | Feature | Summary | Status | Issue |
 | --- | --- | --- | --- |
 | [Spread in `yield return`](features/yield-return-spread.md) | `yield return ..xs;` yields every element of `xs`. | Prototype, merged into `main` | [#13](https://github.com/ok3mad/roslyn/issues/13) |
-| [Function types](features/function-types.md) | `(A, B) -> R` is `Func<A, B, R>`, and `(A) -> void` is `Action<A>`. | Prototype, merged into `main` | [#21](https://github.com/ok3mad/roslyn/issues/21) |
+| [Function types](features/function-types.md) | `(A, B) -> R` is `Func<A, B, R>`, and `(A) -> void` is `Action<A>`. Parameter names, `(int width, int height) -> int`, are carried on the type as tuple element names are. | Prototype, merged into `main` | [#21](https://github.com/ok3mad/roslyn/issues/21) |
 | [`val` locals](features/val-locals.md) | `val x = e;` declares an implicitly typed local that cannot be reassigned, also in deconstructions, `foreach`, `out`, patterns and lambda parameters (`(val x) => ...`). | Prototype, merged into `main` | [#14](https://github.com/ok3mad/roslyn/issues/14), [#15](https://github.com/ok3mad/roslyn/issues/15), [#18](https://github.com/ok3mad/roslyn/issues/18), [#17](https://github.com/ok3mad/roslyn/issues/17) |
 | [`readonly` locals](features/readonly-locals.md) | `readonly int x = e;` and `readonly var x = e;` declare locals that cannot be reassigned; `readonly var` is `val`. | Prototype, merged into `main` | [#16](https://github.com/ok3mad/roslyn/issues/16) |
 | [`readonly` parameters](features/readonly-parameters.md) | `void F(readonly int x)` declares a parameter that cannot be reassigned; it is not part of the signature. | Prototype | [#23](https://github.com/ok3mad/roslyn/issues/23), [#97](https://github.com/ok3mad/roslyn/issues/97) |
@@ -231,6 +231,9 @@ in `#pragma warning`, `/nowarn` and `.editorconfig`.
 | CS20063 | Error | Cannot infer the type of parameter '{0}' from the conversions of '{1}', because binding the members that convert '{1}' needs the signature of '{1}', directly or through other members whose types are inferred. Write the parameter type. |
 | CS20064 | Error | '{0}' overrides or implements the [Pure] member '{1}', so it must be marked [Pure] too. |
 | CS20065 | Warning | '{0}' overrides or implements the [Pure] member '{1}', so it must be pure too, but it is not marked [Pure], and a C# file is not checked. Move it to a Sharper file and mark it [Pure]. |
+| CS20066 | Error | '{0}': cannot change function type parameter names when overriding inherited member '{1}' |
+| CS20067 | Error | The function type parameter names in the signature of '{0}' must match the function type parameter names of interface member '{1}' (including on the return type). |
+| CS20068 | Error | Both partial member declarations, '{0}' and '{1}', must use the same function type parameter names. |
 
 ## Where the code is
 

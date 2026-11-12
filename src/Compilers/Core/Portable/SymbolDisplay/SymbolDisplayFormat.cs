@@ -258,7 +258,8 @@ namespace Microsoft.CodeAnalysis
                 miscellaneousOptions:
                     SymbolDisplayMiscellaneousOptions.UseSpecialTypes |
                     SymbolDisplayMiscellaneousOptions.ExpandValueTuple,
-                compilerInternalOptions: SymbolDisplayCompilerInternalOptions.UseMetadataMemberNames | SymbolDisplayCompilerInternalOptions.UseNativeIntegerUnderlyingType);
+                compilerInternalOptions: SymbolDisplayCompilerInternalOptions.UseMetadataMemberNames | SymbolDisplayCompilerInternalOptions.UseNativeIntegerUnderlyingType |
+                    SymbolDisplayCompilerInternalOptions.ExcludeSharperFunctionTypeNames);
 
         /// <summary>
         /// Used to normalize explicit interface implementation member names.
@@ -270,7 +271,8 @@ namespace Microsoft.CodeAnalysis
                 typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
                 genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters,
                 miscellaneousOptions: SymbolDisplayMiscellaneousOptions.EscapeKeywordIdentifiers | SymbolDisplayMiscellaneousOptions.ExpandValueTuple,
-                compilerInternalOptions: SymbolDisplayCompilerInternalOptions.ReverseArrayRankSpecifiers | SymbolDisplayCompilerInternalOptions.IncludeFileLocalTypesPrefix);
+                compilerInternalOptions: SymbolDisplayCompilerInternalOptions.ReverseArrayRankSpecifiers | SymbolDisplayCompilerInternalOptions.IncludeFileLocalTypesPrefix |
+                    SymbolDisplayCompilerInternalOptions.ExcludeSharperFunctionTypeNames);
 
         /// <summary>
         /// Determines how the global namespace is displayed.
