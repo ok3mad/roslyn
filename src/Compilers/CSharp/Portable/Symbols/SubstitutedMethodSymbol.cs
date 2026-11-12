@@ -358,11 +358,16 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 TypeMap map = Map;
                 foreach (var p in unsubstitutedParameters)
                 {
-                    substituted.Add(new SubstitutedParameterSymbol(this, map, p));
+                    substituted.Add(SubstituteParameter(map, p));
                 }
 
                 return substituted.ToImmutableAndFree();
             }
+        }
+
+        protected virtual ParameterSymbol SubstituteParameter(TypeMap map, ParameterSymbol originalParameter)
+        {
+            return new SubstitutedParameterSymbol(this, map, originalParameter);
         }
 
         internal override int CalculateLocalSyntaxOffset(int localPosition, SyntaxTree localTree)

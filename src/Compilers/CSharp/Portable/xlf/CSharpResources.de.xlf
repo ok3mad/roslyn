@@ -2597,6 +2597,11 @@
         <target state="translated">"{0}" kann nicht versiegelt werden, weil der enthaltende Datensatz nicht versiegelt ist.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperCantChangeFunctionTypeNamesOnOverride">
+        <source>'{0}': cannot change function type parameter names when overriding inherited member '{1}'</source>
+        <target state="new">'{0}': cannot change function type parameter names when overriding inherited member '{1}'</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperFunctionTypeParameterModifier">
         <source>A function type parameter cannot be '{0}', because a function type is a 'System.Func' or 'System.Action' delegate.</source>
         <target state="new">A function type parameter cannot be '{0}', because a function type is a 'System.Func' or 'System.Action' delegate.</target>
@@ -2630,6 +2635,11 @@
       <trans-unit id="ERR_SharperImmutableNotProven">
         <source>'{0}' is marked [Immutable], but it cannot be proven immutable: {1}.</source>
         <target state="new">'{0}' is marked [Immutable], but it cannot be proven immutable: {1}.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperImplBadFunctionTypeNames">
+        <source>The function type parameter names in the signature of '{0}' must match the function type parameter names of interface member '{1}' (including on the return type).</source>
+        <target state="new">The function type parameter names in the signature of '{0}' must match the function type parameter names of interface member '{1}' (including on the return type).</target>
         <note />
       </trans-unit>
       <trans-unit id="ERR_SharperInferAmbiguousOverriddenMember">
@@ -2755,6 +2765,11 @@
       <trans-unit id="ERR_SharperOpaquePatternNotPure">
         <source>The operand of a pattern that is not a constant must be pure, but it is not: {0}.</source>
         <target state="new">The operand of a pattern that is not a constant must be pure, but it is not: {0}.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperPartialMemberInconsistentFunctionTypeNames">
+        <source>Both partial member declarations, '{0}' and '{1}', must use the same function type parameter names.</source>
+        <target state="new">Both partial member declarations, '{0}' and '{1}', must use the same function type parameter names.</target>
         <note />
       </trans-unit>
       <trans-unit id="ERR_SharperPhantomTypeParameterInState">

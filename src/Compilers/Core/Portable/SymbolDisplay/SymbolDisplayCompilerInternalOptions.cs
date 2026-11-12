@@ -81,5 +81,11 @@ namespace Microsoft.CodeAnalysis
         /// the prefix will be unique for all files which are permitted to declare file-local types.
         /// </summary>
         IncludeFileLocalTypesPrefix = 1 << 10,
+
+        /// <summary>
+        /// Sharper: display <c>Func&lt;int, int&gt;</c> instead of <c>Func&lt;int x, int&gt;</c> for a function type
+        /// with parameter names, where the text becomes a metadata name.
+        /// </summary>
+        ExcludeSharperFunctionTypeNames = 1 << 11,
     }
 }

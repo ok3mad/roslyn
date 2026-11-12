@@ -926,7 +926,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     MemberSignatureComparer.ConsideringTupleNamesCreatesDifference(overridingMember, overriddenMember))
                 {
                     // it is ok to override with no tuple names, for compatibility with C# 6, but otherwise names should match
-                    diagnostics.Add(ErrorCode.ERR_CantChangeTupleNamesOnOverride, overridingMemberLocation, overridingMember, overriddenMember);
+                    diagnostics.Add(SymbolExtensions.TupleOrSharperFunctionTypeNamesError(overridingMember, overriddenMember, ErrorCode.ERR_CantChangeTupleNamesOnOverride, ErrorCode.ERR_SharperCantChangeFunctionTypeNamesOnOverride), overridingMemberLocation, overridingMember, overriddenMember);
                 }
                 else if (overriddenMember is PropertySymbol { IsRequired: true } && overridingMember is PropertySymbol { IsRequired: false })
                 {

@@ -8422,6 +8422,15 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
   <data name="ERR_SharperFunctionTypeTooManyParameters" xml:space="preserve">
     <value>A function type cannot have more than {0} parameters, because no 'System.Func' or 'System.Action' delegate has more.</value>
   </data>
+  <data name="ERR_SharperCantChangeFunctionTypeNamesOnOverride" xml:space="preserve">
+    <value>'{0}': cannot change function type parameter names when overriding inherited member '{1}'</value>
+  </data>
+  <data name="ERR_SharperImplBadFunctionTypeNames" xml:space="preserve">
+    <value>The function type parameter names in the signature of '{0}' must match the function type parameter names of interface member '{1}' (including on the return type).</value>
+  </data>
+  <data name="ERR_SharperPartialMemberInconsistentFunctionTypeNames" xml:space="preserve">
+    <value>Both partial member declarations, '{0}' and '{1}', must use the same function type parameter names.</value>
+  </data>
   <data name="WRN_SharperReadOnlyLocalMemberCallOnCopy" xml:space="preserve">
     <value>Call to non-readonly member '{0}' on readonly local '{1}' runs on a copy, so '{1}' is not changed.</value>
   </data>

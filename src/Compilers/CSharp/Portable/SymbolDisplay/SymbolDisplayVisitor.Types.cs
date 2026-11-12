@@ -837,6 +837,14 @@ namespace Microsoft.CodeAnalysis.CSharp
 
             if (typeArguments.Length > 0 && Format.GenericsOptions.IncludesOption(SymbolDisplayGenericsOptions.IncludeTypeParameters))
             {
+                // Sharper: a function type with parameter names shows each name after its type argument,
+                // Func<int width, int height, int>.
+                ImmutableArray<string?> sharperParameterNames =
+                    owner is Symbols.PublicModel.NamedTypeSymbol publicNamedType &&
+                    !Format.CompilerInternalOptions.IncludesOption(SymbolDisplayCompilerInternalOptions.ExcludeSharperFunctionTypeNames)
+                        ? publicNamedType.UnderlyingNamedTypeSymbol.SharperFunctionTypeParameterNames
+                        : default;
+
                 AddPunctuation(SyntaxKind.LessThanToken);
 
                 var first = true;
@@ -871,6 +879,12 @@ namespace Microsoft.CodeAnalysis.CSharp
                     if (!modifiers.IsDefault)
                     {
                         AddCustomModifiersIfNeeded(modifiers[i], leadingSpace: true, trailingSpace: false);
+                    }
+
+                    if (!sharperParameterNames.IsDefault && i < sharperParameterNames.Length && sharperParameterNames[i] is { } sharperParameterName)
+                    {
+                        AddSpace();
+                        Builder.Add(CreatePart(SymbolDisplayPartKind.ParameterName, symbol: null, sharperParameterName));
                     }
                 }
 

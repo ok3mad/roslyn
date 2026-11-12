@@ -2580,6 +2580,9 @@ namespace Microsoft.CodeAnalysis.CSharp
         ERR_SharperInferParameterConversionCycle = SharperErrorCodes.Base + 63,
         ERR_SharperPureOverrideNotPure = SharperErrorCodes.Base + 64,
         WRN_SharperPureOverrideNotPure = SharperErrorCodes.Base + 65,
+        ERR_SharperCantChangeFunctionTypeNamesOnOverride = SharperErrorCodes.Base + 66,
+        ERR_SharperImplBadFunctionTypeNames = SharperErrorCodes.Base + 67,
+        ERR_SharperPartialMemberInconsistentFunctionTypeNames = SharperErrorCodes.Base + 68,
         ERR_SharperPredicatePatternNotPure = SharperErrorCodes.Base + 69,
 
         // Note: you will need to do the following after adding errors:

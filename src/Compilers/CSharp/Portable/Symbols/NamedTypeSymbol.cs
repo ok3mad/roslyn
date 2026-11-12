@@ -242,6 +242,13 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 //stand to gain anything by having it.
 
                 //return method != null && method.IsVirtual ? method : null;
+
+                // Sharper: the Invoke method of a function type with parameter names has those names.
+                if (method is not null && _lazyUncommonProperties?._sharperFunctionTypeNames is { } names)
+                {
+                    return names.GetInvokeMethod(this, method);
+                }
+
                 return method;
             }
         }
@@ -1209,6 +1216,13 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 return false;
             }
 
+            // Sharper: the parameter names of a function type share the tuple names' flag.
+            if ((comparison & TypeCompareKind.IgnoreTupleNames) == 0 &&
+                !SharperFunctionTypeNames.NamesEqual(this.SharperFunctionTypeParameterNames, other.SharperFunctionTypeParameterNames))
+            {
+                return false;
+            }
+
             return true;
 
             bool tupleNamesEquals(NamedTypeSymbol other, TypeCompareKind comparison)
@@ -1330,7 +1344,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             allTypeArguments.Free();
             allTypeParameters.Free();
 
-            return IsTupleType ? MergeTupleNames((NamedTypeSymbol)other, result) : result;
+            return IsTupleType ? MergeTupleNames((NamedTypeSymbol)other, result) : MergeSharperFunctionTypeNames((NamedTypeSymbol)other, result);
         }
 
         /// <summary>
