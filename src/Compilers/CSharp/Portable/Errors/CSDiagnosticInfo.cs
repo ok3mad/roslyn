@@ -19,6 +19,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         public static readonly DiagnosticInfo VoidDiagnosticInfo = new CSDiagnosticInfo(ErrorCode.Void);
 
         private readonly IReadOnlyList<Location> _additionalLocations;
+        private readonly ImmutableDictionary<string, string> _properties;
 
         internal CSDiagnosticInfo(ErrorCode code)
             : this(code, Array.Empty<object>(), ImmutableArray<Symbol>.Empty, ImmutableArray<Location>.Empty)
@@ -35,9 +36,10 @@ namespace Microsoft.CodeAnalysis.CSharp
         {
         }
 
-        internal CSDiagnosticInfo(ErrorCode code, object[] args, ImmutableArray<Symbol> symbols, ImmutableArray<Location> additionalLocations)
+        internal CSDiagnosticInfo(ErrorCode code, object[] args, ImmutableArray<Symbol> symbols, ImmutableArray<Location> additionalLocations, ImmutableDictionary<string, string> properties = null)
             : base(code, args, symbols)
         {
+            _properties = properties ?? ImmutableDictionary<string, string>.Empty;
             // Internal errors are abnormal and should not occur except where there are bugs in the compiler.
             Debug.Assert(code != ErrorCode.ERR_InternalError);
             _additionalLocations = additionalLocations.IsDefaultOrEmpty ? SpecializedCollections.EmptyReadOnlyList<Location>() : additionalLocations;
@@ -46,6 +48,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         private CSDiagnosticInfo(CSDiagnosticInfo original, DiagnosticSeverity severity) : base(original, severity)
         {
             _additionalLocations = original._additionalLocations;
+            _properties = original._properties;
         }
 
         protected override DiagnosticInfo GetInstanceWithSeverityCore(DiagnosticSeverity severity)
@@ -54,6 +57,9 @@ namespace Microsoft.CodeAnalysis.CSharp
         }
 
         public override IReadOnlyList<Location> AdditionalLocations => _additionalLocations;
+
+        /// <summary>Sharper: the properties a fixer reads, such as the types CS20027 lists.</summary>
+        internal override ImmutableDictionary<string, string> Properties => _properties;
 
         internal new ErrorCode Code => (ErrorCode)base.Code;
 
