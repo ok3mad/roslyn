@@ -129,7 +129,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             if (!this.IsNoMoreVisibleThan(type, ref useSiteInfo))
             {
                 // Inconsistent accessibility: field type '{1}' is less accessible than field '{0}'
-                diagnostics.Add(ErrorCode.ERR_BadVisFieldType, this.ErrorLocation, this, type);
+                diagnostics.AddInconsistentAccessibility(ErrorCode.ERR_BadVisFieldType, this.ErrorLocation, this, type);
             }
 
             diagnostics.Add(this.ErrorLocation, useSiteInfo);

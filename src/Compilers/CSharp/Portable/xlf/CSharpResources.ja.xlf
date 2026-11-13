@@ -2607,14 +2607,14 @@
         <target state="new">An expression tree cannot contain a lambda or method group converted to the interface '{0}'.</target>
         <note />
       </trans-unit>
-      <trans-unit id="ERR_SharperFunctionTypeParameterModifier">
-        <source>A function type parameter cannot be '{0}', because a function type is a 'System.Func' or 'System.Action' delegate.</source>
-        <target state="new">A function type parameter cannot be '{0}', because a function type is a 'System.Func' or 'System.Action' delegate.</target>
+      <trans-unit id="ERR_SharperFunctionTypeNotVisible">
+        <source>'{0}' is visible outside this assembly, but its signature uses the function type '{1}', which no 'System.Func' or 'System.Action' delegate can express and is internal to the assembly. Declare a named delegate instead.</source>
+        <target state="new">'{0}' is visible outside this assembly, but its signature uses the function type '{1}', which no 'System.Func' or 'System.Action' delegate can express and is internal to the assembly. Declare a named delegate instead.</target>
         <note />
       </trans-unit>
-      <trans-unit id="ERR_SharperFunctionTypeTooManyParameters">
-        <source>A function type cannot have more than {0} parameters, because no 'System.Func' or 'System.Action' delegate has more.</source>
-        <target state="new">A function type cannot have more than {0} parameters, because no 'System.Func' or 'System.Action' delegate has more.</target>
+      <trans-unit id="ERR_SharperFunctionTypeParameterModifier">
+        <source>A function type parameter cannot be '{0}'. Declare a named delegate instead.</source>
+        <target state="new">A function type parameter cannot be '{0}'. Declare a named delegate instead.</target>
         <note />
       </trans-unit>
       <trans-unit id="ERR_SharperImmutableBaseNotImmutable">

@@ -601,7 +601,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             {
                 // "Inconsistent accessibility: indexer return type '{1}' is less accessible than indexer '{0}'"
                 // "Inconsistent accessibility: property type '{1}' is less accessible than property '{0}'"
-                diagnostics.Add((this.IsIndexer ? ErrorCode.ERR_BadVisIndexerReturn : ErrorCode.ERR_BadVisPropertyType), Location, this, type.Type);
+                diagnostics.AddInconsistentAccessibility((this.IsIndexer ? ErrorCode.ERR_BadVisIndexerReturn : ErrorCode.ERR_BadVisPropertyType), Location, this, type.Type);
             }
 
             if (type.Type.HasFileLocalTypes())
@@ -699,7 +699,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             {
                 if (!IsExplicitInterfaceImplementation && !this.IsNoMoreVisibleThan(param.Type, ref useSiteInfo))
                 {
-                    diagnostics.Add(ErrorCode.ERR_BadVisIndexerParam, Location, this, param.Type);
+                    diagnostics.AddInconsistentAccessibility(ErrorCode.ERR_BadVisIndexerParam, Location, this, param.Type);
                 }
                 else if (param.Type.HasFileLocalTypes() && !containingTypeForFileTypeCheck.HasFileLocalTypes())
                 {
@@ -727,7 +727,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             if (this.IsExtensionBlockMember() && ContainingType.ExtensionParameter is { } extensionParameter &&
                 !this.IsNoMoreVisibleThan(extensionParameter.Type, ref useSiteInfo))
             {
-                diagnostics.Add(ErrorCode.ERR_BadVisIndexerParam, Location, this, extensionParameter.Type);
+                diagnostics.AddInconsistentAccessibility(ErrorCode.ERR_BadVisIndexerParam, Location, this, extensionParameter.Type);
             }
 
             diagnostics.Add(Location, useSiteInfo);

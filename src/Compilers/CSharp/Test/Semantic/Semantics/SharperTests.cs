@@ -2823,7 +2823,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 #pragma warning disable CS0169 // The field is never used
                 unsafe class C
                 {
-                    (ref int, out string, in long) -> bool modifiers;
+                    (params int[], this string) -> bool modifiers;
                     (int x, int y) -> int names;
                     (int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int) -> int tooMany;
                     (int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int) -> int sixteen;
@@ -2859,18 +2859,6 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             // Constraint errors are the same as for the Func twins, and are reported at the same place: on the
             // parameter or return type that stands for the offending type argument.
             CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, options: TestOptions.UnsafeReleaseDll).VerifyDiagnostics(
-                // (4,6): error CS20008: A function type parameter cannot be 'ref', because a function type is a 'System.Func' or 'System.Action' delegate.
-                //     (ref int, out string, in long) -> bool modifiers;
-                Diagnostic(ErrorCode.ERR_SharperFunctionTypeParameterModifier, "ref").WithArguments("ref").WithLocation(4, 6),
-                // (4,15): error CS20008: A function type parameter cannot be 'out', because a function type is a 'System.Func' or 'System.Action' delegate.
-                //     (ref int, out string, in long) -> bool modifiers;
-                Diagnostic(ErrorCode.ERR_SharperFunctionTypeParameterModifier, "out").WithArguments("out").WithLocation(4, 15),
-                // (4,27): error CS20008: A function type parameter cannot be 'in', because a function type is a 'System.Func' or 'System.Action' delegate.
-                //     (ref int, out string, in long) -> bool modifiers;
-                Diagnostic(ErrorCode.ERR_SharperFunctionTypeParameterModifier, "in").WithArguments("in").WithLocation(4, 27),
-                // (6,5): error CS20009: A function type cannot have more than 16 parameters, because no 'System.Func' or 'System.Action' delegate has more.
-                //     (int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int) -> int tooMany;
-                Diagnostic(ErrorCode.ERR_SharperFunctionTypeTooManyParameters, "(int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int) -> int").WithArguments("16").WithLocation(6, 5),
                 // (8,6): error CS1536: Invalid parameter type 'void'
                 //     (void) -> int voidParameter;
                 Diagnostic(ErrorCode.ERR_NoVoidParameter, "void").WithLocation(8, 6),

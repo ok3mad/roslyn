@@ -12306,6 +12306,44 @@ namespace Microsoft.CodeAnalysis.CSharp
             }
         }
 
+        /// <summary>
+        /// The anonymous delegate that is the natural type of a lambda or method group that no <c>System.Func</c> or
+        /// <c>System.Action</c> can express. Shared with Sharper's function types (<c>BindSharperAnonymousDelegateFunctionType</c>),
+        /// so that a function type is the same type as the natural type of a lambda with that signature: the descriptor
+        /// has no parameter names, and the location is not part of its identity.
+        /// </summary>
+        internal static NamedTypeSymbol ConstructAnonymousDelegateSymbol(
+            CSharpCompilation compilation,
+            Location location,
+            ImmutableArray<TypeWithAnnotations> parameterTypes,
+            ImmutableArray<RefKind> parameterRefKinds,
+            ImmutableArray<ScopedKind> parameterScopes,
+            ImmutableArray<ConstantValue?> parameterDefaultValues,
+            bool hasParams,
+            ImmutableArray<bool> parameterHasUnscopedRefAttributes,
+            TypeWithAnnotations returnType,
+            RefKind returnRefKind)
+        {
+            var fieldsBuilder = ArrayBuilder<AnonymousTypeField>.GetInstance(parameterTypes.Length + 1);
+            for (int i = 0; i < parameterTypes.Length; i++)
+            {
+                fieldsBuilder.Add(
+                    new AnonymousTypeField(
+                        name: "",
+                        location,
+                        parameterTypes[i],
+                        parameterRefKinds.IsDefault ? RefKind.None : parameterRefKinds[i],
+                        parameterScopes.IsDefault ? ScopedKind.None : parameterScopes[i],
+                        parameterDefaultValues.IsDefault ? null : parameterDefaultValues[i],
+                        isParams: hasParams && i == parameterTypes.Length - 1,
+                        hasUnscopedRefAttribute: parameterHasUnscopedRefAttributes.IsDefault ? false : parameterHasUnscopedRefAttributes[i]));
+            }
+            fieldsBuilder.Add(new AnonymousTypeField(name: "", location, returnType, returnRefKind, ScopedKind.None));
+
+            var typeDescr = new AnonymousTypeDescriptor(fieldsBuilder.ToImmutableAndFree(), location);
+            return compilation.AnonymousTypeManager.ConstructAnonymousDelegateSymbol(typeDescr);
+        }
+
         // This method was adapted from LoweredDynamicOperationFactory.GetDelegateType().
         internal NamedTypeSymbol? GetMethodGroupOrLambdaDelegateType(
             SyntaxNode syntax,
@@ -12388,27 +12426,19 @@ namespace Microsoft.CodeAnalysis.CSharp
             }
 
             // Synthesize a delegate type for other cases.
-            // PROTOTYPE(sharper): the parameter names of a lambda or a function type with ref parameters would attach
-            // here, without becoming part of the anonymous delegate's identity (https://github.com/ok3mad/roslyn/issues/56).
-            var fieldsBuilder = ArrayBuilder<AnonymousTypeField>.GetInstance(parameterTypes.Length + 1);
-            var location = syntax.Location;
-            for (int i = 0; i < parameterTypes.Length; i++)
-            {
-                fieldsBuilder.Add(
-                    new AnonymousTypeField(
-                        name: "",
-                        location,
-                        parameterTypes[i],
-                        parameterRefKinds.IsDefault ? RefKind.None : parameterRefKinds[i],
-                        parameterScopes.IsDefault ? ScopedKind.None : parameterScopes[i],
-                        parameterDefaultValues.IsDefault ? null : parameterDefaultValues[i],
-                        isParams: hasParams && i == parameterTypes.Length - 1,
-                        hasUnscopedRefAttribute: parameterHasUnscopedRefAttributes.IsDefault ? false : parameterHasUnscopedRefAttributes[i]));
-            }
-            fieldsBuilder.Add(new AnonymousTypeField(name: "", location, returnType, returnRefKind, ScopedKind.None));
-
-            var typeDescr = new AnonymousTypeDescriptor(fieldsBuilder.ToImmutableAndFree(), location);
-            return Compilation.AnonymousTypeManager.ConstructAnonymousDelegateSymbol(typeDescr);
+            // Sharper: the anonymous delegate has no parameter names from the lambda, because names must not become part
+            // of its identity (https://github.com/ok3mad/roslyn/issues/56); see ConstructAnonymousDelegateSymbol.
+            return ConstructAnonymousDelegateSymbol(
+                Compilation,
+                syntax.Location,
+                parameterTypes,
+                parameterRefKinds,
+                parameterScopes,
+                parameterDefaultValues,
+                hasParams,
+                parameterHasUnscopedRefAttributes,
+                returnType,
+                returnRefKind);
 
             static bool checkConstraints(CSharpCompilation compilation, ConversionsBase conversions, NamedTypeSymbol delegateType, ImmutableArray<TypeWithAnnotations> typeArguments)
             {

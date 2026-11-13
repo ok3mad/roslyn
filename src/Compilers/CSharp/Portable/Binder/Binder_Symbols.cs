@@ -725,16 +725,19 @@ namespace Microsoft.CodeAnalysis.CSharp
 
         /// <summary>
         /// Sharper: binds the function type <c>(A, B) -> R</c> to <c>System.Func&lt;A, B, R&gt;</c>, and <c>(A, B) -> void</c> to
-        /// <c>System.Action&lt;A, B&gt;</c>.
+        /// <c>System.Action&lt;A, B&gt;</c>. A function type that they cannot express, with <c>ref</c>, <c>out</c>,
+        /// <c>in</c>, <c>ref readonly</c> or <c>scoped</c> parameters, a ref return or more than 16 parameters, binds to
+        /// the anonymous delegate of a lambda with that signature (<see cref="BindSharperAnonymousDelegateFunctionType"/>).
         /// </summary>
         private TypeSymbol BindFunctionType(FunctionTypeSyntax syntax, BindingDiagnosticBag diagnostics, ConsList<TypeSymbol> basesBeingResolved)
         {
             MessageID.IDS_FeatureSharper.CheckFeatureAvailability(diagnostics, syntax.ArrowToken);
 
-            var typeArguments = ArrayBuilder<TypeWithAnnotations>.GetInstance(syntax.Parameters.Count + 1);
-            var typeArgumentLocations = ArrayBuilder<Location>.GetInstance(syntax.Parameters.Count + 1);
             var names = PooledHashSet<string>.GetInstance();
             var parameterNames = ArrayBuilder<string>.GetInstance(syntax.Parameters.Count);
+            var refKinds = ArrayBuilder<RefKind>.GetInstance(syntax.Parameters.Count);
+            var scopes = ArrayBuilder<bool>.GetInstance(syntax.Parameters.Count);
+            bool needsAnonymousDelegate = syntax.Parameters.Count > 16 || syntax.ReturnType is RefTypeSyntax;
             foreach (var parameter in syntax.Parameters)
             {
                 // Names are optional, per parameter, and are carried on the type without changing what it means, as
@@ -754,18 +757,32 @@ namespace Microsoft.CodeAnalysis.CSharp
 
                 parameterNames.Add(string.IsNullOrEmpty(parameterName) ? null : parameterName);
 
-                // PROTOTYPE(sharper): ref, out and in parameters need a delegate other than Func and Action
-                // (https://github.com/ok3mad/roslyn/issues/56).
-                foreach (var modifier in parameter.Modifiers)
-                {
-                    diagnostics.Add(ErrorCode.ERR_SharperFunctionTypeParameterModifier, modifier.GetLocation(), modifier.Text);
-                }
-
-                typeArguments.Add(BindTypeArgument(parameter.Type, diagnostics, basesBeingResolved));
-                typeArgumentLocations.Add(parameter.Type.Location);
+                var refKind = BindSharperFunctionTypeParameterModifiers(parameter, diagnostics, out bool isScoped);
+                refKinds.Add(refKind);
+                scopes.Add(isScoped);
+                needsAnonymousDelegate |= refKind != RefKind.None || isScoped;
             }
 
             names.Free();
+
+            if (needsAnonymousDelegate)
+            {
+                // The anonymous delegate has the parameter names of its descriptor, which are not part of its identity;
+                // the function type's names are not carried (see the feature page, "Ref parameters").
+                parameterNames.Free();
+                return BindSharperAnonymousDelegateFunctionType(syntax, refKinds.ToImmutableAndFree(), scopes.ToImmutableAndFree(), diagnostics, basesBeingResolved);
+            }
+
+            refKinds.Free();
+            scopes.Free();
+
+            var typeArguments = ArrayBuilder<TypeWithAnnotations>.GetInstance(syntax.Parameters.Count + 1);
+            var typeArgumentLocations = ArrayBuilder<Location>.GetInstance(syntax.Parameters.Count + 1);
+            foreach (var parameter in syntax.Parameters)
+            {
+                typeArguments.Add(BindTypeArgument(parameter.Type, diagnostics, basesBeingResolved));
+                typeArgumentLocations.Add(parameter.Type.Location);
+            }
 
             // The parser reports void anywhere but in the return type.
             var returnType = BindTypeArgument(syntax.ReturnType, diagnostics, basesBeingResolved);
@@ -779,18 +796,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             var wellKnownType = returnsVoid
                 ? WellKnownTypes.GetWellKnownActionDelegate(invokeArgumentCount: syntax.Parameters.Count)
                 : WellKnownTypes.GetWellKnownFunctionDelegate(invokeArgumentCount: syntax.Parameters.Count);
-
-            if (wellKnownType == WellKnownType.Unknown)
-            {
-                // PROTOTYPE(sharper): more than 16 parameters need a delegate other than Func and Action
-                // (https://github.com/ok3mad/roslyn/issues/56).
-                Debug.Assert(syntax.Parameters.Count > 16);
-                diagnostics.Add(ErrorCode.ERR_SharperFunctionTypeTooManyParameters, syntax.Location, 16);
-                typeArguments.Free();
-                typeArgumentLocations.Free();
-                parameterNames.Free();
-                return new ExtendedErrorTypeSymbol(this.Compilation, name: "", arity: 0, errorInfo: null, unreported: false);
-            }
+            Debug.Assert(wellKnownType != WellKnownType.Unknown);
 
             var delegateType = GetWellKnownType(wellKnownType, diagnostics, syntax);
             if (typeArguments.Count == 0)

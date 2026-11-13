@@ -6,6 +6,7 @@ using System.Collections.Immutable;
 using System.Diagnostics;
 using Microsoft.CodeAnalysis.CSharp.Symbols;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.PooledObjects;
 using Microsoft.CodeAnalysis.Text;
 using Roslyn.Utilities;
 
@@ -133,6 +134,160 @@ namespace Microsoft.CodeAnalysis.CSharp
             }
 
             return type;
+        }
+
+        /// <summary>
+        /// Sharper: the ref kind of a function type parameter from its modifiers, <c>ref</c>, <c>out</c>, <c>in</c> or
+        /// <c>ref readonly</c>, each optionally after <c>scoped</c>. <c>params</c>, <c>this</c> and <c>readonly</c> on
+        /// its own have no meaning in a delegate type and are reported (CS20008).
+        /// </summary>
+        private static RefKind BindSharperFunctionTypeParameterModifiers(FunctionTypeParameterSyntax parameter, BindingDiagnosticBag diagnostics, out bool isScoped)
+        {
+            var refKind = RefKind.None;
+            SyntaxToken refnessKeyword = default;
+            isScoped = false;
+            SyntaxToken previous = default;
+            foreach (var modifier in parameter.Modifiers)
+            {
+                switch (modifier.Kind())
+                {
+                    case SyntaxKind.RefKeyword:
+                    case SyntaxKind.OutKeyword:
+                    case SyntaxKind.InKeyword:
+                        if (refnessKeyword.IsKind(modifier.Kind()))
+                        {
+                            diagnostics.Add(ErrorCode.ERR_DupParamMod, modifier.GetLocation(), modifier.Text);
+                        }
+                        else if (refKind != RefKind.None)
+                        {
+                            diagnostics.Add(ErrorCode.ERR_BadParameterModifiers, modifier.GetLocation(), modifier.Text, refnessKeyword.Text);
+                        }
+                        else
+                        {
+                            refnessKeyword = modifier;
+                            refKind = modifier.Kind() switch
+                            {
+                                SyntaxKind.RefKeyword => RefKind.Ref,
+                                SyntaxKind.OutKeyword => RefKind.Out,
+                                _ => RefKind.In,
+                            };
+                        }
+
+                        break;
+
+                    case SyntaxKind.ReadOnlyKeyword when refKind == RefKind.Ref && previous == refnessKeyword:
+                        refKind = RefKind.RefReadOnlyParameter;
+                        break;
+
+                    case SyntaxKind.ReadOnlyKeyword when refKind == RefKind.RefReadOnlyParameter:
+                        diagnostics.Add(ErrorCode.ERR_DupParamMod, modifier.GetLocation(), modifier.Text);
+                        break;
+
+                    case SyntaxKind.ScopedKeyword:
+                        if (isScoped)
+                        {
+                            diagnostics.Add(ErrorCode.ERR_DupParamMod, modifier.GetLocation(), modifier.Text);
+                        }
+                        else if (refKind != RefKind.None)
+                        {
+                            diagnostics.Add(ErrorCode.ERR_ScopedAfterInOutRefReadonly, modifier.GetLocation());
+                        }
+                        else
+                        {
+                            isScoped = true;
+                        }
+
+                        break;
+
+                    default:
+                        // params, this, and readonly without ref.
+                        diagnostics.Add(ErrorCode.ERR_SharperFunctionTypeParameterModifier, modifier.GetLocation(), modifier.Text);
+                        break;
+                }
+
+                previous = modifier;
+            }
+
+            return refKind;
+        }
+
+        /// <summary>
+        /// Sharper: binds a function type that no <c>System.Func</c> or <c>System.Action</c> can express to the anonymous
+        /// delegate that is the natural type of a lambda with the same signature
+        /// (<see cref="ConstructAnonymousDelegateSymbol"/>). Within a compilation there is one such type per signature,
+        /// so the function type and <c>var f = (ref int x) => ...</c> have the same type. It is internal, so a member
+        /// visible outside the assembly cannot use it (CS20075).
+        /// </summary>
+        private NamedTypeSymbol BindSharperAnonymousDelegateFunctionType(
+            FunctionTypeSyntax syntax,
+            ImmutableArray<RefKind> refKinds,
+            ImmutableArray<bool> scoped,
+            BindingDiagnosticBag diagnostics,
+            ConsList<TypeSymbol>? basesBeingResolved)
+        {
+            bool useUpdatedEscapeRules = Compilation.SourceModule.UseUpdatedEscapeRules;
+            var parameterTypes = ArrayBuilder<TypeWithAnnotations>.GetInstance(syntax.Parameters.Count);
+            var scopes = ArrayBuilder<ScopedKind>.GetInstance(syntax.Parameters.Count);
+            for (int i = 0; i < syntax.Parameters.Count; i++)
+            {
+                var parameterSyntax = syntax.Parameters[i];
+                var type = BindType(parameterSyntax.Type, diagnostics, basesBeingResolved);
+                var refKind = refKinds[i];
+                if (type.IsStatic)
+                {
+                    // '{0}': static types cannot be used as parameters
+                    diagnostics.Add(ErrorFacts.GetStaticClassParameterCode(useWarning: false), parameterSyntax.Type.Location, type.Type);
+                }
+
+                ScopedKind scope;
+                if (scoped[i])
+                {
+                    scope = refKind == RefKind.None ? ScopedKind.ScopedValue : ScopedKind.ScopedRef;
+
+                    // A type parameter is not checked here: whether it allows ref structs comes from its constraints,
+                    // which may be what is being bound.
+                    if (scope == ScopedKind.ScopedValue && !type.Type.IsRefLikeType && !type.Type.IsTypeParameter() && !type.Type.IsErrorType())
+                    {
+                        diagnostics.Add(ErrorCode.ERR_ScopedRefAndRefStructOnly, parameterSyntax.Type.Location);
+                    }
+                }
+                else
+                {
+                    // As for a lambda's parameter, whose effective scope its natural type takes: out is scoped by default.
+                    scope = ParameterHelpers.IsRefScopedByDefault(useUpdatedEscapeRules, refKind) ? ScopedKind.ScopedRef : ScopedKind.None;
+                }
+
+                parameterTypes.Add(type);
+                scopes.Add(scope);
+            }
+
+            var returnTypeSyntax = syntax.ReturnType;
+            var returnRefKind = RefKind.None;
+            if (returnTypeSyntax is RefTypeSyntax refType)
+            {
+                returnRefKind = refType.ReadOnlyKeyword.IsKind(SyntaxKind.ReadOnlyKeyword) ? RefKind.RefReadOnly : RefKind.Ref;
+                returnTypeSyntax = refType.Type;
+            }
+
+            // `ref void` is reported by BindType (CS1547).
+            var returnType = BindType(returnTypeSyntax, diagnostics, basesBeingResolved);
+            if (returnType.IsStatic)
+            {
+                // '{0}': static types cannot be used as return types
+                diagnostics.Add(ErrorFacts.GetStaticClassReturnCode(useWarning: false), returnTypeSyntax.Location, returnType.Type);
+            }
+
+            return ConstructAnonymousDelegateSymbol(
+                Compilation,
+                syntax.Location,
+                parameterTypes.ToImmutableAndFree(),
+                refKinds,
+                scopes.ToImmutableAndFree(),
+                parameterDefaultValues: default,
+                hasParams: false,
+                parameterHasUnscopedRefAttributes: default,
+                returnType,
+                returnRefKind);
         }
     }
 }

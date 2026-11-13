@@ -7492,6 +7492,12 @@ done:
                 {
                     // ScanType takes a leading 'ref' or 'ref readonly' as part of the type, as ScanTupleType does for
                     // C#, so that a 'ref' tuple element still scans as a tuple type.
+                    while (IsSharperFunctionTypeScopedModifier(forScan: true))
+                    {
+                        this.EatToken();
+                        hasModifiers = true;
+                    }
+
                     if (this.CurrentToken.Kind == SyntaxKind.RefKeyword)
                     {
                         hasRefElements = true;
@@ -8163,6 +8169,12 @@ done:
                 while (true)
                 {
                     bool hasModifiers = false;
+                    while (IsSharperFunctionTypeScopedModifier(forScan: true))
+                    {
+                        this.EatToken();
+                        hasModifiers = true;
+                    }
+
                     while (IsParameterModifierExcludingScoped(this.CurrentToken))
                     {
                         this.EatToken();
@@ -8209,6 +8221,46 @@ done:
         }
 
         /// <summary>
+        /// Sharper: true at a <c>scoped</c> that is a modifier of a function type parameter: before another modifier, as in
+        /// <c>(scoped ref int) -> void</c>, or before a type that ends the parameter or is followed by its name, as in
+        /// <c>(scoped Span&lt;int&gt;) -> void</c> and <c>(scoped Span&lt;int&gt; s) -> void</c>. Otherwise it is a type
+        /// named <c>scoped</c>, as in <c>(scoped) -> int</c> and <c>(scoped, int) -> int</c>. This is the rule of
+        /// <c>scoped</c> in a lambda parameter list since C# 14; <c>@scoped</c> names the type.
+        /// </summary>
+        /// <param name="forScan">When scanning, before it is known whether the parentheses are a function type or a tuple
+        /// type: <c>scoped x</c> before <c>,</c> or <c>)</c>, with <c>x</c> an identifier, is then scanned as a tuple element
+        /// of type <c>scoped</c> named <c>x</c>. Both readings take the same tokens, so the tuple <c>(scoped a, int b)</c>
+        /// keeps its C# meaning.</param>
+        private bool IsSharperFunctionTypeScopedModifier(bool forScan)
+        {
+            if (this.CurrentToken.ContextualKind != SyntaxKind.ScopedKeyword)
+            {
+                return false;
+            }
+
+            using var _ = this.GetDisposableResetPoint(resetOnDispose: true);
+            this.EatToken();
+            if (IsParameterModifierExcludingScoped(this.CurrentToken))
+            {
+                return true;
+            }
+
+            var firstTokenOfType = this.CurrentToken;
+            if (ScanType(out var lastTokenOfType) == ScanTypeFlags.NotType)
+            {
+                return false;
+            }
+
+            if (IsTrueIdentifier())
+            {
+                return true;
+            }
+
+            return this.CurrentToken.Kind is SyntaxKind.CommaToken or SyntaxKind.CloseParenToken &&
+                !(forScan && lastTokenOfType == firstTokenOfType && firstTokenOfType.Kind == SyntaxKind.IdentifierToken);
+        }
+
+        /// <summary>
         /// Sharper: true at <c>((name) -> name</c>, which C# also parses as a parenthesized pointer member access, such as
         /// the invocation <c>((p)->F)(x)</c>. The caller is expected to have consumed the outer opening paren.
         /// </summary>
@@ -8244,6 +8296,11 @@ done:
                 while (true)
                 {
                     var modifiers = _pool.Allocate<SyntaxToken>();
+                    while (IsSharperFunctionTypeScopedModifier(forScan: false))
+                    {
+                        modifiers.Add(this.EatContextualToken(SyntaxKind.ScopedKeyword));
+                    }
+
                     ParseParameterModifiers(modifiers, isFunctionPointerParameter: true, isLambdaParameter: false);
 
                     parameters.Add(_syntaxFactory.FunctionTypeParameter(

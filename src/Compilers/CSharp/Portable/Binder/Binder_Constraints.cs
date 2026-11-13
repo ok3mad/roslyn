@@ -453,7 +453,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             if (!containingSymbol.IsNoMoreVisibleThan(constraintType, ref useSiteInfo))
             {
                 // "Inconsistent accessibility: constraint type '{1}' is less accessible than '{0}'"
-                diagnostics.Add(ErrorCode.ERR_BadVisBound, location, containingSymbol, constraintType.Type);
+                diagnostics.AddInconsistentAccessibility(ErrorCode.ERR_BadVisBound, location, containingSymbol, constraintType.Type);
             }
 
             if (constraintType.Type.HasFileLocalTypes())

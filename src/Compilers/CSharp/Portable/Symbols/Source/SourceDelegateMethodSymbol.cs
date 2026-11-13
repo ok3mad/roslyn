@@ -103,7 +103,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             if (!delegateType.IsNoMoreVisibleThan(invoke.ReturnTypeWithAnnotations, ref useSiteInfo))
             {
                 // Inconsistent accessibility: return type '{1}' is less accessible than delegate '{0}'
-                diagnostics.Add(ErrorCode.ERR_BadVisDelegateReturn, delegateType.GetFirstLocation(), delegateType, invoke.ReturnType);
+                diagnostics.AddInconsistentAccessibility(ErrorCode.ERR_BadVisDelegateReturn, delegateType.GetFirstLocation(), delegateType, invoke.ReturnType);
             }
 
             var delegateTypeIsFile = delegateType.HasFileLocalTypes();
@@ -118,7 +118,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 if (!parameterSymbol.TypeWithAnnotations.IsAtLeastAsVisibleAs(delegateType, ref useSiteInfo))
                 {
                     // Inconsistent accessibility: parameter type '{1}' is less accessible than delegate '{0}'
-                    diagnostics.Add(ErrorCode.ERR_BadVisDelegateParam, delegateType.GetFirstLocation(), delegateType, parameterSymbol.Type);
+                    diagnostics.AddInconsistentAccessibility(ErrorCode.ERR_BadVisDelegateParam, delegateType.GetFirstLocation(), delegateType, parameterSymbol.Type);
                 }
                 else if (!delegateTypeIsFile && parameterSymbol.Type.HasFileLocalTypes())
                 {

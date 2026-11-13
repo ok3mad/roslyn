@@ -698,7 +698,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 // Dev10 reports different errors for field-like events (ERR_BadVisFieldType) and custom events (ERR_BadVisPropertyType).
                 // Both seem odd, so add a new one.
 
-                diagnostics.Add(ErrorCode.ERR_BadVisEventType, location, this, this.Type);
+                diagnostics.AddInconsistentAccessibility(ErrorCode.ERR_BadVisEventType, location, this, this.Type);
             }
             else if (!this.Type.IsDelegateType() && !this.Type.IsErrorType())
             {

@@ -2523,7 +2523,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         ERR_SharperValRefReassignment = SharperErrorCodes.Base + 6,
         // ERR_SharperFunctionTypeParameterName = SharperErrorCodes.Base + 7,   Retired in step N1 of function type parameter names, which keeps the names.
         ERR_SharperFunctionTypeParameterModifier = SharperErrorCodes.Base + 8,
-        ERR_SharperFunctionTypeTooManyParameters = SharperErrorCodes.Base + 9,
+        // ERR_SharperFunctionTypeTooManyParameters = SharperErrorCodes.Base + 9,   Retired in #56: a function type with more than 16 parameters is an anonymous delegate.
         // WRN_SharperReadOnlyLocalMemberCallOnCopy = SharperErrorCodes.Base + 10,   Retired in #228: WRN_SharperValMemberCallOnCopy names the cause instead.
         ERR_SharperReadOnlyLocalWithNoInitializer = SharperErrorCodes.Base + 11,
         ERR_SharperSpreadRefStructEnumerator = SharperErrorCodes.Base + 12,
@@ -2589,6 +2589,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         ERR_SharperInterfaceInitializerBadMember = SharperErrorCodes.Base + 72,
         ERR_SharperInterfaceInitializerStaticAbstract = SharperErrorCodes.Base + 73,
         ERR_SharperInterfaceInitializerInExpressionTree = SharperErrorCodes.Base + 74,
+        ERR_SharperFunctionTypeNotVisible = SharperErrorCodes.Base + 75,
 
         // Note: you will need to do the following after adding errors:
         //  1) Update ErrorFacts.IsBuildOnlyDiagnostic (src/Compilers/CSharp/Portable/Errors/ErrorFacts.cs)
