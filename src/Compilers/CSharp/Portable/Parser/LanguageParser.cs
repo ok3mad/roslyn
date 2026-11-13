@@ -7490,14 +7490,14 @@ done:
             {
                 while (true)
                 {
-                    // ScanType takes a leading 'ref' or 'ref readonly' as part of the type, as ScanTupleType does for
-                    // C#, so that a 'ref' tuple element still scans as a tuple type.
                     while (IsSharperFunctionTypeScopedModifier(forScan: true))
                     {
                         this.EatToken();
                         hasModifiers = true;
                     }
 
+                    // ScanType takes a leading 'ref' or 'ref readonly' as part of the type, as ScanTupleType does for
+                    // C#, so that a 'ref' tuple element still scans as a tuple type.
                     if (this.CurrentToken.Kind == SyntaxKind.RefKeyword)
                     {
                         hasRefElements = true;
@@ -8222,15 +8222,14 @@ done:
 
         /// <summary>
         /// Sharper: true at a <c>scoped</c> that is a modifier of a function type parameter: before another modifier, as in
-        /// <c>(scoped ref int) -> void</c>, or before a type that ends the parameter or is followed by its name, as in
-        /// <c>(scoped Span&lt;int&gt;) -> void</c> and <c>(scoped Span&lt;int&gt; s) -> void</c>. Otherwise it is a type
-        /// named <c>scoped</c>, as in <c>(scoped) -> int</c> and <c>(scoped, int) -> int</c>. This is the rule of
-        /// <c>scoped</c> in a lambda parameter list since C# 14; <c>@scoped</c> names the type.
+        /// <c>(scoped ref int) -> void</c>, or before the start of a type, as in <c>(scoped Span&lt;int&gt;) -> void</c>.
+        /// Otherwise it is a type named <c>scoped</c>, as in <c>(scoped) -> int</c>, <c>(scoped, int) -> int</c> and
+        /// <c>(scoped[]) -> int</c>. This is the rule of <c>scoped</c> in a lambda parameter list since C# 14;
+        /// <c>@scoped</c> names the type. It looks at the next tokens only, so nested types are not scanned twice.
         /// </summary>
         /// <param name="forScan">When scanning, before it is known whether the parentheses are a function type or a tuple
-        /// type: <c>scoped x</c> before <c>,</c> or <c>)</c>, with <c>x</c> an identifier, is then scanned as a tuple element
-        /// of type <c>scoped</c> named <c>x</c>. Both readings take the same tokens, so the tuple <c>(scoped a, int b)</c>
-        /// keeps its C# meaning.</param>
+        /// type: <c>scoped x</c> before <c>,</c> or <c>)</c> is then scanned as a tuple element of type <c>scoped</c> named
+        /// <c>x</c>. Both readings take the same tokens, so the tuple <c>(scoped a, int b)</c> keeps its C# meaning.</param>
         private bool IsSharperFunctionTypeScopedModifier(bool forScan)
         {
             if (this.CurrentToken.ContextualKind != SyntaxKind.ScopedKeyword)
@@ -8238,26 +8237,21 @@ done:
                 return false;
             }
 
-            using var _ = this.GetDisposableResetPoint(resetOnDispose: true);
-            this.EatToken();
-            if (IsParameterModifierExcludingScoped(this.CurrentToken))
+            var next = this.PeekToken(1);
+            if (IsParameterModifierExcludingScoped(next))
             {
                 return true;
             }
 
-            var firstTokenOfType = this.CurrentToken;
-            if (ScanType(out var lastTokenOfType) == ScanTypeFlags.NotType)
+            switch (next.Kind)
             {
-                return false;
+                case SyntaxKind.OpenParenToken:
+                    return true;
+                case SyntaxKind.IdentifierToken:
+                    return !(forScan && this.PeekToken(2).Kind is SyntaxKind.CommaToken or SyntaxKind.CloseParenToken);
+                default:
+                    return SyntaxFacts.IsPredefinedType(next.Kind);
             }
-
-            if (IsTrueIdentifier())
-            {
-                return true;
-            }
-
-            return this.CurrentToken.Kind is SyntaxKind.CommaToken or SyntaxKind.CloseParenToken &&
-                !(forScan && lastTokenOfType == firstTokenOfType && firstTokenOfType.Kind == SyntaxKind.IdentifierToken);
         }
 
         /// <summary>

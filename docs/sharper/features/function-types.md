@@ -119,7 +119,8 @@ var f = (ref int x) => x++;
   type. In the anonymous delegate a pointer is allowed, and a static type is CS0721 or CS0722, as for a lambda.
   `params`, `this`, and `readonly` without `ref` are CS20008. `scoped` follows the rule of a lambda's parameter list
   since C# 14: before a type it is a modifier, so `(scoped S) -> void` and `(scoped S s) -> void` are scoped, and only
-  `(scoped) -> int` and `(scoped, int) -> int` use a type named `scoped` (which C# 11 and later cannot declare). In
+  where no type follows, as in `(scoped) -> int`, `(scoped, int) -> int` and `(scoped[]) -> int`, is it a type named
+  `scoped` (which C# 11 and later cannot declare). In
   a tuple, `(scoped a, int b)` keeps its C# meaning.
 - **Identity:** within a compilation, every function type with the same parameter types, ref kinds, `scoped`
   and return is one type, the same one `var` gives a lambda with that signature (`GetMethodGroupOrLambdaDelegateType`,

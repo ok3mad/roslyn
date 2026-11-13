@@ -442,6 +442,8 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 (scoped S s) -> void modifierWithName = null;
                 (scoped ref int) -> void scopedRef = null;
                 (scoped scoped) -> void scopedTypeNamedScoped = null;
+                (scoped[]) -> int arrayOfScoped = null;
+                (scoped (scoped ref int) -> void) -> void nested = null;
                 ref struct S { }
                 """;
             var comp = CreateCompilation(source, references: [library.EmitToImageReference()], parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
@@ -456,6 +458,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             Assert.True(FunctionTypeRef_Local(comp, "modifier").Type.IsAnonymousType);
             Assert.True(FunctionTypeRef_Local(comp, "modifierWithName").Type.IsAnonymousType);
             Assert.True(FunctionTypeRef_Local(comp, "scopedRef").Type.IsAnonymousType);
+            AssertEx.Equal("System.Func<scoped[], System.Int32>", FunctionTypeRef_Local(comp, "arrayOfScoped").Type.ToTestDisplayString());
         }
 
         [Fact]

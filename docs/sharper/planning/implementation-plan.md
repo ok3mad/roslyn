@@ -1832,7 +1832,8 @@ building it.
   `FindTypeLessVisibleThan` finds is an anonymous delegate, it reports CS20075 instead, with the delegate written as a
   function type. An `infer` member's inferred type goes through the same checks, so it needs nothing else.
 - **Parsing `scoped`.** `IsSharperFunctionTypeScopedModifier` decides it in the parser and in both scanners
-  (`ScanTupleOrSharperFunctionType`, `IsSharperFunctionTypeStart`). While scanning, `scoped x` before `,` or `)`, with
+  (`ScanTupleOrSharperFunctionType`, `IsSharperFunctionTypeStart`) from the next two tokens, without scanning the type
+  that follows, which the caller scans anyway: a second scan of a nested type is exponential in the depth. While scanning, `scoped x` before `,` or `)`, with
   `x` an identifier, scans as a tuple element of type `scoped` named `x`: it takes the same tokens either way, so a
   tuple keeps its meaning and nothing is scanned twice.
 
