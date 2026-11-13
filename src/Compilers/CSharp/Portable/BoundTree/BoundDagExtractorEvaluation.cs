@@ -6,7 +6,6 @@ using System.Diagnostics;
 using Microsoft.CodeAnalysis.Collections;
 using Microsoft.CodeAnalysis.CSharp.Symbols;
 using Microsoft.CodeAnalysis.PooledObjects;
-using Roslyn.Utilities;
 
 namespace Microsoft.CodeAnalysis.CSharp
 {
@@ -42,10 +41,13 @@ namespace Microsoft.CodeAnalysis.CSharp
             return builder;
         }
 
-        /// <summary>The parameter whose argument gives the output with the given index, or null for the return value.</summary>
+        /// <summary>
+        /// The parameter whose argument gives the out value with the given index; null for the return value, and for a call
+        /// with errors whose method has no such parameter.
+        /// </summary>
         public ParameterSymbol? GetOutParameter(int index)
         {
-            if (index == ReturnValueIndex)
+            if (index == ReturnValueIndex || Call.ArgumentRefKindsOpt.IsDefaultOrEmpty)
             {
                 return null;
             }
@@ -56,11 +58,23 @@ namespace Microsoft.CodeAnalysis.CSharp
                 if (Call.ArgumentRefKindsOpt[i] == RefKind.Out && count++ == index)
                 {
                     int parameterIndex = Call.ArgsToParamsOpt.IsDefault ? i : Call.ArgsToParamsOpt[i];
-                    return Call.Method.Parameters[parameterIndex];
+                    return parameterIndex < Call.Method.ParameterCount ? Call.Method.Parameters[parameterIndex] : null;
                 }
             }
 
-            throw ExceptionUtilities.UnexpectedValue(index);
+            return null;
+        }
+
+        /// <summary>The declared type of an output: the method's return type or the out parameter's type.</summary>
+        public TypeWithAnnotations GetOutputTypeWithAnnotations(BoundDagTemp output)
+        {
+            Debug.Assert(output.Source == (object)this);
+            if (output.Index == ReturnValueIndex)
+            {
+                return Call.Method.ReturnTypeWithAnnotations;
+            }
+
+            return GetOutParameter(output.Index)?.TypeWithAnnotations ?? TypeWithAnnotations.Create(output.Type);
         }
 
         public override OneOrMany<BoundDagTemp> AllOutputs()

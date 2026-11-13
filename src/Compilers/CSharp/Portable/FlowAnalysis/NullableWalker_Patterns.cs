@@ -501,15 +501,15 @@ namespace Microsoft.CodeAnalysis.CSharp
 
                                         var returnTemp = e.MakeResultTemp();
                                         int returnSlot = getOrMakeAndRegisterDagTempSlot(returnTemp);
-                                        TrackNullableStateForAssignment(valueOpt: null, e.Call.Method.ReturnTypeWithAnnotations, returnSlot, returnState);
+                                        TrackNullableStateForAssignment(valueOpt: null, e.GetOutputTypeWithAnnotations(returnTemp), returnSlot, returnState);
 
                                         ArrayBuilder<BoundDagTemp> outTemps = e.MakeOutParameterTemps();
                                         foreach (var output in outTemps)
                                         {
-                                            ParameterSymbol parameter = e.GetOutParameter(output.Index);
+                                            TypeWithAnnotations outputType = e.GetOutputTypeWithAnnotations(output);
                                             int outputSlot = getOrMakeAndRegisterDagTempSlot(output);
-                                            TypeWithState outputState = applyWhenTrueAnnotations(parameter.TypeWithAnnotations.ToTypeWithState(), parameter.FlowAnalysisAnnotations);
-                                            TrackNullableStateForAssignment(valueOpt: null, parameter.TypeWithAnnotations, outputSlot, outputState);
+                                            TypeWithState outputState = applyWhenTrueAnnotations(outputType.ToTypeWithState(), e.GetOutParameter(output.Index)?.FlowAnalysisAnnotations ?? FlowAnalysisAnnotations.None);
+                                            TrackNullableStateForAssignment(valueOpt: null, outputType, outputSlot, outputState);
                                         }
 
                                         outTemps.Free();
@@ -800,9 +800,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                         }
                     case BoundDagExtractorEvaluation e:
                         {
-                            TypeWithAnnotations type = e.GetOutParameter(output.Index) is { } parameter
-                                ? parameter.TypeWithAnnotations
-                                : e.Call.Method.ReturnTypeWithAnnotations;
+                            TypeWithAnnotations type = e.GetOutputTypeWithAnnotations(output);
                             int outputSlot = makeDagTempSlot(type, output);
                             Debug.Assert(outputSlot > 0);
                             addToTempMap(output, outputSlot, type.Type);

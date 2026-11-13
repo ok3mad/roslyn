@@ -215,6 +215,24 @@ namespace Microsoft.CodeAnalysis.CSharp
         }
 
         /// <summary>
+        /// Whether <paramref name="id"/> is in the name of a positional pattern with a positional clause, in a Sharper file,
+        /// which binds as an expression when it names no type (an extractor pattern). For the identifier map of primary
+        /// constructor captures (<c>MethodCompiler</c>): <c>s is p.TryParse(var n)</c> may read a parameter <c>p</c>.
+        /// </summary>
+        internal static bool IsInSharperExtractorPatternName(ExpressionSyntax id)
+        {
+            SyntaxNode child = id;
+            while (child.Parent is QualifiedNameSyntax qualifiedName)
+            {
+                child = qualifiedName;
+            }
+
+            return child.Parent is RecursivePatternSyntax { PositionalPatternClause: not null } recursive &&
+                recursive.Type == child &&
+                id.IsFeatureEnabled(MessageID.IDS_FeatureSharper);
+        }
+
+        /// <summary>
         /// A type named in a positional pattern always wins: the pattern is an extractor only where binding its name as a
         /// type reports that no type of that name exists (CS0246, CS0426, CS0234) or that the name is something else
         /// (CS0118, for 'receiver.TryX').
