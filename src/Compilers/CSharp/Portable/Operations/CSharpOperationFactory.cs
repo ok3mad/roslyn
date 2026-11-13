@@ -238,6 +238,8 @@ namespace Microsoft.CodeAnalysis.Operations
                     return CreateBoundRelationalPatternOperation((BoundRelationalPattern)boundNode);
                 case BoundKind.OpaquePattern:
                     return CreateBoundOpaquePatternOperation((BoundOpaquePattern)boundNode);
+                case BoundKind.ExtractorPattern:
+                    return CreateBoundExtractorPatternOperation((BoundExtractorPattern)boundNode);
                 case BoundKind.TypePattern:
                     return CreateBoundTypePatternOperation((BoundTypePattern)boundNode);
                 case BoundKind.SlicePattern:
@@ -2711,6 +2713,28 @@ namespace Microsoft.CodeAnalysis.Operations
                 _semanticModel,
                 boundRecursivePattern.Syntax,
                 isImplicit: boundRecursivePattern.WasCompilerGenerated);
+        }
+
+        /// <summary>
+        /// Sharper: an extractor pattern (Feature 13, slice 3), <c>s is TryParse(var n)</c>, is a positional pattern whose
+        /// deconstruct symbol is the method it calls with the input, as the pattern is written; the call, its receiver and
+        /// its arguments do not appear.
+        /// </summary>
+        private IRecursivePatternOperation CreateBoundExtractorPatternOperation(BoundExtractorPattern boundExtractorPattern)
+        {
+            ImmutableArray<IPatternOperation> deconstructionSubpatterns =
+                boundExtractorPattern.Subpatterns.SelectAsArray((p, fac) => (IPatternOperation)fac.Create(p.Pattern), this);
+            return new RecursivePatternOperation(
+                boundExtractorPattern.InputType.GetPublicSymbol(),
+                boundExtractorPattern.Call.Method.GetPublicSymbol(),
+                deconstructionSubpatterns,
+                ImmutableArray<IPropertySubpatternOperation>.Empty,
+                declaredSymbol: null,
+                boundExtractorPattern.InputType.GetPublicSymbol(),
+                boundExtractorPattern.NarrowedType.GetPublicSymbol(),
+                _semanticModel,
+                boundExtractorPattern.Syntax,
+                isImplicit: boundExtractorPattern.WasCompilerGenerated);
         }
 
         private IRecursivePatternOperation CreateBoundRecursivePatternOperation(BoundITuplePattern boundITuplePattern)

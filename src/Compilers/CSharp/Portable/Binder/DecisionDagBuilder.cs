@@ -475,6 +475,10 @@ namespace Microsoft.CodeAnalysis.CSharp
                     {
                         return MakeTestsForOpaquePattern(input, opaque, out output);
                     }
+                case BoundExtractorPattern extractor:
+                    {
+                        return MakeTestsAndBindingsForExtractorPattern(input, extractor, out output, bindings);
+                    }
                 case BoundNegatedPattern neg:
                     output = input;
                     return MakeTestsAndBindingsForNegatedPattern(input, neg, bindings);
@@ -1291,6 +1295,53 @@ namespace Microsoft.CodeAnalysis.CSharp
             outputInfo = MakeConvertToType(inputInfo, opaque.Syntax, opaque.NarrowedType, isExplicitTest: false, tests);
             BoundDagTemp output = PrepareForUnionValuePropertyMatching(ref outputInfo, tests);
             tests.Add(new Tests.One(new BoundDagOpaqueTest(opaque.Syntax, opaque.Relation, opaque.Value, opaque.PredicateArgument, output, opaque.HasErrors)));
+            return Tests.AndSequence.Create(tests);
+        }
+
+        /// <summary>
+        /// Sharper: an extractor pattern (Feature 13, slice 3) calls its method with the input as it is, null included, as
+        /// the call it stands for would; the call is an evaluation, so two identical calls on the same input are one. The
+        /// Try shape then tests that the call returned true, and the sub-patterns match the out values or the result. Nothing
+        /// is learned about the input itself.
+        /// </summary>
+        private Tests MakeTestsAndBindingsForExtractorPattern(
+            TestInputOutputInfo inputInfo,
+            BoundExtractorPattern extractor,
+            out TestInputOutputInfo outputInfo,
+            ArrayBuilder<BoundPatternBinding> bindings)
+        {
+            var tests = ArrayBuilder<Tests>.GetInstance(4);
+            TypeSymbol? argumentType = extractor.InputPlaceholder.Type;
+            Debug.Assert(argumentType is not null);
+            if (!inputInfo.GetInputType().Equals(argumentType, TypeCompareKind.AllIgnoreOptions))
+            {
+                // The check of 'or' operands gives a pattern a wider input type: test for the method's input type first.
+                inputInfo = MakeConvertToType(inputInfo, extractor.Syntax, argumentType, isExplicitTest: false, tests);
+            }
+
+            BoundDagTemp input = PrepareForUnionValuePropertyMatching(ref inputInfo, tests);
+            outputInfo = inputInfo;
+
+            var evaluation = new BoundDagExtractorEvaluation(extractor.Syntax, extractor.Call, extractor.InputPlaceholder, input, extractor.HasErrors);
+            tests.Add(new Tests.One(evaluation));
+            BoundDagTemp result = evaluation.MakeResultTemp();
+            if (extractor.IsTryShape)
+            {
+                tests.Add(MakeConstantTest(extractor.Syntax, result, ConstantValue.True));
+                ArrayBuilder<BoundDagTemp> outTemps = evaluation.MakeOutParameterTemps();
+                int count = Math.Min(outTemps.Count, extractor.Subpatterns.Length);
+                for (int i = 0; i < count; i++)
+                {
+                    tests.Add(MakeTestsAndBindings(outTemps[i], extractor.Subpatterns[i].Pattern, bindings));
+                }
+
+                outTemps.Free();
+            }
+            else if (extractor.Subpatterns is [var subpattern])
+            {
+                tests.Add(MakeTestsAndBindings(result, subpattern.Pattern, bindings));
+            }
+
             return Tests.AndSequence.Create(tests);
         }
 
@@ -2939,7 +2990,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 {
                     string name = $"t{tempIdentifier(t.Source)}";
 
-                    if (t.Source is BoundDagDeconstructEvaluation)
+                    if (t.Source is BoundDagDeconstructEvaluation or BoundDagExtractorEvaluation)
                     {
                         if (t.Index == -1)
                         {
@@ -3781,6 +3832,11 @@ namespace Microsoft.CodeAnalysis.CSharp
                                     condition = null;
                                     return RemoveDeconstructEvaluation(tests, ref tempMap, deconstruct);
                                 }
+                            case BoundDagExtractorEvaluation extractor:
+                                {
+                                    condition = null;
+                                    return RemoveExtractorEvaluation(tests, ref tempMap, extractor);
+                                }
                             case BoundDagFieldEvaluation:
                             case BoundDagPropertyEvaluation:
                             case BoundDagIndexEvaluation:
@@ -3877,6 +3933,29 @@ namespace Microsoft.CodeAnalysis.CSharp
                     {
                         // Refer to the result of e1 instead of result of eval, this will allow reusing results of evaluations that might be coming next
                         AddOutParameterTempsReplacement(ref tempMap, (BoundDagDeconstructEvaluation)eval, e1);
+                        return Tests.True.Instance;
+                    }
+
+                    return tests;
+                }
+
+                /// <summary>Sharper: an identical extractor call (Feature 13, slice 3) gives the same return and out values.</summary>
+                private static Tests RemoveExtractorEvaluation(One tests, ref ImmutableDictionary<BoundDagTemp, BoundDagTemp> tempMap, BoundDagExtractorEvaluation e1)
+                {
+                    if (IsEquivalentEvaluation(tests, e1, out var eval))
+                    {
+                        var e2 = (BoundDagExtractorEvaluation)eval;
+                        ArrayBuilder<BoundDagTemp> newTemps = e1.MakeOutParameterTemps();
+                        ArrayBuilder<BoundDagTemp> oldTemps = e2.MakeOutParameterTemps();
+                        Debug.Assert(newTemps.Count == oldTemps.Count);
+                        for (int i = 0; i < oldTemps.Count; i++)
+                        {
+                            AddTempReplacement(ref tempMap, oldTemps[i], newTemps[i]);
+                        }
+
+                        newTemps.Free();
+                        oldTemps.Free();
+                        AddResultTempReplacement(ref tempMap, e2, e1);
                         return Tests.True.Instance;
                     }
 
@@ -4110,6 +4189,26 @@ namespace Microsoft.CodeAnalysis.CSharp
                                             var deconstructEvaluation = deconstruct.Update(replacement);
                                             AddOutParameterTempsReplacement(ref tempMap, deconstruct, deconstructEvaluation);
                                             return deconstructEvaluation;
+                                        }
+                                    case BoundDagExtractorEvaluation extractor:
+                                        {
+                                            if (!TryGetTempReplacement(tempMap, extractor.Input, out BoundDagTemp? replacement))
+                                            {
+                                                return test;
+                                            }
+
+                                            var extractorEvaluation = extractor.Update(replacement);
+                                            ArrayBuilder<BoundDagTemp> newTemps = extractorEvaluation.MakeOutParameterTemps();
+                                            ArrayBuilder<BoundDagTemp> oldTemps = extractor.MakeOutParameterTemps();
+                                            for (int i = 0; i < oldTemps.Count; i++)
+                                            {
+                                                AddTempReplacement(ref tempMap, oldTemps[i], newTemps[i]);
+                                            }
+
+                                            newTemps.Free();
+                                            oldTemps.Free();
+                                            AddResultTempReplacement(ref tempMap, extractor, extractorEvaluation);
+                                            return extractorEvaluation;
                                         }
 
                                     default:

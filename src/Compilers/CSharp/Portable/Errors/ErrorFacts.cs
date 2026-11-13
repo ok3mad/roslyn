@@ -2679,6 +2679,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 or ErrorCode.ERR_SharperRefinementNotSupportedYet
                 or ErrorCode.ERR_SharperOpaquePatternNotPure
                 or ErrorCode.ERR_SharperPredicatePatternNotPure
+                or ErrorCode.ERR_SharperExtractorPatternNotPure
                     => false,
             };
 #pragma warning restore CS8524 // The switch expression does not handle some values of its input type (it is not exhaustive) involving an unnamed enum value.

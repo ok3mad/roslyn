@@ -1748,6 +1748,13 @@
   <Node Name="BoundDagDeconstructEvaluation" Base="BoundDagEvaluation">
     <Field Name="DeconstructMethod" Type="MethodSymbol" Null="disallow"/>
   </Node>
+  <Node Name="BoundDagExtractorEvaluation" Base="BoundDagEvaluation">
+    <!--Sharper: the call of an extractor pattern (`s is TryParse(var n)`, Feature 13 slice 3): Call is the call of a pure
+        `bool TryX(T, out U...)` or `U F(T)` over InputPlaceholder, which stands for the input, with discards as its out
+        arguments. The return value is the temp with index -1 and the out values are the temps 0 to n-1.-->
+    <Field Name="Call" Type="BoundCall" Null="disallow"/>
+    <Field Name="InputPlaceholder" Type="BoundValuePlaceholder" Null="disallow" SkipInVisitor="true"/>
+  </Node>
   <Node Name="BoundDagTypeEvaluation" Base="BoundDagEvaluation">
     <!--Cast to the given type, assumed to be used after a successful type check.-->
     <Field Name="Type" Type="TypeSymbol" Null="disallow"/>
@@ -2764,6 +2771,20 @@
     <Field Name="Value" Type="BoundExpression" Null="disallow"/>
     <Field Name="IsConstantPattern" Type="bool"/>
     <Field Name="PredicateArgument" Type="BoundValuePlaceholder?" SkipInVisitor="true"/>
+  </Node>
+
+  <!--
+    Sharper: an extractor pattern (`s is TryParse(var n)` or `s is Parse(> 0)`, Feature 13 slice 3), a positional pattern
+    whose name is no type but a pure method. Call is the call of that method over InputPlaceholder, which stands for the
+    input, with discards as its out arguments. With IsTryShape, the method is a `bool TryX(T, out U...)`, the pattern
+    matches when it returns true, and Subpatterns match the out values; otherwise the method is a `U F(T)` and the single
+    subpattern matches its result. NarrowedType is the InputType.
+  -->
+  <Node Name="BoundExtractorPattern" Base="BoundPattern">
+    <Field Name="Call" Type="BoundCall" Null="disallow"/>
+    <Field Name="InputPlaceholder" Type="BoundValuePlaceholder" Null="disallow" SkipInVisitor="true"/>
+    <Field Name="Subpatterns" Type="ImmutableArray&lt;BoundPositionalSubpattern&gt;" Null="disallow"/>
+    <Field Name="IsTryShape" Type="bool"/>
   </Node>
 
   <Node Name="BoundDiscardExpression" Base="BoundExpression">

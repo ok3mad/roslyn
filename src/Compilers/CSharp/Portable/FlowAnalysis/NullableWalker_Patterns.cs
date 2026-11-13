@@ -122,6 +122,16 @@ namespace Microsoft.CodeAnalysis.CSharp
             return null;
         }
 
+        public override BoundNode VisitExtractorPattern(BoundExtractorPattern node)
+        {
+            // Sharper: for the semantic model; the call is analyzed with diagnostics where the DAG makes it (slice 3).
+            AddPlaceholderReplacement(node.InputPlaceholder, node.InputPlaceholder, new VisitResult(node.InputType, NullableAnnotation.NotAnnotated, NullableFlowState.NotNull));
+            VisitRvalue(node.Call);
+            RemovePlaceholderReplacement(node.InputPlaceholder);
+            VisitAndUnsplitAll(node.Subpatterns);
+            return null;
+        }
+
         public override BoundNode VisitNegatedPattern(BoundNegatedPattern node)
         {
             Visit(node.Negated);
@@ -198,6 +208,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 case BoundITuplePattern _:
                 case BoundRelationalPattern _:
                 case BoundOpaquePattern _:
+                case BoundExtractorPattern _:
                 case BoundSlicePattern _:
                 case BoundListPattern lp:
                     break; // nothing to learn
@@ -475,6 +486,50 @@ namespace Microsoft.CodeAnalysis.CSharp
                                         outParamTemps.Free();
                                         break;
                                     }
+                                case BoundDagExtractorEvaluation e:
+                                    {
+                                        // Sharper: the call of an extractor (Feature 13, slice 3), with the input in its
+                                        // state here as the argument. The out values are read only when a Try method
+                                        // returned true, so they get its when-true annotations.
+                                        Unsplit();
+                                        var argumentState = GetState(ref this.State, inputSlot);
+                                        AddPlaceholderReplacement(e.InputPlaceholder, e.InputPlaceholder, new VisitResult(TypeWithState.Create(inputType, argumentState), TypeWithAnnotations.Create(inputType)));
+                                        VisitRvalue(e.Call);
+                                        TypeWithState returnState = ResultType;
+                                        RemovePlaceholderReplacement(e.InputPlaceholder);
+                                        Unsplit();
+
+                                        var returnTemp = e.MakeResultTemp();
+                                        int returnSlot = getOrMakeAndRegisterDagTempSlot(returnTemp);
+                                        TrackNullableStateForAssignment(valueOpt: null, e.Call.Method.ReturnTypeWithAnnotations, returnSlot, returnState);
+
+                                        ArrayBuilder<BoundDagTemp> outTemps = e.MakeOutParameterTemps();
+                                        foreach (var output in outTemps)
+                                        {
+                                            ParameterSymbol parameter = e.GetOutParameter(output.Index);
+                                            int outputSlot = getOrMakeAndRegisterDagTempSlot(output);
+                                            TypeWithState outputState = applyWhenTrueAnnotations(parameter.TypeWithAnnotations.ToTypeWithState(), parameter.FlowAnalysisAnnotations);
+                                            TrackNullableStateForAssignment(valueOpt: null, parameter.TypeWithAnnotations, outputSlot, outputState);
+                                        }
+
+                                        outTemps.Free();
+                                        break;
+
+                                        static TypeWithState applyWhenTrueAnnotations(TypeWithState typeWithState, FlowAnalysisAnnotations annotations)
+                                        {
+                                            if ((annotations & FlowAnalysisAnnotations.NotNullWhenTrue) != 0)
+                                            {
+                                                return TypeWithState.Create(typeWithState.Type, NullableFlowState.NotNull);
+                                            }
+
+                                            if ((annotations & FlowAnalysisAnnotations.MaybeNullWhenTrue) != 0)
+                                            {
+                                                return TypeWithState.Create(typeWithState.Type, NullableFlowState.MaybeDefault);
+                                            }
+
+                                            return typeWithState;
+                                        }
+                                    }
                                 case BoundDagTypeEvaluation e:
                                     {
                                         var output = e.MakeResultTemp();
@@ -741,6 +796,16 @@ namespace Microsoft.CodeAnalysis.CSharp
                             int outputSlot = makeDagTempSlot(parameterType, output);
                             Debug.Assert(outputSlot > 0);
                             addToTempMap(output, outputSlot, parameterType.Type);
+                            return outputSlot;
+                        }
+                    case BoundDagExtractorEvaluation e:
+                        {
+                            TypeWithAnnotations type = e.GetOutParameter(output.Index) is { } parameter
+                                ? parameter.TypeWithAnnotations
+                                : e.Call.Method.ReturnTypeWithAnnotations;
+                            int outputSlot = makeDagTempSlot(type, output);
+                            Debug.Assert(outputSlot > 0);
+                            addToTempMap(output, outputSlot, type.Type);
                             return outputSlot;
                         }
                     case BoundDagTypeEvaluation e:

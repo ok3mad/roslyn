@@ -2043,6 +2043,17 @@ namespace Microsoft.CodeAnalysis.CSharp
                     case BoundKind.OpaquePattern:
                         // Sharper: the operand was read before the match (VisitSharperOpaquePatternOperands).
                         break;
+                    case BoundKind.ExtractorPattern:
+                        {
+                            // Sharper: the call was read before the match; the sub-patterns match what it returns.
+                            var pat = (BoundExtractorPattern)pattern;
+                            foreach (BoundPositionalSubpattern subpattern in pat.Subpatterns)
+                            {
+                                assignPatternVariablesAndMarkReadFields(subpattern.Pattern, definitely);
+                            }
+
+                            break;
+                        }
                     case BoundKind.NegatedPattern:
                         {
                             var pat = (BoundNegatedPattern)pattern;

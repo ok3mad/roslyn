@@ -1156,6 +1156,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     case BoundDiscardPattern:
                     case BoundRelationalPattern:
                     case BoundOpaquePattern:
+                    case BoundExtractorPattern:
                     case BoundBinaryPattern:
                     case BoundNegatedPattern:
                     case BoundPropertySubpattern:

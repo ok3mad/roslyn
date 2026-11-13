@@ -193,6 +193,13 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         internal static bool CheckPredicatePatternCall(CSharpCompilation compilation, MethodSymbol? containingMethod, BoundCall call, BindingDiagnosticBag diagnostics)
             => CheckOpaquePatternOperand(compilation, containingMethod, call, ErrorCode.ERR_SharperPredicatePatternNotPure, diagnostics);
 
+        /// <summary>
+        /// Checks that the call of an extractor pattern (<c>s is TryParse(var n)</c>, Feature 13 slice 3) is pure (CS20075).
+        /// Its <c>out</c> arguments are discards, which are fresh, so a <c>[Pure]</c> method never gets CS20053 here.
+        /// </summary>
+        internal static bool CheckExtractorPatternCall(CSharpCompilation compilation, MethodSymbol? containingMethod, BoundCall call, BindingDiagnosticBag diagnostics)
+            => CheckOpaquePatternOperand(compilation, containingMethod, call, ErrorCode.ERR_SharperExtractorPatternNotPure, diagnostics);
+
         private static bool CheckOpaquePatternOperand(CSharpCompilation compilation, MethodSymbol? containingMethod, BoundExpression operand, ErrorCode errorCode, BindingDiagnosticBag diagnostics)
         {
             var walker = new PurityWalker(compilation.SharperImmutability, containingMethod, definition: null, localOnly: false, allowsCreation: true, constructorsInProgress: null, isMember: true);

@@ -877,6 +877,7 @@ start:
                     or BoundTypePattern
                     or BoundRelationalPattern
                     or BoundOpaquePattern
+                    or BoundExtractorPattern
                     or BoundNegatedPattern, $"This visitor doesn't support pattern {node} yet.");
 
                 return base.Visit(node);
@@ -1047,6 +1048,13 @@ start:
                 return null;
             }
 
+            public override BoundNode? VisitExtractorPattern(BoundExtractorPattern node)
+            {
+                // Sharper: an extractor is one operand here, as an opaque pattern is; 'or' patterns in its sub-patterns are not checked.
+                TryPushOperand(NegateIfNeeded(node));
+                return null;
+            }
+
             // Given a pattern that expects `pattern.InputType` as input type, produce
             // one that expects `inputType`.
             //
@@ -1102,6 +1110,12 @@ start:
                 if (pattern is BoundOpaquePattern opaquePattern)
                 {
                     return opaquePattern.Update(opaquePattern.Relation, opaquePattern.Value, opaquePattern.IsConstantPattern, opaquePattern.PredicateArgument, inputType, opaquePattern.NarrowedType);
+                }
+
+                if (pattern is BoundExtractorPattern extractorPattern)
+                {
+                    // The DAG tests for the method's input type first (MakeTestsAndBindingsForExtractorPattern).
+                    return extractorPattern.Update(extractorPattern.Call, extractorPattern.InputPlaceholder, extractorPattern.Subpatterns, extractorPattern.IsTryShape, inputType, inputType);
                 }
 
                 if (pattern is BoundDeclarationPattern declarationPattern)

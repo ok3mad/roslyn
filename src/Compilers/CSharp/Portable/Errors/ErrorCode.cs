@@ -2589,6 +2589,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         ERR_SharperInterfaceInitializerBadMember = SharperErrorCodes.Base + 72,
         ERR_SharperInterfaceInitializerStaticAbstract = SharperErrorCodes.Base + 73,
         ERR_SharperInterfaceInitializerInExpressionTree = SharperErrorCodes.Base + 74,
+        ERR_SharperExtractorPatternNotPure = SharperErrorCodes.Base + 75,
 
         // Note: you will need to do the following after adding errors:
         //  1) Update ErrorFacts.IsBuildOnlyDiagnostic (src/Compilers/CSharp/Portable/Errors/ErrorFacts.cs)

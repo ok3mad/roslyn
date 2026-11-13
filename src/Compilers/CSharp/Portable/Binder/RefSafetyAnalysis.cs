@@ -753,6 +753,15 @@ namespace Microsoft.CodeAnalysis.CSharp
             return base.VisitOpaquePattern(node);
         }
 
+        public override BoundNode? VisitExtractorPattern(BoundExtractorPattern node)
+        {
+            // Sharper: the argument of an extractor's call is the pattern's input (Feature 13, slice 3).
+            AddPlaceholderScope(node.InputPlaceholder, SafeContextAndLocation.Create(_patternInputValEscape));
+            base.VisitExtractorPattern(node);
+            RemovePlaceholderScope(node.InputPlaceholder);
+            return null;
+        }
+
         public override BoundNode? VisitPropertySubpattern(BoundPropertySubpattern node)
         {
             using var _ = new PatternInput(this, getMemberValEscape(node.Member, _patternInputValEscape));

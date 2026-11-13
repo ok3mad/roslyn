@@ -114,6 +114,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         /// <summary>
         /// Whether <paramref name="syntax"/> is the method of a predicate pattern, which is also the syntax of its call:
         /// the expression of a constant pattern or a <c>case</c> label, or the right side of <c>is</c>, in parentheses or not.
+        /// Also the method of an extractor pattern (slice 3), the type of a positional pattern.
         /// </summary>
         internal static bool IsSharperPredicatePatternName(SyntaxNode syntax)
         {
@@ -131,6 +132,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             return node.Parent switch
             {
                 ConstantPatternSyntax or CaseSwitchLabelSyntax => true,
+                RecursivePatternSyntax recursive => recursive.Type == node,
                 BinaryExpressionSyntax { RawKind: (int)SyntaxKind.IsExpression } isExpression => isExpression.Right == node,
                 _ => false,
             } && syntax.IsFeatureEnabled(MessageID.IDS_FeatureSharper);

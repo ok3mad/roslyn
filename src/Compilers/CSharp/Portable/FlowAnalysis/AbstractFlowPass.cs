@@ -926,7 +926,8 @@ namespace Microsoft.CodeAnalysis.CSharp
             Debug.Assert(node.Pattern is
                 BoundTypePattern or BoundRecursivePattern or BoundITuplePattern or BoundRelationalPattern or
                 BoundDeclarationPattern or BoundConstantPattern or BoundNegatedPattern or BoundBinaryPattern or
-                BoundDeclarationPattern or BoundDiscardPattern or BoundListPattern or BoundSlicePattern or BoundOpaquePattern);
+                BoundDeclarationPattern or BoundDiscardPattern or BoundListPattern or BoundSlicePattern or BoundOpaquePattern or
+                BoundExtractorPattern);
 
             bool negated = node.Pattern.IsNegated(out var pattern);
             Debug.Assert(negated == node.IsNegated);
@@ -934,9 +935,18 @@ namespace Microsoft.CodeAnalysis.CSharp
             if (VisitPossibleConditionalAccess(node.Expression, out var stateWhenNotNull))
             {
                 Debug.Assert(!IsConditionalState);
-                SetConditionalState(patternMatchesNull(pattern)
-                    ? (State, stateWhenNotNull)
-                    : (stateWhenNotNull, State));
+                if (callsSharperMethodOnInput(pattern))
+                {
+                    // Sharper: a predicate or extractor calls its method with null too, so it may match null or not
+                    // (Feature 13). Both branches get the state of the short-circuited access.
+                    SetConditionalState(State, State.Clone());
+                }
+                else
+                {
+                    SetConditionalState(patternMatchesNull(pattern)
+                        ? (State, stateWhenNotNull)
+                        : (stateWhenNotNull, State));
+                }
             }
             else if (IsConditionalState)
             {
@@ -977,6 +987,30 @@ namespace Microsoft.CodeAnalysis.CSharp
 
             return node;
 
+            static bool callsSharperMethodOnInput(BoundPattern pattern)
+            {
+                switch (pattern)
+                {
+                    case BoundOpaquePattern { PredicateArgument: not null }:
+                    case BoundExtractorPattern:
+                        return true;
+                    case BoundNegatedPattern negated:
+                        return callsSharperMethodOnInput(negated.Negated);
+                    case BoundBinaryPattern binary:
+                        var binaryPatterns = getBinaryPatterns(binary);
+                        bool result = callsSharperMethodOnInput(binaryPatterns.Peek().Left);
+                        while (binaryPatterns.TryPop(out var currentBinary))
+                        {
+                            result |= callsSharperMethodOnInput(currentBinary.Right);
+                        }
+
+                        binaryPatterns.Free();
+                        return result;
+                    default:
+                        return false;
+                }
+            }
+
             static bool patternMatchesNull(BoundPattern pattern)
             {
                 switch (pattern)
@@ -986,6 +1020,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                     case BoundITuplePattern:
                     case BoundRelationalPattern:
                     case BoundOpaquePattern:
+                    case BoundExtractorPattern: // Handled by callsSharperMethodOnInput
                     case BoundDeclarationPattern { IsVar: false }:
                     case BoundConstantPattern { ConstantValue: { IsNull: false } }:
                     case BoundListPattern:
@@ -1070,6 +1105,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                     case BoundITuplePattern:
                     case BoundRelationalPattern:
                     case BoundOpaquePattern:
+                    case BoundExtractorPattern:
                     case BoundDeclarationPattern:
                     case BoundListPattern:
                     case BoundSlicePattern: // Only occurs in error cases
@@ -1127,6 +1163,11 @@ namespace Microsoft.CodeAnalysis.CSharp
                 {
                     case BoundOpaquePattern opaque:
                         VisitRvalue(opaque.Value);
+                        break;
+                    case BoundExtractorPattern extractor:
+                        // The call of an extractor (slice 3), with its receiver, before its sub-patterns.
+                        VisitRvalue(extractor.Call);
+                        pushReversed(stack, extractor.Subpatterns);
                         break;
                     case BoundBinaryPattern binary:
                         stack.Push(binary.Right);

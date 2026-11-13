@@ -209,6 +209,40 @@ namespace Microsoft.CodeAnalysis.CSharp
                             return result;
                         }
 
+                    case BoundDagExtractorEvaluation e:
+                        {
+                            // Sharper: an extractor pattern (Feature 13, slice 3) calls its method with the input and
+                            // the out temps in place of the discards, and keeps the return value.
+                            BoundCall call = e.Call;
+                            Debug.Assert(e.InputPlaceholder.Type.Equals(input.Type, TypeCompareKind.AllIgnoreOptions));
+                            ArrayBuilder<BoundDagTemp> outTemps = e.MakeOutParameterTemps();
+                            ImmutableArray<BoundExpression> arguments = call.Arguments;
+                            if (outTemps.Count > 0)
+                            {
+                                var argumentBuilder = ArrayBuilder<BoundExpression>.GetInstance(arguments.Length);
+                                int outIndex = 0;
+                                for (int i = 0; i < arguments.Length; i++)
+                                {
+                                    argumentBuilder.Add(call.ArgumentRefKindsOpt[i] == RefKind.Out
+                                        ? _tempAllocator.GetTemp(outTemps[outIndex++])
+                                        : arguments[i]);
+                                }
+
+                                arguments = argumentBuilder.ToImmutableAndFree();
+                                call = call.Update(
+                                    call.ReceiverOpt, call.InitialBindingReceiverIsSubjectToCloning, call.Method, arguments, call.ArgumentNamesOpt,
+                                    call.ArgumentRefKindsOpt, call.IsDelegateCall, call.Expanded, call.InvokedAsExtensionMethod, call.ArgsToParamsOpt,
+                                    call.DefaultArguments, call.ResultKind, call.OriginalMethodsOpt, call.Type);
+                            }
+
+                            outTemps.Free();
+                            _localRewriter.AddPlaceholderReplacement(e.InputPlaceholder, input);
+                            BoundExpression loweredCall = _localRewriter.VisitExpression(call);
+                            _localRewriter.RemovePlaceholderReplacement(e.InputPlaceholder);
+                            _factory.Syntax = e.Syntax;
+                            return _factory.AssignmentExpression(_tempAllocator.GetTemp(e.MakeResultTemp()), loweredCall);
+                        }
+
                     case BoundDagTypeEvaluation t:
                         {
                             TypeSymbol inputType = input.Type;
