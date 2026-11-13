@@ -119,8 +119,8 @@ finds the type: `static infer Hello(int id) => ...`, `infer Fetch(infer url, inf
 - **No breaking change.** `infer` is a contextual keyword resolved like `var`: a type named `infer` in scope wins,
   and with the flag off it is an unknown type (CS0246).
 - **Combines with `readonly`:** `readonly infer x` is a parameter whose type is inferred and that cannot be
-  reassigned. Whether `val x` should be accepted as its shorthand on method parameters, as it is on lambda
-  parameters, is open ([#178](https://github.com/ok3mad/roslyn/issues/178)).
+  reassigned. On method parameters `val x` is its shorthand, as it is on lambda parameters
+  ([#178](https://github.com/ok3mad/roslyn/issues/178)).
 
 ### Inferred return type
 
@@ -823,7 +823,7 @@ What is settled so far, what was tried and dropped, and what waits for a later s
 
 - How are refined parameter types preserved across assembly boundaries, through metadata attributes and runtime guards at C# entry points? Immutability is decided (see [Decided](#decided)): attributes in metadata, trusted by consumers, and a run-time type check where an optimization relies on it.
 - How does the checker's flow analysis tie into the more flexible type inference?
-- What escape hatches are needed to keep the language pragmatic, for example an `assume` that lowers to a runtime check?
+- What escape hatches are needed to keep the language pragmatic, for example an `assume` that lowers to a runtime check? `assume` is designed in [Feature 15](implementation-plan.md#feature-15-assume-slice-1-design) of the plan.
 - How are diagnostics mapped back to original source after lowering?
 - Which effect conversions are safe enough to infer automatically, and which need a manual converter?
 - **Untagged unions and generics (deep dive).** Resolved by tagging failures (see [Decided](#decided)). If a bare error case passed through pipes, generic code over `T | NotFound` could not tell whether `T` is itself `NotFound`, so behavior would change with the instantiation and nested options would collapse; C# 15 unions have the same trap. Over `(T | Fail<NotFound>)` it can, as long as a `Fail<...>` is never a success value. The earlier candidate, to let only declared error cases pass through and reject an unconstrained `T` instantiated with one, needed no library, but an ordinary type could not be a failure.

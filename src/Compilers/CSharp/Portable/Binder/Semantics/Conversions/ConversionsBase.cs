@@ -82,6 +82,21 @@ namespace Microsoft.CodeAnalysis.CSharp
 
         protected abstract bool IsParameterDefaultValueBinding { get; }
 
+        /// <summary>
+        /// The conversion of a lambda or method group to a Sharper single-method interface, which only the binder's
+        /// retry after a C# error classifies (<see cref="Conversions.WithSharperFunctionToInterface"/>).
+        /// </summary>
+        protected virtual Conversion GetSharperFunctionToInterfaceConversion(BoundExpression source, TypeSymbol destination, ref CompoundUseSiteInfo<AssemblySymbol> useSiteInfo)
+            => Conversion.NoConversion;
+
+        /// <summary>
+        /// For type inference in the same retry: the delegate for the method of the single-method interface that a lambda
+        /// or method group converts to, written over the method's type parameters (<c>IMap&lt;T&gt;</c> gives
+        /// <c>Func&lt;T, T&gt;</c>), or null.
+        /// </summary>
+        internal virtual NamedTypeSymbol GetSharperFunctionToInterfaceDelegateType(BoundExpression source, TypeSymbol destination)
+            => null;
+
         internal AssemblySymbol CorLibrary { get { return corLibrary; } }
 
 #nullable enable
@@ -1120,13 +1135,22 @@ namespace Microsoft.CodeAnalysis.CSharp
                     {
                         return Conversion.AnonymousFunction;
                     }
-                    break;
+                    goto case BoundKind.MethodGroup;
 
                 case BoundKind.MethodGroup:
-                    Conversion methodGroupConversion = GetMethodGroupDelegateConversion((BoundMethodGroup)sourceExpression, destination, ref useSiteInfo);
-                    if (methodGroupConversion.Exists)
+                    if (sourceExpression.Kind == BoundKind.MethodGroup)
                     {
-                        return methodGroupConversion;
+                        Conversion methodGroupConversion = GetMethodGroupDelegateConversion((BoundMethodGroup)sourceExpression, destination, ref useSiteInfo);
+                        if (methodGroupConversion.Exists)
+                        {
+                            return methodGroupConversion;
+                        }
+                    }
+
+                    Conversion sharperInterfaceConversion = GetSharperFunctionToInterfaceConversion(sourceExpression, destination, ref useSiteInfo);
+                    if (sharperInterfaceConversion.Exists)
+                    {
+                        return sharperInterfaceConversion;
                     }
                     break;
 

@@ -29,7 +29,8 @@ namespace Microsoft.CodeAnalysis.CSharp
         /// <returns>The bound type, or default when the syntax is the <c>infer</c> keyword.</returns>
         internal TypeWithAnnotations BindTypeOrSharperInferKeyword(TypeSyntax syntax, BindingDiagnosticBag diagnostics, out bool isInfer)
         {
-            if (syntax.IsInfer)
+            // On a method parameter, 'val x' is 'readonly infer x' (#178), with the same lookup.
+            if (syntax.IsInfer || syntax.IsSharperValParameterType)
             {
                 var symbol = BindTypeOrAliasOrKeyword((IdentifierNameSyntax)syntax, diagnostics, out isInfer);
                 return isInfer ? default : UnwrapAlias(symbol, diagnostics, syntax).TypeWithAnnotations;
@@ -37,6 +38,17 @@ namespace Microsoft.CodeAnalysis.CSharp
 
             isInfer = false;
             return BindType(syntax, diagnostics);
+        }
+
+        /// <summary>
+        /// True if <paramref name="syntax"/>, a <c>val</c> parameter type (<see cref="TypeSyntax.IsSharperValParameterType"/>),
+        /// is the Sharper keyword: no type named <c>val</c> is in scope. Lookup only; binding the type reports its diagnostics.
+        /// </summary>
+        internal bool IsSharperValKeyword(TypeSyntax syntax)
+        {
+            Debug.Assert(syntax.IsSharperValParameterType);
+            BindTypeOrAliasOrKeyword((IdentifierNameSyntax)syntax, BindingDiagnosticBag.Discarded, out bool isKeyword);
+            return isKeyword;
         }
 
         /// <summary>
@@ -74,21 +86,42 @@ namespace Microsoft.CodeAnalysis.CSharp
             MethodSymbol method,
             CSharpSyntaxNode body,
             TypeSyntax inferSyntax,
-            BindingDiagnosticBag diagnostics)
+            BindingDiagnosticBag diagnostics,
+            out SharperRefinement? refinement,
+            out bool canHaveRefinement)
         {
             Debug.Assert(inferSyntax.IsInfer);
             Debug.Assert(IsSharperReturnTypeBeingInferred(method));
 
-            return body is BlockSyntax block
-                ? BindSharperInferredReturnTypeOfBlock(method, block, inferSyntax, diagnostics)
-                : BindSharperInferredReturnTypeOfExpression(method, (ArrowExpressionClauseSyntax)body, inferSyntax, diagnostics);
+            var returnedValues = ArrayBuilder<BoundExpression>.GetInstance();
+            TypeWithAnnotations result = body is BlockSyntax block
+                ? BindSharperInferredReturnTypeOfBlock(method, block, inferSyntax, diagnostics, returnedValues)
+                : BindSharperInferredReturnTypeOfExpression(method, (ArrowExpressionClauseSyntax)body, inferSyntax, diagnostics, returnedValues);
+
+            refinement = null;
+            canHaveRefinement = SharperRefinement.CanInferForReturn(method, result);
+            if (canHaveRefinement)
+            {
+                refinement = SharperRefinement.OfValues(returnedValues, result.Type, inferSyntax);
+                if (method.MethodKind != MethodKind.LocalFunction)
+                {
+                    // The return carries the embedded attribute, as a refined parameter does, also when the body gives no
+                    // refinement (SharperRefinement.AnyValueText). The attribute type is made here, when the return type
+                    // is inferred, so that the assembly embeds it.
+                    _ = Compilation.SharperImmutability.GetAttributeType(SharperImmutabilityAttribute.Refinement, diagnostics, inferSyntax);
+                }
+            }
+
+            returnedValues.Free();
+            return result;
         }
 
         private TypeWithAnnotations BindSharperInferredReturnTypeOfExpression(
             MethodSymbol method,
             ArrowExpressionClauseSyntax body,
             TypeSyntax inferSyntax,
-            BindingDiagnosticBag diagnostics)
+            BindingDiagnosticBag diagnostics,
+            ArrayBuilder<BoundExpression> returnedValues)
         {
             var bodyDiagnostics = BindingDiagnosticBag.GetInstance(withDiagnostics: true, withDependencies: diagnostics.AccumulatesDependencies);
             ExpressionSyntax expressionSyntax = body.Expression.CheckAndUnwrapRefExpression(bodyDiagnostics, out RefKind refKind)!;
@@ -130,6 +163,7 @@ namespace Microsoft.CodeAnalysis.CSharp
 
                 if (!bodyType.IsVoidType())
                 {
+                    returnedValues.Add(expression);
                     var block = new BoundBlock(
                         body,
                         GetDeclaredLocalsForScope(body),
@@ -153,7 +187,8 @@ namespace Microsoft.CodeAnalysis.CSharp
             MethodSymbol method,
             BlockSyntax body,
             TypeSyntax inferSyntax,
-            BindingDiagnosticBag diagnostics)
+            BindingDiagnosticBag diagnostics,
+            ArrayBuilder<BoundExpression> returnedValues)
         {
             // Async iterators are rejected with the declaration.
             Debug.Assert(!(method.IsIterator && method.IsAsync));
@@ -199,6 +234,11 @@ namespace Microsoft.CodeAnalysis.CSharp
 
                     if (!result.IsVoidType())
                     {
+                        if (!isIterator)
+                        {
+                            returnedValues.AddRange(returns.Where(static r => r.Item1.ExpressionOpt is not null).Select(static r => r.Item1.ExpressionOpt!));
+                        }
+
                         result = InferSharperReturnTypeNullability(method, block, inferSyntax, result, isIterator);
                     }
                 }

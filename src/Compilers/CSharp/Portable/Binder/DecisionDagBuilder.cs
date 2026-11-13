@@ -1271,17 +1271,26 @@ namespace Microsoft.CodeAnalysis.CSharp
 
         /// <summary>
         /// Sharper: an opaque pattern (Feature 13) tests for the operand's type, as a relational pattern does, and then
-        /// compares with the operand. Nothing is known of the comparison's outcome, so the value sets stay as they are.
+        /// compares with the operand, or calls the predicate. Nothing is known of the outcome, so the value sets stay as they are.
         /// </summary>
         private Tests MakeTestsForOpaquePattern(
             TestInputOutputInfo inputInfo,
             BoundOpaquePattern opaque,
             out TestInputOutputInfo outputInfo)
         {
+            if (opaque.PredicateArgument is not null && inputInfo.DagTemp.Type.Equals(opaque.NarrowedType, TypeCompareKind.AllIgnoreOptions))
+            {
+                // A predicate pattern (slice 2) calls its method with the input as it is, null included, as the call
+                // 'M(x)' would: no type or null test comes first. (The check of 'or' operands gives a pattern a wider input
+                // type, and then tests for the predicate's input type first.)
+                outputInfo = inputInfo;
+                return new Tests.One(new BoundDagOpaqueTest(opaque.Syntax, opaque.Relation, opaque.Value, opaque.PredicateArgument, inputInfo.DagTemp, opaque.HasErrors));
+            }
+
             var tests = ArrayBuilder<Tests>.GetInstance(2);
             outputInfo = MakeConvertToType(inputInfo, opaque.Syntax, opaque.NarrowedType, isExplicitTest: false, tests);
             BoundDagTemp output = PrepareForUnionValuePropertyMatching(ref outputInfo, tests);
-            tests.Add(new Tests.One(new BoundDagOpaqueTest(opaque.Syntax, opaque.Relation, opaque.Value, output, opaque.HasErrors)));
+            tests.Add(new Tests.One(new BoundDagOpaqueTest(opaque.Syntax, opaque.Relation, opaque.Value, opaque.PredicateArgument, output, opaque.HasErrors)));
             return Tests.AndSequence.Create(tests);
         }
 
@@ -3033,7 +3042,9 @@ namespace Microsoft.CodeAnalysis.CSharp
                             };
                             return $"?{d.Kind}({tempName(d.Input)} {operatorName} {r.Value})";
                         case BoundDagOpaqueTest o:
-                            return $"?{d.Kind}({tempName(d.Input)} {o.OperatorKind.Operator()} {o.Value.Syntax})";
+                            return o.PredicateArgument is null
+                                ? $"?{d.Kind}({tempName(d.Input)} {o.OperatorKind.Operator()} {o.Value.Syntax})"
+                                : $"?{d.Kind}({o.Value.Syntax}({tempName(d.Input)}))";
                         default:
                             return $"?{d.Kind}({tempName(d.Input)})";
                     }

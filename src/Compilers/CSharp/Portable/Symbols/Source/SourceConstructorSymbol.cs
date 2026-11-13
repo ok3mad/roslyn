@@ -322,7 +322,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
             if (MemberSignatureComparer.ConsideringTupleNamesCreatesDifference(this, implementation))
             {
-                diagnostics.Add(ErrorCode.ERR_PartialMemberInconsistentTupleNames, implementation.GetFirstLocation(), this, implementation);
+                diagnostics.Add(SymbolExtensions.TupleOrSharperFunctionTypeNamesError(this, implementation, ErrorCode.ERR_PartialMemberInconsistentTupleNames, ErrorCode.ERR_SharperPartialMemberInconsistentFunctionTypeNames), implementation.GetFirstLocation(), this, implementation);
             }
             else if (!MemberSignatureComparer.PartialMethodsStrictComparer.Equals(this, implementation)
                 || !Parameters.SequenceEqual(implementation.Parameters, static (a, b) => a.Name == b.Name))

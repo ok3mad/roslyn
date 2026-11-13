@@ -42,9 +42,17 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             internal readonly TypeWithAnnotations Type;
             internal readonly ReadOnlyBindingDiagnostic<AssemblySymbol> Diagnostics;
 
-            internal Result(TypeWithAnnotations type, ReadOnlyBindingDiagnostic<AssemblySymbol> diagnostics)
+            /// <summary>The refinement of the returned value, inferred with the type from the same binding of the body.</summary>
+            internal readonly SharperRefinement? Refinement;
+
+            /// <summary>True if the return can have a refinement (<see cref="SharperRefinement.CanInferForReturn"/>).</summary>
+            internal readonly bool CanHaveRefinement;
+
+            internal Result(TypeWithAnnotations type, SharperRefinement? refinement, bool canHaveRefinement, ReadOnlyBindingDiagnostic<AssemblySymbol> diagnostics)
             {
                 Type = type;
+                Refinement = refinement;
+                CanHaveRefinement = canHaveRefinement;
                 Diagnostics = diagnostics;
             }
         }
@@ -59,6 +67,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             /// <summary>The inferred methods whose return types the body reads, in order, without the published ones.</summary>
             internal readonly List<SharperInferredReturnType> Uses = new List<SharperInferredReturnType>();
             internal TypeWithAnnotations Type;
+            internal SharperRefinement? Refinement;
+            internal bool CanHaveRefinement;
             internal BindingDiagnosticBag? Diagnostics;
 
             internal Frame(SharperInferredReturnType inference, int index)
@@ -216,6 +226,30 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             return _lazyType!.Value;
         }
 
+        /// <summary>
+        /// The refinement of the returned value (Feature 11 of the implementation plan, step 3): the union of what every
+        /// <c>return</c> can produce, or null if a return yields a value with no refinement. It is inferred with the
+        /// type, from the same binding of the body, so reading it is a read of the return type: it starts no other
+        /// inference and adds no cycle. In a cycle, and while the type is being inferred, there is none.
+        /// </summary>
+        internal virtual SharperRefinement? GetReturnRefinement()
+        {
+            _ = GetReturnType();
+            return Volatile.Read(ref _lazyType) is null ? null : _lazyDecided!.Refinement;
+        }
+
+        /// <summary>
+        /// The text of the attribute on the return: the refinement, the discard pattern if the return could have a
+        /// refinement and the body gives none (<see cref="SharperRefinement.AnyValueText"/>), or null for no attribute.
+        /// </summary>
+        internal virtual string? GetReturnRefinementAttributeText()
+        {
+            _ = GetReturnType();
+            return Volatile.Read(ref _lazyType) is null || _lazyDecided is not { CanHaveRefinement: true } decided
+                ? null
+                : decided.Refinement?.Text ?? SharperRefinement.AnyValueText;
+        }
+
         private Frame Infer(Context context)
         {
             var frame = new Frame(this, context.NextIndex++);
@@ -227,7 +261,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             try
             {
                 frame.Type = GetBodyBinder(_body!) is { } binder
-                    ? binder.BindSharperInferredReturnType(_method, _body!, _inferSyntax, diagnostics)
+                    ? binder.BindSharperInferredReturnType(_method, _body!, _inferSyntax, diagnostics, out frame.Refinement, out frame.CanHaveRefinement)
                     : CreateErrorType();
                 frame.Diagnostics = diagnostics;
             }
@@ -270,6 +304,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 }
 
                 TypeWithAnnotations type = frame.Type;
+                SharperRefinement? refinement = frame.Refinement;
+                bool canHaveRefinement = frame.CanHaveRefinement;
                 if (frame.Uses.Contains(inference) || component.Count > 1)
                 {
                     // Whatever else the binding reported came from the error types of the cycle.
@@ -283,14 +319,18 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                         diagnostics.Add(ErrorCode.ERR_SharperInferCycle, inference._inferSyntax.Location, inference._method, FormatCycle(frame, component, members));
                     }
 
+                    // A method that needs its own return has no return refinement either: the error on recursive
+                    // 'infer' returns of Feature 11 is this one.
                     type = inference.CreateErrorType();
+                    refinement = null;
+                    canHaveRefinement = false;
                 }
                 else
                 {
                     inference.CheckInferredType(type, inference._inferSyntax, diagnostics);
                 }
 
-                Interlocked.CompareExchange(ref inference._lazyDecided, new Result(type, diagnostics.ToReadOnlyAndFree()), null);
+                Interlocked.CompareExchange(ref inference._lazyDecided, new Result(type, refinement, canHaveRefinement, diagnostics.ToReadOnlyAndFree()), null);
             }
 
             foreach (var frame in component)

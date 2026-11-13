@@ -681,6 +681,16 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols.Metadata.PE
 
         internal PEParameterSymbol ReturnTypeParameter => Signature.ReturnParam;
 
+        /// <summary>
+        /// Sharper: the return refinement that an embedded <c>Sharper.SharperRefinementAttribute</c> on the return
+        /// states, read as a parameter's is (<see cref="PEParameterSymbol.SharperRefinement"/>). A virtual or interface
+        /// member has none: its callers do not know which body runs.
+        /// </summary>
+        internal override SharperRefinement SharperReturnRefinement
+            => RefKind == RefKind.None && !IsVirtual && !IsAbstract && !IsOverride && !ContainingType.IsInterface
+                ? Signature.ReturnParam.SharperRefinement
+                : null;
+
         public override RefKind RefKind => Signature.ReturnParam.RefKind;
 
         public override TypeWithAnnotations ReturnTypeWithAnnotations => Signature.ReturnParam.TypeWithAnnotations;

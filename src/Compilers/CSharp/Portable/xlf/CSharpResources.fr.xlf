@@ -2597,6 +2597,16 @@
         <target state="translated">'{0}' ne peut pas être sealed, car l'enregistrement contenant n'est pas sealed.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperCantChangeFunctionTypeNamesOnOverride">
+        <source>'{0}': cannot change function type parameter names when overriding inherited member '{1}'</source>
+        <target state="new">'{0}': cannot change function type parameter names when overriding inherited member '{1}'</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperFunctionToInterfaceInExpressionTree">
+        <source>An expression tree cannot contain a lambda or method group converted to the interface '{0}'.</source>
+        <target state="new">An expression tree cannot contain a lambda or method group converted to the interface '{0}'.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperFunctionTypeParameterModifier">
         <source>A function type parameter cannot be '{0}', because a function type is a 'System.Func' or 'System.Action' delegate.</source>
         <target state="new">A function type parameter cannot be '{0}', because a function type is a 'System.Func' or 'System.Action' delegate.</target>
@@ -2630,6 +2640,11 @@
       <trans-unit id="ERR_SharperImmutableNotProven">
         <source>'{0}' is marked [Immutable], but it cannot be proven immutable: {1}.</source>
         <target state="new">'{0}' is marked [Immutable], but it cannot be proven immutable: {1}.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperImplBadFunctionTypeNames">
+        <source>The function type parameter names in the signature of '{0}' must match the function type parameter names of interface member '{1}' (including on the return type).</source>
+        <target state="new">The function type parameter names in the signature of '{0}' must match the function type parameter names of interface member '{1}' (including on the return type).</target>
         <note />
       </trans-unit>
       <trans-unit id="ERR_SharperInferAmbiguousOverriddenMember">
@@ -2717,6 +2732,26 @@
         <target state="new">Cannot infer the return type of '{0}', because its body uses '{0}' itself. Write the return type.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperInterfaceInitializerBadMember">
+        <source>'{0}' cannot be assigned in an interface initializer. Only methods that are not generic, and properties with a getter and no setter, can be assigned, and only when no other member of the interface has the same name.</source>
+        <target state="new">'{0}' cannot be assigned in an interface initializer. Only methods that are not generic, and properties with a getter and no setter, can be assigned, and only when no other member of the interface has the same name.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperInterfaceInitializerInExpressionTree">
+        <source>An expression tree cannot contain an interface initializer.</source>
+        <target state="new">An expression tree cannot contain an interface initializer.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperInterfaceInitializerMissingMembers">
+        <source>The initializer of '{0}' does not assign {1}, which has no default implementation. Assign it, or add '_ = Unexpected' to make unassigned members throw.</source>
+        <target state="new">The initializer of '{0}' does not assign {1}, which has no default implementation. Assign it, or add '_ = Unexpected' to make unassigned members throw.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperInterfaceInitializerStaticAbstract">
+        <source>Cannot create an instance of '{0}' with an initializer, because it has the static abstract member '{1}'.</source>
+        <target state="new">Cannot create an instance of '{0}' with an initializer, because it has the static abstract member '{1}'.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperItAwait">
         <source>Cannot use 'await' in an implicit 'it' lambda. Write the lambda, as in 'async x =&gt; ...'.</source>
         <target state="new">Cannot use 'await' in an implicit 'it' lambda. Write the lambda, as in 'async x =&gt; ...'.</target>
@@ -2757,6 +2792,11 @@
         <target state="new">The operand of a pattern that is not a constant must be pure, but it is not: {0}.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperPartialMemberInconsistentFunctionTypeNames">
+        <source>Both partial member declarations, '{0}' and '{1}', must use the same function type parameter names.</source>
+        <target state="new">Both partial member declarations, '{0}' and '{1}', must use the same function type parameter names.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperPhantomTypeParameterInState">
         <source>Type parameter '{0}' is marked [Phantom], but '{1}' uses it in the state of the type.</source>
         <target state="new">Type parameter '{0}' is marked [Phantom], but '{1}' uses it in the state of the type.</target>
@@ -2782,19 +2822,24 @@
         <target state="new">The stage after '|&gt;' must be a function, such as a method group or a delegate, or an expression that uses 'it', but it is {0}.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperPredicatePatternNotPure">
+        <source>The method of a predicate pattern must be pure, but it is not: {0}.</source>
+        <target state="new">The method of a predicate pattern must be pure, but it is not: {0}.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperPureNotPure">
         <source>'{0}' is marked [Pure], but it is not pure: {1}.</source>
         <target state="new">'{0}' is marked [Pure], but it is not pure: {1}.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperPureOverrideNotPure">
+        <source>'{0}' overrides or implements the [Pure] member '{1}', so it must be marked [Pure] too.</source>
+        <target state="new">'{0}' overrides or implements the [Pure] member '{1}', so it must be marked [Pure] too.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperPureStructMemberNotReadOnly">
         <source>'{0}' is marked [Pure], so it must be readonly: declare it 'readonly', or make the struct 'readonly'.</source>
         <target state="new">'{0}' is marked [Pure], so it must be readonly: declare it 'readonly', or make the struct 'readonly'.</target>
-        <note />
-      </trans-unit>
-      <trans-unit id="ERR_SharperPureVirtual">
-        <source>'{0}' cannot be marked [Pure] yet: [Pure] is not supported on virtual, abstract and override members.</source>
-        <target state="new">'{0}' cannot be marked [Pure] yet: [Pure] is not supported on virtual, abstract and override members.</target>
         <note />
       </trans-unit>
       <trans-unit id="ERR_SharperReadOnlyLocalWithNoInitializer">
@@ -4717,24 +4762,14 @@
         <target state="new">The out argument of a [Pure] member is not a fresh local</target>
         <note />
       </trans-unit>
-      <trans-unit id="WRN_SharperReadOnlyLocalMemberCallOnCopy">
-        <source>Call to non-readonly member '{0}' on readonly local '{1}' runs on a copy, so '{1}' is not changed.</source>
-        <target state="new">Call to non-readonly member '{0}' on readonly local '{1}' runs on a copy, so '{1}' is not changed.</target>
+      <trans-unit id="WRN_SharperPureOverrideNotPure">
+        <source>'{0}' overrides or implements the [Pure] member '{1}', so it must be pure too, but it is not marked [Pure], and a C# file is not checked. Move it to a Sharper file and mark it [Pure].</source>
+        <target state="new">'{0}' overrides or implements the [Pure] member '{1}', so it must be pure too, but it is not marked [Pure], and a C# file is not checked. Move it to a Sharper file and mark it [Pure].</target>
         <note />
       </trans-unit>
-      <trans-unit id="WRN_SharperReadOnlyLocalMemberCallOnCopy_Title">
-        <source>Call to a non-readonly member on a readonly local runs on a copy</source>
-        <target state="new">Call to a non-readonly member on a readonly local runs on a copy</target>
-        <note />
-      </trans-unit>
-      <trans-unit id="WRN_SharperReadOnlyParameterMemberCallOnCopy">
-        <source>Call to non-readonly member '{0}' on readonly parameter '{1}' runs on a copy, so '{1}' is not changed.</source>
-        <target state="new">Call to non-readonly member '{0}' on readonly parameter '{1}' runs on a copy, so '{1}' is not changed.</target>
-        <note />
-      </trans-unit>
-      <trans-unit id="WRN_SharperReadOnlyParameterMemberCallOnCopy_Title">
-        <source>Call to a non-readonly member on a readonly parameter runs on a copy</source>
-        <target state="new">Call to a non-readonly member on a readonly parameter runs on a copy</target>
+      <trans-unit id="WRN_SharperPureOverrideNotPure_Title">
+        <source>A member in a C# file overrides or implements a [Pure] member</source>
+        <target state="new">A member in a C# file overrides or implements a [Pure] member</target>
         <note />
       </trans-unit>
       <trans-unit id="WRN_SharperTryExpressionAwaitableBody">
@@ -4748,13 +4783,13 @@
         <note />
       </trans-unit>
       <trans-unit id="WRN_SharperValMemberCallOnCopy">
-        <source>Call to non-readonly member '{0}' on val variable '{1}' runs on a copy, so '{1}' is not changed.</source>
-        <target state="new">Call to non-readonly member '{0}' on val variable '{1}' runs on a copy, so '{1}' is not changed.</target>
-        <note />
+        <source>Call to non-readonly member '{0}' on {2} '{1}' runs on a copy, so '{1}' is not changed.</source>
+        <target state="new">Call to non-readonly member '{0}' on {2} '{1}' runs on a copy, so '{1}' is not changed.</target>
+        <note>{2} names why '{1}' cannot be reassigned: 'val variable', 'readonly local' or 'readonly parameter'.</note>
       </trans-unit>
       <trans-unit id="WRN_SharperValMemberCallOnCopy_Title">
-        <source>Call to a non-readonly member on a val variable runs on a copy</source>
-        <target state="new">Call to a non-readonly member on a val variable runs on a copy</target>
+        <source>Call to a non-readonly member on a variable that cannot be reassigned runs on a copy</source>
+        <target state="new">Call to a non-readonly member on a variable that cannot be reassigned runs on a copy</target>
         <note />
       </trans-unit>
       <trans-unit id="WRN_SwitchExpressionNotExhaustiveWithUnnamedEnumValue">

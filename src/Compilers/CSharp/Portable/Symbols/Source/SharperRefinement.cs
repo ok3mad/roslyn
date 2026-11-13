@@ -15,15 +15,18 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
     /// <summary>
     /// The refinement of a Sharper parameter, <c>int i is &gt;=0</c>: a closed pattern over constants that every value of
     /// the parameter satisfies (Feature 11 of the implementation plan). It is bound once per parameter symbol
-    /// (<see cref="SourceComplexParameterSymbolBase.SharperRefinement"/>), with its value set.
+    /// (<see cref="SourceComplexParameterSymbolBase.SharperRefinement"/>), with its value set. The return of an
+    /// <c>infer</c> method and a <c>val</c> local have an inferred one (<see cref="OfValues"/>).
     /// </summary>
     /// <remarks>
     /// Slice 1: the refinement is bound and checked, and makes the parameter <c>readonly</c> (step 2). The method checks
     /// it at entry (<see cref="SharperRefinementGuard"/>), and the parameter carries its normalized text (<see cref="Text"/>)
     /// in an embedded <c>Sharper.SharperRefinementAttribute</c>, which metadata symbols read back
-    /// (<see cref="FromMetadata"/>; step 5). Call sites and switches come in step 4.
+    /// (<see cref="FromMetadata"/>; step 5). Returns and <c>val</c> locals get theirs in step 3
+    /// (<see cref="MethodSymbol.SharperReturnRefinement"/>, <see cref="LocalSymbol.SharperRefinement"/>). Call sites and
+    /// switches come in step 4.
     /// </remarks>
-    internal sealed class SharperRefinement
+    internal sealed partial class SharperRefinement
     {
         /// <summary>The name of the embedded attribute that carries a refinement in metadata, in namespace <c>Sharper</c>.</summary>
         internal const string AttributeName = "SharperRefinementAttribute";
@@ -178,7 +181,12 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         internal BoundPattern MakePattern(TypeSymbol inputType, SyntaxNode syntax)
         {
             Debug.Assert(!HasErrors);
-            return make(Pattern, inputType, syntax);
+            return Rebuild(Pattern, inputType, syntax);
+        }
+
+        private static BoundPattern Rebuild(BoundPattern pattern, TypeSymbol inputType, SyntaxNode syntax)
+        {
+            return make(pattern, inputType, syntax);
 
             static BoundPattern make(BoundPattern pattern, TypeSymbol type, SyntaxNode syntax)
             {
@@ -219,43 +227,48 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 Debug.Assert(!HasErrors);
                 if (_lazyText is null)
                 {
-                    Interlocked.CompareExchange(ref _lazyText, format(Pattern), null);
+                    Interlocked.CompareExchange(ref _lazyText, FormatPattern(), null);
                 }
 
                 return _lazyText;
-
-                static string format(BoundPattern pattern)
-                {
-                    switch (pattern)
-                    {
-                        case BoundConstantPattern constant:
-                            return FormatConstant(constant.ConstantValue, constant.InputType);
-                        case BoundRelationalPattern relational:
-                            return SyntaxFacts.GetText(relational.Relation.Operator() switch
-                            {
-                                BinaryOperatorKind.LessThan => SyntaxKind.LessThanToken,
-                                BinaryOperatorKind.LessThanOrEqual => SyntaxKind.LessThanEqualsToken,
-                                BinaryOperatorKind.GreaterThan => SyntaxKind.GreaterThanToken,
-                                BinaryOperatorKind.GreaterThanOrEqual => SyntaxKind.GreaterThanEqualsToken,
-                                var op => throw ExceptionUtilities.UnexpectedValue(op),
-                            }) + " " + FormatConstant(relational.ConstantValue, relational.InputType);
-                        case BoundBinaryPattern { Disjunction: true } binary:
-                            return format(binary.Left) + " or " + format(binary.Right);
-                        case BoundBinaryPattern binary:
-                            return operand(binary.Left, andOperand: true) + " and " + operand(binary.Right, andOperand: true);
-                        case BoundNegatedPattern negated:
-                            return "not " + operand(negated.Negated, andOperand: false);
-                        default:
-                            throw ExceptionUtilities.UnexpectedValue(pattern.Kind);
-                    }
-                }
-
-                // 'not' binds tighter than 'and', which binds tighter than 'or'.
-                static string operand(BoundPattern pattern, bool andOperand)
-                    => pattern is BoundBinaryPattern { Disjunction: var disjunction } && (disjunction || !andOperand)
-                        ? "(" + format(pattern) + ")"
-                        : format(pattern);
             }
+        }
+
+        private string FormatPattern()
+        {
+            return format(Pattern);
+
+            static string format(BoundPattern pattern)
+            {
+                switch (pattern)
+                {
+                    case BoundConstantPattern constant:
+                        return FormatConstant(constant.ConstantValue, constant.InputType);
+                    case BoundRelationalPattern relational:
+                        return SyntaxFacts.GetText(relational.Relation.Operator() switch
+                        {
+                            BinaryOperatorKind.LessThan => SyntaxKind.LessThanToken,
+                            BinaryOperatorKind.LessThanOrEqual => SyntaxKind.LessThanEqualsToken,
+                            BinaryOperatorKind.GreaterThan => SyntaxKind.GreaterThanToken,
+                            BinaryOperatorKind.GreaterThanOrEqual => SyntaxKind.GreaterThanEqualsToken,
+                            var op => throw ExceptionUtilities.UnexpectedValue(op),
+                        }) + " " + FormatConstant(relational.ConstantValue, relational.InputType);
+                    case BoundBinaryPattern { Disjunction: true } binary:
+                        return format(binary.Left) + " or " + format(binary.Right);
+                    case BoundBinaryPattern binary:
+                        return operand(binary.Left, andOperand: true) + " and " + operand(binary.Right, andOperand: true);
+                    case BoundNegatedPattern negated:
+                        return "not " + operand(negated.Negated, andOperand: false);
+                    default:
+                        throw ExceptionUtilities.UnexpectedValue(pattern.Kind);
+                }
+            }
+
+            // 'not' binds tighter than 'and', which binds tighter than 'or'.
+            static string operand(BoundPattern pattern, bool andOperand)
+                => pattern is BoundBinaryPattern { Disjunction: var disjunction } && (disjunction || !andOperand)
+                    ? "(" + format(pattern) + ")"
+                    : format(pattern);
         }
 
         private static string FormatConstant(ConstantValue value, TypeSymbol type)
@@ -313,6 +326,25 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     : double.IsNegativeInfinity(d) ? keyword + ".NegativeInfinity"
                     : (suffix == "f" ? ((float)d).ToString("R", CultureInfo.InvariantCulture) : d.ToString("R", CultureInfo.InvariantCulture)) + suffix;
             }
+        }
+
+        /// <summary>
+        /// The embedded <c>SharperRefinementAttribute</c> with <paramref name="text"/> (<see cref="Text"/>, or
+        /// <see cref="AnyValueText"/> on a return), for a parameter or a return; null if the attribute type is not usable.
+        /// </summary>
+        internal static SynthesizedAttributeData? SynthesizeAttribute(CSharpCompilation compilation, string text)
+        {
+            if (compilation.SharperImmutability.GetAttributeType(SharperImmutabilityAttribute.Refinement, BindingDiagnosticBag.Discarded, compilation.SyntaxTrees[0].GetRoot()) is { } attribute &&
+                attribute.InstanceConstructors.FirstOrDefault(c => c.ParameterCount == 1 && c.Parameters[0].Type.SpecialType == SpecialType.System_String) is { } constructor)
+            {
+                return SynthesizedAttributeData.Create(
+                    compilation,
+                    constructor,
+                    [new TypedConstant(constructor.Parameters[0].Type, TypedConstantKind.Primitive, text)],
+                    System.Collections.Immutable.ImmutableArray<System.Collections.Generic.KeyValuePair<string, TypedConstant>>.Empty);
+            }
+
+            return null;
         }
 
         /// <summary>

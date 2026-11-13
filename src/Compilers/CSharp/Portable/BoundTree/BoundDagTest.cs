@@ -131,7 +131,9 @@ namespace Microsoft.CodeAnalysis.CSharp
                     };
                     return $"{r.Input.GetDebuggerDisplay()} {operatorName} {r.Value.GetValueToDisplay()}";
                 case BoundDagOpaqueTest o:
-                    return $"{o.Input.GetDebuggerDisplay()} {o.OperatorKind.Operator()} {o.Value.Syntax}";
+                    return o.PredicateArgument is null
+                        ? $"{o.Input.GetDebuggerDisplay()} {o.OperatorKind.Operator()} {o.Value.Syntax}"
+                        : $"{o.Value.Syntax}({o.Input.GetDebuggerDisplay()})";
                 default:
                     return $"{this.Kind}({this.Input.GetDebuggerDisplay()})";
             }

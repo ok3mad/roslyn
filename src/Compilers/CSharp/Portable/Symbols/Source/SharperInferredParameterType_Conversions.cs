@@ -285,7 +285,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         }
 
         private static bool IsInferredFromConversions(ParameterSyntax parameter)
-            => parameter is { Type.IsInfer: true, Default: null };
+            => parameter is { Type.IsInferOrValParameterType: true, Default: null };
 
         /// <summary>
         /// The result for an <c>infer</c> parameter without a default value of a local function, from the delegate types

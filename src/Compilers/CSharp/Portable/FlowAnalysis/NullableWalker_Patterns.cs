@@ -108,7 +108,17 @@ namespace Microsoft.CodeAnalysis.CSharp
         public override BoundNode VisitOpaquePattern(BoundOpaquePattern node)
         {
             // Sharper: for the semantic model; the operand is analyzed with diagnostics where the DAG tests it.
-            VisitRvalue(node.Value);
+            if (node.PredicateArgument is { } argument)
+            {
+                AddPlaceholderReplacement(argument, argument, new VisitResult(node.InputType, NullableAnnotation.NotAnnotated, NullableFlowState.NotNull));
+                VisitRvalue(node.Value);
+                RemovePlaceholderReplacement(argument);
+            }
+            else
+            {
+                VisitRvalue(node.Value);
+            }
+
             return null;
         }
 
@@ -616,9 +626,20 @@ namespace Microsoft.CodeAnalysis.CSharp
                                     gotoNode(p.WhenFalse, this.StateWhenFalse, nodeBelievedReachable, from: p, whenTrueBranch: false);
                                     break;
                                 case BoundDagOpaqueTest t:
-                                    // Sharper: the operand is evaluated here, as a when clause is.
+                                    // Sharper: the operand is evaluated here, as a when clause is. A predicate's argument
+                                    // is the input in its state here (Feature 13, slice 2).
                                     Unsplit();
-                                    VisitRvalue(t.Value);
+                                    if (t.PredicateArgument is { } argument)
+                                    {
+                                        var argumentState = inputSlot > 0 ? GetState(ref this.State, inputSlot) : NullableFlowState.NotNull;
+                                        AddPlaceholderReplacement(argument, argument, new VisitResult(TypeWithState.Create(inputType, argumentState), TypeWithAnnotations.Create(inputType)));
+                                        VisitRvalue(t.Value);
+                                        RemovePlaceholderReplacement(argument);
+                                    }
+                                    else
+                                    {
+                                        VisitRvalue(t.Value);
+                                    }
                                     Unsplit();
                                     Split();
                                     gotoNode(p.WhenTrue, this.StateWhenTrue, nodeBelievedReachable, from: p, whenTrueBranch: true);

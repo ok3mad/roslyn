@@ -1132,7 +1132,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         /// </summary>
         private IParameterSymbol GetSharperInferredParameter(ExpressionSyntax expression, CancellationToken cancellationToken)
         {
-            if (expression is not TypeSyntax { IsInfer: true, Parent: ParameterSyntax parameter } inferSyntax || parameter.Type != inferSyntax)
+            if (expression is not TypeSyntax { Parent: ParameterSyntax parameter } inferSyntax || parameter.Type != inferSyntax || !(inferSyntax.IsInfer || inferSyntax.IsSharperValParameterType))
             {
                 return null;
             }
@@ -2242,7 +2242,18 @@ namespace Microsoft.CodeAnalysis.CSharp
                 NullabilityInfo convertedNullability;
                 Conversion conversion;
 
-                if (highestBoundExprKind == BoundKind.Lambda) // the enclosing conversion is explicit
+                if (highestBoundExpr is BoundSharperFunctionToInterface functionToInterface)
+                {
+                    // Sharper: a lambda or method group converted to a single-method interface (#29) has no type, like a
+                    // lambda converted to a delegate; the conversion goes through the delegate for the interface's method.
+                    type = null;
+                    nullability = default;
+                    convertedType = functionToInterface.Type;
+                    convertedNullability = new NullabilityInfo(CodeAnalysis.NullableAnnotation.NotAnnotated, CodeAnalysis.NullableFlowState.NotNull);
+                    conversion = Conversion.MakeSharperFunctionToInterface(
+                        functionToInterface.Function is BoundConversion functionConversion ? functionConversion.Conversion : Conversion.Identity);
+                }
+                else if (highestBoundExprKind == BoundKind.Lambda) // the enclosing conversion is explicit
                 {
                     var lambda = (BoundLambda)highestBoundExpr;
                     convertedType = lambda.Type;

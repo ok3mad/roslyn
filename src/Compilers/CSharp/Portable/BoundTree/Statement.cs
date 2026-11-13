@@ -45,6 +45,16 @@ namespace Microsoft.CodeAnalysis.CSharp
         protected override ImmutableArray<BoundNode?> Children => ImmutableArray.Create<BoundNode?>(this.Left);
     }
 
+    partial class BoundSharperInterfaceCreation
+    {
+        protected override ImmutableArray<BoundNode?> Children => StaticCast<BoundNode?>.From(this.Values);
+    }
+
+    partial class BoundSharperFunctionToInterface
+    {
+        protected override ImmutableArray<BoundNode?> Children => ImmutableArray.Create<BoundNode?>(this.Function);
+    }
+
     partial class BoundConvertedTryExpression
     {
         protected override ImmutableArray<BoundNode?> Children => ImmutableArray.Create<BoundNode?>(this.Body);

@@ -16,20 +16,49 @@ namespace Microsoft.CodeAnalysis.CSharp
     {
         private readonly Binder _binder;
 
+        /// <summary>
+        /// Whether a lambda or method group converts to a Sharper single-method interface. Only the binder's retry
+        /// after a C# error sets it, so that valid C# keeps its meaning.
+        /// </summary>
+        private readonly bool _sharperFunctionToInterface;
+
         public Conversions(Binder binder)
-            : this(binder, currentRecursionDepth: 0, includeNullability: false, otherNullabilityOpt: null)
+            : this(binder, currentRecursionDepth: 0, includeNullability: false, otherNullabilityOpt: null, sharperFunctionToInterface: false)
         {
         }
 
-        private Conversions(Binder binder, int currentRecursionDepth, bool includeNullability, Conversions otherNullabilityOpt)
+        private Conversions(Binder binder, int currentRecursionDepth, bool includeNullability, Conversions otherNullabilityOpt, bool sharperFunctionToInterface)
             : base(binder.Compilation.Assembly.CorLibrary, currentRecursionDepth, includeNullability, otherNullabilityOpt)
         {
             _binder = binder;
+            _sharperFunctionToInterface = sharperFunctionToInterface;
+        }
+
+        /// <summary>
+        /// These conversions, plus the conversion of a lambda or method group to a Sharper single-method interface.
+        /// </summary>
+        internal Conversions WithSharperFunctionToInterface()
+        {
+            return new Conversions(_binder, currentRecursionDepth, IncludeNullability, otherNullabilityOpt: null, sharperFunctionToInterface: true);
         }
 
         protected override ConversionsBase CreateInstance(int currentRecursionDepth)
         {
-            return new Conversions(_binder, currentRecursionDepth, IncludeNullability, otherNullabilityOpt: null);
+            return new Conversions(_binder, currentRecursionDepth, IncludeNullability, otherNullabilityOpt: null, _sharperFunctionToInterface);
+        }
+
+        internal override NamedTypeSymbol GetSharperFunctionToInterfaceDelegateType(BoundExpression source, TypeSymbol destination)
+        {
+            return _sharperFunctionToInterface
+                ? _binder.GetSharperFunctionToInterfaceDelegateType(source, destination)
+                : null;
+        }
+
+        protected override Conversion GetSharperFunctionToInterfaceConversion(BoundExpression source, TypeSymbol destination, ref CompoundUseSiteInfo<AssemblySymbol> useSiteInfo)
+        {
+            return _sharperFunctionToInterface
+                ? _binder.ClassifySharperFunctionToInterface(source, destination, ref useSiteInfo)
+                : Conversion.NoConversion;
         }
 
 #nullable enable
@@ -38,7 +67,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         protected override ConversionsBase WithNullabilityCore(bool includeNullability)
         {
             Debug.Assert(IncludeNullability != includeNullability);
-            return new Conversions(_binder, currentRecursionDepth, includeNullability, this);
+            return new Conversions(_binder, currentRecursionDepth, includeNullability, this, _sharperFunctionToInterface);
         }
 
         public override Conversion GetMethodGroupDelegateConversion(BoundMethodGroup source, TypeSymbol destination, ref CompoundUseSiteInfo<AssemblySymbol> useSiteInfo)

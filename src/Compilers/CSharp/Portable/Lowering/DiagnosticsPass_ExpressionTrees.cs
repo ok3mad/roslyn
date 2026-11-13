@@ -257,6 +257,27 @@ namespace Microsoft.CodeAnalysis.CSharp
             return base.VisitSharperPipe(node);
         }
 
+        public override BoundNode VisitSharperInterfaceCreation(BoundSharperInterfaceCreation node)
+        {
+            if (_inExpressionLambda)
+            {
+                Error(ErrorCode.ERR_SharperInterfaceInitializerInExpressionTree, node);
+            }
+
+            return base.VisitSharperInterfaceCreation(node);
+        }
+
+        public override BoundNode VisitSharperFunctionToInterface(BoundSharperFunctionToInterface node)
+        {
+            if (_inExpressionLambda)
+            {
+                // The generated class that implements the interface has no expression tree form.
+                Error(ErrorCode.ERR_SharperFunctionToInterfaceInExpressionTree, node, node.Type);
+            }
+
+            return base.VisitSharperFunctionToInterface(node);
+        }
+
         public override BoundNode VisitDeconstructionAssignmentOperator(BoundDeconstructionAssignmentOperator node)
         {
             if (!node.HasAnyErrors)

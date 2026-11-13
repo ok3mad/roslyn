@@ -643,7 +643,17 @@ namespace Microsoft.CodeAnalysis.CSharp
         {
             BoundExpression result;
             var methodGroup = MethodGroup.GetInstance();
-            methodGroup.PopulateWithSingleMethod(boundExpression, delegateType.DelegateInvokeMethod);
+            var invokeMethod = delegateType.DelegateInvokeMethod;
+            if (invokeMethod is SharperNamedDelegateInvokeMethodSymbol namedInvokeMethod && analyzedArguments.Names.Count > 0)
+            {
+                // Sharper: the parameter names of a function type are not in metadata yet, so they must not decide
+                // what a call means: a named argument still names a parameter of Func or Action.
+                // PROTOTYPE(sharper): named arguments with the function type's names (https://github.com/ok3mad/roslyn/issues/215).
+                invokeMethod = namedInvokeMethod.WithoutSharperNames;
+                delegateType = delegateType.WithSharperFunctionTypeParameterNames(default);
+            }
+
+            methodGroup.PopulateWithSingleMethod(boundExpression, invokeMethod);
             var overloadResolutionResult = OverloadResolutionResult<MethodSymbol>.GetInstance();
             CompoundUseSiteInfo<AssemblySymbol> useSiteInfo = GetNewCompoundUseSiteInfo(diagnostics);
             OverloadResolution.MethodInvocationOverloadResolution(
@@ -725,6 +735,12 @@ namespace Microsoft.CodeAnalysis.CSharp
             var resolution = this.ResolveMethodGroup(
                 methodGroup, expression, methodName, analyzedArguments,
                 useSiteInfo: ref useSiteInfo,
+                options: (ignoreNormalFormIfHasValidParamsParameter ? OverloadResolution.Options.IgnoreNormalFormIfHasValidParamsParameter : OverloadResolution.Options.None) |
+                         (disallowExpandedNonArrayParams ? OverloadResolution.Options.DisallowExpandedNonArrayParams : OverloadResolution.Options.None) |
+                         (analyzedArguments.HasDynamicArgument ? OverloadResolution.Options.DynamicResolution : OverloadResolution.Options.None),
+                acceptOnlyMethods: acceptOnlyMethods);
+            resolution = RetryResolveMethodGroupWithSharperFunctionToInterface(
+                resolution, methodGroup, expression, methodName, analyzedArguments, ref useSiteInfo,
                 options: (ignoreNormalFormIfHasValidParamsParameter ? OverloadResolution.Options.IgnoreNormalFormIfHasValidParamsParameter : OverloadResolution.Options.None) |
                          (disallowExpandedNonArrayParams ? OverloadResolution.Options.DisallowExpandedNonArrayParams : OverloadResolution.Options.None) |
                          (analyzedArguments.HasDynamicArgument ? OverloadResolution.Options.DynamicResolution : OverloadResolution.Options.None),
@@ -2000,13 +2016,14 @@ namespace Microsoft.CodeAnalysis.CSharp
                 BoundParameter parameter => parameter.ParameterSymbol.Name,
                 _ => ((BoundLocal)local).LocalSymbol,
             };
-            ErrorCode code = local switch
+            // One code for every variable that cannot be reassigned; the message names what the user wrote (#228).
+            MessageID cause = local switch
             {
-                BoundLocal { LocalSymbol: SourceLocalSymbol { IsVal: false } } => ErrorCode.WRN_SharperReadOnlyLocalMemberCallOnCopy,
-                BoundParameter { ParameterSymbol: SourceComplexParameterSymbolBase { IsSharperReadOnly: true } } => ErrorCode.WRN_SharperReadOnlyParameterMemberCallOnCopy,
-                _ => ErrorCode.WRN_SharperValMemberCallOnCopy,
+                BoundLocal { LocalSymbol: SourceLocalSymbol { IsVal: false } } => MessageID.IDS_READONLYLOCAL,
+                BoundParameter { ParameterSymbol: SourceComplexParameterSymbolBase { IsSharperVal: false, IsSharperReadOnly: true } } => MessageID.IDS_READONLYPARAMETER,
+                _ => MessageID.IDS_VALLOCAL,
             };
-            Error(diagnostics, code, local.Syntax, method, variable);
+            Error(diagnostics, ErrorCode.WRN_SharperValMemberCallOnCopy, local.Syntax, method, variable, cause.Localize());
             return true;
         }
 

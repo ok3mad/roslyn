@@ -58,8 +58,11 @@ A type is immutable for its exact instances when:
 - **Observers.** Instance getters and indexers, `Equals` and `GetHashCode` only read fields, constants, parameters and
   locals, and call other pure observers: those on `this`, on a value whose static type is immutable, and non-virtual
   ones of immutable types. Operators of the attested types count as pure when they return a value type (`decimal +`,
-  `string ==`). When the observer's return type is statically immutable, it may also create a result equivalent to the
-  last one:
+  `string ==`). They also call the members a [`[Pure]`](purity.md) body may call, by the same query: `[Pure]` members,
+  through a `[Pure]` virtual or interface slot too, and the attested members of other assemblies (`Math.Abs`). Such a
+  member may create a mutable object, so its result must be of a statically immutable type unless the observer may
+  create one itself. When the observer's return type is statically immutable, it may also create a result equivalent
+  to the last one:
   - `new` of a statically immutable type whose constructor is pure (`Total => new Money(Net + Tax, "EUR")`). A
     constructor is pure when it writes only the fields and auto-properties of its own `this` and otherwise follows the
     observer rules, and so do the instance initializers it runs and the constructor it calls; a record's or a primary

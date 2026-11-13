@@ -79,6 +79,17 @@ namespace Microsoft.CodeAnalysis.CSharp
         /// </summary>
         private SmallDictionary<MethodSymbol, MethodSymbol>? _constructorInitializers;
 
+        /// <summary>
+        /// The classes generated for Sharper lambdas converted to single-method interfaces in this type, by interface
+        /// definition (<see cref="SharperInterfaceAdapterTypeSymbol"/>).
+        /// </summary>
+        internal Dictionary<NamedTypeSymbol, SharperInterfaceAdapterTypeSymbol>? SharperInterfaceAdapters;
+
+        /// <summary>
+        /// The classes generated for Sharper interface initializers in this type (<see cref="SharperInterfaceStubTypeSymbol"/>).
+        /// </summary>
+        internal List<SharperInterfaceStubTypeSymbol>? SharperInterfaceStubs;
+
         public TypeCompilationState(NamedTypeSymbol? typeOpt, CSharpCompilation compilation, PEModuleBuilder? moduleBuilderOpt)
         {
             this.Compilation = compilation;

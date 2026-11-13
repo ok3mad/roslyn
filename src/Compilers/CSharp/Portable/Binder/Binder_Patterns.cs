@@ -498,7 +498,21 @@ namespace Microsoft.CodeAnalysis.CSharp
         {
             ExpressionSyntax innerExpression = SkipParensAndNullSuppressions(expression, diagnostics, ref hasErrors);
 
-            var originalExpression = BindTypeOrRValue(innerExpression, diagnostics);
+            // BindTypeOrRValue, with a look at a method group first.
+            var originalExpression = BindExpression(innerExpression, diagnostics: diagnostics, invoked: false, indexed: false);
+            if (originalExpression is BoundMethodGroup methodGroup &&
+                TryBindSharperPredicatePattern(node, innerExpression, methodGroup, unionType, inputType, hasErrors, diagnostics) is { } predicate)
+            {
+                // Sharper: 'x is IsEven' (Feature 13, slice 2).
+                hasUnionMatching = false;
+                return predicate;
+            }
+
+            if (originalExpression.Kind != BoundKind.TypeExpression)
+            {
+                originalExpression = CheckValue(originalExpression, BindValueKind.RValue, diagnostics);
+            }
+
             bool wasExpression = originalExpression.Kind != BoundKind.TypeExpression;
 
             if (wasExpression)
@@ -628,10 +642,45 @@ namespace Microsoft.CodeAnalysis.CSharp
             out BoundExpression originalExpression,
             BinaryOperatorKind? sharperOpaqueOperator,
             out bool isSharperOpaque)
+            => BindExpressionForPattern(unionType, inputType, patternExpression, ref hasErrors, diagnostics, out constantValueOpt, out wasExpression,
+                out patternExpressionConversion, out originalExpression, sharperOpaqueOperator, out isSharperOpaque, sharperPredicateNode: null, out _);
+
+        /// <summary>
+        /// Binds the expression for an is-type right-hand-side, in case it does not bind as a type. With a
+        /// <paramref name="sharperPredicateNode"/>, a method group may make a predicate pattern (Sharper, Feature 13,
+        /// slice 2), returned in <paramref name="sharperPredicate"/> with <paramref name="isSharperOpaque"/> set.
+        /// </summary>
+        private BoundExpression BindExpressionForPattern(
+            NamedTypeSymbol? unionType,
+            TypeSymbol inputType,
+            ExpressionSyntax patternExpression,
+            ref bool hasErrors,
+            BindingDiagnosticBag diagnostics,
+            out ConstantValue? constantValueOpt,
+            out bool wasExpression,
+            out Conversion patternExpressionConversion,
+            out BoundExpression originalExpression,
+            BinaryOperatorKind? sharperOpaqueOperator,
+            out bool isSharperOpaque,
+            SyntaxNode? sharperPredicateNode,
+            out BoundOpaquePattern? sharperPredicate)
         {
+            sharperPredicate = null;
             isSharperOpaque = false;
             constantValueOpt = null;
             originalExpression = BindExpression(patternExpression, diagnostics: diagnostics, invoked: false, indexed: false);
+            if (sharperPredicateNode is not null &&
+                originalExpression is BoundMethodGroup methodGroup &&
+                TryBindSharperPredicatePattern(sharperPredicateNode, patternExpression, methodGroup, unionType, inputType, hasErrors, diagnostics) is { } predicate)
+            {
+                // Sharper: 'x is IsEven' (Feature 13, slice 2).
+                isSharperOpaque = true;
+                wasExpression = true;
+                patternExpressionConversion = Conversion.NoConversion;
+                sharperPredicate = predicate;
+                return predicate.Value;
+            }
+
             originalExpression = CheckValue(originalExpression, BindValueKind.RValue, diagnostics);
             wasExpression = originalExpression.Kind switch { BoundKind.BadExpression => false, BoundKind.TypeExpression => false, _ => true };
             patternExpressionConversion = Conversion.NoConversion;

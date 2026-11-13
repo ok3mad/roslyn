@@ -272,6 +272,15 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
         public override RefKind RefKind => _refKind;
 
+        internal override SharperRefinement? SharperReturnRefinement
+        {
+            get
+            {
+                ComputeReturnType();
+                return _lazySharperInferredReturnType?.GetReturnRefinement();
+            }
+        }
+
         internal void ComputeReturnType()
         {
             if (_lazyReturnType is object)

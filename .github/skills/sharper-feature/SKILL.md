@@ -100,6 +100,30 @@ implementation plan, "Feature 3"):
    generic argument and a tuple element in a statement, and the overlapping C# expressions with every token that can
    follow them.
 
+### Data carried on a type symbol, outside its meaning
+
+Function type parameter names (`(int width, int height) -> int`) follow tuple element names: a record on the
+constructed type (`SharperFunctionTypeNames`, on `NamedTypeSymbol.UncommonProperties` next to `TupleExtraData`) that
+comparisons ignore under `TypeCompareKind.IgnoreTupleNames`. For the next thing a type carries this way:
+
+1. **Grep the precedent's threading, and decide each site**: `git grep -n "TupleNames\|TupleElementNames\|WithTupleData"`.
+   The sites fall into four groups: comparison (`NamedTypeSymbol.Equals`), merging (`MergeEquivalentTypes`), copying
+   on a rebuild (`WithTupleDataFrom`, which every rebuild already calls, so put the copy inside it), and emit
+   (`ContainsTupleNames` on a type, the encoders, attribute synthesis), which must not see data that is not emitted.
+   Record the result as a table (implementation plan, "The tuple-name sites").
+2. **Store it only where it can occur.** `Func` and `Action` are always a `ConstructedNamedTypeSymbol`, so one subclass
+   stores the names, not the 28 that override `WithTupleDataCore`.
+3. **An override's types come from the overridden member.** `CustomModifierUtils.CopyTypeCustomModifiers` runs for every
+   override and implementation and re-applies what the runtime ignores from the override's own types; new data must
+   be re-applied there too, or the override silently has the base's and the override check never fires.
+4. **A display string can be metadata.** `SymbolDisplayFormat.ExplicitInterfaceImplementationFormat` names explicit
+   implementations in metadata, and `ILVisualizationFormat` is what IL baselines print; a change to how a type displays
+   opts those out (`SymbolDisplayCompilerInternalOptions.ExcludeSharperFunctionTypeNames`).
+5. **A member that differs only in data** (the named `Invoke`) is the substituted member itself with one override
+   (`SharperNamedDelegateInvokeMethodSymbol : SubstitutedMethodSymbol`), so equality, lowering and emit need nothing.
+6. **Test that nothing is emitted**: compare the IL and the metadata dump (members, attributes, metadata names) with
+   the C# twin's, and read the type back through a metadata reference and a compilation reference.
+
 ## Traps Found So Far
 
 1. **Kind lists outside the visitors.** `ExitPointsWalker` throws on unknown pending-branch kinds, and the lowering
@@ -188,7 +212,8 @@ implementation plan, "Feature 3"):
    explicitly typed parameter list, and `ParameterHelpers.CheckParameterModifiers` (CS9272 for `params`). Each needed the
    binder's decision, and the semantic model needed it too for `GetTypeInfo` on `val`. A decision made by lookup cannot
    be recomputed from syntax later, so it travels with the bound state (`UnboundLambdaState.ParameterIsSharperVal`) to
-   the symbol (`LambdaParameterSymbol.IsSharperVal`).
+   the symbol (`SourceComplexParameterSymbolBase.IsSharperVal`, which a method's `val x` sets too, from
+   `SourceParameterSymbol.Create`).
 20. **A modifier C# rejects may be rejected by the parser.** `readonly` on a local parses, but the parser attaches CS0106
    to the token, so no binder change can lift it. Gate the error in the parser, then add it back wherever the same
    modifier list builds another construct (`readonly` locals: the local function path and `const readonly`). Check that
@@ -209,7 +234,7 @@ implementation plan, "Feature 3"):
 22. **Simple symbols keep no syntax.** A rule read from a parameter's syntax needs the syntax on the symbol, but
    `SourceParameterSymbol.Create` makes a parameter with no modifiers, attributes or default a
    `SourceSimpleParameterSymbol`, which drops it. Add the condition there so such parameters stay complex
-   (`readonly` parameters), or carry the decision in a flag, as `LambdaParameterSymbol.IsSharperVal` does.
+   (`readonly` parameters, `val` method parameters), or carry the decision in a flag, as `IsSharperVal` does.
 
 23. **A signature inferred from a body must not be computed under the method-checks lock.** `MethodChecks` runs under a
    per-method lock (`LazyMethodChecks`) and reads the return type itself; binding a body there reads other methods'
@@ -383,7 +408,13 @@ implementation plan, "Feature 3"):
    (`SkipInVisitor`), so an expression a DAG test evaluates is seen by flow analysis only through its pattern: read it
    in the state before the match (no pattern variable is assigned yet), and let the nullable walker analyze it at the
    DAG node, as it does a `when` clause. The decision DAG rewriter lowers it (`_localRewriter.VisitExpression`), which
-   can change `_factory.Syntax`.
+   can change `_factory.Syntax`. An expression over the pattern's input (the predicate pattern's call `IsEven(x)`) uses
+   a `BoundValuePlaceholder` for the input, which every pass that reaches it must register: the decision DAG rewriter
+   (`AddPlaceholderReplacement` with the DAG temp), the nullable walker (with the temp's state at the DAG node, and once
+   more for the semantic model's visit of the pattern), `RefSafetyAnalysis` (the pattern input's escape scope) and the
+   `PurityWalker` allow list. A call whose syntax is a bare name trips `InterceptableNameSyntax`'s assert, as the pipe's
+   bare stage did. Comparing two such tests structurally (`IsSameComparison`) must treat the two placeholders as one
+   input and compare a static call's type receiver, or two identical tests never share.
 
 43. **A prologue belongs to the emitted method, after state machine rewriting.** Code that must run when a method is
    called (the refinement guard) cannot go into the bound body: an iterator's or `async` method's body becomes
@@ -397,6 +428,25 @@ implementation plan, "Feature 3"):
    of the `[Immutable]` attribute table that does not bind by name, made when the declaration binds so that
    `GetEmbeddedTypes` sees it, and written from the symbol's `AddSynthesizedAttributes` (`SharperRefinementGuard`,
    `SharperImmutabilityAttribute.Refinement`).
+
+44. **A contract on a virtual or interface slot is checked from both ends.** `[Pure]` on a slot binds every override and
+   implementation (`SharperImmutability.CheckPureOverrides`). On the declaration side, walk `OverriddenMethod` for
+   overrides, read `ExplicitInterfaceImplementations`, and ask `FindImplementationForInterfaceMember` for every
+   interface of the type to find implicit implementations, also one inherited from a base class, which is reported on
+   the type that declares the interface. On the call side, a call binds to the most derived override visible on the
+   receiver, not to the slot, so the query walks the overridden members and asks the interface map of each one's own
+   type (`IsPureSlot`); a member that filled the slot once stays one for its overrides. An error in a Sharper file is
+   a warning in a C# file of the same compilation, where the attribute does not bind; skip the members the compiler
+   writes.
+
+45. **A fact inferred from a body rides on the inference that already binds it, and its metadata must not depend on the
+   body.** The return refinement is computed from the returned values of the binding that infers the return type and
+   published with the type (`SharperInferredReturnType.Result`), so it needs no second binding and cannot add a cycle:
+   reading it reads the type first. An attribute on a return that comes and goes with the body breaks Edit and
+   Continue: the delta writer pairs a method's `Param` rows with the baseline's by position
+   (`DeltaMetadataWriter.EmitParametersFromOriginalMetadata`) and cannot add or remove the return's row, so a body edit
+   crashed the emit. Emit the attribute whenever the declaration allows the fact, with a value for "nothing known"
+   (`SharperRefinement.AnyValueText`), and write an emit-difference test for a body edit that adds and removes the fact.
 
 ## Inferred Types
 
@@ -438,6 +488,20 @@ member that infers the same way by a stand-in in those bindings, not only the on
 its own inference, bind the same body again and find the first in progress, a cycle that depends on the order. Tell
 these bindings apart by their root binder (`ConversionFrame.IsInBinding`), not by the containing member: a nested
 inferred return type binds the same body with the same member.
+
+46. **A conversion that only applies where C# fails needs a retry, not a classification.** Classifying a new conversion
+   everywhere changes valid C#: `N(object)` next to `N(IF)` would pick the interface by betterness, and an instance method
+   would hide an extension method in an outer scope. Lambda to interface (#29) classifies its kind only in conversions made
+   by `Conversions.WithSharperFunctionToInterface()`, used by a retry after C# found no conversion or no applicable
+   candidate. Retry the whole method group resolution (`ResolveMethodGroup`, instance and extension scopes together), not
+   one scope's overload resolution. A lambda converted to a delegate whose body fails to bind has no conversion
+   (`LambdaConversionResult.BindingFailed`); accept it in the retry so the body's own errors are reported.
+47. **A synthesized class that copies an interface's type parameters must drop their variance.** The runtime refuses a
+   class with `in` or `out` type parameters (`TypeLoadException`); `SynthesizedTypeParameterSymbol.Variance` is invariant
+   on classes. Keep the constraints: the runtime checks them on the implemented interface. Nest such a class in the type
+   being compiled (`ModuleBuilderOpt.AddSynthesizedDefinition`, bodies through `TypeCompilationState.AddSynthesizedMethod`):
+   a top-level class cannot implement a private or protected interface. A `None` operation whose child has the same syntax
+   must be implicit, or the IOperation test hook reports a duplicate node.
 
 ## Testing
 

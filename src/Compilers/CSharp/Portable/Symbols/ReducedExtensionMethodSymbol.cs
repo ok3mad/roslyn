@@ -22,6 +22,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
     /// </summary>
     internal sealed class ReducedExtensionMethodSymbol : MethodSymbol
     {
+        internal override SharperRefinement SharperReturnRefinement => _reducedFrom.SharperReturnRefinement;
+
         private readonly MethodSymbol _reducedFrom;
         private readonly TypeMap _typeMap;
         private readonly ImmutableArray<TypeParameterSymbol> _typeParameters;

@@ -257,6 +257,11 @@
         <target state="translated">ruta de acceso</target>
         <note>'path' is a placeholder for a file path or glob in a directive like '#:include path'.</note>
       </trans-unit>
+      <trans-unit id="Make_0_generic">
+        <source>Make '{0}' generic</source>
+        <target state="new">Make '{0}' generic</target>
+        <note>Sharper: adds a type parameter to the method or local function {0} and uses it as the type of an 'infer' parameter that nothing pins.</note>
+      </trans-unit>
       <trans-unit id="Make_private_field_readonly_when_possible">
         <source>Make private fields readonly when possible</source>
         <target state="translated">Cuando sea posible, hacer que los cambios privados sean solo de lectura</target>

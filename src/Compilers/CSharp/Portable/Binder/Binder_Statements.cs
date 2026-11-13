@@ -1220,6 +1220,14 @@ namespace Microsoft.CodeAnalysis.CSharp
 
             Debug.Assert(declTypeOpt.HasType);
 
+            if (isVar && localSymbol is { IsVal: true, RefKind: RefKind.None })
+            {
+                // Sharper: a 'val' local keeps the refinement of its initializer (Feature 11, step 3).
+                // PROTOTYPE(sharper): 'val' variables of deconstructions, patterns, foreach and 'out', and locals with a
+                // written type ('readonly int x = 3;'), have no refinement yet.
+                localSymbol.SetSharperRefinement(hasErrors || initializerOpt is null ? null : SharperRefinement.OfExpression(initializerOpt, declarator));
+            }
+
             if (kind == LocalDeclarationKind.FixedVariable)
             {
                 // NOTE: this is an error, but it won't prevent further binding.
@@ -2137,6 +2145,12 @@ namespace Microsoft.CodeAnalysis.CSharp
             conversion = (flags & (ConversionForAssignmentFlags.IncrementAssignment | ConversionForAssignmentFlags.InterpolatedString)) == 0 ?
                                  this.Conversions.ClassifyConversionFromExpression(expression, targetType, isChecked: CheckOverflowAtRuntime, ref useSiteInfo) :
                                  this.Conversions.ClassifyConversionFromType(expression.Type, targetType, isChecked: CheckOverflowAtRuntime, ref useSiteInfo);
+
+            if (!conversion.Exists && flags == ConversionForAssignmentFlags.None)
+            {
+                // Sharper: a lambda or method group converts to a single-method interface where C# finds no conversion.
+                conversion = ClassifySharperFunctionToInterfaceAfterError(expression, targetType, ref useSiteInfo);
+            }
 
             diagnostics.Add(expression.Syntax, useSiteInfo);
 
@@ -3409,6 +3423,12 @@ namespace Microsoft.CodeAnalysis.CSharp
             else
             {
                 conversion = this.Conversions.ClassifyConversionFromExpression(argument, returnType, isChecked: CheckOverflowAtRuntime, ref useSiteInfo);
+            }
+
+            if (!conversion.Exists && returnRefKind == RefKind.None && !badAsyncReturnAlreadyReported)
+            {
+                // Sharper: a lambda or method group converts to a single-method interface where C# finds no conversion.
+                conversion = ClassifySharperFunctionToInterfaceAfterError(argument, returnType, ref useSiteInfo);
             }
 
             diagnostics.Add(syntax, useSiteInfo);

@@ -307,6 +307,12 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         /// variable is a ref-local, the writability refers to ref-assignment,
         /// not assignment to the underlying storage.
         /// </summary>
+        /// <summary>
+        /// Sharper: the refinement of a <c>val</c> local, which keeps the refinement of its initializer; null if there
+        /// is none, or before the declaration is bound (Feature 11 of the implementation plan, step 3).
+        /// </summary>
+        internal virtual SharperRefinement SharperRefinement => null;
+
         internal virtual bool IsWritableVariable
         {
             get

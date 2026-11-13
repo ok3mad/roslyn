@@ -316,6 +316,12 @@ namespace Microsoft.CodeAnalysis.Operations
                 // whose only child is the left side. The stage cannot be a child, because the control flow graph has no
                 // region for its 'it' (#155).
                 case BoundKind.SharperPipe:
+                // PROTOTYPE(sharper): Sharper's lambda to single-method interface has no IOperation shape yet: analyzers see
+                // an OperationKind.None node, typed as the interface, whose only child is the delegate creation (#29).
+                case BoundKind.SharperFunctionToInterface:
+                // PROTOTYPE(sharper): Sharper's interface initializer has no IOperation shape yet: analyzers see an
+                // OperationKind.None node, typed as the interface, whose children are the assigned values (#30).
+                case BoundKind.SharperInterfaceCreation:
                     ConstantValue? constantValue = (boundNode as BoundExpression)?.ConstantValueOpt;
                     bool isImplicit = boundNode.WasCompilerGenerated;
 
@@ -324,6 +330,8 @@ namespace Microsoft.CodeAnalysis.Operations
                         switch (boundNode.Kind)
                         {
                             case BoundKind.FixedLocalCollectionInitializer:
+                            // The lambda or method group under it has the same syntax.
+                            case BoundKind.SharperFunctionToInterface:
                                 isImplicit = true;
                                 break;
                         }
@@ -2635,14 +2643,28 @@ namespace Microsoft.CodeAnalysis.Operations
 
         /// <summary>
         /// Sharper: an opaque pattern (Feature 13) is a relational or constant pattern whose value is not a constant.
+        /// A predicate pattern (slice 2), <c>x is IsEven</c>, is a constant pattern whose value is a reference to the method
+        /// it calls with the input, as the pattern is written.
         /// </summary>
         private IPatternOperation CreateBoundOpaquePatternOperation(BoundOpaquePattern boundOpaquePattern)
         {
-            IOperation value = Create(boundOpaquePattern.Value);
             SyntaxNode syntax = boundOpaquePattern.Syntax;
             bool isImplicit = boundOpaquePattern.WasCompilerGenerated;
             ITypeSymbol? inputType = boundOpaquePattern.InputType.GetPublicSymbol();
             ITypeSymbol? narrowedType = boundOpaquePattern.NarrowedType.GetPublicSymbol();
+            if (boundOpaquePattern is { PredicateArgument: not null, Value: BoundCall call })
+            {
+                MethodSymbol method = call.Method;
+                BoundExpression? receiver = call.InvokedAsExtensionMethod ? call.Arguments[0] : call.ReceiverOpt;
+                TypeParameterSymbol? constrainedToType = GetConstrainedToType(method, receiver);
+                bool isVirtual = constrainedToType is not null ||
+                    ((method.IsAbstract || method.IsOverride || method.IsVirtual) && receiver is not BoundBaseReference);
+                IOperation? instance = call.InvokedAsExtensionMethod ? Create(receiver) : CreateReceiverOperation(receiver, method);
+                var reference = new MethodReferenceOperation(method.GetPublicSymbol(), constrainedToType.GetPublicSymbol(), isVirtual, instance, _semanticModel, call.Syntax, type: null, isImplicit: false);
+                return new ConstantPatternOperation(reference, inputType, narrowedType, _semanticModel, syntax, isImplicit);
+            }
+
+            IOperation value = Create(boundOpaquePattern.Value);
             if (boundOpaquePattern.IsConstantPattern)
             {
                 return new ConstantPatternOperation(value, inputType, narrowedType, _semanticModel, syntax, isImplicit);

@@ -27,6 +27,24 @@ namespace Microsoft.CodeAnalysis.CSharp.Syntax
         /// </summary>
         internal bool IsInfer => ((InternalSyntax.TypeSyntax)this.Green).IsInfer && this.IsFeatureEnabled(MessageID.IDS_FeatureSharper);
 
+        /// <summary>
+        /// True if this is the identifier <c>val</c> as the type of a parameter that has an <c>infer</c> form: a method,
+        /// local function, constructor, operator, indexer or delegate parameter, where <c>val x</c> is
+        /// <c>readonly infer x</c> (#178). Lambdas have their own <c>(val x)</c> form, and anonymous methods and
+        /// extension block receivers keep <c>val</c> a type name. Syntax only: like <see cref="IsInfer"/>, it still binds
+        /// to a type named <c>val</c> when one is in scope.
+        /// </summary>
+        internal bool IsSharperValParameterType
+            => IsVal &&
+                Parent is ParameterSyntax { Parent: BaseParameterListSyntax { Parent: not (ExtensionBlockDeclarationSyntax or ParenthesizedLambdaExpressionSyntax or AnonymousMethodExpressionSyntax) } } parameter &&
+                parameter.Type == this;
+
+        /// <summary>
+        /// True if this may stand for an inferred parameter type: <see cref="IsInfer"/>, or <c>val</c> where it is
+        /// <c>readonly infer</c> (<see cref="IsSharperValParameterType"/>).
+        /// </summary>
+        internal bool IsInferOrValParameterType => IsInfer || IsSharperValParameterType;
+
         public bool IsUnmanaged => ((InternalSyntax.TypeSyntax)this.Green).IsUnmanaged;
 
         public bool IsNotNull => ((InternalSyntax.TypeSyntax)this.Green).IsNotNull;

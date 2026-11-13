@@ -2526,10 +2526,10 @@ namespace Microsoft.CodeAnalysis.CSharp
         // ERR_SharperFunctionTypeParameterName = SharperErrorCodes.Base + 7,   Retired in step N1 of function type parameter names, which keeps the names.
         ERR_SharperFunctionTypeParameterModifier = SharperErrorCodes.Base + 8,
         ERR_SharperFunctionTypeTooManyParameters = SharperErrorCodes.Base + 9,
-        WRN_SharperReadOnlyLocalMemberCallOnCopy = SharperErrorCodes.Base + 10,
+        // WRN_SharperReadOnlyLocalMemberCallOnCopy = SharperErrorCodes.Base + 10,   Retired in #228: WRN_SharperValMemberCallOnCopy names the cause instead.
         ERR_SharperReadOnlyLocalWithNoInitializer = SharperErrorCodes.Base + 11,
         ERR_SharperSpreadRefStructEnumerator = SharperErrorCodes.Base + 12,
-        WRN_SharperReadOnlyParameterMemberCallOnCopy = SharperErrorCodes.Base + 13,
+        // WRN_SharperReadOnlyParameterMemberCallOnCopy = SharperErrorCodes.Base + 13,   Retired in #228: WRN_SharperValMemberCallOnCopy names the cause instead.
         ERR_SharperInferNoType = SharperErrorCodes.Base + 14,
         ERR_SharperInferNotSupportedYet = SharperErrorCodes.Base + 15,
         ERR_SharperInferNoBody = SharperErrorCodes.Base + 16,
@@ -2568,7 +2568,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         ERR_SharperPipeInExpressionTree = SharperErrorCodes.Base + 49,
         ERR_SharperPureNotPure = SharperErrorCodes.Base + 50,
         ERR_SharperPureStructMemberNotReadOnly = SharperErrorCodes.Base + 51,
-        ERR_SharperPureVirtual = SharperErrorCodes.Base + 52,
+        // ERR_SharperPureVirtual = SharperErrorCodes.Base + 52,   Retired in the second part of purity slice 1 (#173): [Pure] is allowed on virtual, abstract, override and interface members.
         WRN_SharperPureOutArgumentNotFresh = SharperErrorCodes.Base + 53,
         ERR_SharperItClaimedByInnerCall = SharperErrorCodes.Base + 54,
         ERR_SharperInferEventNoOverriddenMember = SharperErrorCodes.Base + 55,
@@ -2580,6 +2580,17 @@ namespace Microsoft.CodeAnalysis.CSharp
         ERR_SharperRefinementNotSupportedYet = SharperErrorCodes.Base + 61,
         ERR_SharperOpaquePatternNotPure = SharperErrorCodes.Base + 62,
         ERR_SharperInferParameterConversionCycle = SharperErrorCodes.Base + 63,
+        ERR_SharperPureOverrideNotPure = SharperErrorCodes.Base + 64,
+        WRN_SharperPureOverrideNotPure = SharperErrorCodes.Base + 65,
+        ERR_SharperCantChangeFunctionTypeNamesOnOverride = SharperErrorCodes.Base + 66,
+        ERR_SharperImplBadFunctionTypeNames = SharperErrorCodes.Base + 67,
+        ERR_SharperPartialMemberInconsistentFunctionTypeNames = SharperErrorCodes.Base + 68,
+        ERR_SharperPredicatePatternNotPure = SharperErrorCodes.Base + 69,
+        ERR_SharperFunctionToInterfaceInExpressionTree = SharperErrorCodes.Base + 70,
+        ERR_SharperInterfaceInitializerMissingMembers = SharperErrorCodes.Base + 71,
+        ERR_SharperInterfaceInitializerBadMember = SharperErrorCodes.Base + 72,
+        ERR_SharperInterfaceInitializerStaticAbstract = SharperErrorCodes.Base + 73,
+        ERR_SharperInterfaceInitializerInExpressionTree = SharperErrorCodes.Base + 74,
 
         // Note: you will need to do the following after adding errors:
         //  1) Update ErrorFacts.IsBuildOnlyDiagnostic (src/Compilers/CSharp/Portable/Errors/ErrorFacts.cs)

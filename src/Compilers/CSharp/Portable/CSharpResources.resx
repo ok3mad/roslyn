@@ -8411,10 +8411,11 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
     <value>'..' on a dynamic operand is a range, not a spread</value>
   </data>
   <data name="WRN_SharperValMemberCallOnCopy" xml:space="preserve">
-    <value>Call to non-readonly member '{0}' on val variable '{1}' runs on a copy, so '{1}' is not changed.</value>
+    <value>Call to non-readonly member '{0}' on {2} '{1}' runs on a copy, so '{1}' is not changed.</value>
+    <comment>{2} names why '{1}' cannot be reassigned: 'val variable', 'readonly local' or 'readonly parameter'.</comment>
   </data>
   <data name="WRN_SharperValMemberCallOnCopy_Title" xml:space="preserve">
-    <value>Call to a non-readonly member on a val variable runs on a copy</value>
+    <value>Call to a non-readonly member on a variable that cannot be reassigned runs on a copy</value>
   </data>
   <data name="ERR_SharperValMayNotBindToType" xml:space="preserve">
     <value>The syntax 'val' for a pattern is not permitted to refer to a type, but '{0}' is in scope here. Use '@val' for the type.</value>
@@ -8431,23 +8432,20 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
   <data name="ERR_SharperFunctionTypeTooManyParameters" xml:space="preserve">
     <value>A function type cannot have more than {0} parameters, because no 'System.Func' or 'System.Action' delegate has more.</value>
   </data>
-  <data name="WRN_SharperReadOnlyLocalMemberCallOnCopy" xml:space="preserve">
-    <value>Call to non-readonly member '{0}' on readonly local '{1}' runs on a copy, so '{1}' is not changed.</value>
+  <data name="ERR_SharperCantChangeFunctionTypeNamesOnOverride" xml:space="preserve">
+    <value>'{0}': cannot change function type parameter names when overriding inherited member '{1}'</value>
   </data>
-  <data name="WRN_SharperReadOnlyLocalMemberCallOnCopy_Title" xml:space="preserve">
-    <value>Call to a non-readonly member on a readonly local runs on a copy</value>
+  <data name="ERR_SharperImplBadFunctionTypeNames" xml:space="preserve">
+    <value>The function type parameter names in the signature of '{0}' must match the function type parameter names of interface member '{1}' (including on the return type).</value>
+  </data>
+  <data name="ERR_SharperPartialMemberInconsistentFunctionTypeNames" xml:space="preserve">
+    <value>Both partial member declarations, '{0}' and '{1}', must use the same function type parameter names.</value>
   </data>
   <data name="ERR_SharperReadOnlyLocalWithNoInitializer" xml:space="preserve">
     <value>A readonly local must be initialized in its declaration, because it cannot be assigned later.</value>
   </data>
   <data name="ERR_SharperSpreadRefStructEnumerator" xml:space="preserve">
     <value>A spread 'yield return ..' cannot enumerate '{0}' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead.</value>
-  </data>
-  <data name="WRN_SharperReadOnlyParameterMemberCallOnCopy" xml:space="preserve">
-    <value>Call to non-readonly member '{0}' on readonly parameter '{1}' runs on a copy, so '{1}' is not changed.</value>
-  </data>
-  <data name="WRN_SharperReadOnlyParameterMemberCallOnCopy_Title" xml:space="preserve">
-    <value>Call to a non-readonly member on a readonly parameter runs on a copy</value>
   </data>
   <data name="ERR_SharperInferNoType" xml:space="preserve">
     <value>Cannot infer the return type of '{0}', because the value it returns ({1}) has no type. Write the return type.</value>
@@ -8569,8 +8567,14 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
   <data name="ERR_SharperPureStructMemberNotReadOnly" xml:space="preserve">
     <value>'{0}' is marked [Pure], so it must be readonly: declare it 'readonly', or make the struct 'readonly'.</value>
   </data>
-  <data name="ERR_SharperPureVirtual" xml:space="preserve">
-    <value>'{0}' cannot be marked [Pure] yet: [Pure] is not supported on virtual, abstract and override members.</value>
+  <data name="ERR_SharperPureOverrideNotPure" xml:space="preserve">
+    <value>'{0}' overrides or implements the [Pure] member '{1}', so it must be marked [Pure] too.</value>
+  </data>
+  <data name="WRN_SharperPureOverrideNotPure" xml:space="preserve">
+    <value>'{0}' overrides or implements the [Pure] member '{1}', so it must be pure too, but it is not marked [Pure], and a C# file is not checked. Move it to a Sharper file and mark it [Pure].</value>
+  </data>
+  <data name="WRN_SharperPureOverrideNotPure_Title" xml:space="preserve">
+    <value>A member in a C# file overrides or implements a [Pure] member</value>
   </data>
   <data name="WRN_SharperPureOutArgumentNotFresh" xml:space="preserve">
     <value>The out argument '{1}' of the [Pure] member '{0}' is not a fresh local, so '{0}' may observe its own write through another argument.</value>
@@ -8583,6 +8587,21 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
   </data>
   <data name="ERR_SharperInferParameterConversionCycle" xml:space="preserve">
     <value>Cannot infer the type of parameter '{0}' from the conversions of '{1}', because binding the members that convert '{1}' needs the signature of '{1}', directly or through other members whose types are inferred. Write the parameter type.</value>
+  </data>
+  <data name="ERR_SharperInterfaceInitializerMissingMembers" xml:space="preserve">
+    <value>The initializer of '{0}' does not assign {1}, which has no default implementation. Assign it, or add '_ = Unexpected' to make unassigned members throw.</value>
+  </data>
+  <data name="ERR_SharperInterfaceInitializerBadMember" xml:space="preserve">
+    <value>'{0}' cannot be assigned in an interface initializer. Only methods that are not generic, and properties with a getter and no setter, can be assigned, and only when no other member of the interface has the same name.</value>
+  </data>
+  <data name="ERR_SharperInterfaceInitializerStaticAbstract" xml:space="preserve">
+    <value>Cannot create an instance of '{0}' with an initializer, because it has the static abstract member '{1}'.</value>
+  </data>
+  <data name="ERR_SharperInterfaceInitializerInExpressionTree" xml:space="preserve">
+    <value>An expression tree cannot contain an interface initializer.</value>
+  </data>
+  <data name="ERR_SharperFunctionToInterfaceInExpressionTree" xml:space="preserve">
+    <value>An expression tree cannot contain a lambda or method group converted to the interface '{0}'.</value>
   </data>
   <data name="ERR_SharperInferParameterUsesDisagree" xml:space="preserve">
     <value>Cannot infer the type of parameter '{0}', because its uses need different types: '{1}' for '{2}' and '{3}' for '{4}'. Write the parameter type.</value>
@@ -8631,6 +8650,9 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
   </data>
   <data name="ERR_SharperOpaquePatternNotPure" xml:space="preserve">
     <value>The operand of a pattern that is not a constant must be pure, but it is not: {0}.</value>
+  </data>
+  <data name="ERR_SharperPredicatePatternNotPure" xml:space="preserve">
+    <value>The method of a predicate pattern must be pure, but it is not: {0}.</value>
   </data>
   <data name="WRN_SharperPureOutArgumentNotFresh_Title" xml:space="preserve">
     <value>The out argument of a [Pure] member is not a fresh local</value>

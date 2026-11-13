@@ -394,6 +394,18 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
         internal override bool IsWritableVariable => base.IsWritableVariable && !IsValOrSharperReadOnly;
 
+        // Sharper: set when the declaration of a 'val' local is bound. Binding is deterministic, so a body that is bound
+        // again (to infer a return type and to compile, or a lambda body per delegate type) sets an equal refinement.
+        private SharperRefinement _sharperRefinement;
+
+        internal sealed override SharperRefinement SharperRefinement => Volatile.Read(ref _sharperRefinement);
+
+        internal void SetSharperRefinement(SharperRefinement refinement)
+        {
+            Debug.Assert(IsVal);
+            Volatile.Write(ref _sharperRefinement, refinement);
+        }
+
 #nullable enable
         public override TypeWithAnnotations GetTypeWithAnnotations(SyntaxNode reference, BindingDiagnosticBag diagnostics)
         {

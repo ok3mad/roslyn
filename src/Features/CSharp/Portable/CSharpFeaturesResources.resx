@@ -649,4 +649,8 @@
     <value>Use 'infer'</value>
     <comment>Sharper: replaces a written return or parameter type with 'infer', which the compiler infers to the same type. 'infer' is a keyword and should not be localized.</comment>
   </data>
+  <data name="Make_0_generic" xml:space="preserve">
+    <value>Make '{0}' generic</value>
+    <comment>Sharper: adds a type parameter to the method or local function {0} and uses it as the type of an 'infer' parameter that nothing pins.</comment>
+  </data>
 </root>

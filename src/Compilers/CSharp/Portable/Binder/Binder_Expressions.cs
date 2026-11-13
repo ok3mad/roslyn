@@ -7196,6 +7196,14 @@ namespace Microsoft.CodeAnalysis.CSharp
                 }
             }
 
+            // PROTOTYPE(sharper): a target-typed 'new() { ... }' keeps CS0144; nullable analysis treats target-typed creations
+            // as object creations.
+            if (!wasTargetTyped && IsSharperInterfaceInitializer(node, analyzedArguments, initializerOpt))
+            {
+                // Sharper: 'new IProfiles { Load = id => ... }' creates a generated class (#30).
+                return BindSharperInterfaceInitializer(node, type, initializerOpt!, diagnostics);
+            }
+
             // interfaces can't be instantiated in C#
             diagnostics.Add(ErrorCode.ERR_NoNewAbstract, node.Location, type);
             return MakeBadExpressionForObjectCreation(node, type, analyzedArguments, initializerOpt, typeNode, diagnostics);
@@ -7454,6 +7462,24 @@ namespace Microsoft.CodeAnalysis.CSharp
             {
                 // We have at least one accessible candidate constructor, perform overload resolution with accessible candidateConstructors.
                 this.OverloadResolution.ObjectCreationOverloadResolution(candidateConstructors, analyzedArguments, result, dynamicResolution: false, isEarlyAttributeBinding: IsEarlyAttributeBinder, ref useSiteInfo);
+
+                if (!result.HasAnyApplicableMember && ShouldRetrySharperFunctionToInterface(analyzedArguments))
+                {
+                    // Sharper: retry with the conversion of a lambda or method group to a single-method interface.
+                    OverloadResolutionResult<MethodSymbol> retryResult = OverloadResolutionResult<MethodSymbol>.GetInstance();
+                    var retryUseSiteInfo = new CompoundUseSiteInfo<AssemblySymbol>(useSiteInfo);
+                    GetSharperFunctionToInterfaceBinder().OverloadResolution.ObjectCreationOverloadResolution(candidateConstructors, analyzedArguments, retryResult, dynamicResolution: false, isEarlyAttributeBinding: IsEarlyAttributeBinder, ref retryUseSiteInfo);
+                    if (retryResult.HasAnyApplicableMember)
+                    {
+                        result.Free();
+                        result = retryResult;
+                        useSiteInfo.MergeAndClear(ref retryUseSiteInfo);
+                    }
+                    else
+                    {
+                        retryResult.Free();
+                    }
+                }
 
                 if (result.Succeeded)
                 {
@@ -12347,12 +12373,23 @@ namespace Microsoft.CodeAnalysis.CSharp
                     }
                     if (checkConstraints(Compilation, Conversions, delegateType, typeArguments))
                     {
-                        return delegateType.Construct(typeArguments);
+                        var constructed = delegateType.Construct(typeArguments);
+                        if (syntax is AnonymousFunctionExpressionSyntax && syntax.IsFeatureEnabled(MessageID.IDS_FeatureSharper))
+                        {
+                            // Sharper: the natural type of a lambda has the names of its parameters, as the type of
+                            // a tuple literal has the names of its elements. Discards have no name.
+                            constructed = constructed.WithSharperFunctionTypeParameterNames(
+                                parameters.SelectAsArray(static p => p.IsDiscard || string.IsNullOrEmpty(p.Name) ? null : p.Name));
+                        }
+
+                        return constructed;
                     }
                 }
             }
 
             // Synthesize a delegate type for other cases.
+            // PROTOTYPE(sharper): the parameter names of a lambda or a function type with ref parameters would attach
+            // here, without becoming part of the anonymous delegate's identity (https://github.com/ok3mad/roslyn/issues/56).
             var fieldsBuilder = ArrayBuilder<AnonymousTypeField>.GetInstance(parameterTypes.Length + 1);
             var location = syntax.Location;
             for (int i = 0; i < parameterTypes.Length; i++)

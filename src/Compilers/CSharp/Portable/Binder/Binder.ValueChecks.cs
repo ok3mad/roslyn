@@ -1394,8 +1394,9 @@ namespace Microsoft.CodeAnalysis.CSharp
 
             ParameterSymbol parameterSymbol = parameter.ParameterSymbol;
 
-            // A Sharper (val x) lambda parameter cannot be reassigned, like a val local; a ref val can still be written through.
-            if (parameterSymbol is LambdaParameterSymbol { IsSharperVal: true })
+            // A Sharper val parameter, (val x) in a lambda or val x in a method (#178), cannot be reassigned, like a val local;
+            // a ref val can still be written through.
+            if (parameterSymbol is SourceComplexParameterSymbolBase { IsSharperVal: true })
             {
                 if (parameterSymbol.RefKind == RefKind.None && RequiresAssignableVariable(valueKind))
                 {

@@ -734,14 +734,25 @@ namespace Microsoft.CodeAnalysis.CSharp
             var typeArguments = ArrayBuilder<TypeWithAnnotations>.GetInstance(syntax.Parameters.Count + 1);
             var typeArgumentLocations = ArrayBuilder<Location>.GetInstance(syntax.Parameters.Count + 1);
             var names = PooledHashSet<string>.GetInstance();
+            var parameterNames = ArrayBuilder<string>.GetInstance(syntax.Parameters.Count);
             foreach (var parameter in syntax.Parameters)
             {
-                // Names are optional, per parameter, and do not change the type. As tuple element names, they must be
-                // unique. PROTOTYPE(sharper): carry the names on the type (https://github.com/ok3mad/roslyn/issues/213).
-                if (parameter.Identifier.IsKind(SyntaxKind.IdentifierToken) && !names.Add(parameter.Identifier.ValueText))
+                // Names are optional, per parameter, and are carried on the type without changing what it means, as
+                // tuple element names are. They must be unique; a duplicate is dropped.
+                string parameterName = null;
+                if (parameter.Identifier.IsKind(SyntaxKind.IdentifierToken))
                 {
-                    diagnostics.Add(ErrorCode.ERR_DuplicateParamName, parameter.Identifier.GetLocation(), parameter.Identifier.ValueText);
+                    if (names.Add(parameter.Identifier.ValueText))
+                    {
+                        parameterName = parameter.Identifier.ValueText;
+                    }
+                    else
+                    {
+                        diagnostics.Add(ErrorCode.ERR_DuplicateParamName, parameter.Identifier.GetLocation(), parameter.Identifier.ValueText);
+                    }
                 }
+
+                parameterNames.Add(string.IsNullOrEmpty(parameterName) ? null : parameterName);
 
                 // PROTOTYPE(sharper): ref, out and in parameters need a delegate other than Func and Action
                 // (https://github.com/ok3mad/roslyn/issues/56).
@@ -777,6 +788,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 diagnostics.Add(ErrorCode.ERR_SharperFunctionTypeTooManyParameters, syntax.Location, 16);
                 typeArguments.Free();
                 typeArgumentLocations.Free();
+                parameterNames.Free();
                 return new ExtendedErrorTypeSymbol(this.Compilation, name: "", arity: 0, errorInfo: null, unreported: false);
             }
 
@@ -785,10 +797,12 @@ namespace Microsoft.CodeAnalysis.CSharp
             {
                 typeArguments.Free();
                 typeArgumentLocations.Free();
+                parameterNames.Free();
                 return delegateType;
             }
 
-            return BindSharperTypeAlias(delegateType, typeArguments.ToImmutableAndFree(), typeArgumentLocations.ToImmutableAndFree(), syntax, basesBeingResolved, diagnostics);
+            return BindSharperTypeAlias(delegateType, typeArguments.ToImmutableAndFree(), typeArgumentLocations.ToImmutableAndFree(), syntax, basesBeingResolved, diagnostics)
+                .WithSharperFunctionTypeParameterNames(parameterNames.ToImmutableAndFree());
         }
 
         private TypeSymbol BindTupleType(TupleTypeSyntax syntax, BindingDiagnosticBag diagnostics, ConsList<TypeSymbol> basesBeingResolved)
