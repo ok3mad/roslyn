@@ -482,5 +482,124 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             Assert.Equal("System.Int32 C.Use(IF f)", model.GetSymbolInfo(call).Symbol.ToTestDisplayString());
             Assert.Equal("System.Int32", model.GetTypeInfo(((BinaryExpressionSyntax)lambdas[1].Body).Left).Type.ToTestDisplayString());
         }
+
+        [Fact]
+        public void LambdaToInterface_TypeInference()
+        {
+            // Step b: a lambda or method group infers type arguments through the interface's method, as for its delegate.
+            var source = """
+                using System;
+                using System.Threading.Tasks;
+
+                interface IGet<T> { T Get(); }
+                interface IParser<T> { T Parse(string s); }
+                interface IMap<TIn, TOut> { TOut Map(TIn x); }
+                interface ILoad<T> { Task<T> Load(); }
+
+                static class E
+                {
+                    public static R Then<T, R>(this T x, IMap<T, R> f) => f.Map(x);
+                }
+
+                class C
+                {
+                    static T Make<T>(IGet<T> g) => g.Get();
+                    static T Parse<T>(string s, IParser<T> p) => p.Parse(s);
+                    static Task<T> Run<T>(ILoad<T> l) => l.Load();
+                    static string Kind<T>(T value) => typeof(T).Name;
+                    static int Number() => 7;
+
+                    static string Pick<T>(Func<T> f) => "delegate " + Kind(f());
+                    static string Pick<T>(IGet<T> g) => "interface " + Kind(g.Get());
+
+                    static async Task Main()
+                    {
+                        Console.Write(Kind(Make(() => 42)));                          // from the return type
+                        Console.Write(" " + Kind(Parse("abc", (string s) => s.Length)));  // explicit parameter types
+                        Console.Write(" " + Kind(5.Then(x => x * 2.0)));               // T from 5, then R from the body
+                        Console.Write(" " + Kind(Make(Number)));                       // a method group
+                        Console.Write(" " + Kind(await Run(async () => { await Task.Yield(); return "s"; })));
+                        Console.Write(" " + Pick(() => 1L));                            // the delegate overload still wins
+                    }
+                }
+                """;
+            CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90,
+                expectedOutput: ExecutionConditionUtil.IsCoreClr ? "Int32 Int32 Double Int32 String delegate Int64" : null).VerifyDiagnostics();
+        }
+
+        [Fact]
+        public void LambdaToInterface_TypeInference_Errors()
+        {
+            var source = """
+                interface IMap<T> { T Map(T x); }
+
+                class C
+                {
+                    static T Apply<T>(IMap<T> m) => default!;
+                    static T ApplyF<T>(System.Func<T, T> f) => default!;
+
+                    static void Main()
+                    {
+                        Apply(x => x);      // nothing fixes T, as for the delegate
+                        ApplyF(x => x);
+                        Apply((int x) => x);
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions).VerifyDiagnostics(
+                // (10,9): error CS0411: The type arguments for method 'C.Apply<T>(IMap<T>)' cannot be inferred from the usage. Try specifying the type arguments explicitly.
+                //         Apply(x => x);      // nothing fixes T, as for the delegate
+                Diagnostic(ErrorCode.ERR_CantInferMethTypeArgs, "Apply").WithArguments("C.Apply<T>(IMap<T>)").WithLocation(10, 9),
+                // (11,9): error CS0411: The type arguments for method 'C.ApplyF<T>(Func<T, T>)' cannot be inferred from the usage. Try specifying the type arguments explicitly.
+                //         ApplyF(x => x);
+                Diagnostic(ErrorCode.ERR_CantInferMethTypeArgs, "ApplyF").WithArguments("C.ApplyF<T>(System.Func<T, T>)").WithLocation(11, 9));
+        }
+
+        [Fact]
+        public void LambdaToInterface_TypeInference_Nullable()
+        {
+            var source = """
+                #nullable enable
+                interface IGet<T> { T Get(); }
+
+                class C
+                {
+                    static T Make<T>(IGet<T> g) => g.Get();
+                    static T MakeF<T>(System.Func<T> f) => f();
+                    static void Use(IGet<string> g) { }
+
+                    static void Main()
+                    {
+                        int a = Make(() => (string?)null).Length;   // T is string?
+                        int b = Make(() => "s").Length;
+                        int c = MakeF(() => (string?)null).Length;
+                        string? n = null;
+                        int d = Make(() => n).Length;
+                        int e = MakeF(() => n).Length;
+                        n = "x";
+                        int f = Make(() => n).Length;
+                        int g = MakeF(() => n).Length;
+                        Use(() => null);
+                    }
+                }
+                """;
+            // The interface lines warn where their Func twins do: the lambda's flow state decides T.
+            CreateCompilation(source, parseOptions: s_sharperOptions).VerifyDiagnostics(
+                // (12,17): warning CS8602: Dereference of a possibly null reference.
+                //         int a = Make(() => (string?)null).Length;   // T is string?
+                Diagnostic(ErrorCode.WRN_NullReferenceReceiver, "Make(() => (string?)null)").WithLocation(12, 17),
+                // (14,17): warning CS8602: Dereference of a possibly null reference.
+                //         int c = MakeF(() => (string?)null).Length;
+                Diagnostic(ErrorCode.WRN_NullReferenceReceiver, "MakeF(() => (string?)null)").WithLocation(14, 17),
+                // (16,17): warning CS8602: Dereference of a possibly null reference.
+                //         int d = Make(() => n).Length;
+                Diagnostic(ErrorCode.WRN_NullReferenceReceiver, "Make(() => n)").WithLocation(16, 17),
+                // (17,17): warning CS8602: Dereference of a possibly null reference.
+                //         int e = MakeF(() => n).Length;
+                Diagnostic(ErrorCode.WRN_NullReferenceReceiver, "MakeF(() => n)").WithLocation(17, 17),
+                // (21,19): warning CS8603: Possible null reference return.
+                //         Use(() => null);
+                Diagnostic(ErrorCode.WRN_NullReferenceReturn, "null").WithLocation(21, 19));
+        }
     }
 }

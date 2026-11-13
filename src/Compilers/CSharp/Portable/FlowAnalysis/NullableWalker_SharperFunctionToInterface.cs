@@ -19,5 +19,25 @@ namespace Microsoft.CodeAnalysis.CSharp
             SetResultType(node, TypeWithState.Create(node.Type, NullableFlowState.NotNull));
             return null;
         }
+
+        /// <summary>
+        /// A Sharper interface initializer (#30): each value is converted as if assigned to the member, a lambda against its
+        /// method's signature and a property's value against its type, and the result is never null.
+        /// </summary>
+        public override BoundNode? VisitSharperInterfaceCreation(BoundSharperInterfaceCreation node)
+        {
+            for (int i = 0; i < node.Values.Length; i++)
+            {
+                var value = node.Values[i];
+                var targetType = node.Members[i] is PropertySymbol property
+                    ? property.TypeWithAnnotations
+                    : TypeWithAnnotations.Create(value.Type);
+                VisitOptionalImplicitConversion(value, targetType, useLegacyWarnings: false, trackMembers: false, AssignmentKind.Assignment);
+                Unsplit();
+            }
+
+            SetResultType(node, TypeWithState.Create(node.Type, NullableFlowState.NotNull));
+            return null;
+        }
     }
 }

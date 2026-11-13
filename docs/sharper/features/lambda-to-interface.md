@@ -1,6 +1,6 @@
 # Lambda to single-method interface
 
-**Status:** Prototype, step a. Requires `/features:sharper`. Issue: [#29](https://github.com/ok3mad/roslyn/issues/29).
+**Status:** Prototype, steps a and b. Requires `/features:sharper`. Issue: [#29](https://github.com/ok3mad/roslyn/issues/29).
 The interface initializer that builds on it is [#30](https://github.com/ok3mad/roslyn/issues/30).
 
 ## Summary
@@ -52,8 +52,13 @@ Render(user, new Profiles(id => new Profile("Pro")));
   body has errors reports the body's errors, as for a delegate. In a call, if the retry finds applicable candidates,
   its errors are reported (CS0121 between two interface overloads); otherwise C#'s are. An expression tree cannot
   contain the conversion (CS20070).
-- **Type inference.** Not yet (step b): a type parameter that appears only in the interface must be fixed by another
-  argument. `Apply<T>(T x, IMap<T> map)` works with `Apply(3, x => x + 1)`, because `3` fixes `T`.
+- **Type inference** (step b). In the retry, a lambda or method group whose parameter is an eligible interface is
+  inferred as for the delegate of the interface's method: `IMap<T>` counts as `Func<T, T>`. So `Make(() => 42)` infers
+  `T` from the return type of `T Make<T>(IGet<T> g)`, `Parse("abc", (string s) => s.Length)` from explicit parameter
+  types, and `5.Then(x => x * 2.0)` fixes `T` from `5` before inferring `R` from the body. A lambda that a delegate
+  would leave uninferred is CS0411 here too: `Apply(x => x)` for `T Apply<T>(IMap<T> m)`. Nullable analysis re-infers
+  from the lambda's flow state, as for a delegate, so `Make(() => (string?)null).Length` warns (CS8602). Outside the
+  retry, C# infers as before.
 
 ## Lowering
 
@@ -78,7 +83,6 @@ as the interface, whose child is the delegate creation.
 
 Each is a `PROTOTYPE(sharper)` comment or listed here:
 
-- Type inference through the interface's method (step b).
 - Casts, `?:`, switch expressions, delegate invocations and indexers: the conversion is only tried in assignments,
   initializers, returns, method calls and object creations (including `: base(...)`).
 - A delegate-typed value (not a lambda or method group) converting to an interface.
@@ -91,6 +95,8 @@ Each is a `PROTOTYPE(sharper)` comment or listed here:
 | What | Where |
 | --- | --- |
 | Eligibility, the delegate type, classification, the retries | `Binder/Binder_SharperFunctionToInterface.cs` |
+| Type inference | `MethodTypeInferrer.MapSharperFunctionToInterfaceParameterTypes`, through `ConversionsBase.GetSharperFunctionToInterfaceDelegateType` |
+| Nullable re-inference | `NullableWalker.RemoveArgumentConversions` takes the function out of the argument, and `VisitConversion` converts it to the re-inferred interface's delegate |
 | Retry sites | `GenerateConversionForAssignment` and `CreateReturnConversion` (`Binder_Statements.cs`), `BindMethodGroupInvocation` (`Binder_Invocation.cs`), `TryPerformOverloadResolutionWithConstructorSubset` (`Binder_Expressions.cs`) |
 | Conversion kind | `ConversionKind.SharperFunctionToInterface`, classified only by `Conversions.WithSharperFunctionToInterface()` |
 | Bound node | `BoundSharperFunctionToInterface` |

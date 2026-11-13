@@ -1655,6 +1655,21 @@
     <Field Name="DelegateTypeOverDefinition" Type="TypeSymbol"/>
   </Node>
 
+  <!--
+  Sharper's interface initializer (#30), new IProfiles { Load = id => ..., Plan = "Pro", _ = Unexpected }, where C# reports
+  CS0144. Members are the assigned members, of Type or of its base interfaces, in source order, and Values their values,
+  converted to the delegate of a method or to the type of a property. ThrowsForUnassigned is '_ = Unexpected': the other
+  members without a default implementation throw. Lowering creates an instance of a generated class. Type is the interface.
+  -->
+  <Node Name="BoundSharperInterfaceCreation" Base="BoundExpression" DoesNotSurvive="LocalRewriting">
+    <Field Name="Type" Type="TypeSymbol" Override="true" Null="disallow"/>
+    <Field Name="Members" Type="ImmutableArray&lt;Symbol&gt;"/>
+    <Field Name="Values" Type="ImmutableArray&lt;BoundExpression&gt;"/>
+    <!-- The types of Values written over the type parameters of the interface's definition: the generated class's fields. -->
+    <Field Name="FieldTypesOverDefinition" Type="ImmutableArray&lt;TypeSymbol&gt;"/>
+    <Field Name="ThrowsForUnassigned" Type="bool"/>
+  </Node>
+
   <Node Name="BoundDecisionDag" Base="BoundNode">
     <Field Name="RootNode" Type="BoundDecisionDagNode" Null="disallow"/>
     <Field Name="SuitableForLowering" Type="bool"/>

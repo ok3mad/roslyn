@@ -89,6 +89,14 @@ namespace Microsoft.CodeAnalysis.CSharp
         protected virtual Conversion GetSharperFunctionToInterfaceConversion(BoundExpression source, TypeSymbol destination, ref CompoundUseSiteInfo<AssemblySymbol> useSiteInfo)
             => Conversion.NoConversion;
 
+        /// <summary>
+        /// For type inference in the same retry: the delegate for the method of the single-method interface that a lambda
+        /// or method group converts to, written over the method's type parameters (<c>IMap&lt;T&gt;</c> gives
+        /// <c>Func&lt;T, T&gt;</c>), or null.
+        /// </summary>
+        internal virtual NamedTypeSymbol GetSharperFunctionToInterfaceDelegateType(BoundExpression source, TypeSymbol destination)
+            => null;
+
         internal AssemblySymbol CorLibrary { get { return corLibrary; } }
 
 #nullable enable

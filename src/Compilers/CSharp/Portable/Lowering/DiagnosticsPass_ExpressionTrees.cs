@@ -257,6 +257,16 @@ namespace Microsoft.CodeAnalysis.CSharp
             return base.VisitSharperPipe(node);
         }
 
+        public override BoundNode VisitSharperInterfaceCreation(BoundSharperInterfaceCreation node)
+        {
+            if (_inExpressionLambda)
+            {
+                Error(ErrorCode.ERR_SharperInterfaceInitializerInExpressionTree, node);
+            }
+
+            return base.VisitSharperInterfaceCreation(node);
+        }
+
         public override BoundNode VisitSharperFunctionToInterface(BoundSharperFunctionToInterface node)
         {
             if (_inExpressionLambda)

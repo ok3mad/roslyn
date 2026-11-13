@@ -157,6 +157,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         UnconvertedSharperPipe,
         SharperPipe,
         SharperFunctionToInterface,
+        SharperInterfaceCreation,
         DecisionDag,
         EvaluationDecisionDagNode,
         TestDecisionDagNode,
@@ -5295,6 +5296,44 @@ namespace Microsoft.CodeAnalysis.CSharp
         }
     }
 
+    internal sealed partial class BoundSharperInterfaceCreation : BoundExpression
+    {
+        public BoundSharperInterfaceCreation(SyntaxNode syntax, ImmutableArray<Symbol> members, ImmutableArray<BoundExpression> values, ImmutableArray<TypeSymbol> fieldTypesOverDefinition, bool throwsForUnassigned, TypeSymbol type, bool hasErrors = false)
+            : base(BoundKind.SharperInterfaceCreation, syntax, type, hasErrors || values.HasErrors())
+        {
+
+            RoslynDebug.Assert(!members.IsDefault, "Field 'members' cannot be null (use Null=\"allow\" in BoundNodes.xml to remove this check)");
+            RoslynDebug.Assert(!values.IsDefault, "Field 'values' cannot be null (use Null=\"allow\" in BoundNodes.xml to remove this check)");
+            RoslynDebug.Assert(!fieldTypesOverDefinition.IsDefault, "Field 'fieldTypesOverDefinition' cannot be null (use Null=\"allow\" in BoundNodes.xml to remove this check)");
+            RoslynDebug.Assert(type is object, "Field 'type' cannot be null (make the type nullable in BoundNodes.xml to remove this check)");
+
+            this.Members = members;
+            this.Values = values;
+            this.FieldTypesOverDefinition = fieldTypesOverDefinition;
+            this.ThrowsForUnassigned = throwsForUnassigned;
+        }
+
+        public new TypeSymbol Type => base.Type!;
+        public ImmutableArray<Symbol> Members { get; }
+        public ImmutableArray<BoundExpression> Values { get; }
+        public ImmutableArray<TypeSymbol> FieldTypesOverDefinition { get; }
+        public bool ThrowsForUnassigned { get; }
+
+        [DebuggerStepThrough]
+        public override BoundNode? Accept(BoundTreeVisitor visitor) => visitor.VisitSharperInterfaceCreation(this);
+
+        public BoundSharperInterfaceCreation Update(ImmutableArray<Symbol> members, ImmutableArray<BoundExpression> values, ImmutableArray<TypeSymbol> fieldTypesOverDefinition, bool throwsForUnassigned, TypeSymbol type)
+        {
+            if (members != this.Members || values != this.Values || fieldTypesOverDefinition != this.FieldTypesOverDefinition || throwsForUnassigned != this.ThrowsForUnassigned || !TypeSymbol.Equals(type, this.Type, TypeCompareKind.ConsiderEverything))
+            {
+                var result = new BoundSharperInterfaceCreation(this.Syntax, members, values, fieldTypesOverDefinition, throwsForUnassigned, type, this.HasErrors);
+                result.CopyAttributes(this);
+                return result;
+            }
+            return this;
+        }
+    }
+
     internal sealed partial class BoundDecisionDag : BoundNode
     {
         public BoundDecisionDag(SyntaxNode syntax, BoundDecisionDagNode rootNode, bool suitableForLowering, bool hasErrors = false)
@@ -9671,6 +9710,8 @@ namespace Microsoft.CodeAnalysis.CSharp
                     return VisitSharperPipe((BoundSharperPipe)node, arg);
                 case BoundKind.SharperFunctionToInterface:
                     return VisitSharperFunctionToInterface((BoundSharperFunctionToInterface)node, arg);
+                case BoundKind.SharperInterfaceCreation:
+                    return VisitSharperInterfaceCreation((BoundSharperInterfaceCreation)node, arg);
                 case BoundKind.DecisionDag:
                     return VisitDecisionDag((BoundDecisionDag)node, arg);
                 case BoundKind.EvaluationDecisionDagNode:
@@ -10032,6 +10073,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         public virtual R VisitUnconvertedSharperPipe(BoundUnconvertedSharperPipe node, A arg) => this.DefaultVisit(node, arg);
         public virtual R VisitSharperPipe(BoundSharperPipe node, A arg) => this.DefaultVisit(node, arg);
         public virtual R VisitSharperFunctionToInterface(BoundSharperFunctionToInterface node, A arg) => this.DefaultVisit(node, arg);
+        public virtual R VisitSharperInterfaceCreation(BoundSharperInterfaceCreation node, A arg) => this.DefaultVisit(node, arg);
         public virtual R VisitDecisionDag(BoundDecisionDag node, A arg) => this.DefaultVisit(node, arg);
         public virtual R VisitEvaluationDecisionDagNode(BoundEvaluationDecisionDagNode node, A arg) => this.DefaultVisit(node, arg);
         public virtual R VisitTestDecisionDagNode(BoundTestDecisionDagNode node, A arg) => this.DefaultVisit(node, arg);
@@ -10281,6 +10323,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         public virtual BoundNode? VisitUnconvertedSharperPipe(BoundUnconvertedSharperPipe node) => this.DefaultVisit(node);
         public virtual BoundNode? VisitSharperPipe(BoundSharperPipe node) => this.DefaultVisit(node);
         public virtual BoundNode? VisitSharperFunctionToInterface(BoundSharperFunctionToInterface node) => this.DefaultVisit(node);
+        public virtual BoundNode? VisitSharperInterfaceCreation(BoundSharperInterfaceCreation node) => this.DefaultVisit(node);
         public virtual BoundNode? VisitDecisionDag(BoundDecisionDag node) => this.DefaultVisit(node);
         public virtual BoundNode? VisitEvaluationDecisionDagNode(BoundEvaluationDecisionDagNode node) => this.DefaultVisit(node);
         public virtual BoundNode? VisitTestDecisionDagNode(BoundTestDecisionDagNode node) => this.DefaultVisit(node);
@@ -10946,6 +10989,11 @@ namespace Microsoft.CodeAnalysis.CSharp
         public override BoundNode? VisitSharperFunctionToInterface(BoundSharperFunctionToInterface node)
         {
             this.Visit(node.Function);
+            return null;
+        }
+        public override BoundNode? VisitSharperInterfaceCreation(BoundSharperInterfaceCreation node)
+        {
+            this.VisitList(node.Values);
             return null;
         }
         public override BoundNode? VisitDecisionDag(BoundDecisionDag node)
@@ -12399,6 +12447,13 @@ namespace Microsoft.CodeAnalysis.CSharp
             TypeSymbol? delegateTypeOverDefinition = this.VisitType(node.DelegateTypeOverDefinition);
             TypeSymbol? type = this.VisitType(node.Type);
             return node.Update(function, interfaceMethod, delegateTypeOverDefinition, type);
+        }
+        public override BoundNode? VisitSharperInterfaceCreation(BoundSharperInterfaceCreation node)
+        {
+            ImmutableArray<Symbol> members = this.VisitSymbols<Symbol>(node.Members);
+            ImmutableArray<BoundExpression> values = this.VisitList(node.Values);
+            TypeSymbol? type = this.VisitType(node.Type);
+            return node.Update(members, values, node.FieldTypesOverDefinition, node.ThrowsForUnassigned, type);
         }
         public override BoundNode? VisitDecisionDag(BoundDecisionDag node)
         {
@@ -14732,6 +14787,25 @@ namespace Microsoft.CodeAnalysis.CSharp
             else
             {
                 updatedNode = node.Update(function, interfaceMethod, delegateTypeOverDefinition, node.Type);
+            }
+            return updatedNode;
+        }
+
+        public override BoundNode? VisitSharperInterfaceCreation(BoundSharperInterfaceCreation node)
+        {
+            ImmutableArray<Symbol> members = GetUpdatedArray(node, node.Members);
+            ImmutableArray<TypeSymbol> fieldTypesOverDefinition = GetUpdatedArray(node, node.FieldTypesOverDefinition);
+            ImmutableArray<BoundExpression> values = this.VisitList(node.Values);
+            BoundSharperInterfaceCreation updatedNode;
+
+            if (_updatedNullabilities.TryGetValue(node, out (NullabilityInfo Info, TypeSymbol? Type) infoAndType))
+            {
+                updatedNode = node.Update(members, values, fieldTypesOverDefinition, node.ThrowsForUnassigned, infoAndType.Type!);
+                updatedNode.TopLevelNullability = infoAndType.Info;
+            }
+            else
+            {
+                updatedNode = node.Update(members, values, fieldTypesOverDefinition, node.ThrowsForUnassigned, node.Type);
             }
             return updatedNode;
         }
@@ -17277,6 +17351,17 @@ namespace Microsoft.CodeAnalysis.CSharp
             new TreeDumperNode("hasErrors", node.HasErrors, null)
         }
         );
+        public override TreeDumperNode VisitSharperInterfaceCreation(BoundSharperInterfaceCreation node, object? arg) => new TreeDumperNode("sharperInterfaceCreation", null, new TreeDumperNode[]
+        {
+            new TreeDumperNode("members", node.Members, null),
+            new TreeDumperNode("values", null, from x in node.Values select Visit(x, null)),
+            new TreeDumperNode("fieldTypesOverDefinition", node.FieldTypesOverDefinition, null),
+            new TreeDumperNode("throwsForUnassigned", node.ThrowsForUnassigned, null),
+            new TreeDumperNode("type", node.Type, null),
+            new TreeDumperNode("isSuppressed", node.IsSuppressed, null),
+            new TreeDumperNode("hasErrors", node.HasErrors, null)
+        }
+        );
         public override TreeDumperNode VisitDecisionDag(BoundDecisionDag node, object? arg) => new TreeDumperNode("decisionDag", null, new TreeDumperNode[]
         {
             new TreeDumperNode("rootNode", null, new TreeDumperNode[] { Visit(node.RootNode, null) }),
@@ -18399,6 +18484,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 BoundKind.UnconvertedSharperPipe => PipelinePhase.InitialBinding,
                 BoundKind.SharperPipe => PipelinePhase.LocalRewriting,
                 BoundKind.SharperFunctionToInterface => PipelinePhase.LocalRewriting,
+                BoundKind.SharperInterfaceCreation => PipelinePhase.LocalRewriting,
                 BoundKind.SpillSequence => PipelinePhase.Spilling,
                 BoundKind.UnconvertedObjectCreationExpression => PipelinePhase.InitialBinding,
                 BoundKind.UnconvertedCollectionExpression => PipelinePhase.InitialBinding,

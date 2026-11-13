@@ -8579,6 +8579,18 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
   <data name="ERR_SharperInferParameterConversionCycle" xml:space="preserve">
     <value>Cannot infer the type of parameter '{0}' from the conversions of '{1}', because binding the members that convert '{1}' needs the signature of '{1}', directly or through other members whose types are inferred. Write the parameter type.</value>
   </data>
+  <data name="ERR_SharperInterfaceInitializerMissingMembers" xml:space="preserve">
+    <value>The initializer of '{0}' does not assign {1}, which has no default implementation. Assign it, or add '_ = Unexpected' to make unassigned members throw.</value>
+  </data>
+  <data name="ERR_SharperInterfaceInitializerBadMember" xml:space="preserve">
+    <value>'{0}' cannot be assigned in an interface initializer. Only methods that are not generic, and properties with a getter and no setter, can be assigned, and only when no other member of the interface has the same name.</value>
+  </data>
+  <data name="ERR_SharperInterfaceInitializerStaticAbstract" xml:space="preserve">
+    <value>Cannot create an instance of '{0}' with an initializer, because it has the static abstract member '{1}'.</value>
+  </data>
+  <data name="ERR_SharperInterfaceInitializerInExpressionTree" xml:space="preserve">
+    <value>An expression tree cannot contain an interface initializer.</value>
+  </data>
   <data name="ERR_SharperFunctionToInterfaceInExpressionTree" xml:space="preserve">
     <value>An expression tree cannot contain a lambda or method group converted to the interface '{0}'.</value>
   </data>

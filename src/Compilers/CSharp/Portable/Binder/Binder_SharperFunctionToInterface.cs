@@ -104,7 +104,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         /// generated class can store it over the definition's type parameters (<paramref name="delegateTypeOverDefinition"/>),
         /// and then substituted with the type's arguments.
         /// </summary>
-        private bool TryGetSharperFunctionToInterface(
+        internal bool TryGetSharperFunctionToInterface(
             TypeSymbol destination,
             SyntaxNode syntax,
             [NotNullWhen(true)] out MethodSymbol? interfaceMethod,
@@ -182,9 +182,6 @@ namespace Microsoft.CodeAnalysis.CSharp
                 return Conversion.NoConversion;
             }
 
-            // PROTOTYPE(sharper): method type inference does not look through the interface's method yet (step b of #29),
-            // so a type parameter that only the interface mentions must be fixed by another argument.
-
             if (source is UnboundLambda lambda)
             {
                 // A lambda whose signature matches converts even when its body has errors, unlike a lambda to a delegate
@@ -200,6 +197,20 @@ namespace Microsoft.CodeAnalysis.CSharp
             return functionConversion.Kind is ConversionKind.MethodGroup
                 ? Conversion.MakeSharperFunctionToInterface(functionConversion)
                 : Conversion.NoConversion;
+        }
+
+        /// <summary>
+        /// The delegate a lambda or method group converts to on its way to a single-method interface, for type inference
+        /// in the retry (<see cref="ConversionsBase.GetSharperFunctionToInterfaceDelegateType"/>): an interface over the
+        /// method's type parameters gives a delegate over them, so the lambda is inferred as for that delegate.
+        /// </summary>
+        internal NamedTypeSymbol? GetSharperFunctionToInterfaceDelegateType(BoundExpression source, TypeSymbol destination)
+        {
+            return source.Kind is BoundKind.UnboundLambda or BoundKind.MethodGroup &&
+                source.Syntax.IsFeatureEnabled(MessageID.IDS_FeatureSharper) &&
+                TryGetSharperFunctionToInterface(destination, source.Syntax, out _, out var delegateType, out _)
+                ? delegateType
+                : null;
         }
 
         /// <summary>

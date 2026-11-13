@@ -34,5 +34,29 @@ namespace Microsoft.CodeAnalysis.CSharp
             _factory.Syntax = syntax;
             return result;
         }
+
+        /// <summary>
+        /// A Sharper interface initializer lowers to <c>new &lt;IProfiles&gt;Stub(value0, value1, ...)</c>, the generated
+        /// class nested in the type being compiled (<see cref="SharperInterfaceStubTypeSymbol"/>), with the values in source
+        /// order.
+        /// </summary>
+        public override BoundNode VisitSharperInterfaceCreation(BoundSharperInterfaceCreation node)
+        {
+            var values = VisitList(node.Values);
+            var stub = SharperInterfaceStubTypeSymbol.GetOrCreate(_factory.CompilationState, node, _diagnostics);
+
+            var interfaceType = (NamedTypeSymbol)node.Type;
+            var discardedUseSiteInfo = CompoundUseSiteInfo<AssemblySymbol>.Discarded;
+            NamedTypeSymbol constructedStub = stub.Arity == 0
+                ? stub
+                : stub.Construct(interfaceType.GetAllTypeArguments(ref discardedUseSiteInfo));
+
+            var syntax = _factory.Syntax;
+            _factory.Syntax = node.Syntax;
+            var creation = _factory.New(stub.Constructor.AsMember(constructedStub), values);
+            var result = _factory.Convert(interfaceType, creation, Conversion.ImplicitReference);
+            _factory.Syntax = syntax;
+            return result;
+        }
     }
 }

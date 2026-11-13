@@ -319,6 +319,9 @@ namespace Microsoft.CodeAnalysis.Operations
                 // PROTOTYPE(sharper): Sharper's lambda to single-method interface has no IOperation shape yet: analyzers see
                 // an OperationKind.None node, typed as the interface, whose only child is the delegate creation (#29).
                 case BoundKind.SharperFunctionToInterface:
+                // PROTOTYPE(sharper): Sharper's interface initializer has no IOperation shape yet: analyzers see an
+                // OperationKind.None node, typed as the interface, whose children are the assigned values (#30).
+                case BoundKind.SharperInterfaceCreation:
                     ConstantValue? constantValue = (boundNode as BoundExpression)?.ConstantValueOpt;
                     bool isImplicit = boundNode.WasCompilerGenerated;
 

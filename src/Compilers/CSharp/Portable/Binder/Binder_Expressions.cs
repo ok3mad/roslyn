@@ -7196,6 +7196,14 @@ namespace Microsoft.CodeAnalysis.CSharp
                 }
             }
 
+            // PROTOTYPE(sharper): a target-typed 'new() { ... }' keeps CS0144; nullable analysis treats target-typed creations
+            // as object creations.
+            if (!wasTargetTyped && IsSharperInterfaceInitializer(node, analyzedArguments, initializerOpt))
+            {
+                // Sharper: 'new IProfiles { Load = id => ... }' creates a generated class (#30).
+                return BindSharperInterfaceInitializer(node, type, initializerOpt!, diagnostics);
+            }
+
             // interfaces can't be instantiated in C#
             diagnostics.Add(ErrorCode.ERR_NoNewAbstract, node.Location, type);
             return MakeBadExpressionForObjectCreation(node, type, analyzedArguments, initializerOpt, typeNode, diagnostics);
