@@ -572,6 +572,8 @@ namespace Microsoft.CodeAnalysis.CSharp
                     // Store the receiver as a ref local if it's a value type to ensure side effects are propagated
                     RefKind refKind = receiver.Type.IsReferenceType ? RefKind.None : RefKind.Ref;
 
+                    refKind = AdjustReadonlyReceiverCaptureRefKind(receiver, refKind);
+
                     if (refKind == RefKind.Ref &&
                         receiver is BoundArrayAccess arrayAccess &&
                         !IsInvariantArray(arrayAccess.Expression.Type))
@@ -612,6 +614,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                              || IsPossibleReferenceTypeReceiverOfConstrainedOrExtensionCall(node.IndexerOrSliceAccess.ExpressionSymbol, capturedReceiver)) &&
                              !CodeGenerator.ReceiverIsKnownToReferToTempIfReferenceType(capturedReceiver) &&
                              ((isLeftOfAssignment && !isRegularAssignment) ||
+                                  strategy is PatternIndexOffsetLoweringStrategy.SubtractFromLength or PatternIndexOffsetLoweringStrategy.UseGetOffsetAPI ||
                                   !CodeGenerator.IsSafeToDereferenceReceiverRefAfterEvaluatingArguments(ImmutableArray.Create(makeOffsetInput)))))
                         {
                             Debug.Assert(capturedReceiver.Type is { IsReferenceType: false, IsValueType: false });
@@ -919,6 +922,8 @@ namespace Microsoft.CodeAnalysis.CSharp
                 // Store the receiver as a ref local if it's a value type to ensure side effects are propagated
                 RefKind refKind = receiver.Type.IsReferenceType ? RefKind.None : RefKind.Ref;
 
+                refKind = AdjustReadonlyReceiverCaptureRefKind(receiver, refKind);
+
                 if (refKind == RefKind.Ref &&
                     receiver is BoundArrayAccess arrayAccess &&
                     !IsInvariantArray(arrayAccess.Expression.Type))
@@ -958,7 +963,8 @@ namespace Microsoft.CodeAnalysis.CSharp
                         ((IsPossibleReferenceTypeReceiverOfConstrainedOrExtensionCall(node.LengthOrCountAccess.ExpressionSymbol, capturedReceiver)
                              || IsPossibleReferenceTypeReceiverOfConstrainedOrExtensionCall(node.IndexerOrSliceAccess.ExpressionSymbol, capturedReceiver)) &&
                          !CodeGenerator.ReceiverIsKnownToReferToTempIfReferenceType(capturedReceiver) &&
-                         !isSafeToDereferenceReceiverRefAfterEvaluatingArguments(startMakeOffsetInput, endMakeOffsetInput, rewrittenRangeArg)))
+                         (lengthIsUsed(rangeExpr, startStrategy, endStrategy) ||
+                          !isSafeToDereferenceReceiverRefAfterEvaluatingArguments(startMakeOffsetInput, endMakeOffsetInput, rewrittenRangeArg))))
                     {
                         Debug.Assert(capturedReceiver.Type is { IsReferenceType: false, IsValueType: false });
 
@@ -1099,6 +1105,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                     storeExpressionIfNotConstant(ref endMakeOffsetInput, localsBuilder, sideEffectsBuilder);
                 }
 
+                Debug.Assert(lengthIsUsed(rangeExpr, startStrategy, endStrategy) == ((rewriteFlags & useLength) != 0));
                 if ((rewriteFlags & useLength) != 0)
                 {
                     lengthAccess = VisitExpression(node.LengthOrCountAccess);
@@ -1133,6 +1140,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             else
             {
                 Debug.Assert(rewrittenRangeArg is not null);
+                Debug.Assert(lengthIsUsed(rangeExpr, startStrategy, endStrategy));
                 (startExpr, rangeSizeExpr) = DeconstructRangeIntoLocals(rewrittenRangeArg, VisitExpression(node.LengthOrCountAccess), localsBuilder, sideEffectsBuilder);
             }
 
@@ -1147,6 +1155,33 @@ namespace Microsoft.CodeAnalysis.CSharp
             RemovePlaceholderReplacement(node.ReceiverPlaceholder);
 
             return rewrittenIndexerAccess;
+
+            static bool lengthIsUsed(BoundRangeExpression? rangeExpr, PatternIndexOffsetLoweringStrategy startStrategy, PatternIndexOffsetLoweringStrategy endStrategy)
+            {
+                if (rangeExpr is null)
+                {
+                    return true;
+                }
+                else
+                {
+                    switch (startStrategy)
+                    {
+                        case PatternIndexOffsetLoweringStrategy.SubtractFromLength:
+                        case PatternIndexOffsetLoweringStrategy.UseGetOffsetAPI:
+                            return true;
+                    }
+
+                    switch (endStrategy)
+                    {
+                        case PatternIndexOffsetLoweringStrategy.Length:
+                        case PatternIndexOffsetLoweringStrategy.SubtractFromLength:
+                        case PatternIndexOffsetLoweringStrategy.UseGetOffsetAPI:
+                            return true;
+                    }
+                }
+
+                return false;
+            }
 
             void storeExpressionIfNotConstant([DisallowNull] ref BoundExpression? expression, ArrayBuilder<LocalSymbol> localsBuilder, ArrayBuilder<BoundExpression> sideEffectsBuilder)
             {
