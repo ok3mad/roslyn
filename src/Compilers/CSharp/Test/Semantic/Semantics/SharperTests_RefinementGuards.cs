@@ -36,6 +36,10 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
 
                 public static void Log(string s) => System.Console.WriteLine(s);
+
+                // A value with no refinement, so that a call can pass a value outside the domain: the compiler cannot
+                // prove it (CS20078, disabled here), and the guard throws.
+                public static T V<T>(T value) => value;
             }
             """;
 
@@ -45,6 +49,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             // Each value outside the domain throws ArgumentOutOfRangeException with the parameter's name, the value and the
             // refinement; values inside it run as the C# twin does.
             var source = """
+                #pragma warning disable CS20078 // Unproven callers, which the guard checks.
                 using System;
 
                 enum Color { Red, Green, Blue }
@@ -67,23 +72,23 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                     {
                         Report.Run("Page(1)", () => Page(1));
                         Report.Run("Page(0)", () => Page(0));
-                        Report.Run("Page(-1)", () => Page(-1));
+                        Report.Run("Page(-1)", () => Page(Report.V(-1)));
                         Report.Run("PageCSharp(-1)", () => PageCSharp(-1));
                         Report.Run("All", () => All(5, 0.5, 2m, 'q', true, "s", Color.Green, 7, 9));
-                        Report.Run("l", () => All(101, 0.5, 2m, 'q', true, "s", Color.Green, 7, 9));
-                        Report.Run("d", () => All(5, double.NaN, 2m, 'q', true, "s", Color.Green, 7, 9));
-                        Report.Run("m", () => All(5, 0.5, 0m, 'q', true, "s", Color.Green, 7, 9));
-                        Report.Run("c", () => All(5, 0.5, 2m, 'Q', true, "s", Color.Green, 7, 9));
-                        Report.Run("b", () => All(5, 0.5, 2m, 'q', false, "s", Color.Green, 7, 9));
-                        Report.Run("s", () => All(5, 0.5, 2m, 'q', true, "", Color.Green, 7, 9));
+                        Report.Run("l", () => All(Report.V(101), 0.5, 2m, 'q', true, "s", Color.Green, 7, 9));
+                        Report.Run("d", () => All(5, Report.V(double.NaN), 2m, 'q', true, "s", Color.Green, 7, 9));
+                        Report.Run("m", () => All(5, 0.5, Report.V(0m), 'q', true, "s", Color.Green, 7, 9));
+                        Report.Run("c", () => All(5, 0.5, 2m, Report.V('Q'), true, "s", Color.Green, 7, 9));
+                        Report.Run("b", () => All(5, 0.5, 2m, 'q', Report.V(false), "s", Color.Green, 7, 9));
+                        Report.Run("s", () => All(5, 0.5, 2m, 'q', true, Report.V(""), Color.Green, 7, 9));
                         Report.Run("null", () => All(5, 0.5, 2m, 'q', true, null, Color.Green, 7, 9));
-                        Report.Run("k", () => All(5, 0.5, 2m, 'q', true, "s", Color.Blue, 7, 9));
-                        Report.Run("n", () => All(5, 0.5, 2m, 'q', true, "s", Color.Green, -7, 9));
-                        Report.Run("x", () => All(5, 0.5, 2m, 'q', true, "s", Color.Green, 7, 0));
+                        Report.Run("k", () => All(5, 0.5, 2m, 'q', true, "s", Report.V(Color.Blue), 7, 9));
+                        Report.Run("n", () => All(5, 0.5, 2m, 'q', true, "s", Color.Green, Report.V(-7), 9));
+                        Report.Run("x", () => All(5, 0.5, 2m, 'q', true, "s", Color.Green, 7, Report.V((byte)0)));
 
                         // Parameters are checked in order.
-                        Report.Run("Day(0, \"c\")", () => Day(0, "c"));
-                        Report.Run("Day(1, \"c\")", () => Day(1, "c"));
+                        Report.Run("Day(0, \"c\")", () => Day(Report.V(0), Report.V("c")));
+                        Report.Run("Day(1, \"c\")", () => Day(1, Report.V("c")));
                         Report.Run("Day(7, null)", () => Day(7, null));
                     }
                 }
@@ -117,6 +122,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             // capturing), constructors, primary constructors, indexer accessors, operators, conversions, generic methods and
             // extension block members.
             var source = """
+                #pragma warning disable CS20078 // Unproven callers, which the guard checks.
                 using System;
 
                 public class C
@@ -136,19 +142,19 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                         void Local(int i is >=0) => Console.Write(captured);
                         static void StaticLocal(int i is >=0) { }
 
-                        Report.Run("ctor", () => new C(0));
-                        Report.Run("primary ctor", () => new P(-1));
-                        Report.Run("get", () => _ = new C()[-1]);
-                        Report.Run("set", () => new C()[-1] = 0);
+                        Report.Run("ctor", () => new C(Report.V(0)));
+                        Report.Run("primary ctor", () => new P(Report.V(-1)));
+                        Report.Run("get", () => _ = new C()[Report.V(-1)]);
+                        Report.Run("set", () => new C()[Report.V(-1)] = 0);
                         Report.Run("operator", () => _ = new C() + -1);
                         Report.Run("conversion", () => _ = (C)(-1));
-                        Report.Run("generic", () => Generic("a", -1));
-                        Report.Run("internal", () => Internal(-1));
-                        Report.Run("protected", () => Protected(-1));
-                        Report.Run("local", () => Local(-1));
-                        Report.Run("static local", () => StaticLocal(-1));
-                        Report.Run("extension", () => 1.Add(-1));
-                        Report.Run("static extension", () => int.Make(-1));
+                        Report.Run("generic", () => Generic("a", Report.V(-1)));
+                        Report.Run("internal", () => Internal(Report.V(-1)));
+                        Report.Run("protected", () => Protected(Report.V(-1)));
+                        Report.Run("local", () => Local(Report.V(-1)));
+                        Report.Run("static local", () => StaticLocal(Report.V(-1)));
+                        Report.Run("extension", () => 1.Add(Report.V(-1)));
+                        Report.Run("static extension", () => int.Make(Report.V(-1)));
                         Report.Run("delegate", () => ((Action<int>)Internal)(-1));
                         Report.Run("in range", () => { _ = new C(1)[0]; Local(0); StaticLocal(0); _ = 1.Add(0); });
                     }
@@ -193,6 +199,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             // Iterators and async methods check in the kickoff method: the call throws, before anything is enumerated or
             // awaited, as the C# idiom of a wrapper method does.
             var source = """
+                #pragma warning disable CS20078 // Unproven callers, which the guard checks.
                 #pragma warning disable CS4014 // The calls are not awaited on purpose.
                 using System.Collections.Generic;
                 using System.Threading.Tasks;
@@ -230,12 +237,12 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                         IEnumerable<int> LocalCount(int n is >=0) { yield return n; }
                         async Task<int> LocalLoad(int id is >0) { await Task.Yield(); return id; }
 
-                        Report.Run("iterator", () => Count(-1));
-                        Report.Run("async iterator", () => CountAsync(-1));
-                        Report.Run("async", () => Load(0));
-                        Report.Run("async void", () => Fire(0));
-                        Report.Run("local iterator", () => LocalCount(-1));
-                        Report.Run("local async", () => LocalLoad(0));
+                        Report.Run("iterator", () => Count(Report.V(-1)));
+                        Report.Run("async iterator", () => CountAsync(Report.V(-1)));
+                        Report.Run("async", () => Load(Report.V(0)));
+                        Report.Run("async void", () => Fire(Report.V(0)));
+                        Report.Run("local iterator", () => LocalCount(Report.V(-1)));
+                        Report.Run("local async", () => LocalLoad(Report.V(0)));
 
                         foreach (var i in Count(2)) Report.Log(i.ToString());
                         await foreach (var i in CountAsync(3)) Report.Log(i.ToString());
@@ -268,6 +275,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             // A constructor checks before its field initializers, before a primary constructor stores captured parameters,
             // and before the base or 'this' constructor runs.
             var source = """
+                #pragma warning disable CS20078 // Unproven callers, which the guard checks.
                 class Base
                 {
                     public Base(string s) => Report.Log("base " + s);
@@ -298,10 +306,10 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 {
                     static void Main()
                     {
-                        Report.Run("C(-1)", () => new C(-1));
-                        Report.Run("C(\"y\")", () => new C("y"));
-                        Report.Run("P(-1)", () => new P(-1));
-                        Report.Run("S(-1)", () => new S(-1));
+                        Report.Run("C(-1)", () => new C(Report.V(-1)));
+                        Report.Run("C(\"y\")", () => new C(Report.V("y")));
+                        Report.Run("P(-1)", () => new P(Report.V(-1)));
+                        Report.Run("S(-1)", () => new S(Report.V(-1)));
                         Report.Run("C(1)", () => new C(1));
                         Report.Run("C(\"x\")", () => new C("x"));
                         Report.Run("P(2)", () => Report.Log(new P(2).X.ToString()));
@@ -339,6 +347,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             // task, so a guard there would not throw at the call. A method with refined parameters keeps the compiler's state
             // machine instead, and checks in its kickoff method; other methods still use runtime async.
             var source = """
+                #pragma warning disable CS20078 // Unproven callers, which the guard checks.
                 using System;
                 using System.Threading.Tasks;
 
@@ -360,9 +369,10 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                     static async Task Main()
                     {
                         Task<int> t = null;
+                        int zero = 0;
                         try
                         {
-                            t = Load(0);
+                            t = Load(zero);
                             Console.WriteLine("returned " + t.Status);
                         }
                         catch (ArgumentOutOfRangeException e)

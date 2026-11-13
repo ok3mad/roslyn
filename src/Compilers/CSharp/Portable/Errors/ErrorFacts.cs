@@ -577,6 +577,9 @@ namespace Microsoft.CodeAnalysis.CSharp
                 case ErrorCode.WRN_SharperImmutableHierarchyViolated:
                 case ErrorCode.WRN_SharperPureOutArgumentNotFresh:
                 case ErrorCode.WRN_SharperPureOverrideNotPure:
+                case ErrorCode.WRN_SharperRefinementArgumentNotProven:
+                case ErrorCode.WRN_SharperRefinementArgumentUnknown:
+                case ErrorCode.WRN_SharperSwitchArmExcludedByRefinement:
                     return 1;
                 default:
                     return 0;
@@ -2672,6 +2675,12 @@ namespace Microsoft.CodeAnalysis.CSharp
                 or ErrorCode.ERR_SharperInterfaceInitializerBadMember
                 or ErrorCode.ERR_SharperInterfaceInitializerStaticAbstract
                 or ErrorCode.ERR_SharperInterfaceInitializerInExpressionTree
+                or ErrorCode.ERR_SharperRefinementArgumentDisproven
+                or ErrorCode.ERR_SharperRefinementArgumentNotProven
+                or ErrorCode.WRN_SharperRefinementArgumentNotProven
+                or ErrorCode.WRN_SharperRefinementArgumentUnknown
+                or ErrorCode.ERR_SharperSwitchNotExhaustiveForRefinement
+                or ErrorCode.WRN_SharperSwitchArmExcludedByRefinement
                 or ErrorCode.ERR_SharperInferParameterUsesDisagree
                 or ErrorCode.ERR_SharperRefinementNotClosed
                 or ErrorCode.ERR_SharperRefinementTypeNotSupported

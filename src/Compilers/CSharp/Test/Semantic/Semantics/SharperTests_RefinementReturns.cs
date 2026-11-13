@@ -129,8 +129,8 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                     static infer Plain(int i) => i;
                     static infer Block(string s is "a" or "b") { return s; }
                     static infer Second(int a, long b is not 0) => b;
-                    static infer Through(int i is >0) => Same(Positive(i));
-                    static infer Positive(int i is >0) => i;
+                    static infer Through(int i is >0 and <10) => Same(Positive(i));
+                    static infer Positive(int i is >0 and <10) => i;
                     static infer Converted(int i is >0) => (long)i;
                     static infer Identity(int i is >0) => (int)i;
                 }
@@ -145,7 +145,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                     "Block: \"a\" or \"b\"",
                     "Second: not 0",
                     "Through: >= 0 and < 10 or 42",
-                    "Positive: > 0",
+                    "Positive: > 0 and < 10",
                     "Converted: <none>",
                     "Identity: > 0",
                 },

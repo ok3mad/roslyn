@@ -352,6 +352,9 @@
                 case ErrorCode.WRN_SharperImmutableHierarchyViolated:
                 case ErrorCode.WRN_SharperPureOutArgumentNotFresh:
                 case ErrorCode.WRN_SharperPureOverrideNotPure:
+                case ErrorCode.WRN_SharperRefinementArgumentNotProven:
+                case ErrorCode.WRN_SharperRefinementArgumentUnknown:
+                case ErrorCode.WRN_SharperSwitchArmExcludedByRefinement:
                     return true;
                 default:
                     return false;

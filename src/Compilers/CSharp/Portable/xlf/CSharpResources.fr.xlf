@@ -2847,6 +2847,16 @@
         <target state="new">A readonly local must be initialized in its declaration, because it cannot be assigned later.</target>
         <note />
       </trans-unit>
+      <trans-unit id="ERR_SharperRefinementArgumentDisproven">
+        <source>The argument '{0}' never satisfies the refinement 'is {2}' of parameter '{1}': its values, 'is {3}', are all outside it.</source>
+        <target state="new">The argument '{0}' never satisfies the refinement 'is {2}' of parameter '{1}': its values, 'is {3}', are all outside it.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperRefinementArgumentNotProven">
+        <source>The argument '{0}' may not satisfy the refinement 'is {2}' of parameter '{1}': its inferred refinement 'is {3}' allows {4}.</source>
+        <target state="new">The argument '{0}' may not satisfy the refinement 'is {2}' of parameter '{1}': its inferred refinement 'is {3}' allows {4}.</target>
+        <note />
+      </trans-unit>
       <trans-unit id="ERR_SharperRefinementDefaultValueDisproven">
         <source>The default value of parameter '{0}' ({1}) does not satisfy its refinement '{2}'.</source>
         <target state="new">The default value of parameter '{0}' ({1}) does not satisfy its refinement '{2}'.</target>
@@ -2875,6 +2885,11 @@
       <trans-unit id="ERR_SharperSpreadRefStructEnumerator">
         <source>A spread 'yield return ..' cannot enumerate '{0}' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead.</source>
         <target state="new">A spread 'yield return ..' cannot enumerate '{0}' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="ERR_SharperSwitchNotExhaustiveForRefinement">
+        <source>The switch expression does not handle all values of its input's inferred refinement 'is {0}'. For example, the pattern '{1}' is not covered.</source>
+        <target state="new">The switch expression does not handle all values of its input's inferred refinement 'is {0}'. For example, the pattern '{1}' is not covered.</target>
         <note />
       </trans-unit>
       <trans-unit id="ERR_SharperTryExpressionInCatchFilter">
@@ -4755,6 +4770,36 @@
       <trans-unit id="WRN_SharperPureOverrideNotPure_Title">
         <source>A member in a C# file overrides or implements a [Pure] member</source>
         <target state="new">A member in a C# file overrides or implements a [Pure] member</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WRN_SharperRefinementArgumentNotProven">
+        <source>The argument '{0}' may not satisfy the refinement 'is {2}' of parameter '{1}': its refinement 'is {3}' allows {4}.</source>
+        <target state="new">The argument '{0}' may not satisfy the refinement 'is {2}' of parameter '{1}': its refinement 'is {3}' allows {4}.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WRN_SharperRefinementArgumentNotProven_Title">
+        <source>An argument may not satisfy the refinement of its parameter</source>
+        <target state="new">An argument may not satisfy the refinement of its parameter</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WRN_SharperRefinementArgumentUnknown">
+        <source>The compiler cannot prove that the argument '{0}' satisfies the refinement 'is {2}' of parameter '{1}': the argument has no refinement. The method checks it when it is called.</source>
+        <target state="new">The compiler cannot prove that the argument '{0}' satisfies the refinement 'is {2}' of parameter '{1}': the argument has no refinement. The method checks it when it is called.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WRN_SharperRefinementArgumentUnknown_Title">
+        <source>The compiler cannot prove that an argument satisfies the refinement of its parameter</source>
+        <target state="new">The compiler cannot prove that an argument satisfies the refinement of its parameter</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WRN_SharperSwitchArmExcludedByRefinement">
+        <source>The pattern is unreachable: the input's refinement 'is {0}' excludes every value it matches.</source>
+        <target state="new">The pattern is unreachable: the input's refinement 'is {0}' excludes every value it matches.</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="WRN_SharperSwitchArmExcludedByRefinement_Title">
+        <source>The pattern is unreachable because of the input's refinement</source>
+        <target state="new">The pattern is unreachable because of the input's refinement</target>
         <note />
       </trans-unit>
       <trans-unit id="WRN_SharperTryExpressionAwaitableBody">

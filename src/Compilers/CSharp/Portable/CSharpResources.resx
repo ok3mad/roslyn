@@ -8588,6 +8588,33 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
   <data name="ERR_SharperInterfaceInitializerStaticAbstract" xml:space="preserve">
     <value>Cannot create an instance of '{0}' with an initializer, because it has the static abstract member '{1}'.</value>
   </data>
+  <data name="ERR_SharperRefinementArgumentDisproven" xml:space="preserve">
+    <value>The argument '{0}' never satisfies the refinement 'is {2}' of parameter '{1}': its values, 'is {3}', are all outside it.</value>
+  </data>
+  <data name="ERR_SharperRefinementArgumentNotProven" xml:space="preserve">
+    <value>The argument '{0}' may not satisfy the refinement 'is {2}' of parameter '{1}': its inferred refinement 'is {3}' allows {4}.</value>
+  </data>
+  <data name="WRN_SharperRefinementArgumentNotProven" xml:space="preserve">
+    <value>The argument '{0}' may not satisfy the refinement 'is {2}' of parameter '{1}': its refinement 'is {3}' allows {4}.</value>
+  </data>
+  <data name="WRN_SharperRefinementArgumentNotProven_Title" xml:space="preserve">
+    <value>An argument may not satisfy the refinement of its parameter</value>
+  </data>
+  <data name="WRN_SharperRefinementArgumentUnknown" xml:space="preserve">
+    <value>The compiler cannot prove that the argument '{0}' satisfies the refinement 'is {2}' of parameter '{1}': the argument has no refinement. The method checks it when it is called.</value>
+  </data>
+  <data name="WRN_SharperRefinementArgumentUnknown_Title" xml:space="preserve">
+    <value>The compiler cannot prove that an argument satisfies the refinement of its parameter</value>
+  </data>
+  <data name="ERR_SharperSwitchNotExhaustiveForRefinement" xml:space="preserve">
+    <value>The switch expression does not handle all values of its input's inferred refinement 'is {0}'. For example, the pattern '{1}' is not covered.</value>
+  </data>
+  <data name="WRN_SharperSwitchArmExcludedByRefinement" xml:space="preserve">
+    <value>The pattern is unreachable: the input's refinement 'is {0}' excludes every value it matches.</value>
+  </data>
+  <data name="WRN_SharperSwitchArmExcludedByRefinement_Title" xml:space="preserve">
+    <value>The pattern is unreachable because of the input's refinement</value>
+  </data>
   <data name="ERR_SharperInterfaceInitializerInExpressionTree" xml:space="preserve">
     <value>An expression tree cannot contain an interface initializer.</value>
   </data>

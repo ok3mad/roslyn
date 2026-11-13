@@ -5,6 +5,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Threading;
 using Microsoft.CodeAnalysis.PooledObjects;
 
 namespace Microsoft.CodeAnalysis.CSharp.Symbols
@@ -37,6 +38,47 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         /// An iterator and an <c>async</c> method return a sequence or a task, which has no value set; a refinement of
         /// the element or of the awaited value would need a slot there, which no slice has yet.
         /// </summary>
+        /// <summary>
+        /// True if the refinement was inferred (a union, or the result of a call), false if it is written on a parameter,
+        /// possibly reached through a <c>val</c> local. An argument that cannot be proven is an error when its refinement is
+        /// inferred, so that a widened return breaks its callers, and a warning when it is written, since slices 2 and 3
+        /// narrow such values after tests (Feature 11, step 4).
+        /// </summary>
+        internal bool IsInferred { get; }
+
+        private SharperRefinement? _lazyInferred;
+
+        /// <summary>This refinement, marked as inferred: the same pattern, values and text.</summary>
+        internal SharperRefinement AsInferred()
+        {
+            if (IsInferred)
+            {
+                return this;
+            }
+
+            if (_lazyInferred is null)
+            {
+                var inferred = new SharperRefinement(Pattern, Values, MatchesNull, isInferred: true) { _lazyText = _lazyText };
+                Interlocked.CompareExchange(ref _lazyInferred, inferred, null);
+            }
+
+            return _lazyInferred;
+        }
+
+        /// <summary>
+        /// The refinement of a refined parameter or a <c>val</c> local where it is read: the one in scope if
+        /// <paramref name="scope"/> is given (the hook an <c>assume</c> statement feeds), else its own.
+        /// </summary>
+        internal static SharperRefinement? OfVariable(Symbol variable, Binder? scope)
+            => scope is not null
+                ? scope.GetSharperRefinementInScope(variable)
+                : variable switch
+                {
+                    ParameterSymbol parameter => parameter.SharperRefinement,
+                    LocalSymbol local => local.SharperRefinement,
+                    _ => null,
+                };
+
         internal static bool CanInferForReturn(MethodSymbol method, TypeWithAnnotations returnType)
             => returnType.HasType && !returnType.Type.IsErrorType() && !returnType.Type.IsNullableType() && ValueSetFactory.ForType(returnType.Type) is not null &&
                !method.IsAsync && !method.IsIterator && method.RefKind == RefKind.None &&
@@ -49,7 +91,11 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         /// expression or conditional expression whose arms all yield such values.
         /// </summary>
         /// <param name="syntax">The syntax of the patterns of a new refinement.</param>
-        internal static SharperRefinement? OfExpression(BoundExpression expression, SyntaxNode syntax)
+        /// <param name="scope">
+        /// The binder of the expression, which gives the refinement of a variable in scope
+        /// (<see cref="Binder.GetSharperRefinementInScope"/>); null for the variable's own refinement.
+        /// </param>
+        internal static SharperRefinement? OfExpression(BoundExpression expression, SyntaxNode syntax, Binder? scope = null)
         {
             if (expression.Type is not { } type || expression.HasAnyErrors)
             {
@@ -58,7 +104,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
             var values = ArrayBuilder<BoundExpression>.GetInstance();
             values.Add(expression);
-            SharperRefinement? result = OfValues(values, type, syntax);
+            SharperRefinement? result = OfValues(values, type, syntax, scope);
             values.Free();
             return result;
         }
@@ -68,7 +114,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         /// of <paramref name="type"/>: the union of their refinements, or null if one of them has none, if the type has
         /// no value set, or if the union allows every value.
         /// </summary>
-        internal static SharperRefinement? OfValues(ArrayBuilder<BoundExpression> values, TypeSymbol type, SyntaxNode syntax)
+        internal static SharperRefinement? OfValues(ArrayBuilder<BoundExpression> values, TypeSymbol type, SyntaxNode syntax, Binder? scope = null)
         {
             if (values.Count == 0 || type.IsErrorType() || type.IsNullableType() || ValueSetFactory.ForType(type) is not { } factory)
             {
@@ -78,10 +124,11 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             var alternatives = ArrayBuilder<BoundPattern>.GetInstance();
             SharperRefinement? single = null;
             int sources = 0;
+            bool fromCall = false;
             bool known = true;
             foreach (var value in values)
             {
-                if (!addValue(value, type, alternatives, ref single, ref sources))
+                if (!addValue(value, type, scope, alternatives, ref single, ref sources, ref fromCall))
                 {
                     known = false;
                     break;
@@ -91,8 +138,9 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             SharperRefinement? result = null;
             if (known && sources == 1 && single is not null)
             {
-                // A refined value passed on unchanged keeps its refinement as it is written.
-                result = single;
+                // A refined value passed on unchanged keeps its refinement as it is written. The result of a call is
+                // inferred, even where the method returns a refined parameter unchanged: its body decides it.
+                result = fromCall ? single.AsInferred() : single;
             }
             else if (known && alternatives.Count != 0)
             {
@@ -102,7 +150,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             alternatives.Free();
             return result;
 
-            static bool addValue(BoundExpression value, TypeSymbol type, ArrayBuilder<BoundPattern> alternatives, ref SharperRefinement? single, ref int sources)
+            static bool addValue(BoundExpression value, TypeSymbol type, Binder? scope, ArrayBuilder<BoundPattern> alternatives, ref SharperRefinement? single, ref int sources, ref bool fromCall)
             {
                 while (value is BoundConversion { Conversion.IsIdentity: true, ConstantValueOpt: null } identity)
                 {
@@ -139,7 +187,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     case BoundSwitchExpression switchExpression:
                         foreach (var arm in switchExpression.SwitchArms)
                         {
-                            if (!addValue(arm.Value, type, alternatives, ref single, ref sources))
+                            if (!addValue(arm.Value, type, scope, alternatives, ref single, ref sources, ref fromCall))
                             {
                                 return false;
                             }
@@ -148,12 +196,12 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                         return true;
 
                     case BoundConditionalOperator { IsRef: false } conditional:
-                        return addValue(conditional.Consequence, type, alternatives, ref single, ref sources) &&
-                            addValue(conditional.Alternative, type, alternatives, ref single, ref sources);
+                        return addValue(conditional.Consequence, type, scope, alternatives, ref single, ref sources, ref fromCall) &&
+                            addValue(conditional.Alternative, type, scope, alternatives, ref single, ref sources, ref fromCall);
 
                     case BoundUnconvertedConditionalOperator conditional:
-                        return addValue(conditional.Consequence, type, alternatives, ref single, ref sources) &&
-                            addValue(conditional.Alternative, type, alternatives, ref single, ref sources);
+                        return addValue(conditional.Consequence, type, scope, alternatives, ref single, ref sources, ref fromCall) &&
+                            addValue(conditional.Alternative, type, scope, alternatives, ref single, ref sources, ref fromCall);
                 }
 
                 if (value.Type?.Equals(type, TypeCompareKind.AllIgnoreOptions) != true)
@@ -164,11 +212,13 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 SharperRefinement? refinement = value switch
                 {
                     // A refined parameter and a 'val' local are readonly, so the fact holds wherever they are read.
-                    BoundParameter { ParameterSymbol: { RefKind: RefKind.None } parameter } => parameter.SharperRefinement,
-                    BoundLocal { LocalSymbol: { RefKind: RefKind.None } local } => local.SharperRefinement,
+                    BoundParameter { ParameterSymbol: { RefKind: RefKind.None } parameter } => OfVariable(parameter, scope),
+                    BoundLocal { LocalSymbol: { RefKind: RefKind.None } local } => OfVariable(local, scope),
                     BoundCall { Method: { RefKind: RefKind.None } method } => method.SharperReturnRefinement,
                     _ => null,
                 };
+
+                fromCall |= value is BoundCall;
 
                 if (refinement is not { HasErrors: false })
                 {
@@ -273,7 +323,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 bool matchesNull = Matches(pattern, factory, ConstantValue.Null);
                 if (!(((IConstantValueSet)values.Complement()).IsEmpty && (matchesNull || !type.IsReferenceType)))
                 {
-                    result = new SharperRefinement(pattern, values, matchesNull);
+                    result = new SharperRefinement(pattern, values, matchesNull, isInferred: true);
                 }
             }
 

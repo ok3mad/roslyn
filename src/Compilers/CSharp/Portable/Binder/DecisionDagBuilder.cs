@@ -67,13 +67,24 @@ namespace Microsoft.CodeAnalysis.CSharp
         private readonly bool _forLowering;
         private bool _suitableForLowering = true;
 
-        private DecisionDagBuilder(CSharpCompilation compilation, LabelSymbol defaultLabel, bool forLowering, BindingDiagnosticBag diagnostics)
+        /// <summary>
+        /// Sharper: the refinement of the original input (Feature 11, step 4), whose values seed the root state, or null.
+        /// A dag seeded with it is for diagnostics and flow analysis only: it is not suitable for lowering, so the lowered
+        /// switch still tests the values the refinement excludes and throws for them.
+        /// </summary>
+        private readonly SharperRefinement? _inputRefinement;
+        private BoundDagTemp? _rootTemp;
+
+        private DecisionDagBuilder(CSharpCompilation compilation, LabelSymbol defaultLabel, bool forLowering, BindingDiagnosticBag diagnostics, SharperRefinement? inputRefinement = null)
         {
+            Debug.Assert(inputRefinement is null || (!forLowering && inputRefinement.Values is not null && !inputRefinement.MatchesNull));
             this._compilation = compilation;
             this._conversions = compilation.Conversions;
             _diagnostics = diagnostics;
             _defaultLabel = defaultLabel;
             _forLowering = forLowering;
+            _inputRefinement = inputRefinement;
+            _suitableForLowering = inputRefinement is null;
         }
 
         /// <summary>
@@ -86,9 +97,10 @@ namespace Microsoft.CodeAnalysis.CSharp
             ImmutableArray<BoundSwitchSection> switchSections,
             LabelSymbol defaultLabel,
             BindingDiagnosticBag diagnostics,
-            bool forLowering = false)
+            bool forLowering = false,
+            SharperRefinement? inputRefinement = null)
         {
-            var builder = new DecisionDagBuilder(compilation, defaultLabel, forLowering, diagnostics);
+            var builder = new DecisionDagBuilder(compilation, defaultLabel, forLowering, diagnostics, inputRefinement);
             return ReportSharperValInputCopies(switchGoverningExpression, builder.CreateDecisionDagForSwitchStatement(syntax, switchGoverningExpression, switchSections), forLowering, diagnostics);
         }
 
@@ -102,9 +114,10 @@ namespace Microsoft.CodeAnalysis.CSharp
             ImmutableArray<BoundSwitchExpressionArm> switchArms,
             LabelSymbol defaultLabel,
             BindingDiagnosticBag diagnostics,
-            bool forLowering = false)
+            bool forLowering = false,
+            SharperRefinement? inputRefinement = null)
         {
-            var builder = new DecisionDagBuilder(compilation, defaultLabel, forLowering, diagnostics);
+            var builder = new DecisionDagBuilder(compilation, defaultLabel, forLowering, diagnostics, inputRefinement);
             return ReportSharperValInputCopies(switchExpressionInput, builder.CreateDecisionDagForSwitchExpression(syntax, switchExpressionInput, switchArms), forLowering, diagnostics);
         }
 
@@ -210,6 +223,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             ImmutableArray<BoundSwitchSection> switchSections)
         {
             var rootIdentifier = BoundDagTemp.ForOriginalInput(switchGoverningExpression);
+            _rootTemp = rootIdentifier;
             int i = 0;
             using var builder = TemporaryArray<StateForCase>.GetInstance(switchSections.Length);
             foreach (BoundSwitchSection section in switchSections)
@@ -235,6 +249,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             ImmutableArray<BoundSwitchExpressionArm> switchArms)
         {
             var rootIdentifier = BoundDagTemp.ForOriginalInput(switchExpressionInput);
+            _rootTemp = rootIdentifier;
             int i = 0;
             using var builder = TemporaryArray<StateForCase>.GetInstance(switchArms.Length);
             foreach (BoundSwitchExpressionArm arm in switchArms)
@@ -1455,7 +1470,9 @@ namespace Microsoft.CodeAnalysis.CSharp
 
             var initialState = uniquifyState(new
                 FrozenArrayBuilder<StateForCase>(rewrittenCases),
-                ImmutableDictionary<BoundDagTemp, IValueSet>.Empty);
+                _rootTemp is not null && _inputRefinement?.Values is { } inputValues
+                    ? ImmutableDictionary<BoundDagTemp, IValueSet>.Empty.Add(_rootTemp, inputValues)
+                    : ImmutableDictionary<BoundDagTemp, IValueSet>.Empty);
 
             // Go through the worklist of DagState nodes for which we have not yet computed
             // successor states.
@@ -1508,6 +1525,18 @@ namespace Microsoft.CodeAnalysis.CSharp
                                 out var whenTrueDecisions, out var whenTrueValues,
                                 out var whenFalseDecisions, out var whenFalseValues,
                                 ref foundRelatedExplicitNullTest);
+                            if (KnownFromSharperInputRefinement(state, d) is bool truePossible)
+                            {
+                                // Sharper: the input's refinement decides the test (no case was simplified against it
+                                // before the first test). Both branches go to the possible outcome, so the test is
+                                // removed and the impossible one does not reach the default label.
+                                (truePossible ? whenFalseDecisions : whenTrueDecisions).Free();
+                                state.TrueBranch = state.FalseBranch = truePossible
+                                    ? uniquifyState(whenTrueDecisions, whenTrueValues)
+                                    : uniquifyState(whenFalseDecisions, whenFalseValues);
+                                break;
+                            }
+
                             state.TrueBranch = uniquifyState(whenTrueDecisions, whenTrueValues);
                             state.FalseBranch = uniquifyState(whenFalseDecisions, whenFalseValues);
                             if (foundRelatedExplicitNullTest && d is BoundDagNonNullTest { IsExplicitTest: false } t)
@@ -1846,6 +1875,32 @@ namespace Microsoft.CodeAnalysis.CSharp
 
             whenTrue = AsFrozen(whenTrueBuilder);
             whenFalse = AsFrozen(whenFalseBuilder);
+        }
+
+        /// <summary>
+        /// Sharper: the outcome of a test of the original input that its refinement decides, or null. A refinement that
+        /// seeds a dag excludes null (value sets do not hold null), so it decides the null tests too.
+        /// </summary>
+        private bool? KnownFromSharperInputRefinement(DagState state, BoundDagTest test)
+        {
+            if (_inputRefinement is null || !test.Input.Equals(_rootTemp))
+            {
+                return null;
+            }
+
+            Debug.Assert(!_inputRefinement.MatchesNull);
+            switch (test)
+            {
+                case BoundDagNonNullTest:
+                    return true;
+                case BoundDagExplicitNullTest:
+                    return false;
+                case BoundDagValueTest or BoundDagRelationalTest:
+                    var (_, _, truePossible, falsePossible) = SplitValues(state.RemainingValues, test);
+                    return truePossible != falsePossible ? truePossible : null;
+                default:
+                    return null;
+            }
         }
 
         private (

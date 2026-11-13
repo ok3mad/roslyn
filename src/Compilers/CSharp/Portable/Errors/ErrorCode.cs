@@ -2589,6 +2589,12 @@ namespace Microsoft.CodeAnalysis.CSharp
         ERR_SharperInterfaceInitializerBadMember = SharperErrorCodes.Base + 72,
         ERR_SharperInterfaceInitializerStaticAbstract = SharperErrorCodes.Base + 73,
         ERR_SharperInterfaceInitializerInExpressionTree = SharperErrorCodes.Base + 74,
+        ERR_SharperRefinementArgumentDisproven = SharperErrorCodes.Base + 75,
+        ERR_SharperRefinementArgumentNotProven = SharperErrorCodes.Base + 76,
+        WRN_SharperRefinementArgumentNotProven = SharperErrorCodes.Base + 77,
+        WRN_SharperRefinementArgumentUnknown = SharperErrorCodes.Base + 78,
+        ERR_SharperSwitchNotExhaustiveForRefinement = SharperErrorCodes.Base + 79,
+        WRN_SharperSwitchArmExcludedByRefinement = SharperErrorCodes.Base + 80,
 
         // Note: you will need to do the following after adding errors:
         //  1) Update ErrorFacts.IsBuildOnlyDiagnostic (src/Compilers/CSharp/Portable/Errors/ErrorFacts.cs)

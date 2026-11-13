@@ -237,6 +237,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         /// <param name="nodes">A topologically sorted list of nodes in the decision dag.</param>
         /// <param name="targetNode">A node of interest (typically, the default node for a non-exhaustive switch).</param>
         /// <param name="nullPaths">Permit the use of "null" paths on tests which check for null.</param>
+        /// <param name="inputValues">Sharper: the values the input can have, from its refinement, or null for every value of its type.</param>
         /// <returns></returns>
         internal static string SamplePatternForPathToDagNode(
             Binder binder,
@@ -246,7 +247,8 @@ namespace Microsoft.CodeAnalysis.CSharp
             bool nullPaths,
             HashSet<NullableWalker.DecisionDagReachabilityInfo> reachabilityInfo,
             out bool requiresFalseWhenClause,
-            out bool unnamedEnumValue)
+            out bool unnamedEnumValue,
+            IConstantValueSet inputValues = null)
         {
 #if DEBUG
             Debug.Assert(nullPaths == (reachabilityInfo is not null));
@@ -264,17 +266,17 @@ namespace Microsoft.CodeAnalysis.CSharp
 
             try
             {
-                return SamplePatternForTemp(binder, rootIdentifier, constraints, evaluations, requireExactType: false, ref unnamedEnumValue);
+                return SamplePatternForTemp(binder, rootIdentifier, constraints, evaluations, requireExactType: false, ref unnamedEnumValue, inputValues);
             }
             catch (NoRemainingValuesException)
             {
             }
 
             // In rare cases, the shortest path isn't the one that yields a sample
-            return samplePatternFromOtherPaths(binder, rootIdentifier, nodes[0], targetNode, nullPaths, out requiresFalseWhenClause, out unnamedEnumValue);
+            return samplePatternFromOtherPaths(binder, rootIdentifier, nodes[0], targetNode, nullPaths, inputValues, out requiresFalseWhenClause, out unnamedEnumValue);
 
             static string samplePatternFromOtherPaths(Binder binder, BoundDagTemp rootIdentifier, BoundDecisionDagNode rootNode,
-                BoundDecisionDagNode targetNode, bool nullPaths, out bool requiresFalseWhenClause, out bool unnamedEnumValue)
+                BoundDecisionDagNode targetNode, bool nullPaths, IConstantValueSet inputValues, out bool requiresFalseWhenClause, out bool unnamedEnumValue)
             {
                 string altSamplePatternForTemp = null;
                 bool altRequiresFalseWhenClause = false;
@@ -288,7 +290,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                     try
                     {
                         altUnnamedEnumValue = false;
-                        altSamplePatternForTemp = SamplePatternForTemp(binder, rootIdentifier, constraints, evaluations, requireExactType: false, ref altUnnamedEnumValue);
+                        altSamplePatternForTemp = SamplePatternForTemp(binder, rootIdentifier, constraints, evaluations, requireExactType: false, ref altUnnamedEnumValue, inputValues);
                         return false; // we've successfully produced a sample, so stop exploring paths
                     }
                     catch (NoRemainingValuesException)
@@ -360,8 +362,10 @@ namespace Microsoft.CodeAnalysis.CSharp
             Dictionary<BoundDagTemp, ArrayBuilder<(BoundDagTest test, bool sense)>> constraintMap,
             Dictionary<BoundDagTemp, ArrayBuilder<BoundDagEvaluation>> evaluationMap,
             bool requireExactType,
-            ref bool unnamedEnumValue)
+            ref bool unnamedEnumValue,
+            IConstantValueSet inputValues = null)
         {
+            Debug.Assert(inputValues is null || input.IsOriginalInput);
             var constraints = getArray(constraintMap, input);
             var evaluations = getArray(evaluationMap, input);
 
@@ -759,7 +763,7 @@ namespace Microsoft.CodeAnalysis.CSharp
 
             IConstantValueSet computeRemainingValues(IConstantValueSetFactory fac, ImmutableArray<(BoundDagTest test, bool sense)> constraints)
             {
-                IConstantValueSet remainingValues = fac.AllValues;
+                IConstantValueSet remainingValues = inputValues is not null && fac == ValueSetFactory.ForInput(input) ? inputValues : fac.AllValues;
                 foreach (var constraint in constraints)
                 {
                     var (test, sense) = constraint;
