@@ -29,7 +29,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 var useSiteInfo = CompoundUseSiteInfo<AssemblySymbol>.Discarded;
                 if (type.FindTypeLessVisibleThan(member, ref useSiteInfo) is NamedTypeSymbol { IsAnonymousType: true, TypeKind: TypeKind.Delegate } anonymousDelegate)
                 {
-                    // '{0}' is visible outside this assembly, but its signature uses the function type '{1}', ... Declare a named delegate instead.
+                    // '{0}' is visible outside this assembly, but uses the function type '{1}', ... Declare a named delegate instead.
                     diagnostics.Add(ErrorCode.ERR_SharperFunctionTypeNotVisible, location, member, FunctionTypeDisplay(anonymousDelegate));
                     return;
                 }

@@ -8589,7 +8589,7 @@ To remove the warning, you can use /reference instead (set the Embed Interop Typ
     <value>An expression tree cannot contain an interface initializer.</value>
   </data>
   <data name="ERR_SharperFunctionTypeNotVisible" xml:space="preserve">
-    <value>'{0}' is visible outside this assembly, but its signature uses the function type '{1}', which no 'System.Func' or 'System.Action' delegate can express and is internal to the assembly. Declare a named delegate instead.</value>
+    <value>'{0}' is visible outside this assembly, but uses the function type '{1}', which no 'System.Func' or 'System.Action' delegate can express and which is internal to the assembly. Declare a named delegate instead.</value>
   </data>
   <data name="ERR_SharperFunctionToInterfaceInExpressionTree" xml:space="preserve">
     <value>An expression tree cannot contain a lambda or method group converted to the interface '{0}'.</value>

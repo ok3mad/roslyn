@@ -2608,8 +2608,8 @@
         <note />
       </trans-unit>
       <trans-unit id="ERR_SharperFunctionTypeNotVisible">
-        <source>'{0}' is visible outside this assembly, but its signature uses the function type '{1}', which no 'System.Func' or 'System.Action' delegate can express and is internal to the assembly. Declare a named delegate instead.</source>
-        <target state="new">'{0}' is visible outside this assembly, but its signature uses the function type '{1}', which no 'System.Func' or 'System.Action' delegate can express and is internal to the assembly. Declare a named delegate instead.</target>
+        <source>'{0}' is visible outside this assembly, but uses the function type '{1}', which no 'System.Func' or 'System.Action' delegate can express and which is internal to the assembly. Declare a named delegate instead.</source>
+        <target state="new">'{0}' is visible outside this assembly, but uses the function type '{1}', which no 'System.Func' or 'System.Action' delegate can express and which is internal to the assembly. Declare a named delegate instead.</target>
         <note />
       </trans-unit>
       <trans-unit id="ERR_SharperFunctionTypeParameterModifier">
