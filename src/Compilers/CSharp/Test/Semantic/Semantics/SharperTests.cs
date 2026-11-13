@@ -2859,6 +2859,12 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             // Constraint errors are the same as for the Func twins, and are reported at the same place: on the
             // parameter or return type that stands for the offending type argument.
             CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, options: TestOptions.UnsafeReleaseDll).VerifyDiagnostics(
+                // (4,6): error CS20008: A function type parameter cannot be 'params'. Declare a named delegate instead.
+                //     (params int[], this string) -> bool modifiers;
+                Diagnostic(ErrorCode.ERR_SharperFunctionTypeParameterModifier, "params").WithArguments("params").WithLocation(4, 6),
+                // (4,20): error CS20008: A function type parameter cannot be 'this'. Declare a named delegate instead.
+                //     (params int[], this string) -> bool modifiers;
+                Diagnostic(ErrorCode.ERR_SharperFunctionTypeParameterModifier, "this").WithArguments("this").WithLocation(4, 20),
                 // (8,6): error CS1536: Invalid parameter type 'void'
                 //     (void) -> int voidParameter;
                 Diagnostic(ErrorCode.ERR_NoVoidParameter, "void").WithLocation(8, 6),
@@ -3645,10 +3651,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 Diagnostic(ErrorCode.ERR_PatternNullableType, "((int) -> int)?").WithArguments("System.Func<int, int>").WithLocation(18, 18),
                 // (19,18): error CS8116: It is not legal to use nullable type 'Func<int, int>?' in a pattern; use the underlying type 'Func<int, int>' instead.
                 //         _ = o is Func<int, int>? b;
-                Diagnostic(ErrorCode.ERR_PatternNullableType, "Func<int, int>?").WithArguments("System.Func<int, int>").WithLocation(19, 18),
-                // (22,19): error CS20008: A function type parameter cannot be 'ref', because a function type is a 'System.Func' or 'System.Action' delegate.
-                //         _ = o is (ref int) -> int c;
-                Diagnostic(ErrorCode.ERR_SharperFunctionTypeParameterModifier, "ref").WithArguments("ref").WithLocation(22, 19));
+                Diagnostic(ErrorCode.ERR_PatternNullableType, "Func<int, int>?").WithArguments("System.Func<int, int>").WithLocation(19, 18));
         }
 
         [Fact]
@@ -3964,7 +3967,8 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         [Fact]
         public void FunctionType_Names_Modifiers()
         {
-            // The modifiers stay on the parameter, before its type; ref parameters are still errors.
+            // The modifiers stay on the parameter, before its type. With ref parameters the type is an anonymous delegate
+            // (FunctionTypeRef_* tests), which does not take the names.
             var source = """
                 #pragma warning disable CS0169 // The field is never used
                 class C
@@ -3973,13 +3977,9 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 }
                 """;
             var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
-            comp.VerifyDiagnostics(
-                // (4,6): error CS20008: A function type parameter cannot be 'ref', because a function type is a 'System.Func' or 'System.Action' delegate.
-                //     (ref int x, out string y) -> bool modifiers;
-                Diagnostic(ErrorCode.ERR_SharperFunctionTypeParameterModifier, "ref").WithArguments("ref").WithLocation(4, 6),
-                // (4,17): error CS20008: A function type parameter cannot be 'out', because a function type is a 'System.Func' or 'System.Action' delegate.
-                //     (ref int x, out string y) -> bool modifiers;
-                Diagnostic(ErrorCode.ERR_SharperFunctionTypeParameterModifier, "out").WithArguments("out").WithLocation(4, 17));
+            comp.VerifyDiagnostics();
+            AssertEx.Equal("System.Boolean <anonymous delegate>.Invoke(ref System.Int32 arg1, out System.String arg2)",
+                comp.GetMember<FieldSymbol>("C.modifiers").Type.DelegateInvokeMethod().ToTestDisplayString());
 
             var type = comp.SyntaxTrees.Single().GetRoot().DescendantNodes().OfType<FunctionTypeSyntax>().Single();
             Assert.Equal(SyntaxKind.RefKeyword, type.Parameters[0].Modifiers.Single().Kind());

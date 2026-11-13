@@ -77,17 +77,18 @@ var name = o switch { () -> void => "action", (int) -> int f => "f" + f(1), _ =>
 | Code | Message |
 | --- | --- |
 | CS0100 | The parameter name '{0}' is a duplicate (C#'s error, for two parameters of one function type with the same name) |
-| CS20008 | A function type parameter cannot be '{0}', because a function type is a 'System.Func' or 'System.Action' delegate. |
-| CS20009 | A function type cannot have more than {0} parameters, because no 'System.Func' or 'System.Action' delegate has more. |
+| CS20008 | A function type parameter cannot be '{0}'. Declare a named delegate instead. (`params`, `this`, and `readonly` without `ref`) |
+| CS20009 | Retired in [#56](https://github.com/ok3mad/roslyn/issues/56): more than 16 parameters make an anonymous delegate |
 | CS20066 | '{0}': cannot change function type parameter names when overriding inherited member '{1}' |
 | CS20067 | The function type parameter names in the signature of '{0}' must match the function type parameter names of interface member '{1}' (including on the return type). |
 | CS20068 | Both partial member declarations, '{0}' and '{1}', must use the same function type parameter names. |
+| CS20075 | '{0}' is visible outside this assembly, but uses the function type '{1}', which no 'System.Func' or 'System.Action' delegate can express and which is internal to the assembly. Declare a named delegate instead. |
 
 ## Limitations
 
-- **`ref`, `out` and `in` parameters, ref returns and more than 16 parameters** have no `Func` or `Action`, and are
-  errors for now (CS20008, CS20009; a ref return reports CS1073). The design is decided
-  ([#56](https://github.com/ok3mad/roslyn/issues/56)), see [Planned: ref parameters](#planned-ref-parameters).
+- **`ref`, `out` and `in` parameters, ref returns and more than 16 parameters** are an internal anonymous delegate
+  (see [Ref parameters](#ref-parameters)), so a member visible outside the assembly needs a named delegate (CS20075).
+  `params` and `this` parameters are errors (CS20008).
 - **Parameter names** exist within one compilation only. They are not in metadata, so a reference to a compiled
   assembly sees plain `Func<...>` (a project reference in the IDE shares the symbols and sees the names), and a named
   argument cannot use them: `area(width: 3)` is CS1746, as through a `Func`. The IDE does not show them yet. The
@@ -96,37 +97,56 @@ var name = o switch { () -> void => "action", (int) -> int f => "f" + f(1), _ =>
   with named arguments ([#215](https://github.com/ok3mad/roslyn/issues/215)); see
   [Planned: parameter names in the IDE and in metadata](#planned-parameter-names-in-the-ide-and-in-metadata).
   A method group's natural type has no names (`var f = int.Abs;`), and neither has an anonymous delegate
-  (`var f = (ref int x) => x;`).
+  (`var f = (ref int x) => x;` and `(ref int pos) -> int`, see [Ref parameters](#ref-parameters)).
 - **IDE:** the editor knows nothing about Sharper yet, so completion and formatting may not handle function types.
 
-## Planned: ref parameters
+## Ref parameters
 
-Decided in [#56](https://github.com/ok3mad/roslyn/issues/56), not built yet. A function type that `Func` and
-`Action` cannot express is the anonymous delegate C# synthesizes for a lambda's natural type:
+Decided and built in [#56](https://github.com/ok3mad/roslyn/issues/56). A function type that `Func` and `Action`
+cannot express is the anonymous delegate C# synthesizes for a lambda's natural type:
 
 ```csharp
 (ref int, out string) -> bool tryRead = (ref int pos, out string s) => { s = ""; return true; };
 () -> ref int slot = () => ref s_value;
 var f = (ref int x) => x++;
-(ref int) -> void g = f;                      // the same type: one anonymous delegate per signature
+(ref int) -> int g = f;                       // the same type: one anonymous delegate per signature
+(scoped ref int, in Span<int>) -> void h;     // scoped, as in a lambda's parameter list
 ```
 
-- **What it covers:** `ref`, `out`, `in`, `ref readonly` and `scoped` parameters, `ref` and `ref readonly` returns,
-  and more than 16 parameters. Everything else stays `Func` or `Action`, so `(int) -> int` keeps meaning
-  `Func<int, int>`. `params` and `this` stay errors.
+- **What it covers:** `ref`, `out`, `in`, `ref readonly` and `scoped` parameters, `ref` and `ref readonly` returns
+  (`() -> ref readonly int`), and more than 16 parameters. Everything else stays `Func` or `Action`, so
+  `(int) -> int` keeps meaning `Func<int, int>`, including the constraint errors of `Func` for a pointer or static
+  type. In the anonymous delegate a pointer is allowed, and a static type is CS0721 or CS0722, as for a lambda.
+  `params`, `this`, and `readonly` without `ref` are CS20008. `scoped` follows the rule of a lambda's parameter list
+  since C# 14: before a type it is a modifier, so `(scoped S) -> void` and `(scoped S s) -> void` are scoped, and only
+  `(scoped) -> int` and `(scoped, int) -> int` use a type named `scoped` (which C# 11 and later cannot declare). In
+  a tuple, `(scoped a, int b)` keeps its C# meaning.
 - **Identity:** within a compilation, every function type with the same parameter types, ref kinds, `scoped`
   and return is one type, the same one `var` gives a lambda with that signature (`GetMethodGroupOrLambdaDelegateType`,
-  `Binder_Expressions.cs`; anonymous delegates compare by signature). Like all anonymous delegates it is invariant, and
-  like any delegate it does not convert to a named delegate of the same shape; `f.Invoke` does.
+  `Binder_Expressions.cs`; anonymous delegates compare by signature). An `out` parameter is scoped by default, as in a
+  lambda. Like all anonymous delegates it is invariant, and like any delegate it does not convert to a named delegate
+  of the same shape (CS0029); `f.Invoke` does, and so does a method group. The anonymous delegate can be a type
+  argument (`List<(ref int) -> int>`, `Func<(ref int) -> int, int>`), an array element and nullable.
 - **Visibility:** the anonymous delegate is internal, so these function types are allowed wherever an internal type
-  is: locals, private and internal members, public members of internal types, and type arguments in them. This is the
-  boundary `infer` already has for anonymous types (CS0050). A member visible outside the assembly reports a new Sharper
-  error that says to declare a named delegate, instead of the inconsistent accessibility errors (CS0050 to CS0053),
-  and so does an `infer` member whose inferred type is an anonymous delegate.
+  is: locals, private, internal and private protected members, public members of internal types, and type arguments
+  in them. A member visible outside the assembly (public, protected or protected internal in a public type) reports
+  CS20075, which says to declare a named delegate, instead of the inconsistent accessibility errors (CS0050 to CS0061,
+  CS0703), and so does an `infer` member whose inferred type is an anonymous delegate. This is the boundary `infer`
+  already has for anonymous types (CS0050). The same holds for a public delegate's parameters, a public type's base
+  type or interface, and a type parameter's constraint.
 - **Friend assemblies** (`InternalsVisibleTo`) see the other assembly's anonymous delegate as an unnamed type: they
-  can call it and pass lambdas to it, but their own function type of the same shape is a different type.
-- **Parameter names** ([#57](https://github.com/ok3mad/roslyn/issues/57)) must not become part of the anonymous
-  delegate's identity, as they are not part of `Func`'s.
+  can call it and pass lambdas to it, but their own function type of the same shape is a different type (CS1503,
+  CS0029); `own.Invoke` converts.
+- **Parameter names** ([#57](https://github.com/ok3mad/roslyn/issues/57)) are not part of the anonymous delegate's
+  identity, as they are not part of `Func`'s: `(ref int a) -> int` and `(ref int b) -> int` are one type. The names
+  are checked (CS0100) but not carried: the anonymous delegate's `Invoke` has the names of its descriptor, `arg1`,
+  `arg2`, as for a lambda's natural type. Carrying them needs storage outside the descriptor, which is the
+  anonymous delegate's identity; it is left for N4 ([#215](https://github.com/ok3mad/roslyn/issues/215)), which
+  decides names in metadata.
+- **Nullable annotations** are part of the parameter and return types, with the warnings of the lambda's natural
+  type (CS8619 between two anonymous delegates whose annotations differ).
+- **Error messages** show the anonymous delegate as C# does, `<anonymous delegate>`; CS20075 writes it as the
+  function type, `(ref int) -> void`.
 
 Rejected, because no other representation gives one type across assemblies:
 
@@ -220,8 +240,8 @@ Rejected:
 The function type is the syntax node `FunctionTypeSyntax` (`Syntax.xml`), Sharper's first new syntax node. Its kind,
 `SyntaxKind.FunctionType`, is 9900: Sharper syntax nodes count up from there, apart from upstream's kinds. Its
 parameters are `FunctionTypeParameterSyntax` (`SyntaxKind.FunctionTypeParameter`, 9906): modifiers, a type and an
-optional name, the shape of a tuple element with modifiers. The modifiers are bound by `BindFunctionType`, which
-reports CS20008 for them today.
+optional name, the shape of a tuple element with modifiers. `scoped` is read as a modifier by
+`IsSharperFunctionTypeScopedModifier`, in both the scanner and the parser.
 
 The parser (`LanguageParser.cs`) changes only when Sharper is on:
 
@@ -244,6 +264,15 @@ return types and constructs the
 well-known `Func` or `Action` through `BindSharperTypeAlias` (`Binder_SharperTypes.cs`), checking constraints as for
 any generic type, with each parameter and return type as the location of its type argument. There is no bound node, so flow
 analysis, lowering and IOperation need no changes. Tests are the `FunctionType_*` tests in `SharperTests.cs`.
+
+A function type with `ref`, `out`, `in` or `scoped` parameters, a ref return (a `RefTypeSyntax` return type) or more
+than 16 parameters binds in `BindSharperAnonymousDelegateFunctionType` (`Binder_SharperTypes.cs`), which builds the
+anonymous delegate descriptor with `Binder.ConstructAnonymousDelegateSymbol`, the helper that
+`GetMethodGroupOrLambdaDelegateType` uses for a lambda. The modifiers are read by
+`BindSharperFunctionTypeParameterModifiers`. CS20075 is reported by `SharperFunctionTypeVisibility.AddInconsistentAccessibility`,
+which every inconsistent accessibility error of a signature, base type or constraint goes through: in a Sharper
+file, when the less visible type is an anonymous delegate, it reports CS20075 instead. Tests are the
+`FunctionTypeRef_*` tests in `SharperTests_FunctionTypeRefParameters.cs`.
 
 Parameter names are a `SharperFunctionTypeNames` record on the constructed type (`Symbols/SharperFunctionTypeNames.cs`),
 the analog of `TupleExtraData`, set by `BindFunctionType` and, for a lambda's natural type, by

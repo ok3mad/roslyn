@@ -124,6 +124,22 @@ comparisons ignore under `TypeCompareKind.IgnoreTupleNames`. For the next thing 
 6. **Test that nothing is emitted**: compare the IL and the metadata dump (members, attributes, metadata names) with
    the C# twin's, and read the type back through a metadata reference and a compilation reference.
 
+### A form the BCL type cannot express
+
+A function type with `ref`, `out`, `in` or `scoped` parameters, a ref return or more than 16 parameters has no `Func`
+or `Action`, and binds to the anonymous delegate of a lambda's natural type (#56; implementation plan, "Function types
+as anonymous delegates"):
+
+1. **Share the descriptor with the lambda.** Build it with `Binder.ConstructAnonymousDelegateSymbol`, the helper
+   `GetMethodGroupOrLambdaDelegateType` uses, so the form is the same type `var` gives the lambda. Match what the
+   lambda's natural type takes from its parameters: effective scopes (`out` is scoped by default), not the written
+   modifiers.
+2. **An internal type in a signature goes through one helper.** `SharperFunctionTypeVisibility.AddInconsistentAccessibility`
+   reports every inconsistent accessibility error (CS0050 to CS0061, CS0703) and turns the ones caused by an
+   anonymous delegate into CS20075, in Sharper files only. A new member kind or signature check reports through it.
+3. **Test against the lambda twin** with `SymbolEqualityComparer.Default` and, ignoring the top-level annotation of a
+   `var` local, `IncludeNullability`; give the twin an explicit return type where the inferred one would differ.
+
 ## Traps Found So Far
 
 1. **Kind lists outside the visitors.** `ExitPointsWalker` throws on unknown pending-branch kinds, and the lowering
