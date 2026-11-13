@@ -1471,7 +1471,50 @@ rules and return inference.
   Left as `PROTOTYPE(sharper)`: `val` in deconstructions, patterns, `foreach` and `out`, and locals with a written type.
   Tests: 15 `ReturnRefinement*` tests (`SharperTests_RefinementReturns.cs`) and one emit-difference test
   (`EditAndContinueSharperTests`).
-- [ ] Step 4, call sites and switches.
+- [x] **Step 4, call sites and switches** (`sharper/refined-call-sites`). `Binder.CheckSharperRefinedArgument`
+  (`Binder/Binder_SharperRefinements.cs`), called for every converted argument in `CheckAndCoerceArguments`, compares
+  the argument's refinement (`SharperRefinement.OfExpression`, step 3's sources) with the parameter's
+  (`SharperRefinement.Prove`, `Symbols/Source/SharperRefinement_CallSites.cs`): proven if `A ∩ ¬B` is empty, disproven if
+  `A ∩ B` is empty, null counted on its own (`MatchesNull`). CS20075 to CS20080. The open points, as decided:
+  - **Inferred or written.** "Inferred" is a flag on the refinement (`SharperRefinement.IsInferred`): set on unions and
+    on the result of a call, even a call of a method that returns a refined parameter unchanged (`AsInferred` keeps the
+    text and the value set). A written parameter refinement reached unchanged, also through a `val` local, is not
+    inferred, so an unproven argument with it is the warning CS20077, not an error: slices 2 and 3 narrow such values
+    after tests, and `if (k >= 1) Positive(k);` must not be an error until then. A disproven one is an error either way.
+  - **Diagnostic texts** name the argument, the parameter, its refinement, the argument's refinement and a value outside
+    the domain (`allows -1`, from `IValueSet.Sample`, formatted as the attribute text formats constants).
+  - **The hook.** `Binder.GetSharperRefinementInScope(variable)` walks the binder chain and ends at the variable's own
+    refinement; `OfExpression` and `OfValues` take the binder as `scope`. `assume`'s scope binder will override it. A
+    `val` local's refinement is read through it too; the return inference of step 3 still reads the variables' own.
+  - **Routes.** Everything that binds through `CheckAndCoerceArguments` is checked: methods, local functions,
+    constructors and initializers, primary constructor base calls, indexers, attributes, named and optional arguments,
+    classic extension methods (with the receiver) and extension block members (also through the implementation
+    method), metadata methods. Method group conversions, `dynamic` calls and user-defined operators and conversions are
+    not checked; the guard covers them (`PROTOTYPE(sharper)` for operators).
+  - **`params`, `ref`, `in`.** Nothing needed: their parameters cannot be refined (CS20059, CS20061).
+  - **Mixed compilations.** Only calls in Sharper files are checked (the flag on the call's syntax); C# files and
+    compilations without the flag see the plain types and meet the guard.
+  - **Nullable.** Null state and refinements stay separate: `NotX(null)` is proven for `string s is not "x"` and keeps
+    C#'s CS8625 when `s` is not nullable.
+  - **Switch seeding.** `DecisionDagBuilder` takes an `inputRefinement` whose values seed the root state, and decides the
+    tests of the original input that the refinement makes certain (`KnownFromSharperInputRefinement`): both branches go
+    to the possible outcome, so `removeUnnecessaryStates` drops the test. Without that, no case is simplified against
+    the seed before the first split, and an impossible first test (`<0` for `>=0`) leaves an empty branch that reaches the
+    default label. A seeded DAG is marked unsuitable for lowering, so lowering rebuilds C#'s DAG and the values the
+    refinement excludes still throw (`SwitchExpressionException`); the reachability DAG (flow analysis, CS8509) is the
+    seeded one. A refinement that allows null does not seed: value sets hold no null, and the builder prunes a case once
+    its input's set is empty, which made `null => 2` unreachable for `string t is "a" or null`. `is` patterns are not
+    seeded.
+  - **Exhaustiveness and unreachable arms.** `PatternExplainer` starts the root's remaining values from the refinement,
+    so CS8509 names `2`, not `-1`, for `i switch { 0 => 1, 1 => 2 }`. An inferred input refinement turns CS8509 into
+    CS20079. An unreachable arm or case label is checked again against an unseeded DAG (built only when some label is
+    unreachable): reachable there means the warning CS20080, else C#'s error.
+  - **Edit and Continue.** Not small: the IDE sees no refinement through the public API, and a body edit that keeps the
+    signature does not reach `GetSignatureChangeRudeEdit`. `PROTOTYPE(sharper)` comment and
+    [#237](https://github.com/ok3mad/roslyn/issues/237).
+  Earlier tests changed: the guard tests pass their out-of-domain values through an unrefined `Report.V(...)` (CS20078
+  disabled there), and `ReturnRefinement_RefinedParameterUnchanged` narrows `Through` so that its call is proven.
+  Tests: 12 `RefinementCallSite_*` and `RefinementSwitch_*` tests (`SharperTests_RefinementCallSites.cs`).
 - [x] **Step 5, guard and metadata** (`sharper/refined-parameters-guard`). `SharperRefinementGuard`
   (`Lowering/SharperRefinementGuard.cs`) builds `if (p is not (pattern)) throw new ArgumentOutOfRangeException(nameof(p),
   p, "...")` for each refined parameter, lowers it with `LocalRewriter.Rewrite` on its own, and `MethodCompiler` puts it
@@ -1732,7 +1775,7 @@ built.
    `if (!(...)) throw`; IOperation shows that `if` and `throw`.
 4. **Tests** in `SharperTests_Assume.cs`, next to the C# `if` and `throw` they stand for.
 
-Later: step 4's call-site hook (part of step 4) and mutable targets with slice 3.
+Later: mutable targets with slice 3. Step 4's hook exists: the scope binder overrides `Binder.GetSharperRefinementInScope`.
 
 **Size:** S–M, about 1k to 1.5k lines with tests.
 

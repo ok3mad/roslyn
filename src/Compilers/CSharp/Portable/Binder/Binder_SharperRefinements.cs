@@ -16,8 +16,16 @@ namespace Microsoft.CodeAnalysis.CSharp
     /// on a refined value seeds its decision dag with the refinement's values. Only Sharper files are checked; C# callers
     /// meet the guard (<see cref="SharperRefinementGuard"/>).
     /// </summary>
+    /// <remarks>
+    /// Not checked, and covered by the guard: method group conversions, dynamic calls, and the operands of user-defined
+    /// operators and conversions, which do not bind through <see cref="CheckAndCoerceArguments"/>.
+    /// </remarks>
     internal partial class Binder
     {
+        // PROTOTYPE(sharper): callers now depend on inferred return refinements, so an Edit and Continue body edit that
+        // changes only a refinement must be a rude edit; the IDE cannot see refinements yet (#237).
+        // PROTOTYPE(sharper): check the operands of user-defined operators and conversions with refined parameters.
+
         /// <summary>
         /// The refinement of a refined parameter or a <c>val</c> local where this binder reads it: the variable's own
         /// refinement, unless a binder of an enclosing scope knows better. This is the hook an <c>assume</c> statement
