@@ -502,6 +502,16 @@ inferred return type binds the same body with the same member.
    being compiled (`ModuleBuilderOpt.AddSynthesizedDefinition`, bodies through `TypeCompilationState.AddSynthesizedMethod`):
    a top-level class cannot implement a private or protected interface. A `None` operation whose child has the same syntax
    must be implicit, or the IOperation test hook reports a duplicate node.
+48. **A new DAG evaluation and a name that changes from type to value meet their own lists.** The extractor pattern
+   (`BoundDagExtractorEvaluation`) needed `IsEquivalentTo` (calls compared by structure, `BoundDagOpaqueTest.IsSameValue`),
+   `BoundDagEvaluation.Symbol`, the two temp maps of `RemoveEvaluationAndUpdateTempReferences` (each output, the return
+   value included), the debug names of its temps, `LowerEvaluation`, and both nullable switches
+   (`LearnFromDecisionDag` and `getOrMakeAndRegisterDagTempSlot`); grep `BoundDagDeconstructEvaluation`. Its outputs are
+   DAG temps, so sub-patterns on them narrow and subsume like `Deconstruct`'s, while the input learns nothing. A positional
+   pattern's name, a type-only context in C#, can now read a parameter (`s is p.TryX(var n)`): the primary constructor
+   capture finders skip type-only names (`MethodCompiler`'s identifier map and `Binder.IdentifierUsedAsValueFinder`), so
+   both ask `IsInSharperExtractorPatternName`, or the parameter is reported unread. Test-only checks can encode C#'s
+   shapes too: `TestOperationVisitor` required a recursive pattern's method to be named `Deconstruct`.
 
 ## Testing
 
