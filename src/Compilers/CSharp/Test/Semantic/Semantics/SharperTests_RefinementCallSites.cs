@@ -108,8 +108,9 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         [Fact]
         public void RefinementCallSite_Values()
         {
-            // The sources of an argument's refinement are those of step 3. A written refinement that is not proven is a
-            // warning, since slices 2 and 3 narrow such values after tests; an inferred one is an error.
+            // The sources of an argument's refinement are those of step 3. A refinement that depends on a call's inferred
+            // return and is not proven is an error, so that a widened return breaks its callers; any other one (written,
+            // constants, their unions) is a warning, since slices 2 and 3 narrow such values.
             var source = """
                 class C
                 {
@@ -164,12 +165,12 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (22,18): error CS20076: The argument 'Same(k)' may not satisfy the refinement 'is >= 1' of parameter 'i': its inferred refinement 'is >= 0' allows 0.
                 //         Positive(Same(k));
                 Diagnostic(ErrorCode.ERR_SharperRefinementArgumentNotProven, "Same(k)").WithArguments("Same(k)", "i", ">= 1", ">= 0", "0").WithLocation(22, 18),
-                // (24,14): error CS20076: The argument 'c ? 1 : -1' may not satisfy the refinement 'is >= 0' of parameter 'i': its inferred refinement 'is -1 or 1' allows -1.
+                // (24,14): warning CS20077: The argument 'c ? 1 : -1' may not satisfy the refinement 'is >= 0' of parameter 'i': its refinement 'is -1 or 1' allows -1.
                 //         Page(c ? 1 : -1);
-                Diagnostic(ErrorCode.ERR_SharperRefinementArgumentNotProven, "c ? 1 : -1").WithArguments("c ? 1 : -1", "i", ">= 0", "-1 or 1", "-1").WithLocation(24, 14),
-                // (25,14): error CS20076: The argument 'c ? j : n' may not satisfy the refinement 'is >= 0' of parameter 'i': its inferred refinement 'is >= 1 or < 0' allows -1.
+                Diagnostic(ErrorCode.WRN_SharperRefinementArgumentNotProven, "c ? 1 : -1").WithArguments("c ? 1 : -1", "i", ">= 0", "-1 or 1", "-1").WithLocation(24, 14),
+                // (25,14): warning CS20077: The argument 'c ? j : n' may not satisfy the refinement 'is >= 0' of parameter 'i': its refinement 'is >= 1 or < 0' allows -1.
                 //         Page(c ? j : n);
-                Diagnostic(ErrorCode.ERR_SharperRefinementArgumentNotProven, "c ? j : n").WithArguments("c ? j : n", "i", ">= 0", ">= 1 or < 0", "-1").WithLocation(25, 14),
+                Diagnostic(ErrorCode.WRN_SharperRefinementArgumentNotProven, "c ? j : n").WithArguments("c ? j : n", "i", ">= 0", ">= 1 or < 0", "-1").WithLocation(25, 14),
                 // (27,14): warning CS20078: The compiler cannot prove that the argument 'x' satisfies the refinement 'is >= 0' of parameter 'i': the argument has no refinement. The method checks it when it is called.
                 //         Page(x);
                 Diagnostic(ErrorCode.WRN_SharperRefinementArgumentUnknown, "x").WithArguments("x", "i", ">= 0").WithLocation(27, 14),
@@ -424,7 +425,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         public void RefinementSwitch_Fib()
         {
             // Fib's switch needs no '_' arm: the refinement makes it exhaustive. The C# twin warns (CS8509) and its
-            // recursive calls are not checked; Sharper's unproven arguments warn until slice 2 narrows the arm.
+            // recursive calls are not checked; Sharper proves them, since the arm narrows 'i' to '>= 2' (slice 2).
             var source = """
                 using System;
 
@@ -448,12 +449,6 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             var verifier = CompileAndVerify(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90,
                 expectedOutput: ExecutionConditionUtil.IsCoreClr ? "89 89 2" : null);
             verifier.VerifyDiagnostics(
-                // (5,72): warning CS20078: The compiler cannot prove that the argument 'i - 1' satisfies the refinement 'is >= 0' of parameter 'i': the argument has no refinement. The method checks it when it is called.
-                //     static int Fib(int i is >=0) => i switch { 0 or 1 => 1, >=2 => Fib(i - 1) + Fib(i - 2) };
-                Diagnostic(ErrorCode.WRN_SharperRefinementArgumentUnknown, "i - 1").WithArguments("i - 1", "i", ">= 0").WithLocation(5, 72),
-                // (5,85): warning CS20078: The compiler cannot prove that the argument 'i - 2' satisfies the refinement 'is >= 0' of parameter 'i': the argument has no refinement. The method checks it when it is called.
-                //     static int Fib(int i is >=0) => i switch { 0 or 1 => 1, >=2 => Fib(i - 1) + Fib(i - 2) };
-                Diagnostic(ErrorCode.WRN_SharperRefinementArgumentUnknown, "i - 2").WithArguments("i - 2", "i", ">= 0").WithLocation(5, 85),
                 // (6,39): warning CS8509: The switch expression does not handle all possible values of its input type (it is not exhaustive). For example, the pattern '-1' is not covered.
                 //     static int Fib_CSharp(int i) => i switch { 0 or 1 => 1, >=2 => Fib_CSharp(i - 1) + Fib_CSharp(i - 2) };
                 Diagnostic(ErrorCode.WRN_SwitchExpressionNotExhaustive, "switch").WithArguments("-1").WithLocation(6, 39));
@@ -497,8 +492,8 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         [Fact]
         public void RefinementSwitch_Exhaustiveness()
         {
-            // A missing value is named inside the domain. A written refinement keeps C#'s warning (CS8509); an inferred one
-            // that a switch does not cover is an error, so that a widened return breaks the switch.
+            // A missing value is named inside the domain. A refinement that depends on a call's inferred return and that a
+            // switch does not cover is an error, so that a widened return breaks the switch; others keep C#'s CS8509.
             var source = """
                 enum Color { Red, Green, Blue }
 
@@ -545,9 +540,9 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 // (19,15): error CS20079: The switch expression does not handle all values of its input's inferred refinement 'is -1 or 0 or 1'. For example, the pattern '-1' is not covered.
                 //         _ = v switch { >=0 => 1 };
                 Diagnostic(ErrorCode.ERR_SharperSwitchNotExhaustiveForRefinement, "switch").WithArguments("-1 or 0 or 1", "-1").WithLocation(19, 15),
-                // (20,29): error CS20079: The switch expression does not handle all values of its input's inferred refinement 'is 1 or 2'. For example, the pattern '2' is not covered.
+                // (20,29): warning CS8509: The switch expression does not handle all possible values of its input type (it is not exhaustive). For example, the pattern '2' is not covered.
                 //         _ = (x > 0 ? 1 : 2) switch { 1 => 0 };
-                Diagnostic(ErrorCode.ERR_SharperSwitchNotExhaustiveForRefinement, "switch").WithArguments("1 or 2", "2").WithLocation(20, 29));
+                Diagnostic(ErrorCode.WRN_SwitchExpressionNotExhaustive, "switch").WithArguments("2").WithLocation(20, 29));
         }
 
         [Fact]

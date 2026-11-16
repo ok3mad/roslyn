@@ -209,11 +209,16 @@ namespace Microsoft.CodeAnalysis.CSharp
         {
             var builder = ArrayBuilder<BoundSwitchExpressionArm>.GetInstance();
             TypeSymbol inputType = GetInputType(inputExpression);
+
+            // Sharper: each arm narrows a refined or readonly input variable (refined types, slice 2).
+            SharperSwitchNarrowing? narrowing = SharperSwitchNarrowing.Create(this, inputExpression);
             foreach (var arm in node.Arms)
             {
                 var armBinder = originalBinder.GetRequiredBinder(arm);
                 Debug.Assert(inputExpression.Type is not null);
-                var boundArm = armBinder.BindSwitchExpressionArm(arm, inputType, diagnostics);
+                var boundArm = narrowing is not null && armBinder is SwitchExpressionArmBinder sharperArmBinder
+                    ? sharperArmBinder.BindSwitchExpressionArm(arm, inputType, narrowing, diagnostics)
+                    : armBinder.BindSwitchExpressionArm(arm, inputType, diagnostics);
                 builder.Add(boundArm);
             }
 

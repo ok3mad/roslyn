@@ -1,14 +1,22 @@
 # Refined types
 
-**Status:** Prototype of slice 1: steps 1, 2, 3 and 5 (syntax, binding, inferred return refinements, the entry guard and
-the metadata attribute) are merged into `main`; step 4 (call sites and switches) is on `sharper/refined-call-sites`.
-Requires `/features:sharper`. Issue: [#33](https://github.com/ok3mad/roslyn/issues/33). The design is in the
-implementation plan, [Feature 11](../planning/implementation-plan.md#feature-11-refined-types-slice-1-design).
+**Status:** Prototype. Slice 1 (syntax, binding, inferred return refinements, call sites and switches, the entry guard
+and the metadata attribute) is merged into `main`; slice 2 (arm narrowing and interval arithmetic) is on
+`sharper/refined-call-sites`. Requires `/features:sharper`. Issue: [#33](https://github.com/ok3mad/roslyn/issues/33).
+The design is in the implementation plan, [Feature 11](../planning/implementation-plan.md#feature-11-refined-types-slice-1-design)
+and [slice 2](../planning/implementation-plan.md#feature-11-refined-types-slice-2).
 
 A refinement is parsed, bound and checked, the parameter is readonly, the method checks it at entry, and every call in a
 Sharper file checks its arguments: `Page(-1)` is an error ([Call sites](#call-sites)). A switch on a refined value is
-exhaustive within its domain ([Switches](#switches)). Slice 1 proves little beyond constants and refinements passed on
-unchanged: `Fib(i - 1)` warns until slice 2 narrows switch arms and adds interval arithmetic.
+exhaustive within its domain ([Switches](#switches)), each switch expression arm narrows a readonly input
+([Narrowing](#narrowing)), and `+` and `-` of refined integers have a refinement ([Arithmetic](#arithmetic)), so Fib
+is proven:
+
+```csharp
+static int Fib(int i is >=0) => i switch { 0 or 1 => 1, >=2 => Fib(i - 1) + Fib(i - 2) };   // i - 1 is >= 1, i - 2 is >= 0
+```
+
+`if` tests, mutable variables and `assume` wait for slice 3's flow state.
 
 ## Summary
 
@@ -74,7 +82,8 @@ val s = Sign(x);                                                     // int is -
 | A refined parameter, a `val` local with a refinement | Its refinement; they are readonly, so the fact holds wherever they are read |
 | A call of a method whose return has a refinement, from source or metadata | The return's refinement |
 | A switch expression, a conditional expression `c ? a : b` | The union of its arms; an arm that throws adds nothing |
-| Anything else: a plain parameter, a `var` local, a field, arithmetic, a call of a C# method | None, and then the whole value has none |
+| `a + b`, `a - b`, `-a` over refined `int`, `uint`, `long` or `ulong` values (slice 2) | By interval arithmetic ([Arithmetic](#arithmetic)) |
+| Anything else: a plain parameter, a `var` local, a field, a call of a C# method, unchecked arithmetic that can overflow | None, and then the whole value has none |
 
 A method's refinement is the union over every `return` of its body. A widened body widens the refinement, which step 4
 turns into errors at the callers; one `return` with no refinement leaves the method with none.
@@ -114,9 +123,12 @@ parameter, a `val` local, a call whose return has a refinement, and switch and c
 | --- | --- | --- |
 | Proven: every value it can have satisfies the parameter's refinement (`A ∩ ¬B` empty), as `Page(0)`, `Page(Limit * 2 + 1)`, `Page(j)` for `int j is >=1` | Nothing | |
 | Disproven: no value does (`A ∩ B` empty), as `Page(-1)`, `Day(0)`, `NotNull(null)` for `string s is "a" or "b"` | Error | CS20075 |
-| Not proven, and its refinement is inferred: the result of a call (`Page(Sign(x))`), a `val` local that holds one, a union (`c ? 1 : -1`) | Error: widening an inferred return breaks its callers, as a changed type would | CS20076 |
-| Not proven, and its refinement is written on a parameter (`Positive(k)` for `int k is >=0`, also through `val v = k`) | Warning: slices 2 and 3 narrow such values after tests | CS20077 |
-| No refinement: a plain parameter, a field, arithmetic (`i - 1`), a C# method's result | Warning; the guard checks it at run time | CS20078 |
+| Not proven, and its refinement is inferred, that is, depends on a call's inferred return: the result of a call (`Page(Sign(x))`), a `val` local, union or narrowed arm that holds one | Error: widening an inferred return breaks its callers, as a changed type would | CS20076 |
+| Not proven, and any other refinement: written on a parameter (`Positive(k)` for `int k is >=0`, also through `val v = k`), constants and their unions (`c ? 1 : -1`), arithmetic (`k - 1`) | Warning: a better prover (slice 3) narrows such values after tests | CS20077 |
+| No refinement: a plain parameter, a field, a C# method's result, arithmetic that can overflow | Warning; the guard checks it at run time | CS20078 |
+
+Arithmetic results are never inferred, even over a call's result: they had no refinement before slice 2, and a better
+prover must not turn a warning into an error. A value it disproves is an error, since the guard always throws there.
 
 The diagnostics name the parameter, its refinement, the argument's refinement and a value outside the parameter's
 domain (`allows -1`). Null counts on its own: `NotX(null)` is proven for `string s is not "x"`, which matches null.
@@ -159,6 +171,55 @@ The seeded DAG is for diagnostics and flow analysis only: it is marked unsuitabl
 C#'s and still tests the values the refinement excludes, throwing `SwitchExpressionException` for them. A broken promise
 (untrusted metadata, Edit and Continue) cannot pick a wrong arm. The code is `DecisionDagBuilder`'s `inputRefinement`
 (the root state's values, and tests on the input that the refinement decides) and `PatternExplainer`'s `inputValues`.
+
+## Narrowing
+
+Inside a switch expression arm, a variable that cannot change and that is the switch's input has the values the arm's
+pattern matches among those the earlier arms leave (slice 2). The arm's `when` clause and value see them, also inside
+lambdas and nested switches, which narrow further:
+
+```csharp
+static void M(int k is >=0, readonly int r)
+{
+    _ = k switch { 0 => 0, _ => Positive(k) };          // k is >= 1 here: proven
+    _ = k switch { <10 => Small(k), _ => Positive(k) };  // >= 0 and < 10, then >= 10
+    _ = r switch { >=0 => Page(r), _ => 0 };            // a readonly parameter narrows too
+}
+```
+
+| Rule | |
+| --- | --- |
+| Variables that narrow | Refined and `readonly` parameters, `val` and `readonly` locals, `val` lambda parameters. A mutable variable could change inside the arm |
+| An arm with a `when` clause | Narrows its own `when` clause and value, but takes nothing away from the later arms |
+| Patterns that are not closed over constants | Type, declaration and `var` patterns of the input's type, and `_`, match every value; others count as matching every value for their arm and none for the later arms, so the narrowed values always include the real ones |
+| Severity | A narrowed refinement is inferred if the variable's is; an arm whose values are all outside a parameter's domain is disproven (CS20075) |
+| Not narrowed | Switch statements (`goto case` enters a section without matching its labels), `is` patterns, `if` tests, and the arm's own pattern variables; `nint` and `nuint` (their sets have no written form) |
+
+The code is `SharperSwitchNarrowing` (`Binder/Binder_SharperRefinements.cs`): the switch expression binder makes it,
+and each `SwitchExpressionArmBinder` records the narrowed refinement and answers the scope hook
+(`GetSharperRefinementInScope`) for the arm.
+
+## Arithmetic
+
+`a + b`, `a - b` and `-a` over `int`, `uint`, `long` and `ulong` values whose refinements are known have a refinement,
+computed interval by interval (slice 2):
+
+| Expression | Refinement |
+| --- | --- |
+| `k + 1` for `int k is >=0 and <100` | `>= 1 and <= 100` |
+| `k - j` for `j is >=1 and <=5` | `>= -5 and <= 98` |
+| `-k` | `>= -99 and <= 0` |
+| `i + 10` for `int i is 1 or 5` | `11 or 15` |
+| `i + 1` for `int i is >=0` | None: unchecked, `int.MaxValue + 1` wraps around |
+| `checked(i + 1)` for `int i is >=0` | `>= 1`: the value that would overflow throws |
+| `l + k` for `long l` and `int k` | None: a converted operand has no refinement yet |
+
+Arithmetic counts wherever refinements do: arguments, switch inputs, `val` locals and inferred returns
+(`infer Next(int i is >=0 and <10) => i + 1` returns `int is >= 1 and <= 10`, written to metadata). A refinement built
+from values uses the normal form, with a range of fewer than four integral values written as constants (`0 or 1`). The
+code is `SharperRefinement.OfArithmetic` and `FromValues` (`Symbols/Source/SharperRefinement_Narrowing.cs`), over the
+ranges `ValueSetFactory.TryGetSharperRanges` reads from a value set. Multiplication, division and conversions are
+later.
 
 ## Runtime guard
 
@@ -243,8 +304,17 @@ is a body update (an edit that changes the type is a rude edit, as before).
 - A method with refined parameters does not use runtime async (see the guard table); a synthesized wrapper that checks
   and then calls a runtime-async body would let it ([#224](https://github.com/ok3mad/roslyn/issues/224)).
 - The guard always runs; eliding it when every caller is proven is an optimization for later.
+- An inferred return does not see narrowing: the union of the returned values is computed after binding, from the
+  variables' own refinements, so `infer F(int i is >=0) => i switch { 0 => 1, _ => i }` is `>= 0`, not `>= 1`.
+- Switch statements, `is` patterns and `if` tests do not narrow, and arithmetic covers `+`, `-` and unary `-` without
+  conversions (slice 3 and later).
 
 ## Tests
+
+`SharperTests_RefinementNarrowing.cs` (`RefinementNarrowing_*`, `RefinementArithmetic_*`): narrowing of every
+eligible variable, `when` clauses, lambdas and nested switches, every type with a value set, the severity of narrowed
+refinements, arithmetic over every supported type with and without overflow, inferred returns and their attribute
+text, and the flag off.
 
 `SharperTests_RefinementCallSites.cs` (`RefinementCallSite_*`, `RefinementSwitch_*`): constants of every type in and
 out of the domain, every source of an argument's refinement, a widened inferred return breaking its caller and a
