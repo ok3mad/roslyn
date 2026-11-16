@@ -450,7 +450,10 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             comp.VerifyDiagnostics(
                 // (8,9): error CS9048: The 'scoped' modifier can be used for refs and ref struct values only.
                 // (scoped scoped) -> void scopedTypeNamedScoped = null;
-                Diagnostic(ErrorCode.ERR_ScopedRefAndRefStructOnly, "scoped").WithLocation(8, 9));
+                Diagnostic(ErrorCode.ERR_ScopedRefAndRefStructOnly, "scoped").WithLocation(8, 9),
+                // (10,9): error CS9048: The 'scoped' modifier can be used for refs and ref struct values only.
+                // (scoped (scoped ref int) -> void) -> void nested = null;
+                Diagnostic(ErrorCode.ERR_ScopedRefAndRefStructOnly, "(scoped ref int) -> void").WithLocation(10, 9));
 
             AssertEx.Equal("System.Func<scoped, System.Int32, System.Int32>", FunctionTypeRef_Local(comp, "typeNamedScoped").Type.ToTestDisplayString());
             AssertEx.Equal("System.Func<scoped, System.Int32>", FunctionTypeRef_Local(comp, "onlyScoped").Type.ToTestDisplayString());
