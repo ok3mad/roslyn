@@ -69,14 +69,27 @@ namespace Microsoft.CodeAnalysis.CSharp
         {
             wasReported = false;
             defaultLabel = new GeneratedLabelSymbol("default");
-            decisionDag = DecisionDagBuilder.CreateDecisionDagForSwitchExpression(this.Compilation, node, boundInputExpression, switchArms, defaultLabel, diagnostics);
+
+            // Sharper: a refined input seeds the dag with its refinement's values (Feature 11, step 4).
+            SharperRefinement? refinement = GetSharperSwitchInputRefinement(boundInputExpression);
+            decisionDag = DecisionDagBuilder.CreateDecisionDagForSwitchExpression(this.Compilation, node, boundInputExpression, switchArms, defaultLabel, diagnostics, inputRefinement: refinement);
             var reachableLabels = decisionDag.ReachableLabels;
+            ImmutableHashSet<LabelSymbol>? reachableWithoutRefinement = null;
             bool hasErrors = false;
             foreach (BoundSwitchExpressionArm arm in switchArms)
             {
                 hasErrors |= arm.HasErrors;
                 if (!hasErrors && !reachableLabels.Contains(arm.Label))
                 {
+                    if (refinement is not null &&
+                        (reachableWithoutRefinement ??= DecisionDagBuilder.CreateDecisionDagForSwitchExpression(
+                            this.Compilation, node, boundInputExpression, switchArms, new GeneratedLabelSymbol("default"), BindingDiagnosticBag.Discarded).ReachableLabels).Contains(arm.Label))
+                    {
+                        // Unreachable only because of the refinement: narrowing a domain must never break a caller.
+                        diagnostics.Add(ErrorCode.WRN_SharperSwitchArmExcludedByRefinement, arm.Pattern.Syntax.Location, refinement.Text);
+                        continue;
+                    }
+
                     diagnostics.Add(ErrorCode.ERR_SwitchArmSubsumed, arm.Pattern.Syntax.Location);
                     wasReported = true;
                 }
@@ -103,7 +116,16 @@ namespace Microsoft.CodeAnalysis.CSharp
                 if (n is BoundLeafDecisionDagNode leaf && leaf.Label == defaultLabel)
                 {
                     var samplePattern = PatternExplainer.SamplePatternForPathToDagNode(
-                        this, BoundDagTemp.ForOriginalInput(boundInputExpression), nodes, n, nullPaths: false, reachabilityInfo: null, out bool requiresFalseWhenClause, out bool unnamedEnumValue);
+                        this, BoundDagTemp.ForOriginalInput(boundInputExpression), nodes, n, nullPaths: false, reachabilityInfo: null, out bool requiresFalseWhenClause, out bool unnamedEnumValue,
+                        inputValues: refinement?.Values);
+                    if (refinement is { IsInferred: true })
+                    {
+                        // Sharper: a widened inferred refinement must break the switch, as it breaks a caller.
+                        diagnostics.Add(ErrorCode.ERR_SharperSwitchNotExhaustiveForRefinement, node.SwitchKeyword.GetLocation(), refinement.Text, samplePattern);
+                        wasReported = true;
+                        return true;
+                    }
+
                     ErrorCode warningCode =
                         requiresFalseWhenClause ? ErrorCode.WRN_SwitchExpressionNotExhaustiveWithWhen :
                         unnamedEnumValue ? ErrorCode.WRN_SwitchExpressionNotExhaustiveWithUnnamedEnumValue :

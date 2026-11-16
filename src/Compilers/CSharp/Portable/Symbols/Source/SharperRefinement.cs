@@ -33,11 +33,12 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
         private string? _lazyText;
 
-        private SharperRefinement(BoundPattern pattern, IConstantValueSet? values, bool matchesNull)
+        private SharperRefinement(BoundPattern pattern, IConstantValueSet? values, bool matchesNull, bool isInferred = false)
         {
             Pattern = pattern;
             Values = values;
             MatchesNull = matchesNull;
+            IsInferred = isInferred;
         }
 
         /// <summary>

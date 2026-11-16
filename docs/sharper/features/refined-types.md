@@ -1,14 +1,14 @@
 # Refined types
 
-**Status:** Prototype of slice 1: steps 1, 2 and 5 (syntax, binding, the entry guard and the metadata attribute) are
-merged into `main`; step 3 (inferred return refinements) is on `sharper/refined-returns`. Requires `/features:sharper`. Issue:
-[#33](https://github.com/ok3mad/roslyn/issues/33). The design is in the implementation plan,
-[Feature 11](../planning/implementation-plan.md#feature-11-refined-types-slice-1-design).
+**Status:** Prototype of slice 1: steps 1, 2, 3 and 5 (syntax, binding, inferred return refinements, the entry guard and
+the metadata attribute) are merged into `main`; step 4 (call sites and switches) is on `sharper/refined-call-sites`.
+Requires `/features:sharper`. Issue: [#33](https://github.com/ok3mad/roslyn/issues/33). The design is in the
+implementation plan, [Feature 11](../planning/implementation-plan.md#feature-11-refined-types-slice-1-design).
 
-**Calls are not checked yet.** A refinement is parsed, bound and checked, the parameter is readonly, and the method
-checks it at entry: `Page(-1)` compiles, and throws `ArgumentOutOfRangeException` when it runs. Switches behave as in
-C#. The return of an `infer` method and a `val` local already carry an inferred refinement
-([Inferred refinements](#inferred-refinements)), which nothing reads yet; call sites and switches (step 4) come next.
+A refinement is parsed, bound and checked, the parameter is readonly, the method checks it at entry, and every call in a
+Sharper file checks its arguments: `Page(-1)` is an error ([Call sites](#call-sites)). A switch on a refined value is
+exhaustive within its domain ([Switches](#switches)). Slice 1 proves little beyond constants and refinements passed on
+unchanged: `Fib(i - 1)` warns until slice 2 narrows switch arms and adds interval arithmetic.
 
 ## Summary
 
@@ -104,6 +104,62 @@ its declaration is bound. The code is `SharperRefinement.OfValues` and `OfExpres
 (`Symbols/Source/SharperRefinement_Inferred.cs`); the slots are `MethodSymbol.SharperReturnRefinement` and
 `LocalSymbol.SharperRefinement`, and a call's result is read with `SharperRefinement.OfExpression`.
 
+## Call sites
+
+Every call in a Sharper file compares the refinement of each argument with the refinement of its parameter. The
+argument's refinement comes from the sources of [Inferred refinements](#inferred-refinements): a constant, a refined
+parameter, a `val` local, a call whose return has a refinement, and switch and conditional expressions over them.
+
+| Argument | Result | Diagnostic |
+| --- | --- | --- |
+| Proven: every value it can have satisfies the parameter's refinement (`A ∩ ¬B` empty), as `Page(0)`, `Page(Limit * 2 + 1)`, `Page(j)` for `int j is >=1` | Nothing | |
+| Disproven: no value does (`A ∩ B` empty), as `Page(-1)`, `Day(0)`, `NotNull(null)` for `string s is "a" or "b"` | Error | CS20075 |
+| Not proven, and its refinement is inferred: the result of a call (`Page(Sign(x))`), a `val` local that holds one, a union (`c ? 1 : -1`) | Error: widening an inferred return breaks its callers, as a changed type would | CS20076 |
+| Not proven, and its refinement is written on a parameter (`Positive(k)` for `int k is >=0`, also through `val v = k`) | Warning: slices 2 and 3 narrow such values after tests | CS20077 |
+| No refinement: a plain parameter, a field, arithmetic (`i - 1`), a C# method's result | Warning; the guard checks it at run time | CS20078 |
+
+The diagnostics name the parameter, its refinement, the argument's refinement and a value outside the parameter's
+domain (`allows -1`). Null counts on its own: `NotX(null)` is proven for `string s is not "x"`, which matches null.
+Nullable analysis is unchanged and separate (`NotX(null)` still gets CS8625 under `#nullable enable` if `s` is not
+`string?`).
+
+| Route | Checked |
+| --- | --- |
+| Methods, local functions, constructors, `new()`, `this(...)` and `base(...)` initializers, primary constructor base calls (`class D() : P(-2)`), indexers, attributes, named and optional arguments, classic extension methods (also the receiver), extension block members (also through their implementation method), metadata methods with `SharperRefinementAttribute` | Yes: they all bind through `Binder.CheckAndCoerceArguments` |
+| Default values | At the declaration (CS20060) |
+| `params`, `ref`, `out`, `in` | Nothing to check: such parameters cannot be refined |
+| Method group conversions (`Action<int> f = Page;`), `dynamic` calls, operands of user-defined operators and conversions | No; the guard covers them |
+| C# files of the same compilation, and compilations without the flag | No; C# callers meet the guard |
+
+The refinement of a variable is read through one hook, `Binder.GetSharperRefinementInScope`, which returns the
+variable's own refinement unless a binder of an enclosing scope knows better; `assume` ([#39](https://github.com/ok3mad/roslyn/issues/39))
+will override it. `val` locals read their initializer's refinement through it too.
+
+## Switches
+
+A switch expression or statement on a refined value in a Sharper file seeds its decision DAG with the refinement's
+values, so the arms only need to cover the domain:
+
+```csharp
+static int Fib(int i is >=0) => i switch { 0 or 1 => 1, >=2 => Fib(i - 1) + Fib(i - 2) };   // exhaustive, no '_'
+```
+
+| Case | Diagnostic |
+| --- | --- |
+| A switch expression that misses values of a written refinement | C#'s CS8509, naming a missing value inside the domain (`2` for `i switch { 0 => 1, 1 => 2 }`) |
+| A switch expression that misses values of an inferred refinement (`Sign(x) switch { 0 => 1, 1 => 2 }`, a `val` of one) | CS20079, an error: a widened return must break the switch, as it breaks a caller |
+| An arm or case label that only the refinement excludes (`<0` for `int i is >=0`) | CS20080, a warning: narrowing a domain, by a body edit or a better prover, must never break code |
+| An arm that earlier arms subsume | C#'s error, as before (CS8510, CS8120, CS0152) |
+| A switch statement that covers the domain | Its end is unreachable: `switch (i) { case 0: return 1; case >0: return 2; }` needs no return after it |
+
+A refinement that allows `null` (`string t is "a" or null`) does not seed the DAG: value sets hold no null, and the DAG
+builder takes an empty set to mean that no value is left. Such a switch behaves as in C#. `is` patterns are not seeded.
+
+The seeded DAG is for diagnostics and flow analysis only: it is marked unsuitable for lowering, so the lowered switch is
+C#'s and still tests the values the refinement excludes, throwing `SwitchExpressionException` for them. A broken promise
+(untrusted metadata, Edit and Continue) cannot pick a wrong arm. The code is `DecisionDagBuilder`'s `inputRefinement`
+(the root state's values, and tests on the input that the refinement decides) and `PatternExplainer`'s `inputValues`.
+
 ## Runtime guard
 
 Every method with refined parameters checks them at entry, in order, on every accessibility. `Page` above runs as if
@@ -175,9 +231,11 @@ is a body update (an edit that changes the type is a rude edit, as before).
 - An implicit implementation of an interface member, `public void M(int i is >=0)` for `I.M(int i)`, is not
   reported yet; it needs the interface map.
 - A default value from `[DefaultParameterValue]` is not checked.
-- Nothing reads an inferred refinement yet. When step 4 makes callers depend on it, a body edit that changes it must
-  become a rude edit, as a changed inferred type is: callers are not recompiled. The IDE cannot see the refinement
-  through the public API today.
+- Callers depend on inferred refinements since step 4, so a body edit that changes one should be a rude edit, as a
+  changed inferred type is: callers are not recompiled. The IDE cannot see the refinement through the public API today
+  ([#237](https://github.com/ok3mad/roslyn/issues/237)).
+- The operands of user-defined operators and conversions with refined parameters are not checked at the call site.
+- A switch on a refinement that allows `null` is not seeded, and `is` patterns are never seeded.
 - Changing a written return type to `infer` during Edit and Continue adds the attribute to the return, which the delta
   writer cannot do.
 - `val` variables of deconstructions, patterns, `foreach` and `out`, and locals with a written type, have no refinement.
@@ -187,6 +245,13 @@ is a body update (an edit that changes the type is a rude edit, as before).
 - The guard always runs; eliding it when every caller is proven is an optimization for later.
 
 ## Tests
+
+`SharperTests_RefinementCallSites.cs` (`RefinementCallSite_*`, `RefinementSwitch_*`): constants of every type in and
+out of the domain, every source of an argument's refinement, a widened inferred return breaking its caller and a
+narrowed one not, every call route, metadata callers (image and compilation references, with the flag off), a mixed
+compilation, runtime output next to the C# twin, Fib's switch without `_` and its lowered IL, exhaustiveness, the
+unreachable-arm warning, nullable interplay and the flag off. The guard tests pass their values outside the domain
+through an unrefined `Report.V(...)`, an unproven caller (CS20078 disabled there).
 
 `src/Compilers/CSharp/Test/Semantic/Semantics/SharperTests_Refinements.cs` (`Refinement_*`): parsing with the flag on
 and off, the default-value ambiguity, the factory overloads, every position, the value sets, each diagnostic, and

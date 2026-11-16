@@ -503,6 +503,17 @@ inferred return type binds the same body with the same member.
    a top-level class cannot implement a private or protected interface. A `None` operation whose child has the same syntax
    must be implicit, or the IOperation test hook reports a duplicate node.
 
+48. **Knowledge seeded into a decision DAG must be applied to the root's tests, and kept out of lowering.** The DAG
+   builder simplifies a case's tests only when it splits on a test, so values seeded into the root state
+   (`DecisionDagBuilder`'s `inputRefinement`, a refined switch input) leave the first test undecided: an impossible
+   outcome gets an empty state, which reaches the default label and makes a covered switch non-exhaustive. Decide such
+   tests by sending both branches to the possible state, which `removeUnnecessaryStates` drops
+   (`KnownFromSharperInputRefinement`). Value sets hold no null, and the builder prunes a case once its input's set is
+   empty, so seed only facts that exclude null. Mark a seeded DAG unsuitable for lowering so that lowering rebuilds C#'s
+   and a broken promise still throws, and give `PatternExplainer` the same values, or CS8509 names a value outside the
+   domain. To tell "unreachable because of the seed" from C#'s subsumption, build the unseeded DAG only when a label is
+   unreachable.
+
 ## Testing
 
 - Tests live in `src/Compilers/CSharp/Test/Semantic/Semantics/SharperTests.cs`; `SharperTests` is partial, so a large
