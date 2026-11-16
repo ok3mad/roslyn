@@ -75,7 +75,8 @@ namespace Microsoft.CodeAnalysis.CSharp
 
                             if (SyntaxFacts.IsInTypeOnlyContext(id) &&
                                 !(id.Parent is BinaryExpressionSyntax { RawKind: (int)SyntaxKind.IsExpression } isExpression &&
-                                    isExpression.Right == id))
+                                    isExpression.Right == id) &&
+                                !IsInSharperExtractorPatternName(id))
                             {
                                 continue;
                             }
@@ -162,7 +163,8 @@ namespace Microsoft.CodeAnalysis.CSharp
                         case ExpressionSyntax expression:
                             if (SyntaxFacts.IsInTypeOnlyContext(expression) &&
                                 !(expression.Parent is BinaryExpressionSyntax { RawKind: (int)SyntaxKind.IsExpression } isExpression &&
-                                    isExpression.Right == expression))
+                                    isExpression.Right == expression) &&
+                                !IsInSharperExtractorPatternName(expression))
                             {
                                 return false;
                             }

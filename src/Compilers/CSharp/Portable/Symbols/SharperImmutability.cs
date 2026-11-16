@@ -1157,6 +1157,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     case BoundRelationalPattern:
                     case BoundOpaquePattern:
                     case BoundExtractorPattern:
+                    case BoundPositionalSubpattern: // Only under an extractor: recursive and ITuple patterns are not allowed
                     case BoundBinaryPattern:
                     case BoundNegatedPattern:
                     case BoundPropertySubpattern:

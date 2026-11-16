@@ -200,10 +200,37 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                     [Pure] public static int Halve(int x) => x / 2;
                 }
                 """;
-            // A type of that name always wins: 'Parse(var n)' deconstructs the class, and 'Halve(var h)' is the type
-            // 'System.Half'. 'Ex.Halve' names no type, so it is an extractor.
+            // A type of that name always wins, silently: 'Parse(var n)' deconstructs the class. 'Halve' names no type.
             var comp = CreateOpaqueCompilation(source);
             comp.VerifyDiagnostics();
+            CompileAndVerify(comp, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "322" : null);
+
+            // 'Half' is the type 'System.Half', whatever methods of that name are in scope.
+            source = """
+                using System;
+                using static Ex;
+                class C
+                {
+                    static bool M(int x) => x is Half(var h);
+                }
+                static class Ex
+                {
+                    [Pure] public static int Half(int x) => x / 2;
+                }
+                """;
+            CreateImmutableCompilation(source).VerifyDiagnostics(
+                // (2,1): hidden CS8019: Unnecessary using directive.
+                // using static Ex;
+                Diagnostic(ErrorCode.HDN_UnusedUsingDirective, "using static Ex;").WithLocation(2, 1),
+                // (5,34): error CS8121: An expression of type 'int' cannot be handled by a pattern of type 'Half'.
+                //     static bool M(int x) => x is Half(var h);
+                Diagnostic(ErrorCode.ERR_PatternWrongType, "Half").WithArguments("int", "System.Half").WithLocation(5, 34),
+                // (5,38): error CS0411: The type arguments for method 'TupleExtensions.Deconstruct<T1>(Tuple<T1>, out T1)' cannot be inferred from the usage. Try specifying the type arguments explicitly.
+                //     static bool M(int x) => x is Half(var h);
+                Diagnostic(ErrorCode.ERR_CantInferMethTypeArgs, "(var h)").WithArguments("System.TupleExtensions.Deconstruct<T1>(System.Tuple<T1>, out T1)").WithLocation(5, 38),
+                // (5,38): error CS8129: No suitable 'Deconstruct' instance or extension method was found for type 'Half', with 1 out parameters and a void return type.
+                //     static bool M(int x) => x is Half(var h);
+                Diagnostic(ErrorCode.ERR_MissingDeconstruct, "(var h)").WithArguments("System.Half", "1").WithLocation(5, 38));
         }
 
         [Fact]
@@ -850,6 +877,102 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             Assert.Equal("System.Int32 Ex.Length(System.String s)", model.GetSymbolInfo(names[1]).Symbol.ToTestDisplayString());
             var n = tree.GetRoot().DescendantNodes().OfType<SingleVariableDesignationSyntax>().Single();
             Assert.Equal("System.Int32 n", model.GetDeclaredSymbol(n)!.ToTestDisplayString());
+        }
+
+        [Fact]
+        public void Extractor_TypeTestFirst()
+        {
+            var source = """
+                using System;
+                using static Ex;
+
+                foreach (object o in new object[] { "7", 3, "x", 2.5 })
+                {
+                    Console.Write(o switch { string and TryParse(var n) => n, int i => i * 10, _ => 0 });
+                    Console.Write(o is (string and TryParse(_)) or int ? "y" : "n");
+                    Console.Write(o is int or (string and Length(1)) ? "y" : "n");
+                    Console.Write(" ");
+                }
+                """ + ExtractorChecks;
+            // In an 'or', the check of its operands gives an extractor a wider input type, and the DAG tests for the
+            // method's input type first.
+            var comp = CreateOpaqueCompilation(source);
+            comp.VerifyDiagnostics();
+            CompileAndVerify(comp, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "7yy 30yy 0ny 0nn " : null);
+        }
+
+        [Fact]
+        public void Extractor_SwitchStatementAndWhen()
+        {
+            var source = """
+                using System;
+                using static Ex;
+
+                foreach (var s in new[] { "12", "3", "x" })
+                {
+                    switch (s)
+                    {
+                        case TryParse(var n) when n > 10:
+                            Console.Write($"big{n} ");
+                            break;
+                        case TryParse(var n):
+                            Console.Write($"small{n} ");
+                            break;
+                        case Length(1):
+                            Console.Write("char ");
+                            break;
+                    }
+                }
+                """ + ExtractorChecks;
+            var comp = CreateOpaqueCompilation(source);
+            comp.VerifyDiagnostics();
+            CompileAndVerify(comp, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "big12 small3 char " : null);
+        }
+
+        [Fact]
+        public void Extractor_Contexts()
+        {
+            var source = """
+                using System;
+                using System.Collections.Generic;
+                using System.Threading.Tasks;
+                using static Ex;
+
+                var p = new Parsing(new Digits());
+                Func<string, int> f = s => s is TryParse(var n) ? n : -1;
+                Console.Write($"{f("4")} {p.Parse("5")} {Pure("6")} ");
+                foreach (var x in Iterate(["7", "y"])) Console.Write(x);
+                Console.Write($" {await Later("8")}");
+
+                static IEnumerable<int> Iterate(string[] items)
+                {
+                    foreach (var s in items)
+                        yield return s is TryParse(var n) ? n : 0;
+                }
+
+                static async Task<int> Later(string s)
+                {
+                    await Task.Yield();
+                    return s is TryParse(var n) ? n : 0;
+                }
+
+                [Pure] static int Pure(string s) => s is TryParse(> 5) ? 1 : 0;
+
+                class Parsing(Digits digits)
+                {
+                    public int Parse(string s) => s is digits.TryParse(var n) ? n : 0;
+                }
+
+                class Digits
+                {
+                    [AssumePure] public bool TryParse(string s, out int n) => int.TryParse(s, out n);
+                }
+                """ + ExtractorChecks;
+            // A lambda, an iterator, an async method, a [Pure] body (where a designation is not allowed, as in any pattern), and
+            // a primary constructor parameter as the receiver, which is captured.
+            var comp = CreateOpaqueCompilation(source);
+            comp.VerifyDiagnostics();
+            CompileAndVerify(comp, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "4 5 1 70 8" : null);
         }
     }
 }
