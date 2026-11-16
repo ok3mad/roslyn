@@ -188,8 +188,9 @@ patterns, `using` aliases, lambda parameter and return types.
   `(A[..])(b)`. The fixer writes `(A[..])b` when it can drop the parentheses, and otherwise leaves the cast.
 - The tuple rule of the task type: in a deconstruction declaration `(List<User>~ users, int count) = ...` does not
   declare, so `Task<List<User>>` stays spelled out there.
-- `Func` and `Action` with `ref`-like or pointer arguments, or more than 16 parameters: they have no function type
-  (CS20008, CS20009).
+- `Func` and `Action` with `ref`-like or pointer arguments, which their function types reject with the same constraint
+  errors. A named delegate with `ref` parameters is not rewritten either: its function type is an anonymous delegate,
+  a different type ([#56](https://github.com/ok3mad/roslyn/issues/56)).
 - Unsafe code where a function type could be read as a pointer member access, `(p)->F`. The reparse check catches it.
 
 **Options:** `sharper_style_prefer_sequence_type`, `sharper_style_prefer_task_type` and

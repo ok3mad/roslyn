@@ -369,7 +369,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             if (!this.IsNoMoreVisibleThan(returnType, ref useSiteInfo))
             {
                 // Inconsistent accessibility: return type '{1}' is less accessible than method '{0}'
-                diagnostics.Add(code, GetFirstLocation(), this, returnType.Type);
+                diagnostics.AddInconsistentAccessibility(code, GetFirstLocation(), this, returnType.Type);
             }
 
             code = (this.MethodKind == MethodKind.Conversion || this.MethodKind == MethodKind.UserDefinedOperator) ?
@@ -381,7 +381,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 if (!parameter.TypeWithAnnotations.IsAtLeastAsVisibleAs(this, ref useSiteInfo))
                 {
                     // Inconsistent accessibility: parameter type '{1}' is less accessible than method '{0}'
-                    diagnostics.Add(code, GetFirstLocation(), this, parameter.Type);
+                    diagnostics.AddInconsistentAccessibility(code, GetFirstLocation(), this, parameter.Type);
                 }
             }
 
@@ -390,7 +390,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 if (!extensionParameter.TypeWithAnnotations.IsAtLeastAsVisibleAs(this, ref useSiteInfo))
                 {
                     // Inconsistent accessibility: parameter type '{1}' is less accessible than method '{0}'
-                    diagnostics.Add(code, GetFirstLocation(), this, extensionParameter.Type);
+                    diagnostics.AddInconsistentAccessibility(code, GetFirstLocation(), this, extensionParameter.Type);
                 }
             }
 
