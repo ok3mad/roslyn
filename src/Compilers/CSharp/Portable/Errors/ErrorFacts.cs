@@ -411,6 +411,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 case ErrorCode.WRN_CallerLineNumberPreferredOverCallerFilePath:
                 case ErrorCode.WRN_DelaySignButNoKey:
                 case ErrorCode.WRN_UnimplementedCommandLineSwitch:
+                case ErrorCode.WRN_DeprecatedFeatureFlag:
                 case ErrorCode.WRN_BadUILang:
                 case ErrorCode.WRN_RefCultureMismatch:
                 case ErrorCode.WRN_ConflictingMachineAssembly:
@@ -2577,6 +2578,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 or ErrorCode.ERR_RuntimeDoesNotSupportExtendedLayoutTypes
                 or ErrorCode.ERR_NoAwaitOnAsyncEnumerable
                 or ErrorCode.ERR_UnsafeOperation
+                or ErrorCode.ERR_UnsafeUnassignedAddressOf
                 or ErrorCode.ERR_UnsafeUninitializedStackAlloc
                 or ErrorCode.ERR_UnsafeMemberOperation
                 or ErrorCode.ERR_UnsafeMemberOperationCompat
@@ -2678,6 +2680,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 or ErrorCode.ERR_SharperRefinementDefaultValueDisproven
                 or ErrorCode.ERR_SharperRefinementNotSupportedYet
                 or ErrorCode.ERR_SharperOpaquePatternNotPure
+                or ErrorCode.WRN_DeprecatedFeatureFlag
                 or ErrorCode.ERR_SharperPredicatePatternNotPure
                     => false,
             };
