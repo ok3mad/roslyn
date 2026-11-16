@@ -725,20 +725,25 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                         if (IsNull(c?.Get(out y))) { _ = y; }
                         int z;
                         if (c?.Get(out z) is not null) { _ = z; }
+                        int w;
+                        if (c?.Get(out w) is IsNull) { _ = w; }
                     }
                     string? Get(out int x) { x = 0; return null; }
                     [Pure] static bool IsNull(string? s) => s is null;
                 }
                 """;
             // The method is called with null too, so a match says nothing about the access: 'x' may be unassigned, as 'y'
-            // is in the twin. A pattern that never matches null tells that the access was made ('z').
+            // is in the twin, and 'w' after a predicate (slice 2). A pattern that never matches null tells that the access was made ('z').
             CreateImmutableCompilation(source).VerifyDiagnostics(
                 // (10,46): error CS0165: Use of unassigned local variable 'x'
                 //         if (c?.Get(out x) is IsNull()) { _ = x; }
                 Diagnostic(ErrorCode.ERR_UseDefViolation, "x").WithArguments("x").WithLocation(10, 46),
                 // (12,42): error CS0165: Use of unassigned local variable 'y'
                 //         if (IsNull(c?.Get(out y))) { _ = y; }
-                Diagnostic(ErrorCode.ERR_UseDefViolation, "y").WithArguments("y").WithLocation(12, 42));
+                Diagnostic(ErrorCode.ERR_UseDefViolation, "y").WithArguments("y").WithLocation(12, 42),
+                // (16,44): error CS0165: Use of unassigned local variable 'w'
+                //         if (c?.Get(out w) is IsNull) { _ = w; }
+                Diagnostic(ErrorCode.ERR_UseDefViolation, "w").WithArguments("w").WithLocation(16, 44));
         }
 
         [Fact]
