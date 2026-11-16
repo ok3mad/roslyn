@@ -1883,7 +1883,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         /// </summary>
         private bool? KnownFromSharperInputRefinement(DagState state, BoundDagTest test)
         {
-            if (_inputRefinement is null || !test.Input.Equals(_rootTemp))
+            if (_inputRefinement is null || _rootTemp is null || !test.Input.Equals(_rootTemp))
             {
                 return null;
             }

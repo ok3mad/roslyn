@@ -32,13 +32,6 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         internal const string AnyValueText = "_";
 
         /// <summary>
-        /// True if the return of <paramref name="method"/>, inferred as <paramref name="returnType"/>, can have a
-        /// refinement. A refinement is not part of the signature, so a member whose callers do not know which body runs
-        /// has none (virtual and interface members; overrides and implementations copy their type and infer nothing).
-        /// An iterator and an <c>async</c> method return a sequence or a task, which has no value set; a refinement of
-        /// the element or of the awaited value would need a slot there, which no slice has yet.
-        /// </summary>
-        /// <summary>
         /// True if the refinement was inferred (a union, or the result of a call), false if it is written on a parameter,
         /// possibly reached through a <c>val</c> local. An argument that cannot be proven is an error when its refinement is
         /// inferred, so that a widened return breaks its callers, and a warning when it is written, since slices 2 and 3
@@ -79,6 +72,13 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     _ => null,
                 };
 
+        /// <summary>
+        /// True if the return of <paramref name="method"/>, inferred as <paramref name="returnType"/>, can have a
+        /// refinement. A refinement is not part of the signature, so a member whose callers do not know which body runs
+        /// has none (virtual and interface members; overrides and implementations copy their type and infer nothing).
+        /// An iterator and an <c>async</c> method return a sequence or a task, which has no value set; a refinement of
+        /// the element or of the awaited value would need a slot there, which no slice has yet.
+        /// </summary>
         internal static bool CanInferForReturn(MethodSymbol method, TypeWithAnnotations returnType)
             => returnType.HasType && !returnType.Type.IsErrorType() && !returnType.Type.IsNullableType() && ValueSetFactory.ForType(returnType.Type) is not null &&
                !method.IsAsync && !method.IsIterator && method.RefKind == RefKind.None &&
