@@ -18,7 +18,8 @@ The [Sharper release](../../.github/workflows/sharper-release.yml) workflow buil
 GitHub release named `sharper-<date>.<run>`. Run it from the Actions tab, or push a tag named `sharper-*`. Each release
 has:
 
-- `sharper-vscode.tar.gz`: `server/` (the language server, framework-dependent on .NET 10, for every OS),
+- `sharper-vscode.tar.gz`: `server/` (the language server, framework-dependent on .NET 10 like upstream's, for every OS; it rolls forward
+  to .NET 11 when .NET 10 is not installed),
   `packages/` (the toolset package) and `VERSION`.
 - The toolset `.nupkg` on its own, versioned `<Roslyn version>-sharper.<build>`.
 
@@ -34,7 +35,7 @@ has:
    **Code → Codespaces → … → New with options** and the **Sharper playground** configuration. The default
    configuration is upstream Roslyn's, which asks for an 8-core machine, so a plain "Create codespace" can fail with
    "no machine types available".
-3. The container (the .NET 10 SDK image) installs the latest release into `/opt/sharper` with
+3. The container (the .NET 11 SDK image, with the .NET 10 runtime for older releases) installs the latest release into `/opt/sharper` with
    [`setup.sh`](../../.devcontainer/sharper/setup.sh), and opens the [playground](playground/) project with the C#
    extension pointed at `/opt/sharper/server`.
 4. Open `Program.cx`. Uncomment `first = 10;` to see a Sharper error. `dotnet run` builds and runs it.
@@ -42,14 +43,15 @@ has:
 To update, run `.devcontainer/sharper/setup.sh` (or `setup.sh sharper-<id>` for a given release) and then
 **Developer: Reload Window**.
 
-The playground has its own `global.json`, `nuget.config`, `Directory.Build.*` and `.editorconfig` so that none of the
-Roslyn repository's build settings apply to it. Its `nuget.config` takes the toolset package only from
+The playground targets `net11.0` with C# 15, the language Sharper builds on. It has its own `global.json`,
+`nuget.config`, `Directory.Build.*` and `.editorconfig` so that none of the Roslyn repository's build settings apply
+to it. Its `nuget.config` takes the toolset package only from
 `/opt/sharper/packages`, and the project references it with the floating version `*-*`, so it always builds with the
 installed release.
 
 ## Without the devcontainer
 
-The same setup works on any machine with the .NET 10 SDK:
+The same setup works on any machine with the .NET 11 SDK:
 
 1. Download and extract `sharper-vscode.tar.gz` from a release.
 2. In VS Code settings, set `dotnet.server.path` to `<extracted>/server/Microsoft.CodeAnalysis.LanguageServer.dll`

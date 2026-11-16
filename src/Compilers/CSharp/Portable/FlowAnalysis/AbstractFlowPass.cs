@@ -3640,7 +3640,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             return null;
         }
 
-        protected void VisitAddressOfOperand(BoundExpression operand, bool shouldReadOperand)
+        private void VisitAddressOfOperand(BoundExpression operand, bool shouldReadOperand)
         {
             if (shouldReadOperand)
             {
