@@ -136,6 +136,7 @@ Restore these files (`git checkout -- <file>`) unless the task is to commit them
 ### 4. Run the unit tests
 
 ```bash
+export PATH=$PWD/.dotnet:$PATH DOTNET_ROOT=$PWD/.dotnet   # see below
 dotnet=.dotnet/dotnet; runtests=artifacts/bin/RunTests/Debug/net10.0/RunTests.dll
 $dotnet exec $runtests --testConfiguration Debug --testFramework core --timeout 300 --html- \
   --out $PWD/artifacts/TestResults/sharper
@@ -144,6 +145,9 @@ python3 .github/skills/sharper-self-build/summarize-results.py \
   --issues artifacts/self-build-issues.json artifacts/TestResults/sharper
 ```
 
+- **`dotnet` must be on `PATH`.** Tests that start processes (the LanguageServer build host, the command-line tests
+  that pipe source through `sh`) find `dotnet` there, not through RunTests. Without it they fail with
+  `Win32Exception (2)` or hang.
 - With no `--include`, RunTests runs every `*UnitTests*` assembly, about 70 work items covering the compiler and
   the IDE. `--testSet compiler` runs only the compiler's 15 assemblies, which are the most likely to show a miscompile.
 - The script labels every failure `#n` (known), `REGRESSION #n` (matches a closed issue) or `NEW`. It also lists open
@@ -174,7 +178,8 @@ path.
 - **Fails the same way:** the flag is not the cause. Then decide between:
   - **A Sharper source change:** for example, `SyntaxFacts` or other shared metadata reporting a Sharper keyword to
     plain C# callers. Compare with the upstream merge base when unsure.
-  - **The environment:** for example ICU, the shell, the network, or a missing Windows feature.
+  - **The environment:** for example ICU (the VB `BinaryOperators.Test1_Date` and `Test5_DateConst` fail where ICU
+    puts U+202F before "AM"), the shell, the network, or a missing Windows feature.
   - **An upstream bug.**
 
 The rebuild replaces those projects' binaries with non-Sharper ones. Before testing in Sharper mode again, run step 1
