@@ -514,6 +514,12 @@ inferred return type binds the same body with the same member.
    domain. To tell "unreachable because of the seed" from C#'s subsumption, build the unseeded DAG only when a label is
    unreachable.
 
+49. **A fact for everything inside a sub-part belongs on the binder the map gives that sub-part.** A binder made on the
+   spot to bind one expression is not on the chain of the binders `LocalBinderFactory` made for lambdas and nested
+   constructs inside it, so they miss what it knows. Arm narrowing records the arm's refinement on the
+   `SwitchExpressionArmBinder` the map holds for the arm and answers the scope hook (`GetSharperRefinementInScope`)
+   there; computing it while the arms bind in order needs no second binding of earlier patterns (trap 25).
+
 ## Testing
 
 - Tests live in `src/Compilers/CSharp/Test/Semantic/Semantics/SharperTests.cs`; `SharperTests` is partial, so a large
