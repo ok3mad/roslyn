@@ -3,6 +3,7 @@
 // See the LICENSE file in the project root for more information.
 
 using System;
+using Microsoft.CodeAnalysis.PooledObjects;
 
 namespace Microsoft.CodeAnalysis.CSharp
 {
@@ -20,6 +21,20 @@ namespace Microsoft.CodeAnalysis.CSharp
             internal static readonly BoolValueSet OnlyFalse = new BoolValueSet(hasFalse: true, hasTrue: false);
 
             private BoolValueSet(bool hasFalse, bool hasTrue) => (_hasFalse, _hasTrue) = (hasFalse, hasTrue);
+
+            /// <summary>Sharper: the values, as ranges of one value.</summary>
+            internal void AddSharperRanges(ArrayBuilder<(ConstantValue? Low, ConstantValue? High)> ranges)
+            {
+                if (_hasFalse)
+                {
+                    ranges.Add((ConstantValue.False, ConstantValue.False));
+                }
+
+                if (_hasTrue)
+                {
+                    ranges.Add((ConstantValue.True, ConstantValue.True));
+                }
+            }
 
             public static BoolValueSet Create(bool hasFalse, bool hasTrue)
             {

@@ -3,6 +3,7 @@
 // See the LICENSE file in the project root for more information.
 
 using System;
+using Microsoft.CodeAnalysis.PooledObjects;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Linq;
@@ -44,6 +45,21 @@ namespace Microsoft.CodeAnalysis.CSharp
                 => new EnumeratedValueSet<T>(included: true, ImmutableHashSet<T>.Empty.Add(value), tc);
 
             public bool IsEmpty => _included && _membersIncludedOrExcluded.IsEmpty;
+
+            /// <summary>
+            /// Sharper: the members, as ranges of one value; true if they are the members the set includes, false if
+            /// they are those it excludes.
+            /// </summary>
+            internal bool AddSharperMembers(ArrayBuilder<(ConstantValue? Low, ConstantValue? High)> ranges)
+            {
+                foreach (var member in _membersIncludedOrExcluded)
+                {
+                    var value = _tc.ToConstantValue(member);
+                    ranges.Add((value, value));
+                }
+
+                return _included;
+            }
 
             ConstantValue IConstantValueSet.Sample
             {

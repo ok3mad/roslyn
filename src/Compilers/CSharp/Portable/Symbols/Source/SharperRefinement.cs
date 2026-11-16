@@ -117,7 +117,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 return new SharperRefinement(pattern, values: null, matchesNull: false);
             }
 
-            var refinement = new SharperRefinement(pattern, ComputeValues(pattern, factory), Matches(pattern, factory, ConstantValue.Null));
+            var refinement = new SharperRefinement(pattern, ComputeValues(pattern, factory), MatchesNullOf(pattern, factory, type));
 
             // The guard throws ArgumentOutOfRangeException, and the parameter carries the embedded attribute (step 5). The
             // attribute type is made here, at declaration time, so that the assembly embeds it.
@@ -368,7 +368,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 return null;
             }
 
-            return new SharperRefinement(pattern, ComputeValues(pattern, factory), Matches(pattern, factory, ConstantValue.Null));
+            return new SharperRefinement(pattern, ComputeValues(pattern, factory), MatchesNullOf(pattern, factory, type));
 
             static BoundPattern? makePattern(PatternSyntax syntax, TypeSymbol type)
             {
@@ -605,6 +605,13 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     throw ExceptionUtilities.UnexpectedValue(pattern.Kind);
             }
         }
+
+        /// <summary>
+        /// True if null matches <paramref name="pattern"/> and a value of <paramref name="type"/> can be null: a negated
+        /// pattern matches null, but an enum or number never is.
+        /// </summary>
+        private static bool MatchesNullOf(BoundPattern pattern, IConstantValueSetFactory factory, TypeSymbol type)
+            => type.CanContainNull() && Matches(pattern, factory, ConstantValue.Null);
 
         /// <summary>True if the constant <paramref name="value"/>, possibly null, matches <paramref name="pattern"/>.</summary>
         private static bool Matches(BoundPattern pattern, IConstantValueSetFactory factory, ConstantValue value)

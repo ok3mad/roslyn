@@ -32,10 +32,11 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         internal const string AnyValueText = "_";
 
         /// <summary>
-        /// True if the refinement was inferred (a union, or the result of a call), false if it is written on a parameter,
-        /// possibly reached through a <c>val</c> local. An argument that cannot be proven is an error when its refinement is
-        /// inferred, so that a widened return breaks its callers, and a warning when it is written, since slices 2 and 3
-        /// narrow such values after tests (Feature 11, step 4).
+        /// True if the refinement depends on the inferred refinement of a method's return: the result of a call, a
+        /// <c>val</c> local or a union that holds one, or a switch arm that narrows one. An argument that cannot be proven
+        /// is an error when its refinement is inferred, so that a widened return breaks its callers, and a warning
+        /// otherwise. Arithmetic results are never inferred: they had no refinement before slice 2, and a better prover
+        /// must not turn a warning into this error (it may still disprove a value, which is an error).
         /// </summary>
         internal bool IsInferred { get; }
 
@@ -144,7 +145,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             }
             else if (known && alternatives.Count != 0)
             {
-                result = Normalize(alternatives, type, factory, syntax);
+                result = Normalize(alternatives, type, factory, syntax, isInferred: fromCall);
             }
 
             alternatives.Free();
@@ -215,10 +216,13 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     BoundParameter { ParameterSymbol: { RefKind: RefKind.None } parameter } => OfVariable(parameter, scope),
                     BoundLocal { LocalSymbol: { RefKind: RefKind.None } local } => OfVariable(local, scope),
                     BoundCall { Method: { RefKind: RefKind.None } method } => method.SharperReturnRefinement,
+                    // Slice 2: '+', '-' and unary '-' of refined integers.
+                    BoundBinaryOperator or BoundUnaryOperator => OfArithmetic(value, type, scope, value.Syntax),
                     _ => null,
                 };
 
-                fromCall |= value is BoundCall;
+                fromCall |= value is BoundCall || refinement is { IsInferred: true };
+                Debug.Assert(refinement is not { IsInferred: true } || value is not (BoundBinaryOperator or BoundUnaryOperator));
 
                 if (refinement is not { HasErrors: false })
                 {
@@ -251,7 +255,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         /// pattern allows is dropped. Null if there are more than <see cref="MaxInferredAlternatives"/>, or if the union
         /// allows every value of the type, which says nothing.
         /// </summary>
-        private static SharperRefinement? Normalize(ArrayBuilder<BoundPattern> alternatives, TypeSymbol type, IConstantValueSetFactory factory, SyntaxNode syntax)
+        private static SharperRefinement? Normalize(ArrayBuilder<BoundPattern> alternatives, TypeSymbol type, IConstantValueSetFactory factory, SyntaxNode syntax, bool isInferred)
         {
             var constants = ArrayBuilder<ConstantValue>.GetInstance();
             var others = ArrayBuilder<BoundPattern>.GetInstance();
@@ -320,10 +324,10 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 Debug.Assert(pattern is not null);
                 pattern = Rebuild(pattern, type, syntax);
                 var values = ComputeValues(pattern, factory);
-                bool matchesNull = Matches(pattern, factory, ConstantValue.Null);
+                bool matchesNull = MatchesNullOf(pattern, factory, type);
                 if (!(((IConstantValueSet)values.Complement()).IsEmpty && (matchesNull || !type.IsReferenceType)))
                 {
-                    result = new SharperRefinement(pattern, values, matchesNull, isInferred: true);
+                    result = new SharperRefinement(pattern, values, matchesNull, isInferred);
                 }
             }
 

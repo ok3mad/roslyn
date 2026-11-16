@@ -415,7 +415,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                     "copy: -1 or 0 or 1",
                     "chosen: >= 0",
                     "text: \"none\" or \"some\"",
-                    "sum: <none>",
+                    "sum: 4",
                     "fromVar: <none>",
                     "a: 1",
                     "b: 1",
