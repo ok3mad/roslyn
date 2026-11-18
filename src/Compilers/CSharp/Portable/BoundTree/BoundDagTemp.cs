@@ -66,7 +66,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 var id => $"t{id}"
             };
 
-            if (Source is BoundDagDeconstructEvaluation)
+            if (Source is BoundDagDeconstructEvaluation or BoundDagExtractorEvaluation)
             {
                 if (Index == -1)
                 {

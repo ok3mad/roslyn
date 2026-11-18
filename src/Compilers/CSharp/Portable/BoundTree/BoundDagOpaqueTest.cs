@@ -25,7 +25,12 @@ namespace Microsoft.CodeAnalysis.CSharp
                 (PredicateArgument is null) == (other.PredicateArgument is null) &&
                 IsSameValue(Value, other.Value, PredicateArgument, other.PredicateArgument);
 
-        private static bool IsSameValue(BoundExpression? x, BoundExpression? y, BoundValuePlaceholder? xArgument, BoundValuePlaceholder? yArgument)
+        /// <summary>
+        /// Whether two pure expressions are written the same way, so that they have the same value while a match runs.
+        /// <paramref name="xArgument"/> and <paramref name="yArgument"/> stand for the same input. An extractor's call
+        /// (slice 3) has discards as its <c>out</c> arguments, which are the same when their types are.
+        /// </summary>
+        internal static bool IsSameValue(BoundExpression? x, BoundExpression? y, BoundValuePlaceholder? xArgument, BoundValuePlaceholder? yArgument)
         {
             if (x == (object?)y)
             {
@@ -54,10 +59,42 @@ namespace Microsoft.CodeAnalysis.CSharp
                 (BoundConversion a, BoundConversion b) => a.Conversion == b.Conversion && a.Checked == b.Checked && a.ExplicitCastInCode == b.ExplicitCastInCode && IsSameValue(a.Operand, b.Operand, xArgument, yArgument),
                 (BoundUnaryOperator a, BoundUnaryOperator b) => a.OperatorKind == b.OperatorKind && Equals(a.MethodOpt, b.MethodOpt) && IsSameValue(a.Operand, b.Operand, xArgument, yArgument),
                 (BoundBinaryOperator a, BoundBinaryOperator b) => a.OperatorKind == b.OperatorKind && Equals(a.BinaryOperatorMethod, b.BinaryOperatorMethod) && IsSameValue(a.Left, b.Left, xArgument, yArgument) && IsSameValue(a.Right, b.Right, xArgument, yArgument),
-                (BoundCall a, BoundCall b) => a.Method.Equals(b.Method) && a.ArgumentRefKindsOpt.IsDefaultOrEmpty && b.ArgumentRefKindsOpt.IsDefaultOrEmpty &&
+                (BoundCall a, BoundCall b) => a.Method.Equals(b.Method) && AreSameRefKinds(a, b) &&
                     IsSameValue(a.ReceiverOpt, b.ReceiverOpt, xArgument, yArgument) && AreSameValues(a.Arguments, b.Arguments, xArgument, yArgument),
+                (BoundDiscardExpression, BoundDiscardExpression) => true, // An extractor's out argument; the types are compared above.
                 _ => false,
             };
+        }
+
+        /// <summary>By-value arguments, or <c>out</c> discards (an extractor's call) in the same places.</summary>
+        private static bool AreSameRefKinds(BoundCall x, BoundCall y)
+        {
+            if (x.ArgumentRefKindsOpt.IsDefaultOrEmpty || y.ArgumentRefKindsOpt.IsDefaultOrEmpty)
+            {
+                return x.ArgumentRefKindsOpt.IsDefaultOrEmpty && y.ArgumentRefKindsOpt.IsDefaultOrEmpty;
+            }
+
+            if (x.ArgumentRefKindsOpt.Length != y.ArgumentRefKindsOpt.Length)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < x.ArgumentRefKindsOpt.Length; i++)
+            {
+                RefKind refKind = x.ArgumentRefKindsOpt[i];
+                if (refKind != y.ArgumentRefKindsOpt[i] ||
+                    refKind switch
+                    {
+                        RefKind.None => false,
+                        RefKind.Out => x.Arguments[i] is not BoundDiscardExpression || y.Arguments[i] is not BoundDiscardExpression,
+                        _ => true,
+                    })
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private static bool AreSameValues(ImmutableArray<BoundExpression> x, ImmutableArray<BoundExpression> y, BoundValuePlaceholder? xArgument, BoundValuePlaceholder? yArgument)

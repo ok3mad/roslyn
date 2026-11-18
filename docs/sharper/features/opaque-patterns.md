@@ -83,7 +83,7 @@ shows an `IRelationalPatternOperation` or `IConstantPatternOperation` whose valu
   closed over constants; the operand's purity is not checked there.
 - Symbolic reasoning over the same operand, such as `<= max` then `> max` being exhaustive.
 - The predicate form `x is IsEven` is slice 2, on its own page: [predicate patterns](predicate-patterns.md). Extractors
-  `s is Parse(val n)` are slice 3 ([#35](https://github.com/ok3mad/roslyn/issues/35)).
+  `s is TryParse(var n)` are slice 3: [extractor patterns](extractor-patterns.md).
 
 ## Code
 

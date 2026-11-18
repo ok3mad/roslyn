@@ -54,6 +54,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                     BoundDagPropertyEvaluation e => e.Property,
                     BoundDagTypeEvaluation e => e.Type,
                     BoundDagDeconstructEvaluation e => e.DeconstructMethod,
+                    BoundDagExtractorEvaluation e => e.Call.Method,
                     BoundDagIndexEvaluation e => e.Property,
                     BoundDagSliceEvaluation e => getSymbolFromIndexerAccess(e.IndexerAccess),
                     BoundDagIndexerEvaluation e => getSymbolFromIndexerAccess(e.IndexerAccess),

@@ -2597,6 +2597,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         WRN_SharperRefinementArgumentUnknown = SharperErrorCodes.Base + 78,
         ERR_SharperSwitchNotExhaustiveForRefinement = SharperErrorCodes.Base + 79,
         WRN_SharperSwitchArmExcludedByRefinement = SharperErrorCodes.Base + 80,
+        ERR_SharperExtractorPatternNotPure = SharperErrorCodes.Base + 81,
 
         // Note: you will need to do the following after adding errors:
         //  1) Update ErrorFacts.IsBuildOnlyDiagnostic (src/Compilers/CSharp/Portable/Errors/ErrorFacts.cs)
