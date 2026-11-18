@@ -3585,6 +3585,10 @@ namespace Microsoft.CodeAnalysis.CSharp
                 }
 
                 arguments[arg] = coerceArgument(in methodResult, receiver, parameters, argumentsForInterpolationConversion: arguments, argument, arg, parameters[paramNum].TypeWithAnnotations, diagnostics);
+
+                // Sharper: an argument for a refined parameter must satisfy its refinement (Feature 11, step 4). Members
+                // whose parameters can be refined are never overrides, so the least overridden member's are the same.
+                CheckSharperRefinedArgument(node, arguments[arg], parameters[paramNum], diagnostics);
             }
 
             argsToParamsOpt = result.ArgsToParamsOpt;

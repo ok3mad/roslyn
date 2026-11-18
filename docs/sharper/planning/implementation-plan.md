@@ -1471,7 +1471,51 @@ rules and return inference.
   Left as `PROTOTYPE(sharper)`: `val` in deconstructions, patterns, `foreach` and `out`, and locals with a written type.
   Tests: 15 `ReturnRefinement*` tests (`SharperTests_RefinementReturns.cs`) and one emit-difference test
   (`EditAndContinueSharperTests`).
-- [ ] Step 4, call sites and switches.
+- [x] **Step 4, call sites and switches** (`sharper/refined-call-sites`). `Binder.CheckSharperRefinedArgument`
+  (`Binder/Binder_SharperRefinements.cs`), called for every converted argument in `CheckAndCoerceArguments`, compares
+  the argument's refinement (`SharperRefinement.OfExpression`, step 3's sources) with the parameter's
+  (`SharperRefinement.Prove`, `Symbols/Source/SharperRefinement_CallSites.cs`): proven if `A ∩ ¬B` is empty, disproven if
+  `A ∩ B` is empty, null counted on its own (`MatchesNull`). CS20075 to CS20080. The open points, as decided:
+  - **Inferred or written** (narrowed in slice 2, see below: unions without a call are no longer inferred). "Inferred"
+    is a flag on the refinement (`SharperRefinement.IsInferred`): set on unions and
+    on the result of a call, even a call of a method that returns a refined parameter unchanged (`AsInferred` keeps the
+    text and the value set). A written parameter refinement reached unchanged, also through a `val` local, is not
+    inferred, so an unproven argument with it is the warning CS20077, not an error: slices 2 and 3 narrow such values
+    after tests, and `if (k >= 1) Positive(k);` must not be an error until then. A disproven one is an error either way.
+  - **Diagnostic texts** name the argument, the parameter, its refinement, the argument's refinement and a value outside
+    the domain (`allows -1`, from `IValueSet.Sample`, formatted as the attribute text formats constants).
+  - **The hook.** `Binder.GetSharperRefinementInScope(variable)` walks the binder chain and ends at the variable's own
+    refinement; `OfExpression` and `OfValues` take the binder as `scope`. `assume`'s scope binder will override it. A
+    `val` local's refinement is read through it too; the return inference of step 3 still reads the variables' own.
+  - **Routes.** Everything that binds through `CheckAndCoerceArguments` is checked: methods, local functions,
+    constructors and initializers, primary constructor base calls, indexers, attributes, named and optional arguments,
+    classic extension methods (with the receiver) and extension block members (also through the implementation
+    method), metadata methods. Method group conversions, `dynamic` calls and user-defined operators and conversions are
+    not checked; the guard covers them (`PROTOTYPE(sharper)` for operators).
+  - **`params`, `ref`, `in`.** Nothing needed: their parameters cannot be refined (CS20059, CS20061).
+  - **Mixed compilations.** Only calls in Sharper files are checked (the flag on the call's syntax); C# files and
+    compilations without the flag see the plain types and meet the guard.
+  - **Nullable.** Null state and refinements stay separate: `NotX(null)` is proven for `string s is not "x"` and keeps
+    C#'s CS8625 when `s` is not nullable.
+  - **Switch seeding.** `DecisionDagBuilder` takes an `inputRefinement` whose values seed the root state, and decides the
+    tests of the original input that the refinement makes certain (`KnownFromSharperInputRefinement`): both branches go
+    to the possible outcome, so `removeUnnecessaryStates` drops the test. Without that, no case is simplified against
+    the seed before the first split, and an impossible first test (`<0` for `>=0`) leaves an empty branch that reaches the
+    default label. A seeded DAG is marked unsuitable for lowering, so lowering rebuilds C#'s DAG and the values the
+    refinement excludes still throw (`SwitchExpressionException`); the reachability DAG (flow analysis, CS8509) is the
+    seeded one. A refinement that allows null does not seed: value sets hold no null, and the builder prunes a case once
+    its input's set is empty, which made `null => 2` unreachable for `string t is "a" or null`. `is` patterns are not
+    seeded.
+  - **Exhaustiveness and unreachable arms.** `PatternExplainer` starts the root's remaining values from the refinement,
+    so CS8509 names `2`, not `-1`, for `i switch { 0 => 1, 1 => 2 }`. An inferred input refinement turns CS8509 into
+    CS20079. An unreachable arm or case label is checked again against an unseeded DAG (built only when some label is
+    unreachable): reachable there means the warning CS20080, else C#'s error.
+  - **Edit and Continue.** Not small: the IDE sees no refinement through the public API, and a body edit that keeps the
+    signature does not reach `GetSignatureChangeRudeEdit`. `PROTOTYPE(sharper)` comment and
+    [#237](https://github.com/ok3mad/roslyn/issues/237).
+  Earlier tests changed: the guard tests pass their out-of-domain values through an unrefined `Report.V(...)` (CS20078
+  disabled there), and `ReturnRefinement_RefinedParameterUnchanged` narrows `Through` so that its call is proven.
+  Tests: 12 `RefinementCallSite_*` and `RefinementSwitch_*` tests (`SharperTests_RefinementCallSites.cs`).
 - [x] **Step 5, guard and metadata** (`sharper/refined-parameters-guard`). `SharperRefinementGuard`
   (`Lowering/SharperRefinementGuard.cs`) builds `if (p is not (pattern)) throw new ArgumentOutOfRangeException(nameof(p),
   p, "...")` for each refined parameter, lowers it with `LocalRewriter.Rewrite` on its own, and `MethodCompiler` puts it
@@ -1498,6 +1542,54 @@ rules and return inference.
   async. A wrapper that checks and calls a runtime-async body is left as a `PROTOTYPE(sharper)` comment
   ([#224](https://github.com/ok3mad/roslyn/issues/224)).
   Tests: 14 `RefinementGuard_*` and `RefinementMetadata_*` tests (`SharperTests_RefinementGuards.cs`).
+
+## Feature 11: refined types, slice 2
+
+Slice 1 proves constants and refinements passed on unchanged; slice 2 proves what a switch arm and arithmetic make of
+them, so `static int Fib(int i is >=0) => i switch { 0 or 1 => 1, >=2 => Fib(i - 1) + Fib(i - 2) };` compiles without a
+warning: in the second arm `i` is `>= 2`, so `i - 1` is `>= 1` and `i - 2` is `>= 0`. Built on
+`sharper/refined-call-sites` after step 4 merged; feature page [refined-types.md](../features/refined-types.md).
+
+**Probe.** What the code showed:
+
+| Area | What the code shows |
+| --- | --- |
+| Arm binding | `SwitchExpressionBinder.BindSwitchExpressionArms` binds the arms in order, each with its `SwitchExpressionArmBinder` (pattern, then `when`, then value). `LocalBinderFactory` maps the arm to that binder, so every binder inside the arm (lambdas, nested switches) chains through it: one override of step 4's hook covers the whole arm |
+| The DAG's leaf sets | Slice 1's design meant to read the narrowed set at each arm's leaf, but the DAG is built after the arms are bound, its `DagState` values are dropped when the bound DAG is made, and a leaf reached on several paths holds their union. Computing an arm's values from the bound patterns, in binding order, needs none of that |
+| Switch statements | `goto case 3` enters a section without its labels having matched the input, so a section's labels do not narrow its statements |
+| Value sets | `IConstantValueSet` has no way to list its values; the sets are private classes of `ValueSetFactory` (`NumericValueSet<T>` holds intervals, `FloatingValueSet<T>` adds NaN, `EnumeratedValueSet<string>` includes or excludes strings, `BoolValueSet`). `nint` and `nuint` sets track values outside `int` as flags |
+| Arithmetic | `i - 1` is a `BoundBinaryOperator` with `IntSubtraction` (`Checked` in a checked context); `-i` a `BoundUnaryOperator` with `IntUnaryMinus`. `b + 1` for `byte b` converts `b` to `int` first |
+| Null | Step 2 computed `MatchesNull` by matching null against the pattern, so `Color c is not Color.Blue` matched null although an enum is never null |
+
+### Decisions
+
+| Question | Decision | Why |
+| --- | --- | --- |
+| What narrows | Switch expression arms, when the input is a variable that cannot change: a refined or `readonly` parameter, a `val` or `readonly` local, a `val` lambda parameter. The arm sees the values its pattern matches among those the earlier arms leave; its `when` clause and value see them, lambdas and nested switches included | A mutable variable can change inside the arm (`x switch { >0 => (x = -1) + Page(x) }`); slice 3's flow state covers mutable variables and statements |
+| Not narrowed | Switch statements (`goto case`), `is` patterns and `if` tests (slice 3), the arm's own pattern variables | |
+| Patterns that are not closed over constants | Count as matching every value for their own arm, and as matching none for the arms after them; an arm with a `when` clause takes nothing away from the later arms. Type, declaration and `var` patterns of the input's own type, and the discard, match every value | The narrowed set always includes the real values, so narrowing is sound for any pattern |
+| How a set becomes a refinement | `SharperRefinement.FromValues`: the set's ranges (`ValueSetFactory.TryGetSharperRanges`, one small accessor on each set class) become constant and relational patterns, then the normal form of step 3. A range of fewer than four integral values is written as constants (`0 or 1`) | Diagnostics, `val` locals and return attributes need a pattern, and the normal form keeps them all the same |
+| Arithmetic | `+`, `-` and unary `-` over `int`, `uint`, `long` and `ulong`, operand by operand (any source of step 3, recursively), interval by interval, computed in `decimal`. Unchecked arithmetic that can overflow gives no refinement (it wraps); checked arithmetic drops the values that would throw. An operand that is converted (`long + int`) has none. Multiplication, division and conversions are later | Exact for the operations that matter for indices and counters, and never unsound: `i + 1` for `int i is >=0` has none, since `int.MaxValue + 1` wraps |
+| Where arithmetic counts | Everywhere a refinement is computed: arguments, switch inputs, `val` locals and inferred returns (`infer Next(int i is >=0 and <10) => i + 1` is `>= 1 and <= 10`, written to metadata) | One source of truth |
+| Which refinements are inferred | Only those that depend on a call's inferred return: the call's result, and a `val`, union or narrowed arm that holds one. Unions of written refinements and constants (`c ? 1 : -1`, `c ? j : n`) are no longer inferred, so not proving them is the warning CS20077 (step 4 made them errors). Arithmetic results are never inferred | The error exists so that a widened return breaks its callers; and a better prover must not turn a warning into an error: `Page(Sign(x) - 1)` warned in step 4 (no refinement), so it still warns. A value it disproves is an error, since the guard always throws there |
+| Null of value types | A refinement of a type that cannot be null never matches null (`MatchesNullOf`), in source, in metadata and in inferred ones | The old answer made `Color c is not Color.Blue` look like `null or ...` |
+
+### As built
+
+- [x] **Narrowing.** `SharperSwitchNarrowing` (`Binder/Binder_SharperRefinements.cs`), made by the switch expression
+  binder for an eligible input from the variable's refinement in scope (so nested switches narrow further), and passed
+  to each arm (`SwitchExpressionArmBinder.BindSwitchExpressionArm`), which records the variable's refinement inside it
+  and answers `GetSharperRefinementInScope`. The narrowed refinement keeps the variable's `IsInferred`.
+- [x] **Ranges.** `ValueSetFactory.TryGetSharperRanges` (`Utilities/ValueSetFactory.SharperRanges.cs`) and an
+  `AddSharperRanges` method on `NumericValueSet`, `FloatingValueSet` and `BoolValueSet` (`AddSharperMembers` on
+  `EnumeratedValueSet`): five small additions to upstream files.
+- [x] **Arithmetic.** `SharperRefinement.OfArithmetic` and `FromValues` (`Symbols/Source/SharperRefinement_Narrowing.cs`),
+  called from step 3's `OfValues`.
+- Tests: 6 `RefinementNarrowing_*` and `RefinementArithmetic_*` tests (`SharperTests_RefinementNarrowing.cs`); step 4's
+  tests changed where unions without a call now warn, and Fib's recursive calls are proven
+  (`RefinementSwitch_Fib`); `ReturnRefinement_ValLocals` has `val sum = constant + 1` as `4`.
+- Left for later: slice 3 (flow state: `if` tests, mutable variables, switch statements, `assume`), multiplication and
+  conversions in arithmetic, narrowing an arm's pattern variables.
 
 ## Feature 12: pipe, without lifting
 
@@ -1663,7 +1755,7 @@ as a positional pattern, also `Length(5)` with only constant sub-patterns, under
 | Names | A Try shape's sub-pattern may name the `out` parameter (`TryParse(value: var n)`); another name is CS8517, as for `Deconstruct`. The value shape keeps C#'s error for a named sub-pattern |
 | Generic, instance, extension methods | Slice 2's rules: the input is the first argument, never the receiver; type inference from the input (the discards give none), or type arguments written out; instance methods on `this` or another receiver (`s is r.TryParseWithin(var n)`); an extension method called on a receiver or by name |
 | Input conversion and `null` | As an argument: implicit conversions only, the input as it is, `null` included. Under `or`, the operand check widens the input type and the DAG tests for the method's input type first (`MakeTestsAndBindingsForExtractorPattern`, `WithInputTypeCheckIfNeeded`) |
-| Purity | A new error, CS20075 ("The method of an extractor pattern must be pure, but it is not: {0}."), from the member-mode `PurityWalker` over the call. The discards are fresh, so CS20053 never fires (the decision of #177). In a `[Pure]` body the pattern itself is allowed (`BoundExtractorPattern` and `BoundPositionalSubpattern` in the allow list; recursive patterns stay rejected); its designations are not, as anywhere in a pure body |
+| Purity | A new error, CS20081 ("The method of an extractor pattern must be pure, but it is not: {0}."), from the member-mode `PurityWalker` over the call. The discards are fresh, so CS20053 never fires (the decision of #177). In a `[Pure]` body the pattern itself is allowed (`BoundExtractorPattern` and `BoundPositionalSubpattern` in the allow list; recursive patterns stay rejected); its designations are not, as anywhere in a pure body |
 | Shared calls, order | `BoundDagExtractorEvaluation.IsEquivalentTo` compares the calls by structure (`BoundDagOpaqueTest.IsSameValue`, with the placeholders as one input and two `out` discards of one type the same), so the DAG makes one call for `TryParse(> 10) => 1, TryParse(> 0) => 2, TryParse(_) => 3` (the twin with guards makes three). An evaluation sits on the paths of the arms that need it, so `(_, true) => 0, (TryParse(var n), _) => n` makes no call for the first arm. `RemoveEvaluationAndUpdateTempReferences` maps both outputs of an identical call |
 | Exhaustiveness | Nothing is learned about the input; the outputs are DAG temps, so sub-patterns on them narrow as any do: `TryParse(_), not TryParse(_)` is exhaustive, `TryParse(> 0), TryParse(<= 0)` is CS8509 (the `false` return is left out), and `TryParse(> 5)` after `TryParse(> 0)` is unreachable (CS8510) |
 | Flow | The call is read before the match, with the opaque operands (`VisitSharperOpaquePatternOperands`); the sub-patterns' designations are assigned as `Deconstruct`'s are (`DefiniteAssignment.VisitPattern`, `VariablesDeclaredWalker`). A conditional access before a pattern that calls a method on the input (a predicate or an extractor) learns nothing from a match, since the method is called with `null` too (`callsSharperMethodOnInput`; `Extractor_ConditionalAccess` covers both) |
@@ -1762,7 +1854,7 @@ built.
    `if (!(...)) throw`; IOperation shows that `if` and `throw`.
 4. **Tests** in `SharperTests_Assume.cs`, next to the C# `if` and `throw` they stand for.
 
-Later: step 4's call-site hook (part of step 4) and mutable targets with slice 3.
+Later: mutable targets with slice 3. Step 4's hook exists: the scope binder overrides `Binder.GetSharperRefinementInScope`.
 
 **Size:** S–M, about 1k to 1.5k lines with tests.
 

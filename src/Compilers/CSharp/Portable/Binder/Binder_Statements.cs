@@ -1225,7 +1225,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 // Sharper: a 'val' local keeps the refinement of its initializer (Feature 11, step 3).
                 // PROTOTYPE(sharper): 'val' variables of deconstructions, patterns, foreach and 'out', and locals with a
                 // written type ('readonly int x = 3;'), have no refinement yet.
-                localSymbol.SetSharperRefinement(hasErrors || initializerOpt is null ? null : SharperRefinement.OfExpression(initializerOpt, declarator));
+                localSymbol.SetSharperRefinement(hasErrors || initializerOpt is null ? null : SharperRefinement.OfExpression(initializerOpt, declarator, scope: this));
             }
 
             if (kind == LocalDeclarationKind.FixedVariable)

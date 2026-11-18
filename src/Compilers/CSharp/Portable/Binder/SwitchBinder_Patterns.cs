@@ -42,6 +42,9 @@ namespace Microsoft.CodeAnalysis.CSharp
             ImmutableArray<BoundSwitchSection> switchSections = BindSwitchSections(originalBinder, diagnostics, out BoundSwitchLabel defaultLabel);
             ImmutableArray<LocalSymbol> locals = GetDeclaredLocalsForScope(node);
             ImmutableArray<LocalFunctionSymbol> functions = GetDeclaredLocalFunctionsForScope(node);
+
+            // Sharper: a refined input seeds the dag with its refinement's values (Feature 11, step 4).
+            SharperRefinement refinement = GetSharperSwitchInputRefinement(boundSwitchGoverningExpression);
             BoundDecisionDag decisionDag = DecisionDagBuilder.CreateDecisionDagForSwitchStatement(
                 compilation: this.Compilation,
                 syntax: node,
@@ -49,10 +52,11 @@ namespace Microsoft.CodeAnalysis.CSharp
                 switchSections: switchSections,
                 // If there is no explicit default label, the default action is to break out of the switch
                 defaultLabel: defaultLabel?.Label ?? BreakLabel,
-                diagnostics);
+                diagnostics,
+                inputRefinement: refinement);
 
             // Report subsumption errors, but ignore the input's constant value for that.
-            CheckSwitchErrors(ref switchSections, decisionDag, out bool wasReported, diagnostics);
+            CheckSwitchErrors(ref switchSections, decisionDag, out bool wasReported, diagnostics, refinement, boundSwitchGoverningExpression, node, defaultLabel);
 
             // When the input is constant, we use that to reshape the decision dag that is returned
             // so that flow analysis will see that some of the cases may be unreachable.
@@ -78,7 +82,11 @@ namespace Microsoft.CodeAnalysis.CSharp
             ref ImmutableArray<BoundSwitchSection> switchSections,
             BoundDecisionDag decisionDag,
             out bool wasReported,
-            BindingDiagnosticBag diagnostics)
+            BindingDiagnosticBag diagnostics,
+            SharperRefinement refinement = null,
+            BoundExpression governingExpression = null,
+            SwitchStatementSyntax node = null,
+            BoundSwitchLabel defaultLabel = null)
         {
             wasReported = false;
             var reachableLabels = decisionDag.ReachableLabels;
@@ -93,6 +101,12 @@ namespace Microsoft.CodeAnalysis.CSharp
                 return;
             }
 
+            // Sharper: a label unreachable only because of the input's refinement is a warning, not an error.
+            ImmutableHashSet<LabelSymbol> reachableWithoutRefinement = refinement is null
+                ? null
+                : DecisionDagBuilder.CreateDecisionDagForSwitchStatement(
+                    this.Compilation, node, governingExpression, switchSections, defaultLabel?.Label ?? BreakLabel, BindingDiagnosticBag.Discarded).ReachableLabels;
+
             var sectionBuilder = ArrayBuilder<BoundSwitchSection>.GetInstance(switchSections.Length);
             bool anyPreviousErrors = false;
             foreach (var oldSection in switchSections)
@@ -101,7 +115,15 @@ namespace Microsoft.CodeAnalysis.CSharp
                 foreach (var label in oldSection.SwitchLabels)
                 {
                     var newLabel = label;
-                    if (!label.HasErrors && isSubsumed(label, reachableLabels) && label.Syntax.Kind() != SyntaxKind.DefaultSwitchLabel)
+                    if (!label.HasErrors && isSubsumed(label, reachableLabels) && label.Syntax.Kind() != SyntaxKind.DefaultSwitchLabel &&
+                        reachableWithoutRefinement?.Contains(label.Label) == true)
+                    {
+                        diagnostics.Add(
+                            ErrorCode.WRN_SharperSwitchArmExcludedByRefinement,
+                            label.Syntax is CasePatternSwitchLabelSyntax p ? p.Pattern.Location : ((CaseSwitchLabelSyntax)label.Syntax).Value.Location,
+                            refinement.Text);
+                    }
+                    else if (!label.HasErrors && isSubsumed(label, reachableLabels) && label.Syntax.Kind() != SyntaxKind.DefaultSwitchLabel)
                     {
                         var syntax = label.Syntax;
                         switch (syntax)

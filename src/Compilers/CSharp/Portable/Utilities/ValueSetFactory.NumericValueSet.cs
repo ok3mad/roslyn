@@ -53,6 +53,20 @@ namespace Microsoft.CodeAnalysis.CSharp
 
             public bool IsEmpty => _intervals.Length == 0;
 
+            /// <summary>
+            /// Sharper: the intervals, with a null bound where an interval reaches the end of the type. An interval over
+            /// the whole type keeps its low bound.
+            /// </summary>
+            internal void AddSharperRanges(ArrayBuilder<(ConstantValue? Low, ConstantValue? High)> ranges)
+            {
+                foreach (var (first, last) in _intervals)
+                {
+                    bool toMax = _tc.Related(BinaryOperatorKind.Equal, last, _tc.MaxValue);
+                    bool fromMin = _tc.Related(BinaryOperatorKind.Equal, first, _tc.MinValue) && !toMax;
+                    ranges.Add((fromMin ? null : _tc.ToConstantValue(first), toMax ? null : _tc.ToConstantValue(last)));
+                }
+            }
+
             ConstantValue IConstantValueSet.Sample
             {
                 get

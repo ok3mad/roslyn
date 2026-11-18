@@ -58,12 +58,12 @@ positional and list patterns, in `is`, switch statements and switch expressions.
   called with the input as it is, `null` included: no null test comes first.
 - **Purity.** The call must be pure, by the rules of a [`[Pure]`](purity.md) body: the method is `[Pure]` (also through
   a `[Pure]` virtual or interface slot), `[AssumePure]`, or an attested BCL member, and a receiver may read locals,
-  parameters, fields and `this`. Anything else is CS20075, with the reason:
+  parameters, fields and `this`. Anything else is CS20081, with the reason:
 
   ```csharp
   static bool TryParse(string s, out int n) { n = 0; return true; }
   bool M(string s) => s is TryParse(var n);
-  // error CS20075: The method of an extractor pattern must be pure, but it is not: 'TryParse' calls 'C.TryParse(string, out int)', which is not known to be pure.
+  // error CS20081: The method of an extractor pattern must be pure, but it is not: 'TryParse' calls 'C.TryParse(string, out int)', which is not known to be pure.
   ```
 
   The pattern's `out` values are fresh temporaries, so a `[Pure]` Try method never gets CS20053 here (#177).
@@ -102,7 +102,7 @@ appear. The control flow graph needs nothing new.
 
 | Code | Severity | When |
 | --- | --- | --- |
-| CS20075 | Error | The method of an extractor pattern is not pure, with the first expression that is not and why. |
+| CS20081 | Error | The method of an extractor pattern is not pure, with the first expression that is not and why. |
 
 ## Not covered
 

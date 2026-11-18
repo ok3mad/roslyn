@@ -3,6 +3,7 @@
 // See the LICENSE file in the project root for more information.
 
 using System;
+using Microsoft.CodeAnalysis.PooledObjects;
 using System.Diagnostics;
 using System.Text;
 using Roslyn.Utilities;
@@ -47,6 +48,17 @@ namespace Microsoft.CodeAnalysis.CSharp
             }
 
             public bool IsEmpty => !_hasNaN && _numbers.IsEmpty;
+
+            /// <summary>Sharper: the intervals of the numbers, then NaN as a range of one value.</summary>
+            internal void AddSharperRanges(ArrayBuilder<(ConstantValue? Low, ConstantValue? High)> ranges)
+            {
+                ((NumericValueSet<TFloating>)_numbers).AddSharperRanges(ranges);
+                if (_hasNaN)
+                {
+                    var nan = _tc.ToConstantValue(_tc.NaN);
+                    ranges.Add((nan, nan));
+                }
+            }
 
             ConstantValue IConstantValueSet.Sample
             {

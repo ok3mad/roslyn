@@ -360,13 +360,13 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 """;
             // The rules of a [Pure] body: the callee is [Pure], [AssumePure] or attested.
             CreateImmutableCompilation(source).VerifyDiagnostics(
-                // (9,31): error CS20075: The method of an extractor pattern must be pure, but it is not: 'TryParse' calls 'C.TryParse(string, out int)', which is not known to be pure.
+                // (9,31): error CS20081: The method of an extractor pattern must be pure, but it is not: 'TryParse' calls 'C.TryParse(string, out int)', which is not known to be pure.
                 //     bool M1(string s) => s is TryParse(var n);
                 Diagnostic(ErrorCode.ERR_SharperExtractorPatternNotPure, "TryParse").WithArguments("'TryParse' calls 'C.TryParse(string, out int)', which is not known to be pure").WithLocation(9, 31),
-                // (10,31): error CS20075: The method of an extractor pattern must be pure, but it is not: 'Counts' calls 'C.Counts(string)', which is not known to be pure.
+                // (10,31): error CS20081: The method of an extractor pattern must be pure, but it is not: 'Counts' calls 'C.Counts(string)', which is not known to be pure.
                 //     bool M2(string s) => s is Counts(> 0);
                 Diagnostic(ErrorCode.ERR_SharperExtractorPatternNotPure, "Counts").WithArguments("'Counts' calls 'C.Counts(string)', which is not known to be pure").WithLocation(10, 31),
-                // (13,31): error CS20075: The method of an extractor pattern must be pure, but it is not: 'System.Int32.TryParse' calls 'int.TryParse(string?, out int)', which is not known to be pure.
+                // (13,31): error CS20081: The method of an extractor pattern must be pure, but it is not: 'System.Int32.TryParse' calls 'int.TryParse(string?, out int)', which is not known to be pure.
                 //     bool M5(string s) => s is System.Int32.TryParse(var n);
                 Diagnostic(ErrorCode.ERR_SharperExtractorPatternNotPure, "System.Int32.TryParse").WithArguments("'System.Int32.TryParse' calls 'int.TryParse(string?, out int)', which is not known to be pure").WithLocation(13, 31));
         }
@@ -429,7 +429,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             // A call through a [Pure] slot is pure (#225), on 'this' and on another receiver; an unmarked virtual is not.
             var comp = CreateOpaqueCompilation(source);
             comp.VerifyDiagnostics(
-                // (8,46): error CS20075: The method of an extractor pattern must be pure, but it is not: 'Loose' calls 'Parser.Loose(string)', which is not known to be pure.
+                // (8,46): error CS20081: The method of an extractor pattern must be pure, but it is not: 'Loose' calls 'Parser.Loose(string)', which is not known to be pure.
                 //     public bool CheckLoose(string s) => s is Loose(0);
                 Diagnostic(ErrorCode.ERR_SharperExtractorPatternNotPure, "Loose").WithArguments("'Loose' calls 'Parser.Loose(string)', which is not known to be pure").WithLocation(8, 46));
             source = source.Replace("public bool CheckLoose(string s) => s is Loose(0);", "");

@@ -35,7 +35,22 @@ namespace Microsoft.CodeAnalysis.CSharp
             return BindSwitchExpressionArm(node, inputType, diagnostics);
         }
 
+        /// <summary>
+        /// Sharper: the variable that is the switch input and its refinement inside this arm (refined types, slice 2),
+        /// set when the arm binds with a <see cref="SharperSwitchNarrowing"/>. Binding is deterministic, so binding the
+        /// arm again sets an equal one.
+        /// </summary>
+        private (Symbol Variable, SharperRefinement Refinement)? _sharperNarrowing;
+
+        internal override SharperRefinement? GetSharperRefinementInScope(Symbol variable)
+            => _sharperNarrowing is { } narrowing && narrowing.Variable.Equals(variable)
+                ? narrowing.Refinement
+                : base.GetSharperRefinementInScope(variable);
+
         internal override BoundSwitchExpressionArm BindSwitchExpressionArm(SwitchExpressionArmSyntax node, TypeSymbol switchGoverningType, BindingDiagnosticBag diagnostics)
+            => BindSwitchExpressionArm(node, switchGoverningType, sharperNarrowing: null, diagnostics);
+
+        internal BoundSwitchExpressionArm BindSwitchExpressionArm(SwitchExpressionArmSyntax node, TypeSymbol switchGoverningType, SharperSwitchNarrowing? sharperNarrowing, BindingDiagnosticBag diagnostics)
         {
             Debug.Assert(node == _arm);
             Binder armBinder = this.GetRequiredBinder(node);
@@ -51,6 +66,11 @@ namespace Microsoft.CodeAnalysis.CSharp
             }
 
             BoundPattern pattern = patternBinder.BindPattern(node.Pattern, ref unionType, switchGoverningType, permitDesignations: true, hasErrors, diagnostics, out bool hasUnionMatching, underIsPattern: false);
+            if (sharperNarrowing?.NarrowArm(pattern, node.WhenClause != null, node.Pattern) is { } narrowed)
+            {
+                _sharperNarrowing = (sharperNarrowing.Variable, narrowed);
+            }
+
             BoundExpression? whenClause = node.WhenClause != null
                 ? patternBinder.BindBooleanExpression(node.WhenClause.Condition, diagnostics)
                 : null;
