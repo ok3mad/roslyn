@@ -404,7 +404,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     else
                     {
                         // Inconsistent accessibility: type '{1}' is less accessible than class '{0}'
-                        diagnostics.Add(ErrorCode.ERR_BadVisBaseType, baseTypeLocation, this, lessVisibleType);
+                        diagnostics.AddInconsistentAccessibility(ErrorCode.ERR_BadVisBaseType, baseTypeLocation, this, lessVisibleType);
                     }
                 }
 
@@ -455,7 +455,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     if (!i.IsAtLeastAsVisibleAs(this, ref useSiteInfo))
                     {
                         // Inconsistent accessibility: base interface '{1}' is less accessible than interface '{0}'
-                        diagnostics.Add(ErrorCode.ERR_BadVisBaseInterface, interfaceLocations[i], this, i);
+                        diagnostics.AddInconsistentAccessibility(ErrorCode.ERR_BadVisBaseInterface, interfaceLocations[i], this, i);
                     }
 
                     if (i.HasFileLocalTypes() && !this.HasFileLocalTypes())

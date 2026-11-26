@@ -115,7 +115,7 @@ Not done yet:
 | Feature | Summary | Status | Issue |
 | --- | --- | --- | --- |
 | [Spread in `yield return`](features/yield-return-spread.md) | `yield return ..xs;` yields every element of `xs`. | Prototype, merged into `main` | [#13](https://github.com/ok3mad/roslyn/issues/13) |
-| [Function types](features/function-types.md) | `(A, B) -> R` is `Func<A, B, R>`, and `(A) -> void` is `Action<A>`. Parameter names, `(int width, int height) -> int`, are carried on the type as tuple element names are. | Prototype, merged into `main` | [#21](https://github.com/ok3mad/roslyn/issues/21) |
+| [Function types](features/function-types.md) | `(A, B) -> R` is `Func<A, B, R>`, and `(A) -> void` is `Action<A>`. Parameter names, `(int width, int height) -> int`, are carried on the type as tuple element names are. `ref`, `out` and `in` parameters, ref returns and more than 16 parameters are the anonymous delegate of a lambda's natural type, internal to the assembly. | Prototype, merged into `main` | [#21](https://github.com/ok3mad/roslyn/issues/21) |
 | [`val` locals](features/val-locals.md) | `val x = e;` declares an implicitly typed local that cannot be reassigned, also in deconstructions, `foreach`, `out`, patterns and lambda parameters (`(val x) => ...`). On a method parameter, `val x` is `readonly infer x` (prototype on `sharper/val-method-parameters`, [#178](https://github.com/ok3mad/roslyn/issues/178)). | Prototype, merged into `main` | [#14](https://github.com/ok3mad/roslyn/issues/14), [#15](https://github.com/ok3mad/roslyn/issues/15), [#18](https://github.com/ok3mad/roslyn/issues/18), [#17](https://github.com/ok3mad/roslyn/issues/17) |
 | [`readonly` locals](features/readonly-locals.md) | `readonly int x = e;` and `readonly var x = e;` declare locals that cannot be reassigned; `readonly var` is `val`. | Prototype, merged into `main` | [#16](https://github.com/ok3mad/roslyn/issues/16) |
 | [`readonly` parameters](features/readonly-parameters.md) | `void F(readonly int x)` declares a parameter that cannot be reassigned; it is not part of the signature. | Prototype | [#23](https://github.com/ok3mad/roslyn/issues/23), [#97](https://github.com/ok3mad/roslyn/issues/97) |
@@ -177,8 +177,8 @@ in `#pragma warning`, `/nowarn` and `.editorconfig`.
 | CS20005 | Error | Deconstruction 'val (...)' form disallows a specific type for 'val'. Use '@val' for the type. |
 | CS20006 | Error | Cannot ref-assign '{0}' because it is a ref val: it always refers to the same variable. Writes through '{0}' are allowed. |
 | CS20007 | | Retired in step N1 of function type parameter names, which keeps the names. Was: "A function type cannot name its parameters. Remove the name '{0}'." |
-| CS20008 | Error | A function type parameter cannot be '{0}', because a function type is a 'System.Func' or 'System.Action' delegate. |
-| CS20009 | Error | A function type cannot have more than {0} parameters, because no 'System.Func' or 'System.Action' delegate has more. |
+| CS20008 | Error | A function type parameter cannot be '{0}'. Declare a named delegate instead. ('params', 'this' or 'readonly' without 'ref'; until [#56](https://github.com/ok3mad/roslyn/issues/56) also 'ref', 'out' and 'in'.) |
+| CS20009 | | Retired in [#56](https://github.com/ok3mad/roslyn/issues/56): a function type with more than 16 parameters is an anonymous delegate. Was: "A function type cannot have more than {0} parameters, because no 'System.Func' or 'System.Action' delegate has more." |
 | CS20010 | | Retired in [#228](https://github.com/ok3mad/roslyn/issues/228): CS20003 names the cause. Was: "Call to non-readonly member '{0}' on readonly local '{1}' runs on a copy, so '{1}' is not changed." |
 | CS20011 | Error | A readonly local must be initialized in its declaration, because it cannot be assigned later. |
 | CS20012 | Error | A spread 'yield return ..' cannot enumerate '{0}' because its enumerator is a ref struct, which cannot be kept across 'yield return'. Spread an array or a sequence instead. |
@@ -251,6 +251,7 @@ in `#pragma warning`, `/nowarn` and `.editorconfig`.
 | CS20079 | Error | The switch expression does not handle all values of its input's inferred refinement 'is {0}'. For example, the pattern '{1}' is not covered. |
 | CS20080 | Warning | The pattern is unreachable: the input's refinement 'is {0}' excludes every value it matches. |
 | CS20081 | Error | The method of an extractor pattern must be pure, but it is not: {0}. |
+| CS20082 | Error | '{0}' is visible outside this assembly, but uses the function type '{1}', which no 'System.Func' or 'System.Action' delegate can express and which is internal to the assembly. Declare a named delegate instead. |
 
 ## Where the code is
 

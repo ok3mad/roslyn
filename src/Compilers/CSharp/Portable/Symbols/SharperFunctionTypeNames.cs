@@ -59,8 +59,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             // always a ConstructedNamedTypeSymbol. That makes it the only subclass that copies the names, where tuple
             // data needs an override on every subclass (WithTupleDataCore). The definition itself (a function type
             // written inside Func's own declaration) and an error type (Func is missing) drop the names.
-            // PROTOTYPE(sharper): the anonymous delegate of a function type with ref parameters
-            // (https://github.com/ok3mad/roslyn/issues/56) will need the names too, outside of its identity.
+            // A function type with ref parameters is an anonymous delegate (https://github.com/ok3mad/roslyn/issues/56),
+            // not a ConstructedNamedTypeSymbol, and has the parameter names of its descriptor, so it drops these too.
             if (this is not ConstructedNamedTypeSymbol constructed || IsUnboundGenericType)
             {
                 return this;

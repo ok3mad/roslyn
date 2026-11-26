@@ -2622,7 +2622,6 @@ namespace Microsoft.CodeAnalysis.CSharp
                 or ErrorCode.ERR_SharperValDeconstructionDisallowsSpecificType
                 or ErrorCode.ERR_SharperValRefReassignment
                 or ErrorCode.ERR_SharperFunctionTypeParameterModifier
-                or ErrorCode.ERR_SharperFunctionTypeTooManyParameters
                 or ErrorCode.ERR_SharperCantChangeFunctionTypeNamesOnOverride
                 or ErrorCode.ERR_SharperImplBadFunctionTypeNames
                 or ErrorCode.ERR_SharperPartialMemberInconsistentFunctionTypeNames
@@ -2683,6 +2682,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 or ErrorCode.WRN_SharperRefinementArgumentUnknown
                 or ErrorCode.ERR_SharperSwitchNotExhaustiveForRefinement
                 or ErrorCode.WRN_SharperSwitchArmExcludedByRefinement
+                or ErrorCode.ERR_SharperFunctionTypeNotVisible
                 or ErrorCode.ERR_SharperInferParameterUsesDisagree
                 or ErrorCode.ERR_SharperRefinementNotClosed
                 or ErrorCode.ERR_SharperRefinementTypeNotSupported
