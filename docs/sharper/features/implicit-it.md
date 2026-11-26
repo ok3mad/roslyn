@@ -52,9 +52,10 @@ The decisions are in the brainstorm's [Decided](../planning/brainstorm.md#decide
   [pipe](pipe.md) stage is the outermost slot: in `x |> F(it, xs.Where(it > 0))` the inner `it` is the implicit
   lambda's, which makes the stage CS20020, and the pipe's `it` is an outer `it` for CS20021. A pipe inside an implicit
   lambda is not a second meaning, because a stage owns every `it` in it: `xs.Select(it.Id |> it * 10)`.
-- **No declarations.** A variable declared in an argument list that contains an implicit lambda (`out var v`,
-  `is int n`) is CS20022, and the arguments bind as values. `await` in an implicit lambda is CS20023: an implicit
-  lambda cannot be `async`.
+- **No declarations in the lambda.** A variable declared in an argument that would be an implicit lambda
+  (`xs.Select(it is int n ? n : 0)`) is CS20022, and the argument is a value. Variables declared next to the lambda
+  are fine: in `F(Make(it), out var v)` the `out var` gets its type from the overload that is chosen. `await` in an
+  implicit lambda is CS20023: an implicit lambda cannot be `async`.
 
 ## Not supported yet
 
@@ -63,7 +64,8 @@ The decisions are in the brainstorm's [Decided](../planning/brainstorm.md#decide
   scope ([#123](https://github.com/ok3mad/roslyn/issues/123)).
 - Edit and Continue does not see implicit lambdas, because the IDE's matcher finds lambdas by their syntax
   ([#124](https://github.com/ok3mad/roslyn/issues/124)).
-- `F(Make(it), out var v)`: a declaration anywhere in the arguments turns the lambda off ([#125](https://github.com/ok3mad/roslyn/issues/125)).
+- `xs.Select(it is int n ? n : 0)`: a declaration inside an implicit lambda would also be declared in the enclosing
+  statement, which the semantic model finds; it waits for [#123](https://github.com/ok3mad/roslyn/issues/123) ([#125](https://github.com/ok3mad/roslyn/issues/125)).
 - Each call with a free `it` scans its arguments' syntax, and failed trials bind again at each nesting level
   ([#127](https://github.com/ok3mad/roslyn/issues/127)).
 - No IDE support yet: Quick Info, hints, and the "name the parameter" fixer ([#128](https://github.com/ok3mad/roslyn/issues/128)).
@@ -88,6 +90,11 @@ parser change:
    CS20021. If neither does, the lambda trial is reported when its lambdas use `it`, and the value trial otherwise.
    When the lambda trial bound without errors but a lambda used no `it` of its own, the value trial's errors get
    CS20054, which names the inner call that took the `it`.
+
+The other arguments bind once, for both trials, and only the lambda arguments bind again as values. An `out var` in
+them gets its type from the chosen trial only: the trials see a discard in its place, and the chosen trial's call binds
+once more with the variable, over the same bound arguments and lambda bindings. An argument that could be a lambda but
+declares a variable is CS20022 and a value (`FindSharperDeclaration`).
 
 A target-typed `new(...)` has no constructors until it is converted, so it binds its free-`it` arguments as unbound
 implicit lambdas and runs the trials in `ConvertObjectCreationExpression`, rebinding only those arguments. Without a

@@ -190,19 +190,15 @@ namespace Microsoft.CodeAnalysis.CSharp
             InvocationExpressionSyntax node,
             BoundExpression boundExpression,
             string? methodName,
-            AnalyzedArguments analyzedArguments,
             BindingDiagnosticBag diagnostics)
         {
             return BindSharperImplicitItArguments(
                 node.ArgumentList,
+                boundArguments: null,
+                allowArglist: true,
                 methodName ?? node.Expression.ToString(),
                 argument => SharperCandidateTakesFunction(boundExpression, methodName, node.ArgumentList, argument),
-                (implicitItArguments, trialDiagnostics) =>
-                {
-                    analyzedArguments.Clear();
-                    BindArgumentsAndNames(node.ArgumentList, trialDiagnostics, analyzedArguments, allowArglist: true, sharperImplicitItArguments: implicitItArguments);
-                    return BindInvocationExpression(node, node.Expression, methodName, boundExpression, analyzedArguments, trialDiagnostics, acceptOnlyMethods: false);
-                },
+                (analyzedArguments, trialDiagnostics) => BindInvocationExpression(node, node.Expression, methodName, boundExpression, analyzedArguments, trialDiagnostics, acceptOnlyMethods: false),
                 diagnostics);
         }
 
@@ -231,26 +227,21 @@ namespace Microsoft.CodeAnalysis.CSharp
         {
             return BindSharperImplicitItArguments(
                 argumentList,
+                boundArguments: null,
+                allowArglist: true,
                 type.Name,
                 argument => SharperCandidatesTakeFunction(type.InstanceConstructors, argumentList, argument),
-                (implicitItArguments, trialDiagnostics) =>
-                {
-                    var analyzedArguments = AnalyzedArguments.GetInstance();
-                    BindArgumentsAndNames(argumentList, trialDiagnostics, analyzedArguments, allowArglist: true, sharperImplicitItArguments: implicitItArguments);
-                    var result = bind(analyzedArguments, trialDiagnostics);
-                    analyzedArguments.Free();
-                    return result;
-                },
+                bind,
                 diagnostics);
         }
 
         /// <summary>
         /// The arguments of a target-typed <c>new(...)</c> that are implicit lambdas until its type is known: those with a
-        /// free <c>it</c>, unless the arguments declare a variable. Null when there are none.
+        /// free <c>it</c>. Null when there are none. One that declares a variable becomes a value then, with CS20022.
         /// </summary>
         private ArrayBuilder<ArgumentSyntax>? GetSharperImplicitItTargetTypedArguments(ImplicitObjectCreationExpressionSyntax node)
         {
-            if (!HasSharperImplicitItArgument(node.ArgumentList) || FindSharperDeclaration(node.ArgumentList) is not null)
+            if (!HasSharperImplicitItArgument(node.ArgumentList))
             {
                 return null;
             }
@@ -297,34 +288,18 @@ namespace Microsoft.CodeAnalysis.CSharp
             BindingDiagnosticBag diagnostics)
         {
             var argumentList = ((ImplicitObjectCreationExpressionSyntax)node.Syntax).ArgumentList;
-            if (type is NamedTypeSymbol { TypeKind: TypeKind.Class or TypeKind.Struct or TypeKind.Enum, IsAnonymousType: false } namedType)
-            {
-                return BindSharperImplicitItArguments(
-                    argumentList,
-                    namedType.Name,
-                    argument => SharperCandidatesTakeFunction(namedType.InstanceConstructors, argumentList, argument),
-                    bindWithArguments,
-                    diagnostics);
-            }
-
-            return bindWithArguments(null, diagnostics);
-
-            BoundExpression bindWithArguments(ArrayBuilder<ArgumentSyntax>? implicitItArguments, BindingDiagnosticBag trialDiagnostics)
-            {
-                var analyzedArguments = AnalyzedArguments.GetInstance(node.Arguments, node.ArgumentRefKindsOpt, node.ArgumentNamesOpt);
-                for (int i = 0; i < analyzedArguments.Arguments.Count; i++)
-                {
-                    var argument = argumentList.Arguments[i];
-                    if (analyzedArguments.Arguments[i] is UnboundLambda { Data.IsSharperImplicitIt: true } && implicitItArguments?.Contains(argument) != true)
-                    {
-                        analyzedArguments.Arguments[i] = BindArgumentValue(trialDiagnostics, argument, allowArglist: true, RefKind.None);
-                    }
-                }
-
-                var result = bind(analyzedArguments, trialDiagnostics);
-                analyzedArguments.Free();
-                return result;
-            }
+            var namedType = type is NamedTypeSymbol { TypeKind: TypeKind.Class or TypeKind.Struct or TypeKind.Enum, IsAnonymousType: false } candidateType ? candidateType : null;
+            var boundArguments = AnalyzedArguments.GetInstance(node.Arguments, node.ArgumentRefKindsOpt, node.ArgumentNamesOpt);
+            var result = BindSharperImplicitItArguments(
+                argumentList,
+                boundArguments,
+                allowArglist: true,
+                type.Name,
+                argument => namedType is not null && SharperCandidatesTakeFunction(namedType.InstanceConstructors, argumentList, argument),
+                bind,
+                diagnostics);
+            boundArguments.Free();
+            return result;
         }
 
         /// <summary>
@@ -353,6 +328,8 @@ namespace Microsoft.CodeAnalysis.CSharp
             ImmutableArray<PropertySymbol> indexers = default;
             return BindSharperImplicitItArguments(
                 argumentList,
+                boundArguments: null,
+                allowArglist: false,
                 "this[]",
                 argument =>
                 {
@@ -387,14 +364,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                             return true;
                     }
                 },
-                (implicitItArguments, trialDiagnostics) =>
-                {
-                    var analyzedArguments = AnalyzedArguments.GetInstance();
-                    BindArgumentsAndNames(argumentList, trialDiagnostics, analyzedArguments, sharperImplicitItArguments: implicitItArguments);
-                    var result = BindElementAccessWithArguments(node, receiver, analyzedArguments, allowInlineArrayElementAccess, trialDiagnostics);
-                    analyzedArguments.Free();
-                    return result;
-                },
+                (analyzedArguments, trialDiagnostics) => BindElementAccessWithArguments(node, receiver, analyzedArguments, allowInlineArrayElementAccess, trialDiagnostics),
                 diagnostics);
         }
 
@@ -411,9 +381,11 @@ namespace Microsoft.CodeAnalysis.CSharp
             NamedTypeSymbol? initializerType = isThis ? constructor.ContainingType : constructor.ContainingType.BaseTypeNoUseSiteDiagnostics;
             return BindSharperImplicitItArguments(
                 argumentList,
+                boundArguments: null,
+                allowArglist: true,
                 isThis ? "this" : "base",
                 argument => initializerType is not null && SharperCandidatesTakeFunction(initializerType.InstanceConstructors, argumentList, argument),
-                (implicitItArguments, trialDiagnostics) => BindConstructorInitializerCore(argumentList, constructor, trialDiagnostics, implicitItArguments),
+                (analyzedArguments, trialDiagnostics) => BindConstructorInitializerCore(argumentList, constructor, trialDiagnostics, analyzedArguments),
                 diagnostics);
         }
 
@@ -423,92 +395,197 @@ namespace Microsoft.CodeAnalysis.CSharp
         /// <c>it</c>. With an outer <c>it</c> in scope both trials can bind, when the callee takes a value or a function
         /// at that argument; that is an error, so that an overload added later never moves <c>it</c>.
         /// </summary>
+        /// <remarks>
+        /// The other arguments bind once, for both trials, as C# binds an argument list once: only the arguments that
+        /// can be lambdas are bound again. A variable declared in them (<c>F(Make(it), out var v)</c>) is then declared
+        /// once, and an <c>out var</c>, whose type comes from the chosen overload, gets its type once: the trials see a
+        /// discard in its place, which overload resolution treats the same way, and the chosen trial's call is bound
+        /// again with the variable, over the same arguments (#125). The lambdas are not bound again: an
+        /// <see cref="UnboundLambda"/> keeps its bindings.
+        /// </remarks>
+        /// <param name="boundArguments">The arguments, already bound with an implicit lambda for each argument with a free
+        /// <c>it</c> (a target-typed <c>new(...)</c>), or null to bind them here.</param>
         /// <param name="calleeName">The name in CS20021.</param>
         /// <param name="takesFunction">Whether some candidate may take the argument as a function with one parameter.</param>
-        /// <param name="bind">Binds the arguments, the given ones as implicit lambdas (none when null), and the expression.</param>
+        /// <param name="bind">Binds the expression with the arguments, which it may change.</param>
         private BoundExpression BindSharperImplicitItArguments(
             BaseArgumentListSyntax argumentList,
+            AnalyzedArguments? boundArguments,
+            bool allowArglist,
             string calleeName,
             Func<ArgumentSyntax, bool> takesFunction,
-            Func<ArrayBuilder<ArgumentSyntax>?, BindingDiagnosticBag, BoundExpression> bind,
+            Func<AnalyzedArguments, BindingDiagnosticBag, BoundExpression> bind,
             BindingDiagnosticBag diagnostics)
         {
-            if (FindSharperDeclaration(argumentList) is { } declaration)
-            {
-                // A variable declared in the arguments gets its type while the call binds, so the two trials would
-                // both set it. Bind as values, and report a declaration inside an argument that would be a lambda.
-                // PROTOTYPE(sharper): 'F(Make(it), out var v)' cannot be an implicit lambda yet (#125).
-                if (declaration.argument is not null)
-                {
-                    diagnostics.Add(ErrorCode.ERR_SharperItDeclaration, declaration.designation.Location, declaration.designation.Identifier.ValueText);
-                }
-
-                return bind(null, diagnostics);
-            }
-
             // Only an argument that some candidate takes as a function can be a lambda. Without this check every call
             // with an 'it' in its arguments would bind twice, and a failed call binds its lambdas again for error
             // recovery, which multiplies with the nesting depth.
             var implicitItArguments = ArrayBuilder<ArgumentSyntax>.GetInstance();
             foreach (var argument in argumentList.Arguments)
             {
-                if (FindSharperFreeIt(argument) is not null && takesFunction(argument))
+                if (FindSharperFreeIt(argument) is null || !takesFunction(argument))
                 {
-                    implicitItArguments.Add(argument);
+                    continue;
+                }
+
+                if (FindSharperDeclaration(argument) is { } declaration)
+                {
+                    // The lambda's body would declare the variable in its own scope, but the enclosing statement
+                    // declares it too, since which arguments are lambdas depends on types, and the semantic model finds
+                    // the statement's. So such an argument is a value.
+                    // PROTOTYPE(sharper): declarations inside an implicit lambda wait for the semantic model to see
+                    // implicit lambdas (#123), and for a way to drop the statement's variable when the lambda wins (#125).
+                    diagnostics.Add(ErrorCode.ERR_SharperItDeclaration, declaration.Location, declaration.Identifier.ValueText);
+                    continue;
+                }
+
+                implicitItArguments.Add(argument);
+            }
+
+            // The arguments shared by both trials, with the lambdas of the first.
+            var sharedDiagnostics = BindingDiagnosticBag.GetInstance(withDiagnostics: true, withDependencies: diagnostics.AccumulatesDependencies);
+            var arguments = AnalyzedArguments.GetInstance();
+            if (boundArguments is null)
+            {
+                BindArgumentsAndNames(argumentList, sharedDiagnostics, arguments, allowArglist, sharperImplicitItArguments: implicitItArguments);
+            }
+            else
+            {
+                copyArguments(boundArguments, arguments, withStandIns: false);
+                for (int i = 0; i < arguments.Arguments.Count; i++)
+                {
+                    var argument = argumentList.Arguments[i];
+                    if (arguments.Arguments[i] is UnboundLambda { Data.IsSharperImplicitIt: true } && !implicitItArguments.Contains(argument))
+                    {
+                        arguments.Arguments[i] = BindArgumentValue(sharedDiagnostics, argument, allowArglist, RefKind.None);
+                    }
                 }
             }
 
+            bool sharedOk = !sharedDiagnostics.HasAnyErrors();
+            diagnostics.AddRangeAndFree(sharedDiagnostics);
+
+            BoundExpression result;
             if (implicitItArguments.Count == 0)
             {
+                result = bind(arguments, diagnostics);
+                arguments.Free();
                 implicitItArguments.Free();
-                return bind(null, diagnostics);
+                return result;
+            }
+
+            bool hasPendingOutVariable = false;
+            foreach (var argument in arguments.Arguments)
+            {
+                hasPendingOutVariable |= argument.Kind == BoundKind.OutVariablePendingInference;
             }
 
             var lambdaDiagnostics = BindingDiagnosticBag.GetInstance(withDiagnostics: true, withDependencies: diagnostics.AccumulatesDependencies);
-            BoundExpression lambdaResult = bind(implicitItArguments, lambdaDiagnostics);
+            BoundExpression lambdaResult = bindTrial(arguments, lambdaDiagnostics);
             bool lambdasUseIt = AllSharperImplicitItLambdasUseIt(lambdaResult, argumentList, implicitItArguments.Count, out BoundLambda? lambdaWithoutIt);
-            bool lambdaOk = lambdasUseIt && !lambdaDiagnostics.HasAnyErrors();
-            bool lambdaFailedOnlyForIt = !lambdasUseIt && !lambdaDiagnostics.HasAnyErrors();
-            implicitItArguments.Free();
+            bool lambdaBound = sharedOk && !lambdaDiagnostics.HasAnyErrors();
+            bool lambdaOk = lambdasUseIt && lambdaBound;
+            bool lambdaFailedOnlyForIt = !lambdasUseIt && lambdaBound;
 
             if (lambdaOk && !IsSharperOuterItInScope(argumentList))
             {
-                diagnostics.AddRangeAndFree(lambdaDiagnostics);
-                return lambdaResult;
+                result = commit(arguments, lambdaResult, lambdaDiagnostics);
+                arguments.Free();
+                implicitItArguments.Free();
+                return result;
+            }
+
+            // The value trial binds again only the arguments that were lambdas.
+            var valueArgumentDiagnostics = BindingDiagnosticBag.GetInstance(withDiagnostics: true, withDependencies: diagnostics.AccumulatesDependencies);
+            var valueArguments = AnalyzedArguments.GetInstance();
+            copyArguments(arguments, valueArguments, withStandIns: false);
+            foreach (var argument in implicitItArguments)
+            {
+                valueArguments.Arguments[argumentList.Arguments.IndexOf(argument)] = BindArgumentValue(valueArgumentDiagnostics, argument, allowArglist, RefKind.None);
             }
 
             var valueDiagnostics = BindingDiagnosticBag.GetInstance(withDiagnostics: true, withDependencies: diagnostics.AccumulatesDependencies);
-            BoundExpression valueResult = bind(null, valueDiagnostics);
-            bool valueOk = !valueDiagnostics.HasAnyErrors();
+            BoundExpression valueResult = bindTrial(valueArguments, valueDiagnostics);
+            bool valueOk = sharedOk && !valueArgumentDiagnostics.HasAnyErrors() && !valueDiagnostics.HasAnyErrors();
 
             if (lambdaOk && valueOk)
             {
                 // Keep the value, where 'it' is the outer one, so that the outer lambda reports no second error.
                 lambdaDiagnostics.Free();
-                diagnostics.AddRangeAndFree(valueDiagnostics);
+                diagnostics.AddRangeAndFree(valueArgumentDiagnostics);
+                result = commit(valueArguments, valueResult, valueDiagnostics);
                 var firstIt = FindSharperFirstFreeIt(argumentList);
                 Debug.Assert(firstIt is not null);
                 diagnostics.Add(ErrorCode.ERR_SharperItValueOrFunction, firstIt.Location, calleeName);
-                return valueResult.WithHasErrors();
+                result = result.WithHasErrors();
             }
-
-            // When neither binds, report the lambda trial if its lambdas use 'it' (the callee takes a function there,
-            // and the lambda has errors), and the value trial otherwise.
-            if (lambdaOk || (!valueOk && lambdasUseIt))
+            else if (lambdaOk || (!valueOk && lambdasUseIt))
             {
+                // When neither binds, report the lambda trial if its lambdas use 'it' (the callee takes a function there,
+                // and the lambda has errors), and the value trial otherwise.
+                valueArgumentDiagnostics.Free();
                 valueDiagnostics.Free();
-                diagnostics.AddRangeAndFree(lambdaDiagnostics);
-                return lambdaResult;
+                result = commit(arguments, lambdaResult, lambdaDiagnostics);
             }
-
-            lambdaDiagnostics.Free();
-            if (!valueOk && lambdaFailedOnlyForIt && lambdaWithoutIt is not null)
+            else
             {
-                ReportSharperItClaimedByInnerCall(lambdaWithoutIt, diagnostics);
+                lambdaDiagnostics.Free();
+                if (!valueOk && lambdaFailedOnlyForIt && lambdaWithoutIt is not null)
+                {
+                    ReportSharperItClaimedByInnerCall(lambdaWithoutIt, diagnostics);
+                }
+
+                diagnostics.AddRangeAndFree(valueArgumentDiagnostics);
+                result = commit(valueArguments, valueResult, valueDiagnostics);
             }
 
-            diagnostics.AddRangeAndFree(valueDiagnostics);
-            return valueResult;
+            valueArguments.Free();
+            arguments.Free();
+            implicitItArguments.Free();
+            return result;
+
+            // Binds the expression in a trial, over a copy of the arguments, since binding may change them; with a
+            // discard in place of each 'out var', so that the variable gets its type only from the chosen trial.
+            BoundExpression bindTrial(AnalyzedArguments trialArguments, BindingDiagnosticBag trialDiagnostics)
+            {
+                var copy = AnalyzedArguments.GetInstance();
+                copyArguments(trialArguments, copy, withStandIns: hasPendingOutVariable);
+                var trialResult = bind(copy, trialDiagnostics);
+                copy.Free();
+                return trialResult;
+            }
+
+            // Keeps the chosen trial, or, if it had a discard in place of an 'out var', binds the expression again with
+            // the variable, and reports that binding instead.
+            BoundExpression commit(AnalyzedArguments trialArguments, BoundExpression trialResult, BindingDiagnosticBag trialDiagnostics)
+            {
+                if (!hasPendingOutVariable)
+                {
+                    diagnostics.AddRangeAndFree(trialDiagnostics);
+                    return trialResult;
+                }
+
+                trialDiagnostics.Free();
+                var copy = AnalyzedArguments.GetInstance();
+                copyArguments(trialArguments, copy, withStandIns: false);
+                var committed = bind(copy, diagnostics);
+                copy.Free();
+                return committed;
+            }
+
+            static void copyArguments(AnalyzedArguments source, AnalyzedArguments destination, bool withStandIns)
+            {
+                Debug.Assert(!source.IncludesReceiverAsArgument);
+                foreach (var argument in source.Arguments)
+                {
+                    destination.Arguments.Add(withStandIns && argument is OutVariablePendingInference pending
+                        ? new BoundDiscardExpression(pending.Syntax, NullableAnnotation.Oblivious, isInferred: true, type: null)
+                        : argument);
+                }
+
+                destination.Names.AddRange(source.Names);
+                destination.RefKinds.AddRange(source.RefKinds);
+            }
         }
 
         /// <summary>
@@ -554,30 +631,21 @@ namespace Microsoft.CodeAnalysis.CSharp
         }
 
         /// <summary>
-        /// Finds a variable declared in the arguments, outside explicit lambdas and pipe stages (which get new locals each
-        /// time they bind), preferring one inside an argument with a free <c>it</c>.
+        /// Finds a variable declared in an argument, outside explicit lambdas and pipe stages (which get new locals each
+        /// time they bind). Such an argument cannot be an implicit lambda yet; a variable declared in another argument,
+        /// as in <c>F(Make(it), out var v)</c>, is bound once for both trials (#125).
         /// </summary>
-        private (SingleVariableDesignationSyntax designation, ArgumentSyntax? argument)? FindSharperDeclaration(BaseArgumentListSyntax argumentList)
+        private static SingleVariableDesignationSyntax? FindSharperDeclaration(ArgumentSyntax argument)
         {
-            (SingleVariableDesignationSyntax designation, ArgumentSyntax? argument)? result = null;
-            foreach (var argument in argumentList.Arguments)
+            foreach (var node in argument.DescendantNodes(descendIntoChildren: static n => n is not AnonymousFunctionExpressionSyntax and not QueryExpressionSyntax && !(n.Parent is PipeExpressionSyntax pipe && pipe.Stage == n)))
             {
-                foreach (var node in argument.DescendantNodes(descendIntoChildren: static n => n is not AnonymousFunctionExpressionSyntax and not QueryExpressionSyntax && !(n.Parent is PipeExpressionSyntax pipe && pipe.Stage == n)))
+                if (node is SingleVariableDesignationSyntax designation)
                 {
-                    if (node is SingleVariableDesignationSyntax designation)
-                    {
-                        if (FindSharperFreeIt(argument) is not null)
-                        {
-                            return (designation, argument);
-                        }
-
-                        result ??= (designation, null);
-                        break;
-                    }
+                    return designation;
                 }
             }
 
-            return result;
+            return null;
         }
 
         /// <summary>
@@ -892,8 +960,9 @@ namespace Microsoft.CodeAnalysis.CSharp
                 var locals = bodyBinder.GetDeclaredLocalsForScope(_body);
                 if (!locals.IsEmpty)
                 {
-                    // PROTOTYPE(sharper): the binder map scopes these to the lambda, but whether an argument is a
-                    // lambda depends on types; decide whether declarations can be allowed (#125).
+                    // The binder map scopes these to the lambda, but the enclosing statement declares them too (see
+                    // BindSharperImplicitItArguments, which keeps such arguments values; this catches the rest).
+                    // PROTOTYPE(sharper): allow them once the semantic model sees implicit lambdas (#123, #125).
                     diagnostics.Add(ErrorCode.ERR_SharperItDeclaration, locals[0].GetFirstLocation(), locals[0]);
                 }
 

@@ -264,11 +264,14 @@ as anonymous delegates"):
    none, so `BindingDiagnosticBag.GetInstance(diagnostics)` makes a trial that cannot tell success from failure
    (`HasAnyErrors` asserts). A trial that decides something takes
    `GetInstance(withDiagnostics: true, withDependencies: diagnostics.AccumulatesDependencies)`.
-25. **Binding the same arguments twice sets their declared variables twice.** An `out var` or pattern variable in an
-   argument gets its type as the call binds; a second trial with a different outcome trips
-   `SourceLocalSymbol.SetTypeWithAnnotations`. Skip the second trial when the arguments declare variables (implicit
-   `it`). A failed call also binds its lambda arguments again for error recovery, so filter before trying a reading
-   that is likely to fail, or the work multiplies with the nesting depth.
+25. **Binding the same arguments twice sets their declared variables twice.** An `out var` gets its type when the
+   call is coerced; a second trial with a different overload trips `SourceLocalSymbol.SetTypeWithAnnotations`, and in
+   release builds the first trial's type silently wins. Do as C# does: bind an argument once and share it between the
+   trials, rebinding only the arguments whose reading changes (`BindSharperImplicitItArguments`). Give each trial a
+   copy of the `AnalyzedArguments` (binding the call changes them), with a discard in place of each pending `out var`
+   (overload resolution treats both alike), then bind the chosen trial's call once more with the variable. A failed
+   call also binds its lambda arguments again for error recovery, so filter before trying a reading that is likely
+   to fail, or the work multiplies with the nesting depth.
 26. **A lambda without lambda syntax follows the query clause.** `QueryUnboundLambdaState` builds an `UnboundLambda`
    over a plain expression, and an `ExecutableCodeBinder` rooted there scopes its body; inference, nullable analysis,
    closures and expression trees then work. Assertions that list lambda syntax kinds (`BoundLambda`,

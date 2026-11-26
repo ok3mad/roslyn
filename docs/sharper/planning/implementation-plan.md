@@ -574,9 +574,19 @@ implementation taught.
   work multiplied with the nesting depth (CS9236, "binding the lambda at least 100 times", on a two-level example).
   `SharperCandidateTakesFunction` checks the candidates' parameter types first, extension methods included; a lambda
   trial then runs only where some candidate takes a one-parameter delegate.
-- **Variables declared in the arguments break trial binding.** An `out var` gets its type while the call binds, and a
-  second trial sets it again (an assertion in `SourceLocalSymbol.SetTypeWithAnnotations`). An argument list that
-  declares a variable binds as values only, which is decision 5 (no declarations in an implicit lambda).
+- **Bind the other arguments once, as C# does** (#125). An `out var` gets its type when the call is coerced, and a
+  second trial would set it again: an assertion in `SourceLocalSymbol.SetTypeWithAnnotations`, and in release builds
+  the first trial's type wins, even when the other trial is chosen. So `BindSharperImplicitItArguments` binds the
+  arguments that cannot be lambdas once, for both trials, and rebinds only the lambda arguments as values. The trials
+  see a discard in place of each `out var`, which overload resolution treats the same way (`CoerceArguments` has one
+  case for both), and the chosen trial's call binds once more with the variable. That pass costs one overload
+  resolution: an `UnboundLambda` keeps its bindings, and the values are bound nodes. C# never rebinds an argument; it
+  rebinds only lambda bodies, each time with a fresh body binder and fresh locals.
+- **A declaration inside an implicit lambda would be declared twice.** The lambda's body binder declares it in the
+  lambda's scope, but the enclosing statement's binder map declares it too, since `ExpressionVariableFinder` cannot
+  tell which arguments are lambdas, and the semantic model finds the statement's variable (#123). So an argument that
+  some candidate takes as a function and that declares a variable is CS20022 and a value, which is decision 5 (no
+  declarations in an implicit lambda). A pipe stage has no such problem, because its extent is syntax.
 - **Trial bags need diagnostics.** The semantic model binds with a bag that collects none, and a trial copied from it
   could not tell success from failure (`HasAnyErrors` asserts). Trials use their own bags with diagnostics.
 - **"Does it use `it`?" is a bound question.** `xs.Select(Make(ys.First(it.X)))` binds as a lambda whose `it` is
@@ -2015,7 +2025,7 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 - [x] Implicit `it` in object creation (also target-typed `new(...)`), indexers, constructor initializers and primary constructor base arguments; attributes keep CS20019. [#122](https://github.com/ok3mad/roslyn/issues/122)
 - [ ] Implicit `it`: `LookupSymbols` and speculative binding inside an implicit lambda, which the semantic model finds by lambda syntax. [#123](https://github.com/ok3mad/roslyn/issues/123)
 - [ ] Implicit `it`: Edit and Continue, whose lambda matching also works on syntax. [#124](https://github.com/ok3mad/roslyn/issues/124)
-- [ ] Implicit `it`: variables declared next to or inside an implicit lambda, such as `F(Make(it), out var v)`. [#125](https://github.com/ok3mad/roslyn/issues/125)
+- [ ] Implicit `it`: variables declared inside an implicit lambda, such as `xs.Select(it is int n ? n : 0)`, after [#123](https://github.com/ok3mad/roslyn/issues/123); next to one (`F(Make(it), out var v)`) is done. [#125](https://github.com/ok3mad/roslyn/issues/125)
 - [x] Implicit `it`: an error that names the inner call when it claims `it` (today CS0411 at the outer call), and a cause string for writes to `it`. [#126](https://github.com/ok3mad/roslyn/issues/126)
 - [ ] Implicit `it`: the cost of the two trials and of the per-call syntax scan. [#127](https://github.com/ok3mad/roslyn/issues/127)
 - [ ] Implicit `it`: IDE support (Quick Info, hints) and the "name the parameter" fixer. [#128](https://github.com/ok3mad/roslyn/issues/128)

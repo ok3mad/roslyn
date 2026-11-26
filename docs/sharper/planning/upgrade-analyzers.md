@@ -256,7 +256,7 @@ default, and the option has a middle setting for the most common, least controve
 - The body is the bare parameter (`x => x`): a bare `it` argument is never a lambda.
 - `it` already means something here: a local, parameter, field or type named `it`, or the `it` of an enclosing
   implicit lambda (that would be CS20020).
-- The argument list declares a variable (`out var v`, `is T n`), CS20022 and [#125](https://github.com/ok3mad/roslyn/issues/125).
+- The lambda's body declares a variable (`out var v`, `is T n`), CS20022 and [#125](https://github.com/ok3mad/roslyn/issues/125). A variable declared in another argument is fine.
 - The call is an object creation, indexer, constructor initializer or attribute
   ([#122](https://github.com/ok3mad/roslyn/issues/122)).
 - The parameter is used inside a nested call whose own parameter at that position takes a one-parameter delegate,
