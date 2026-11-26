@@ -216,7 +216,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         /// delegate that is the natural type of a lambda with the same signature
         /// (<see cref="ConstructAnonymousDelegateSymbol"/>). Within a compilation there is one such type per signature,
         /// so the function type and <c>var f = (ref int x) => ...</c> have the same type. It is internal, so a member
-        /// visible outside the assembly cannot use it (CS20075).
+        /// visible outside the assembly cannot use it (CS20082).
         /// </summary>
         private NamedTypeSymbol BindSharperAnonymousDelegateFunctionType(
             FunctionTypeSyntax syntax,

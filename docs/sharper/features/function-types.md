@@ -82,12 +82,12 @@ var name = o switch { () -> void => "action", (int) -> int f => "f" + f(1), _ =>
 | CS20066 | '{0}': cannot change function type parameter names when overriding inherited member '{1}' |
 | CS20067 | The function type parameter names in the signature of '{0}' must match the function type parameter names of interface member '{1}' (including on the return type). |
 | CS20068 | Both partial member declarations, '{0}' and '{1}', must use the same function type parameter names. |
-| CS20075 | '{0}' is visible outside this assembly, but uses the function type '{1}', which no 'System.Func' or 'System.Action' delegate can express and which is internal to the assembly. Declare a named delegate instead. |
+| CS20082 | '{0}' is visible outside this assembly, but uses the function type '{1}', which no 'System.Func' or 'System.Action' delegate can express and which is internal to the assembly. Declare a named delegate instead. |
 
 ## Limitations
 
 - **`ref`, `out` and `in` parameters, ref returns and more than 16 parameters** are an internal anonymous delegate
-  (see [Ref parameters](#ref-parameters)), so a member visible outside the assembly needs a named delegate (CS20075).
+  (see [Ref parameters](#ref-parameters)), so a member visible outside the assembly needs a named delegate (CS20082).
   `params` and `this` parameters are errors (CS20008).
 - **Parameter names** exist within one compilation only. They are not in metadata, so a reference to a compiled
   assembly sees plain `Func<...>` (a project reference in the IDE shares the symbols and sees the names), and a named
@@ -131,7 +131,7 @@ var f = (ref int x) => x++;
 - **Visibility:** the anonymous delegate is internal, so these function types are allowed wherever an internal type
   is: locals, private, internal and private protected members, public members of internal types, and type arguments
   in them. A member visible outside the assembly (public, protected or protected internal in a public type) reports
-  CS20075, which says to declare a named delegate, instead of the inconsistent accessibility errors (CS0050 to CS0061,
+  CS20082, which says to declare a named delegate, instead of the inconsistent accessibility errors (CS0050 to CS0061,
   CS0703), and so does an `infer` member whose inferred type is an anonymous delegate. This is the boundary `infer`
   already has for anonymous types (CS0050). The same holds for a public delegate's parameters, a public type's base
   type or interface, and a type parameter's constraint.
@@ -146,7 +146,7 @@ var f = (ref int x) => x++;
   decides names in metadata.
 - **Nullable annotations** are part of the parameter and return types, with the warnings of the lambda's natural
   type (CS8619 between two anonymous delegates whose annotations differ).
-- **Error messages** show the anonymous delegate as C# does, `<anonymous delegate>`; CS20075 writes it as the
+- **Error messages** show the anonymous delegate as C# does, `<anonymous delegate>`; CS20082 writes it as the
   function type, `(ref int) -> void`.
 
 Rejected, because no other representation gives one type across assemblies:
@@ -270,9 +270,9 @@ A function type with `ref`, `out`, `in` or `scoped` parameters, a ref return (a 
 than 16 parameters binds in `BindSharperAnonymousDelegateFunctionType` (`Binder_SharperTypes.cs`), which builds the
 anonymous delegate descriptor with `Binder.ConstructAnonymousDelegateSymbol`, the helper that
 `GetMethodGroupOrLambdaDelegateType` uses for a lambda. The modifiers are read by
-`BindSharperFunctionTypeParameterModifiers`. CS20075 is reported by `SharperFunctionTypeVisibility.AddInconsistentAccessibility`,
+`BindSharperFunctionTypeParameterModifiers`. CS20082 is reported by `SharperFunctionTypeVisibility.AddInconsistentAccessibility`,
 which every inconsistent accessibility error of a signature, base type or constraint goes through: in a Sharper
-file, when the less visible type is an anonymous delegate, it reports CS20075 instead. Tests are the
+file, when the less visible type is an anonymous delegate, it reports CS20082 instead. Tests are the
 `FunctionTypeRef_*` tests in `SharperTests_FunctionTypeRefParameters.cs`.
 
 Parameter names are a `SharperFunctionTypeNames` record on the constructed type (`Symbols/SharperFunctionTypeNames.cs`),

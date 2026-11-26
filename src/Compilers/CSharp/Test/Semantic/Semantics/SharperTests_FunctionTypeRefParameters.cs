@@ -306,55 +306,55 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                 """;
             var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90);
             comp.VerifyDiagnostics(
-                // (6,30): error CS20075: 'C.Field' is visible outside this assembly, but uses the function type '(ref int) -> void', which no 'System.Func' or 'System.Action' delegate can express and which is internal to the assembly. Declare a named delegate instead.
+                // (6,30): error CS20082: 'C.Field' is visible outside this assembly, but uses the function type '(ref int) -> void', which no 'System.Func' or 'System.Action' delegate can express and which is internal to the assembly. Declare a named delegate instead.
                 //     public (ref int) -> void Field;
                 Diagnostic(ErrorCode.ERR_SharperFunctionTypeNotVisible, "Field").WithArguments("C.Field", "(ref int) -> void").WithLocation(6, 30),
                 // (7,14): error CS0052: Inconsistent accessibility: field type 'D' is less accessible than field 'C.FieldTwin'
                 //     public D FieldTwin;
                 Diagnostic(ErrorCode.ERR_BadVisFieldType, "FieldTwin").WithArguments("C.FieldTwin", "D").WithLocation(7, 14),
-                // (8,20): error CS20075: 'C.Protected(<anonymous delegate>)' is visible outside this assembly, but uses the function type '(out int) -> void', which no 'System.Func' or 'System.Action' delegate can express and which is internal to the assembly. Declare a named delegate instead.
+                // (8,20): error CS20082: 'C.Protected(<anonymous delegate>)' is visible outside this assembly, but uses the function type '(out int) -> void', which no 'System.Func' or 'System.Action' delegate can express and which is internal to the assembly. Declare a named delegate instead.
                 //     protected void Protected((out int) -> void f) { }
                 Diagnostic(ErrorCode.ERR_SharperFunctionTypeNotVisible, "Protected").WithArguments("C.Protected(<anonymous delegate>)", "(out int) -> void").WithLocation(8, 20),
                 // (9,20): error CS0051: Inconsistent accessibility: parameter type 'D' is less accessible than method 'C.ProtectedTwin(D)'
                 //     protected void ProtectedTwin(D f) { }
                 Diagnostic(ErrorCode.ERR_BadVisParamType, "ProtectedTwin").WithArguments("C.ProtectedTwin(D)", "D").WithLocation(9, 20),
-                // (10,38): error CS20075: 'C.ProtectedInternal' is visible outside this assembly, but uses the function type '() -> ref int', which no 'System.Func' or 'System.Action' delegate can express and which is internal to the assembly. Declare a named delegate instead.
+                // (10,38): error CS20082: 'C.ProtectedInternal' is visible outside this assembly, but uses the function type '() -> ref int', which no 'System.Func' or 'System.Action' delegate can express and which is internal to the assembly. Declare a named delegate instead.
                 //     protected internal () -> ref int ProtectedInternal => null;
                 Diagnostic(ErrorCode.ERR_SharperFunctionTypeNotVisible, "ProtectedInternal").WithArguments("C.ProtectedInternal", "() -> ref int").WithLocation(10, 38),
-                // (11,34): error CS20075: 'C.TypeArgument' is visible outside this assembly, but uses the function type '(in int) -> int', which no 'System.Func' or 'System.Action' delegate can express and which is internal to the assembly. Declare a named delegate instead.
+                // (11,34): error CS20082: 'C.TypeArgument' is visible outside this assembly, but uses the function type '(in int) -> int', which no 'System.Func' or 'System.Action' delegate can express and which is internal to the assembly. Declare a named delegate instead.
                 //     public List<(in int) -> int> TypeArgument;
                 Diagnostic(ErrorCode.ERR_SharperFunctionTypeNotVisible, "TypeArgument").WithArguments("C.TypeArgument", "(in int) -> int").WithLocation(11, 34),
-                // (12,39): error CS20075: 'C.Nested' is visible outside this assembly, but uses the function type '(ref int) -> void', which no 'System.Func' or 'System.Action' delegate can express and which is internal to the assembly. Declare a named delegate instead.
+                // (12,39): error CS20082: 'C.Nested' is visible outside this assembly, but uses the function type '(ref int) -> void', which no 'System.Func' or 'System.Action' delegate can express and which is internal to the assembly. Declare a named delegate instead.
                 //     public (int) -> (ref int) -> void Nested;
                 Diagnostic(ErrorCode.ERR_SharperFunctionTypeNotVisible, "Nested").WithArguments("C.Nested", "(ref int) -> void").WithLocation(12, 39),
-                // (13,36): error CS20075: 'C.Event' is visible outside this assembly, but uses the function type '(ref int) -> void', which no 'System.Func' or 'System.Action' delegate can express and which is internal to the assembly. Declare a named delegate instead.
+                // (13,36): error CS20082: 'C.Event' is visible outside this assembly, but uses the function type '(ref int) -> void', which no 'System.Func' or 'System.Action' delegate can express and which is internal to the assembly. Declare a named delegate instead.
                 //     public event (ref int) -> void Event;
                 Diagnostic(ErrorCode.ERR_SharperFunctionTypeNotVisible, "Event").WithArguments("C.Event", "(ref int) -> void").WithLocation(13, 36),
-                // (14,30): error CS20075: 'C.this[int]' is visible outside this assembly, but uses the function type '(ref int) -> void', which no 'System.Func' or 'System.Action' delegate can express and which is internal to the assembly. Declare a named delegate instead.
+                // (14,30): error CS20082: 'C.this[int]' is visible outside this assembly, but uses the function type '(ref int) -> void', which no 'System.Func' or 'System.Action' delegate can express and which is internal to the assembly. Declare a named delegate instead.
                 //     public (ref int) -> void this[int i] => null;
                 Diagnostic(ErrorCode.ERR_SharperFunctionTypeNotVisible, "this").WithArguments("C.this[int]", "(ref int) -> void").WithLocation(14, 30),
-                // (15,18): error CS20075: 'C.Inferred()' is visible outside this assembly, but uses the function type '(ref int) -> void', which no 'System.Func' or 'System.Action' delegate can express and which is internal to the assembly. Declare a named delegate instead.
+                // (15,18): error CS20082: 'C.Inferred()' is visible outside this assembly, but uses the function type '(ref int) -> void', which no 'System.Func' or 'System.Action' delegate can express and which is internal to the assembly. Declare a named delegate instead.
                 //     public infer Inferred() => (ref int x) => { };
                 Diagnostic(ErrorCode.ERR_SharperFunctionTypeNotVisible, "Inferred").WithArguments("C.Inferred()", "(ref int) -> void").WithLocation(15, 18),
-                // (19,37): error CS20075: 'C.explicit operator C(<anonymous delegate>)' is visible outside this assembly, but uses the function type '(ref int) -> void', which no 'System.Func' or 'System.Action' delegate can express and which is internal to the assembly. Declare a named delegate instead.
+                // (19,37): error CS20082: 'C.explicit operator C(<anonymous delegate>)' is visible outside this assembly, but uses the function type '(ref int) -> void', which no 'System.Func' or 'System.Action' delegate can express and which is internal to the assembly. Declare a named delegate instead.
                 //     public static explicit operator C((ref int) -> void f) => null;
                 Diagnostic(ErrorCode.ERR_SharperFunctionTypeNotVisible, "C").WithArguments("C.explicit operator C(<anonymous delegate>)", "(ref int) -> void").WithLocation(19, 37),
-                // (20,12): error CS20075: 'C.C(<anonymous delegate>)' is visible outside this assembly, but uses the function type '(ref int) -> void', which no 'System.Func' or 'System.Action' delegate can express and which is internal to the assembly. Declare a named delegate instead.
+                // (20,12): error CS20082: 'C.C(<anonymous delegate>)' is visible outside this assembly, but uses the function type '(ref int) -> void', which no 'System.Func' or 'System.Action' delegate can express and which is internal to the assembly. Declare a named delegate instead.
                 //     public C((ref int) -> void f) { }
                 Diagnostic(ErrorCode.ERR_SharperFunctionTypeNotVisible, "C").WithArguments("C.C(<anonymous delegate>)", "(ref int) -> void").WithLocation(20, 12),
-                // (21,53): error CS20075: 'C.Nested2.F' is visible outside this assembly, but uses the function type '(ref int) -> void', which no 'System.Func' or 'System.Action' delegate can express and which is internal to the assembly. Declare a named delegate instead.
+                // (21,53): error CS20082: 'C.Nested2.F' is visible outside this assembly, but uses the function type '(ref int) -> void', which no 'System.Func' or 'System.Action' delegate can express and which is internal to the assembly. Declare a named delegate instead.
                 //     public class Nested2 { public (ref int) -> void F; }
                 Diagnostic(ErrorCode.ERR_SharperFunctionTypeNotVisible, "F").WithArguments("C.Nested2.F", "(ref int) -> void").WithLocation(21, 53),
-                // (24,22): error CS20075: 'PublicDelegate' is visible outside this assembly, but uses the function type '(ref int) -> void', which no 'System.Func' or 'System.Action' delegate can express and which is internal to the assembly. Declare a named delegate instead.
+                // (24,22): error CS20082: 'PublicDelegate' is visible outside this assembly, but uses the function type '(ref int) -> void', which no 'System.Func' or 'System.Action' delegate can express and which is internal to the assembly. Declare a named delegate instead.
                 // public delegate void PublicDelegate((ref int) -> void f);
                 Diagnostic(ErrorCode.ERR_SharperFunctionTypeNotVisible, "PublicDelegate").WithArguments("PublicDelegate", "(ref int) -> void").WithLocation(24, 22),
-                // (25,14): error CS20075: 'Base' is visible outside this assembly, but uses the function type '(ref int) -> void', which no 'System.Func' or 'System.Action' delegate can express and which is internal to the assembly. Declare a named delegate instead.
+                // (25,14): error CS20082: 'Base' is visible outside this assembly, but uses the function type '(ref int) -> void', which no 'System.Func' or 'System.Action' delegate can express and which is internal to the assembly. Declare a named delegate instead.
                 // public class Base : List<(ref int) -> void> { }
                 Diagnostic(ErrorCode.ERR_SharperFunctionTypeNotVisible, "Base").WithArguments("Base", "(ref int) -> void").WithLocation(25, 14),
-                // (26,18): error CS20075: 'I' is visible outside this assembly, but uses the function type '(ref int) -> void', which no 'System.Func' or 'System.Action' delegate can express and which is internal to the assembly. Declare a named delegate instead.
+                // (26,18): error CS20082: 'I' is visible outside this assembly, but uses the function type '(ref int) -> void', which no 'System.Func' or 'System.Action' delegate can express and which is internal to the assembly. Declare a named delegate instead.
                 // public interface I : IEnumerable<(ref int) -> void> { }
                 Diagnostic(ErrorCode.ERR_SharperFunctionTypeNotVisible, "I").WithArguments("I", "(ref int) -> void").WithLocation(26, 18),
-                // (27,29): error CS20075: 'G<T>' is visible outside this assembly, but uses the function type '(ref int) -> void', which no 'System.Func' or 'System.Action' delegate can express and which is internal to the assembly. Declare a named delegate instead.
+                // (27,29): error CS20082: 'G<T>' is visible outside this assembly, but uses the function type '(ref int) -> void', which no 'System.Func' or 'System.Action' delegate can express and which is internal to the assembly. Declare a named delegate instead.
                 // public class G<T> where T : List<(ref int) -> void> { }
                 Diagnostic(ErrorCode.ERR_SharperFunctionTypeNotVisible, "List<(ref int) -> void>").WithArguments("G<T>", "(ref int) -> void").WithLocation(27, 29));
         }

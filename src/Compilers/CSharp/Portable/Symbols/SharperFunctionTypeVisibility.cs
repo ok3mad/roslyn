@@ -12,13 +12,13 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
     /// compilation (https://github.com/ok3mad/roslyn/issues/56). It is allowed wherever an internal type is, so the
     /// boundary is the inconsistent accessibility errors' (CS0050 to CS0061, CS0703), and so is that of an <c>infer</c>
     /// member whose inferred type is such a delegate. Where one of those errors would name an anonymous delegate,
-    /// CS20075 says to declare a named delegate instead.
+    /// CS20082 says to declare a named delegate instead.
     /// </summary>
     internal static class SharperFunctionTypeVisibility
     {
         /// <summary>
         /// Reports the inconsistent accessibility error <paramref name="code"/> for <paramref name="type"/>, which is
-        /// less visible than <paramref name="member"/>, or CS20075 when the type that makes it less visible is an
+        /// less visible than <paramref name="member"/>, or CS20082 when the type that makes it less visible is an
         /// anonymous delegate and the member is declared in Sharper.
         /// </summary>
         internal static void AddInconsistentAccessibility(this BindingDiagnosticBag diagnostics, ErrorCode code, Location location, Symbol member, TypeSymbol type)

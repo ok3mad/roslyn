@@ -67,13 +67,24 @@ namespace Microsoft.CodeAnalysis.CSharp
         private readonly bool _forLowering;
         private bool _suitableForLowering = true;
 
-        private DecisionDagBuilder(CSharpCompilation compilation, LabelSymbol defaultLabel, bool forLowering, BindingDiagnosticBag diagnostics)
+        /// <summary>
+        /// Sharper: the refinement of the original input (Feature 11, step 4), whose values seed the root state, or null.
+        /// A dag seeded with it is for diagnostics and flow analysis only: it is not suitable for lowering, so the lowered
+        /// switch still tests the values the refinement excludes and throws for them.
+        /// </summary>
+        private readonly SharperRefinement? _inputRefinement;
+        private BoundDagTemp? _rootTemp;
+
+        private DecisionDagBuilder(CSharpCompilation compilation, LabelSymbol defaultLabel, bool forLowering, BindingDiagnosticBag diagnostics, SharperRefinement? inputRefinement = null)
         {
+            Debug.Assert(inputRefinement is null || (!forLowering && inputRefinement.Values is not null && !inputRefinement.MatchesNull));
             this._compilation = compilation;
             this._conversions = compilation.Conversions;
             _diagnostics = diagnostics;
             _defaultLabel = defaultLabel;
             _forLowering = forLowering;
+            _inputRefinement = inputRefinement;
+            _suitableForLowering = inputRefinement is null;
         }
 
         /// <summary>
@@ -86,9 +97,10 @@ namespace Microsoft.CodeAnalysis.CSharp
             ImmutableArray<BoundSwitchSection> switchSections,
             LabelSymbol defaultLabel,
             BindingDiagnosticBag diagnostics,
-            bool forLowering = false)
+            bool forLowering = false,
+            SharperRefinement? inputRefinement = null)
         {
-            var builder = new DecisionDagBuilder(compilation, defaultLabel, forLowering, diagnostics);
+            var builder = new DecisionDagBuilder(compilation, defaultLabel, forLowering, diagnostics, inputRefinement);
             return ReportSharperValInputCopies(switchGoverningExpression, builder.CreateDecisionDagForSwitchStatement(syntax, switchGoverningExpression, switchSections), forLowering, diagnostics);
         }
 
@@ -102,9 +114,10 @@ namespace Microsoft.CodeAnalysis.CSharp
             ImmutableArray<BoundSwitchExpressionArm> switchArms,
             LabelSymbol defaultLabel,
             BindingDiagnosticBag diagnostics,
-            bool forLowering = false)
+            bool forLowering = false,
+            SharperRefinement? inputRefinement = null)
         {
-            var builder = new DecisionDagBuilder(compilation, defaultLabel, forLowering, diagnostics);
+            var builder = new DecisionDagBuilder(compilation, defaultLabel, forLowering, diagnostics, inputRefinement);
             return ReportSharperValInputCopies(switchExpressionInput, builder.CreateDecisionDagForSwitchExpression(syntax, switchExpressionInput, switchArms), forLowering, diagnostics);
         }
 
@@ -210,6 +223,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             ImmutableArray<BoundSwitchSection> switchSections)
         {
             var rootIdentifier = BoundDagTemp.ForOriginalInput(switchGoverningExpression);
+            _rootTemp = rootIdentifier;
             int i = 0;
             using var builder = TemporaryArray<StateForCase>.GetInstance(switchSections.Length);
             foreach (BoundSwitchSection section in switchSections)
@@ -235,6 +249,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             ImmutableArray<BoundSwitchExpressionArm> switchArms)
         {
             var rootIdentifier = BoundDagTemp.ForOriginalInput(switchExpressionInput);
+            _rootTemp = rootIdentifier;
             int i = 0;
             using var builder = TemporaryArray<StateForCase>.GetInstance(switchArms.Length);
             foreach (BoundSwitchExpressionArm arm in switchArms)
@@ -474,6 +489,10 @@ namespace Microsoft.CodeAnalysis.CSharp
                 case BoundOpaquePattern opaque:
                     {
                         return MakeTestsForOpaquePattern(input, opaque, out output);
+                    }
+                case BoundExtractorPattern extractor:
+                    {
+                        return MakeTestsAndBindingsForExtractorPattern(input, extractor, out output, bindings);
                     }
                 case BoundNegatedPattern neg:
                     output = input;
@@ -1294,6 +1313,53 @@ namespace Microsoft.CodeAnalysis.CSharp
             return Tests.AndSequence.Create(tests);
         }
 
+        /// <summary>
+        /// Sharper: an extractor pattern (Feature 13, slice 3) calls its method with the input as it is, null included, as
+        /// the call it stands for would; the call is an evaluation, so two identical calls on the same input are one. The
+        /// Try shape then tests that the call returned true, and the sub-patterns match the out values or the result. Nothing
+        /// is learned about the input itself.
+        /// </summary>
+        private Tests MakeTestsAndBindingsForExtractorPattern(
+            TestInputOutputInfo inputInfo,
+            BoundExtractorPattern extractor,
+            out TestInputOutputInfo outputInfo,
+            ArrayBuilder<BoundPatternBinding> bindings)
+        {
+            var tests = ArrayBuilder<Tests>.GetInstance(4);
+            TypeSymbol? argumentType = extractor.InputPlaceholder.Type;
+            Debug.Assert(argumentType is not null);
+            if (!inputInfo.GetInputType().Equals(argumentType, TypeCompareKind.AllIgnoreOptions))
+            {
+                // The check of 'or' operands gives a pattern a wider input type: test for the method's input type first.
+                inputInfo = MakeConvertToType(inputInfo, extractor.Syntax, argumentType, isExplicitTest: false, tests);
+            }
+
+            BoundDagTemp input = PrepareForUnionValuePropertyMatching(ref inputInfo, tests);
+            outputInfo = inputInfo;
+
+            var evaluation = new BoundDagExtractorEvaluation(extractor.Syntax, extractor.Call, extractor.InputPlaceholder, input, extractor.HasErrors);
+            tests.Add(new Tests.One(evaluation));
+            BoundDagTemp result = evaluation.MakeResultTemp();
+            if (extractor.IsTryShape)
+            {
+                tests.Add(MakeConstantTest(extractor.Syntax, result, ConstantValue.True));
+                ArrayBuilder<BoundDagTemp> outTemps = evaluation.MakeOutParameterTemps();
+                int count = Math.Min(outTemps.Count, extractor.Subpatterns.Length);
+                for (int i = 0; i < count; i++)
+                {
+                    tests.Add(MakeTestsAndBindings(outTemps[i], extractor.Subpatterns[i].Pattern, bindings));
+                }
+
+                outTemps.Free();
+            }
+            else if (extractor.Subpatterns is [var subpattern])
+            {
+                tests.Add(MakeTestsAndBindings(result, subpattern.Pattern, bindings));
+            }
+
+            return Tests.AndSequence.Create(tests);
+        }
+
         private TypeSymbol ErrorType(string name = "")
         {
             return new ExtendedErrorTypeSymbol(this._compilation, name, arity: 0, errorInfo: null, unreported: false);
@@ -1455,7 +1521,9 @@ namespace Microsoft.CodeAnalysis.CSharp
 
             var initialState = uniquifyState(new
                 FrozenArrayBuilder<StateForCase>(rewrittenCases),
-                ImmutableDictionary<BoundDagTemp, IValueSet>.Empty);
+                _rootTemp is not null && _inputRefinement?.Values is { } inputValues
+                    ? ImmutableDictionary<BoundDagTemp, IValueSet>.Empty.Add(_rootTemp, inputValues)
+                    : ImmutableDictionary<BoundDagTemp, IValueSet>.Empty);
 
             // Go through the worklist of DagState nodes for which we have not yet computed
             // successor states.
@@ -1508,6 +1576,18 @@ namespace Microsoft.CodeAnalysis.CSharp
                                 out var whenTrueDecisions, out var whenTrueValues,
                                 out var whenFalseDecisions, out var whenFalseValues,
                                 ref foundRelatedExplicitNullTest);
+                            if (KnownFromSharperInputRefinement(state, d) is bool truePossible)
+                            {
+                                // Sharper: the input's refinement decides the test (no case was simplified against it
+                                // before the first test). Both branches go to the possible outcome, so the test is
+                                // removed and the impossible one does not reach the default label.
+                                (truePossible ? whenFalseDecisions : whenTrueDecisions).Free();
+                                state.TrueBranch = state.FalseBranch = truePossible
+                                    ? uniquifyState(whenTrueDecisions, whenTrueValues)
+                                    : uniquifyState(whenFalseDecisions, whenFalseValues);
+                                break;
+                            }
+
                             state.TrueBranch = uniquifyState(whenTrueDecisions, whenTrueValues);
                             state.FalseBranch = uniquifyState(whenFalseDecisions, whenFalseValues);
                             if (foundRelatedExplicitNullTest && d is BoundDagNonNullTest { IsExplicitTest: false } t)
@@ -1846,6 +1926,32 @@ namespace Microsoft.CodeAnalysis.CSharp
 
             whenTrue = AsFrozen(whenTrueBuilder);
             whenFalse = AsFrozen(whenFalseBuilder);
+        }
+
+        /// <summary>
+        /// Sharper: the outcome of a test of the original input that its refinement decides, or null. A refinement that
+        /// seeds a dag excludes null (value sets do not hold null), so it decides the null tests too.
+        /// </summary>
+        private bool? KnownFromSharperInputRefinement(DagState state, BoundDagTest test)
+        {
+            if (_inputRefinement is null || _rootTemp is null || !test.Input.Equals(_rootTemp))
+            {
+                return null;
+            }
+
+            Debug.Assert(!_inputRefinement.MatchesNull);
+            switch (test)
+            {
+                case BoundDagNonNullTest:
+                    return true;
+                case BoundDagExplicitNullTest:
+                    return false;
+                case BoundDagValueTest or BoundDagRelationalTest:
+                    var (_, _, truePossible, falsePossible) = SplitValues(state.RemainingValues, test);
+                    return truePossible != falsePossible ? truePossible : null;
+                default:
+                    return null;
+            }
         }
 
         private (
@@ -2939,7 +3045,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 {
                     string name = $"t{tempIdentifier(t.Source)}";
 
-                    if (t.Source is BoundDagDeconstructEvaluation)
+                    if (t.Source is BoundDagDeconstructEvaluation or BoundDagExtractorEvaluation)
                     {
                         if (t.Index == -1)
                         {
@@ -3781,6 +3887,11 @@ namespace Microsoft.CodeAnalysis.CSharp
                                     condition = null;
                                     return RemoveDeconstructEvaluation(tests, ref tempMap, deconstruct);
                                 }
+                            case BoundDagExtractorEvaluation extractor:
+                                {
+                                    condition = null;
+                                    return RemoveExtractorEvaluation(tests, ref tempMap, extractor);
+                                }
                             case BoundDagFieldEvaluation:
                             case BoundDagPropertyEvaluation:
                             case BoundDagIndexEvaluation:
@@ -3877,6 +3988,29 @@ namespace Microsoft.CodeAnalysis.CSharp
                     {
                         // Refer to the result of e1 instead of result of eval, this will allow reusing results of evaluations that might be coming next
                         AddOutParameterTempsReplacement(ref tempMap, (BoundDagDeconstructEvaluation)eval, e1);
+                        return Tests.True.Instance;
+                    }
+
+                    return tests;
+                }
+
+                /// <summary>Sharper: an identical extractor call (Feature 13, slice 3) gives the same return and out values.</summary>
+                private static Tests RemoveExtractorEvaluation(One tests, ref ImmutableDictionary<BoundDagTemp, BoundDagTemp> tempMap, BoundDagExtractorEvaluation e1)
+                {
+                    if (IsEquivalentEvaluation(tests, e1, out var eval))
+                    {
+                        var e2 = (BoundDagExtractorEvaluation)eval;
+                        ArrayBuilder<BoundDagTemp> newTemps = e1.MakeOutParameterTemps();
+                        ArrayBuilder<BoundDagTemp> oldTemps = e2.MakeOutParameterTemps();
+                        Debug.Assert(newTemps.Count == oldTemps.Count);
+                        for (int i = 0; i < oldTemps.Count; i++)
+                        {
+                            AddTempReplacement(ref tempMap, oldTemps[i], newTemps[i]);
+                        }
+
+                        newTemps.Free();
+                        oldTemps.Free();
+                        AddResultTempReplacement(ref tempMap, e2, e1);
                         return Tests.True.Instance;
                     }
 
@@ -4110,6 +4244,26 @@ namespace Microsoft.CodeAnalysis.CSharp
                                             var deconstructEvaluation = deconstruct.Update(replacement);
                                             AddOutParameterTempsReplacement(ref tempMap, deconstruct, deconstructEvaluation);
                                             return deconstructEvaluation;
+                                        }
+                                    case BoundDagExtractorEvaluation extractor:
+                                        {
+                                            if (!TryGetTempReplacement(tempMap, extractor.Input, out BoundDagTemp? replacement))
+                                            {
+                                                return test;
+                                            }
+
+                                            var extractorEvaluation = extractor.Update(replacement);
+                                            ArrayBuilder<BoundDagTemp> newTemps = extractorEvaluation.MakeOutParameterTemps();
+                                            ArrayBuilder<BoundDagTemp> oldTemps = extractor.MakeOutParameterTemps();
+                                            for (int i = 0; i < oldTemps.Count; i++)
+                                            {
+                                                AddTempReplacement(ref tempMap, oldTemps[i], newTemps[i]);
+                                            }
+
+                                            newTemps.Free();
+                                            oldTemps.Free();
+                                            AddResultTempReplacement(ref tempMap, extractor, extractorEvaluation);
+                                            return extractorEvaluation;
                                         }
 
                                     default:

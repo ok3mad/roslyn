@@ -578,6 +578,9 @@ namespace Microsoft.CodeAnalysis.CSharp
                 case ErrorCode.WRN_SharperImmutableHierarchyViolated:
                 case ErrorCode.WRN_SharperPureOutArgumentNotFresh:
                 case ErrorCode.WRN_SharperPureOverrideNotPure:
+                case ErrorCode.WRN_SharperRefinementArgumentNotProven:
+                case ErrorCode.WRN_SharperRefinementArgumentUnknown:
+                case ErrorCode.WRN_SharperSwitchArmExcludedByRefinement:
                     return 1;
                 default:
                     return 0;
@@ -2673,6 +2676,12 @@ namespace Microsoft.CodeAnalysis.CSharp
                 or ErrorCode.ERR_SharperInterfaceInitializerBadMember
                 or ErrorCode.ERR_SharperInterfaceInitializerStaticAbstract
                 or ErrorCode.ERR_SharperInterfaceInitializerInExpressionTree
+                or ErrorCode.ERR_SharperRefinementArgumentDisproven
+                or ErrorCode.ERR_SharperRefinementArgumentNotProven
+                or ErrorCode.WRN_SharperRefinementArgumentNotProven
+                or ErrorCode.WRN_SharperRefinementArgumentUnknown
+                or ErrorCode.ERR_SharperSwitchNotExhaustiveForRefinement
+                or ErrorCode.WRN_SharperSwitchArmExcludedByRefinement
                 or ErrorCode.ERR_SharperFunctionTypeNotVisible
                 or ErrorCode.ERR_SharperInferParameterUsesDisagree
                 or ErrorCode.ERR_SharperRefinementNotClosed
@@ -2682,6 +2691,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 or ErrorCode.ERR_SharperOpaquePatternNotPure
                 or ErrorCode.WRN_DeprecatedFeatureFlag
                 or ErrorCode.ERR_SharperPredicatePatternNotPure
+                or ErrorCode.ERR_SharperExtractorPatternNotPure
                     => false,
             };
 #pragma warning restore CS8524 // The switch expression does not handle some values of its input type (it is not exhaustive) involving an unnamed enum value.

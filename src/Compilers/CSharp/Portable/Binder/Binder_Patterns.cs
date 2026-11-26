@@ -1224,6 +1224,14 @@ namespace Microsoft.CodeAnalysis.CSharp
             }
 
             TypeSyntax? typeSyntax = node.Type;
+
+            // Sharper: 'TryParse(var n)' where no type of that name exists is an extractor pattern (Feature 13, slice 3).
+            if (typeSyntax is not null &&
+                TryBindSharperExtractorPattern(node, unionType, inputType, permitDesignations, hasErrors, diagnostics, out hasUnionMatching) is { } extractor)
+            {
+                return extractor;
+            }
+
             TypeWithAnnotations declTypeWithAnnotations;
             BoundTypeExpression? boundDeclType;
             bool isUnionMatching;

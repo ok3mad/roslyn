@@ -74,7 +74,7 @@ Each trap was probed before deciding how to handle it.
 | `(val x) => ...` | An implicitly typed lambda parameter that cannot be reassigned, decided in the binder. | `val x` already parses as a parameter of type `val`; binding it like `var` (a type named `val` wins) keeps the C# meaning without a parser change. |
 | Non-readonly members on a val struct | Run on a copy, with warning CS20003 (option C). | The foreach behavior let a method change the val, which breaks immutability. A silent copy (the readonly field rule) makes mutations disappear without notice. The warning makes the copy visible; member mutation inference will later silence it for members that do not mutate. |
 | `->` as a lambda arrow | No: `->` is only the arrow of function types; lambdas keep `=>`. | `x -> F(x)` is already a pointer member access, parsed the same in and out of unsafe code (`ParsePostFixExpression`); a lambda meaning could only win after binding fails. |
-| What a function type lowers to | `Func` or `Action` when they can express it. Otherwise (`ref`, `out`, `in`, `ref readonly` and `scoped` parameters, ref returns, more than 16 parameters) the anonymous delegate of a lambda's natural type, allowed wherever an internal type is; a member visible outside the assembly reports CS20075, which says to declare a named delegate ([#56](https://github.com/ok3mad/roslyn/issues/56), done, see [Function types as anonymous delegates](#function-types-as-anonymous-delegates)). | The anonymous delegate is internal to one compilation, and nothing else gives one type across assemblies: a public copy per assembly makes distinct CLR types, reusing a referenced copy turns private uses into public API, NoPIA type equivalence needs a canonical assembly and excludes generics, and a delegate library needs 5ⁿ·4 types because ref kinds cannot be type arguments. The internal boundary is the one `infer` already has for anonymous types (CS0050), so locals only would leave a type that a private `infer` method can return but nobody can write. See the [feature page](../features/function-types.md#ref-parameters). |
+| What a function type lowers to | `Func` or `Action` when they can express it. Otherwise (`ref`, `out`, `in`, `ref readonly` and `scoped` parameters, ref returns, more than 16 parameters) the anonymous delegate of a lambda's natural type, allowed wherever an internal type is; a member visible outside the assembly reports CS20082, which says to declare a named delegate ([#56](https://github.com/ok3mad/roslyn/issues/56), done, see [Function types as anonymous delegates](#function-types-as-anonymous-delegates)). | The anonymous delegate is internal to one compilation, and nothing else gives one type across assemblies: a public copy per assembly makes distinct CLR types, reusing a referenced copy turns private uses into public API, NoPIA type equivalence needs a canonical assembly and excludes generics, and a delegate library needs 5ⁿ·4 types because ref kinds cannot be type arguments. The internal boundary is the one `infer` already has for anonymous types (CS0050), so locals only would leave a type that a private `infer` method can return but nobody can write. See the [feature page](../features/function-types.md#ref-parameters). |
 | Function type parameter names | Supported the way tuples carry their element names, in four steps under [#57](https://github.com/ok3mad/roslyn/issues/57): N1, names in the syntax (a Sharper `FunctionTypeParameterSyntax`), ignored by the binder except for duplicates (CS0100), done ([#212](https://github.com/ok3mad/roslyn/issues/212)); N2, names on the constructed `Func`/`Action` symbol within a compilation, done ([#213](https://github.com/ok3mad/roslyn/issues/213), see [step N2](#function-type-parameter-names-step-n2)); N3, signature help, Quick Info and inline hints ([#214](https://github.com/ok3mad/roslyn/issues/214)); N4, names in metadata through a synthesized, embedded attribute ([#215](https://github.com/ok3mad/roslyn/issues/215)). Names never change conversions or overload resolution, and until N4 they change the meaning of no program (a named argument cannot use them). Decided for N2 to N4: the names live on the `Func`/`Action` symbol as an analog of `TupleExtraData`, reusing the `IgnoreTupleNames` comparison bit; a lambda's natural type carries its names (Sharper only); overrides follow the tuple rules (CS8139, CS8141); no name-mismatch warning like CS8123; metadata uses an embedded `Sharper.FunctionParameterNamesAttribute`, not the runtime library, whose reader drops the names on a count mismatch; named arguments on a delegate call are allowed after N4, only with a function type's names. See the [feature page](../features/function-types.md#planned-parameter-names). | Names document what each argument means, as tuple names do. Documentation only (dropping them after parsing) gives the IDE nothing to show beyond the declaration, and loses them through `var`, generic arguments and references. `TupleElementNamesAttribute` cannot be reused: `TupleTypeDecoder` reports a type with the wrong number of names as unsupported, so plain C# consumers would break. Names stored only in the compilation would differ between the IDE (project references are source symbols) and the command line (metadata), which is why they stay meaningless until N4. |
 | Implicit `it` scope | The innermost argument around `it` whose parameter, in the chosen overload, is a one-parameter delegate; a pipe stage is the outermost slot. Decided in the binder: the argument is bound as an implicit lambda first, and as a value only when no candidate takes a one-parameter delegate there. | Greeter's `() => profiles.Load(it.Id)` needs a type-directed rule: Scala's syntactic `_` rule would make `Load(x => x.Id)`. Converting a lambda to a parameter that is not a delegate fails without binding its body, so the fallback costs one more overload resolution, not a second binding. |
 | Nested `it` | An error: one meaning of `it` per implicit lambda or pipe stage. An outer `it` plus a value and a function overload at the same argument is an error too. An inner pipe stage is not a second meaning: it owns every `it` in it, which the syntax shows (Feature 12). | Telling two `it`s apart needs every signature in between, and adding a function in between, or an overload in a library, would move the boundary silently. Allowing it later breaks nothing; banning it later would. |
@@ -143,7 +143,7 @@ The brainstorm proposes 26 pieces of syntax, and row 28, discard arguments, was 
 | 20 | Lifting in pipes and arguments | `users.Find(id) \|> Render(it, p)` | await, `Select`, or passing a `Fail<...>` case through | none | XL | Low | Decided: failures are tagged with `Fail<T>` from the runtime library, and only that case passes through (see [Decisions](#decisions)). Open: implicit versus an explicit marker; breaks down at generic and `object` parameters | [#32](https://github.com/ok3mad/roslyn/issues/32) |
 | 21 | Refined types and members | `decimal Amount is >0`, `int is >=0` | plain type plus boundary checks | yes (pattern in a type position) | XL | Low–Med | Proof obligations at call sites; runtime guards for C# callers | [#33](https://github.com/ok3mad/roslyn/issues/33) |
 | 22 | Opaque patterns | `is > 0 and <= max` | an opaque test in the decision DAG | none (relational patterns already parse any expression) | M, plus purity | Med; slice 1 prototyped on `sharper/opaque-patterns` | Decided: any pure non-constant operand of a relational or constant pattern, in every pattern context except refinements; pure is enough, as for `Deconstruct` in C#. See [Feature 13](#feature-13-patterns-on-pure-functions-design) | [#34](https://github.com/ok3mad/roslyn/issues/34) |
-| 23 | Extractor patterns | `s is Parse(val n and >0)` | call plus a sub-pattern, an evaluation in the decision DAG | none | M–L | Low; designed; the predicate form (slice 2) prototyped on `sharper/predicate-patterns` | Decided: a method only where type lookup fails (a type named `Parse` wins); the predicate form first, then `bool TryX(T, out U)`, then `U F(T)`, unions last. See [Feature 13](#feature-13-patterns-on-pure-functions-design) | [#35](https://github.com/ok3mad/roslyn/issues/35) |
+| 23 | Extractor patterns | `s is Parse(val n and >0)` | call plus a sub-pattern, an evaluation in the decision DAG | none | M–L | Low; designed; the predicate form (slice 2) prototyped on `sharper/predicate-patterns`, the Try and value shapes (slice 3) on `sharper/extractor-patterns`; unions (shape 4) wait for #31 | Decided: a method only where type lookup fails (a type named `Parse` wins); the predicate form first, then `bool TryX(T, out U)`, then `U F(T)`, unions last. See [Feature 13](#feature-13-patterns-on-pure-functions-design) | [#35](https://github.com/ok3mad/roslyn/issues/35) |
 | 24 | `pure` and `total` modifiers | `total int Fib(...)`, `pure(provider)` | erased, plus attributes | small | XL (syntax alone S) | Low | Needs the whole effect checker and bindings for existing .NET code | [#36](https://github.com/ok3mad/roslyn/issues/36) |
 | 25 | Member declared on another type | `static infer Currency.Parse(string s)` | C# 14 extension block | yes | M | Deferred | C# 14 `extension(Currency) { ... }` blocks already cover it, with `infer` and `[Pure]` on their members, so the shorthand only saves a wrapper class. If revived: file level only, where the dotted form is never valid C# (CS0116 or CS9348, plus CS0538); inside a type it stays an explicit interface implementation. See [Parked](brainstorm.md#parked) | [#37](https://github.com/ok3mad/roslyn/issues/37) |
 | 27 | `assume` escape hatch | `assume x is >0;` | runtime check | yes | S–M | Med | Designed ([Feature 15](#feature-15-assume-slice-1-design)): readonly targets in block scope until slice 3 of refined types; an always-on check; an already proven assumption is a warning | [#39](https://github.com/ok3mad/roslyn/issues/39) |
@@ -1471,7 +1471,51 @@ rules and return inference.
   Left as `PROTOTYPE(sharper)`: `val` in deconstructions, patterns, `foreach` and `out`, and locals with a written type.
   Tests: 15 `ReturnRefinement*` tests (`SharperTests_RefinementReturns.cs`) and one emit-difference test
   (`EditAndContinueSharperTests`).
-- [ ] Step 4, call sites and switches.
+- [x] **Step 4, call sites and switches** (`sharper/refined-call-sites`). `Binder.CheckSharperRefinedArgument`
+  (`Binder/Binder_SharperRefinements.cs`), called for every converted argument in `CheckAndCoerceArguments`, compares
+  the argument's refinement (`SharperRefinement.OfExpression`, step 3's sources) with the parameter's
+  (`SharperRefinement.Prove`, `Symbols/Source/SharperRefinement_CallSites.cs`): proven if `A ∩ ¬B` is empty, disproven if
+  `A ∩ B` is empty, null counted on its own (`MatchesNull`). CS20075 to CS20080. The open points, as decided:
+  - **Inferred or written** (narrowed in slice 2, see below: unions without a call are no longer inferred). "Inferred"
+    is a flag on the refinement (`SharperRefinement.IsInferred`): set on unions and
+    on the result of a call, even a call of a method that returns a refined parameter unchanged (`AsInferred` keeps the
+    text and the value set). A written parameter refinement reached unchanged, also through a `val` local, is not
+    inferred, so an unproven argument with it is the warning CS20077, not an error: slices 2 and 3 narrow such values
+    after tests, and `if (k >= 1) Positive(k);` must not be an error until then. A disproven one is an error either way.
+  - **Diagnostic texts** name the argument, the parameter, its refinement, the argument's refinement and a value outside
+    the domain (`allows -1`, from `IValueSet.Sample`, formatted as the attribute text formats constants).
+  - **The hook.** `Binder.GetSharperRefinementInScope(variable)` walks the binder chain and ends at the variable's own
+    refinement; `OfExpression` and `OfValues` take the binder as `scope`. `assume`'s scope binder will override it. A
+    `val` local's refinement is read through it too; the return inference of step 3 still reads the variables' own.
+  - **Routes.** Everything that binds through `CheckAndCoerceArguments` is checked: methods, local functions,
+    constructors and initializers, primary constructor base calls, indexers, attributes, named and optional arguments,
+    classic extension methods (with the receiver) and extension block members (also through the implementation
+    method), metadata methods. Method group conversions, `dynamic` calls and user-defined operators and conversions are
+    not checked; the guard covers them (`PROTOTYPE(sharper)` for operators).
+  - **`params`, `ref`, `in`.** Nothing needed: their parameters cannot be refined (CS20059, CS20061).
+  - **Mixed compilations.** Only calls in Sharper files are checked (the flag on the call's syntax); C# files and
+    compilations without the flag see the plain types and meet the guard.
+  - **Nullable.** Null state and refinements stay separate: `NotX(null)` is proven for `string s is not "x"` and keeps
+    C#'s CS8625 when `s` is not nullable.
+  - **Switch seeding.** `DecisionDagBuilder` takes an `inputRefinement` whose values seed the root state, and decides the
+    tests of the original input that the refinement makes certain (`KnownFromSharperInputRefinement`): both branches go
+    to the possible outcome, so `removeUnnecessaryStates` drops the test. Without that, no case is simplified against
+    the seed before the first split, and an impossible first test (`<0` for `>=0`) leaves an empty branch that reaches the
+    default label. A seeded DAG is marked unsuitable for lowering, so lowering rebuilds C#'s DAG and the values the
+    refinement excludes still throw (`SwitchExpressionException`); the reachability DAG (flow analysis, CS8509) is the
+    seeded one. A refinement that allows null does not seed: value sets hold no null, and the builder prunes a case once
+    its input's set is empty, which made `null => 2` unreachable for `string t is "a" or null`. `is` patterns are not
+    seeded.
+  - **Exhaustiveness and unreachable arms.** `PatternExplainer` starts the root's remaining values from the refinement,
+    so CS8509 names `2`, not `-1`, for `i switch { 0 => 1, 1 => 2 }`. An inferred input refinement turns CS8509 into
+    CS20079. An unreachable arm or case label is checked again against an unseeded DAG (built only when some label is
+    unreachable): reachable there means the warning CS20080, else C#'s error.
+  - **Edit and Continue.** Not small: the IDE sees no refinement through the public API, and a body edit that keeps the
+    signature does not reach `GetSignatureChangeRudeEdit`. `PROTOTYPE(sharper)` comment and
+    [#237](https://github.com/ok3mad/roslyn/issues/237).
+  Earlier tests changed: the guard tests pass their out-of-domain values through an unrefined `Report.V(...)` (CS20078
+  disabled there), and `ReturnRefinement_RefinedParameterUnchanged` narrows `Through` so that its call is proven.
+  Tests: 12 `RefinementCallSite_*` and `RefinementSwitch_*` tests (`SharperTests_RefinementCallSites.cs`).
 - [x] **Step 5, guard and metadata** (`sharper/refined-parameters-guard`). `SharperRefinementGuard`
   (`Lowering/SharperRefinementGuard.cs`) builds `if (p is not (pattern)) throw new ArgumentOutOfRangeException(nameof(p),
   p, "...")` for each refined parameter, lowers it with `LocalRewriter.Rewrite` on its own, and `MethodCompiler` puts it
@@ -1498,6 +1542,54 @@ rules and return inference.
   async. A wrapper that checks and calls a runtime-async body is left as a `PROTOTYPE(sharper)` comment
   ([#224](https://github.com/ok3mad/roslyn/issues/224)).
   Tests: 14 `RefinementGuard_*` and `RefinementMetadata_*` tests (`SharperTests_RefinementGuards.cs`).
+
+## Feature 11: refined types, slice 2
+
+Slice 1 proves constants and refinements passed on unchanged; slice 2 proves what a switch arm and arithmetic make of
+them, so `static int Fib(int i is >=0) => i switch { 0 or 1 => 1, >=2 => Fib(i - 1) + Fib(i - 2) };` compiles without a
+warning: in the second arm `i` is `>= 2`, so `i - 1` is `>= 1` and `i - 2` is `>= 0`. Built on
+`sharper/refined-call-sites` after step 4 merged; feature page [refined-types.md](../features/refined-types.md).
+
+**Probe.** What the code showed:
+
+| Area | What the code shows |
+| --- | --- |
+| Arm binding | `SwitchExpressionBinder.BindSwitchExpressionArms` binds the arms in order, each with its `SwitchExpressionArmBinder` (pattern, then `when`, then value). `LocalBinderFactory` maps the arm to that binder, so every binder inside the arm (lambdas, nested switches) chains through it: one override of step 4's hook covers the whole arm |
+| The DAG's leaf sets | Slice 1's design meant to read the narrowed set at each arm's leaf, but the DAG is built after the arms are bound, its `DagState` values are dropped when the bound DAG is made, and a leaf reached on several paths holds their union. Computing an arm's values from the bound patterns, in binding order, needs none of that |
+| Switch statements | `goto case 3` enters a section without its labels having matched the input, so a section's labels do not narrow its statements |
+| Value sets | `IConstantValueSet` has no way to list its values; the sets are private classes of `ValueSetFactory` (`NumericValueSet<T>` holds intervals, `FloatingValueSet<T>` adds NaN, `EnumeratedValueSet<string>` includes or excludes strings, `BoolValueSet`). `nint` and `nuint` sets track values outside `int` as flags |
+| Arithmetic | `i - 1` is a `BoundBinaryOperator` with `IntSubtraction` (`Checked` in a checked context); `-i` a `BoundUnaryOperator` with `IntUnaryMinus`. `b + 1` for `byte b` converts `b` to `int` first |
+| Null | Step 2 computed `MatchesNull` by matching null against the pattern, so `Color c is not Color.Blue` matched null although an enum is never null |
+
+### Decisions
+
+| Question | Decision | Why |
+| --- | --- | --- |
+| What narrows | Switch expression arms, when the input is a variable that cannot change: a refined or `readonly` parameter, a `val` or `readonly` local, a `val` lambda parameter. The arm sees the values its pattern matches among those the earlier arms leave; its `when` clause and value see them, lambdas and nested switches included | A mutable variable can change inside the arm (`x switch { >0 => (x = -1) + Page(x) }`); slice 3's flow state covers mutable variables and statements |
+| Not narrowed | Switch statements (`goto case`), `is` patterns and `if` tests (slice 3), the arm's own pattern variables | |
+| Patterns that are not closed over constants | Count as matching every value for their own arm, and as matching none for the arms after them; an arm with a `when` clause takes nothing away from the later arms. Type, declaration and `var` patterns of the input's own type, and the discard, match every value | The narrowed set always includes the real values, so narrowing is sound for any pattern |
+| How a set becomes a refinement | `SharperRefinement.FromValues`: the set's ranges (`ValueSetFactory.TryGetSharperRanges`, one small accessor on each set class) become constant and relational patterns, then the normal form of step 3. A range of fewer than four integral values is written as constants (`0 or 1`) | Diagnostics, `val` locals and return attributes need a pattern, and the normal form keeps them all the same |
+| Arithmetic | `+`, `-` and unary `-` over `int`, `uint`, `long` and `ulong`, operand by operand (any source of step 3, recursively), interval by interval, computed in `decimal`. Unchecked arithmetic that can overflow gives no refinement (it wraps); checked arithmetic drops the values that would throw. An operand that is converted (`long + int`) has none. Multiplication, division and conversions are later | Exact for the operations that matter for indices and counters, and never unsound: `i + 1` for `int i is >=0` has none, since `int.MaxValue + 1` wraps |
+| Where arithmetic counts | Everywhere a refinement is computed: arguments, switch inputs, `val` locals and inferred returns (`infer Next(int i is >=0 and <10) => i + 1` is `>= 1 and <= 10`, written to metadata) | One source of truth |
+| Which refinements are inferred | Only those that depend on a call's inferred return: the call's result, and a `val`, union or narrowed arm that holds one. Unions of written refinements and constants (`c ? 1 : -1`, `c ? j : n`) are no longer inferred, so not proving them is the warning CS20077 (step 4 made them errors). Arithmetic results are never inferred | The error exists so that a widened return breaks its callers; and a better prover must not turn a warning into an error: `Page(Sign(x) - 1)` warned in step 4 (no refinement), so it still warns. A value it disproves is an error, since the guard always throws there |
+| Null of value types | A refinement of a type that cannot be null never matches null (`MatchesNullOf`), in source, in metadata and in inferred ones | The old answer made `Color c is not Color.Blue` look like `null or ...` |
+
+### As built
+
+- [x] **Narrowing.** `SharperSwitchNarrowing` (`Binder/Binder_SharperRefinements.cs`), made by the switch expression
+  binder for an eligible input from the variable's refinement in scope (so nested switches narrow further), and passed
+  to each arm (`SwitchExpressionArmBinder.BindSwitchExpressionArm`), which records the variable's refinement inside it
+  and answers `GetSharperRefinementInScope`. The narrowed refinement keeps the variable's `IsInferred`.
+- [x] **Ranges.** `ValueSetFactory.TryGetSharperRanges` (`Utilities/ValueSetFactory.SharperRanges.cs`) and an
+  `AddSharperRanges` method on `NumericValueSet`, `FloatingValueSet` and `BoolValueSet` (`AddSharperMembers` on
+  `EnumeratedValueSet`): five small additions to upstream files.
+- [x] **Arithmetic.** `SharperRefinement.OfArithmetic` and `FromValues` (`Symbols/Source/SharperRefinement_Narrowing.cs`),
+  called from step 3's `OfValues`.
+- Tests: 6 `RefinementNarrowing_*` and `RefinementArithmetic_*` tests (`SharperTests_RefinementNarrowing.cs`); step 4's
+  tests changed where unions without a call now warn, and Fib's recursive calls are proven
+  (`RefinementSwitch_Fib`); `ReturnRefinement_ValLocals` has `val sum = constant + 1` as `4`.
+- Left for later: slice 3 (flow state: `if` tests, mutable variables, switch statements, `assume`), multiplication and
+  conversions in arithmetic, narrowing an arm's pattern variables.
 
 ## Feature 12: pipe, without lifting
 
@@ -1643,6 +1735,36 @@ and a constant or a local is no method group, so C# keeps its meaning without a 
 | Refinements | `int i is IsEven` is an opaque pattern, which `SharperRefinement.FindOpenPattern` rejects (CS20058); the call's purity is not checked there, as for slice 1 |
 | Left out | Union matching, `dynamic` inputs, lambdas and delegate-typed values, extractors with sub-patterns (slice 3) |
 
+### Slice 3, as built
+
+Extractors with sub-patterns: shapes 2 (`bool TryX(T, out U...)`) and 3 (`U F(T)`). Prototype on
+`sharper/extractor-patterns` ([feature page](../features/extractor-patterns.md), tests in
+`SharperTests_ExtractorPatterns.cs`). Only shape 4, C# 15 unions as extractors, is left for #35; it waits for #31.
+
+**Probe.** With the flag off, `s is TryParse(var n)` is CS0246 for a simple name (also with a method `TryParse` in
+scope: type lookup does not report CS0118 for a method), CS0426 for `Ex.TryParse(...)`, CS0234 for `System.Nope(...)`
+and CS0118 for `receiver.TryX(...)` ("'r' is a variable but is used like a type"). Every form with parentheses parses
+as a positional pattern, also `Length(5)` with only constant sub-patterns, under `not` and in `case` labels, so
+`BindRecursivePattern` is the one entry point.
+
+| Question | As built |
+| --- | --- |
+| Where it binds | `BindRecursivePattern`, before the type is bound: a pattern with a type, a positional clause, no property clause and no designation, in a Sharper file. A trial `BindType` must report only CS0246, CS0426, CS0234 or CS0118 (`IsSharperExtractorTypeNotFound`), and `BindExpression` on the name must give a method group without errors. Otherwise C# binds the pattern as before, so a type always wins and C#'s errors stay |
+| Node | A new `BoundExtractorPattern` (the `BoundCall` over a `BoundValuePlaceholder` for the input, with `BoundDiscardExpression` `out` arguments; the sub-patterns; `IsTryShape`) and a new DAG evaluation, `BoundDagExtractorEvaluation`, whose outputs are the return value (temp index -1) and the `out` values (0 to n-1). Not an opaque test: the results are values the sub-patterns test, as for `Deconstruct`, which an opaque test has no room for |
+| Shape choice | With `k` sub-patterns, `M(x, out _ ×k)` is tried first: an applicable method that returns `bool` by value is the Try shape. Then, for one sub-pattern without a name, `M(x)`: an applicable method that returns a value is the value shape. Within a shape, overload resolution chooses, and an applicable call with an error (an ambiguity, CS0121) is reported. So the Try shape wins when both apply (`Get(var g)` with `bool Get(T, out int)` and `int Get(T)`), and `M()` is a Try method with no `out` values, which matches when it returns true. Neither shape (a `void` method, a non-`bool` method with `out` parameters, a `ref` return, default values, `params` expansion) keeps C#'s error |
+| Names | A Try shape's sub-pattern may name the `out` parameter (`TryParse(value: var n)`); another name is CS8517, as for `Deconstruct`. The value shape keeps C#'s error for a named sub-pattern |
+| Generic, instance, extension methods | Slice 2's rules: the input is the first argument, never the receiver; type inference from the input (the discards give none), or type arguments written out; instance methods on `this` or another receiver (`s is r.TryParseWithin(var n)`); an extension method called on a receiver or by name |
+| Input conversion and `null` | As an argument: implicit conversions only, the input as it is, `null` included. Under `or`, the operand check widens the input type and the DAG tests for the method's input type first (`MakeTestsAndBindingsForExtractorPattern`, `WithInputTypeCheckIfNeeded`) |
+| Purity | A new error, CS20081 ("The method of an extractor pattern must be pure, but it is not: {0}."), from the member-mode `PurityWalker` over the call. The discards are fresh, so CS20053 never fires (the decision of #177). In a `[Pure]` body the pattern itself is allowed (`BoundExtractorPattern` and `BoundPositionalSubpattern` in the allow list; recursive patterns stay rejected); its designations are not, as anywhere in a pure body |
+| Shared calls, order | `BoundDagExtractorEvaluation.IsEquivalentTo` compares the calls by structure (`BoundDagOpaqueTest.IsSameValue`, with the placeholders as one input and two `out` discards of one type the same), so the DAG makes one call for `TryParse(> 10) => 1, TryParse(> 0) => 2, TryParse(_) => 3` (the twin with guards makes three). An evaluation sits on the paths of the arms that need it, so `(_, true) => 0, (TryParse(var n), _) => n` makes no call for the first arm. `RemoveEvaluationAndUpdateTempReferences` maps both outputs of an identical call |
+| Exhaustiveness | Nothing is learned about the input; the outputs are DAG temps, so sub-patterns on them narrow as any do: `TryParse(_), not TryParse(_)` is exhaustive, `TryParse(> 0), TryParse(<= 0)` is CS8509 (the `false` return is left out), and `TryParse(> 5)` after `TryParse(> 0)` is unreachable (CS8510) |
+| Flow | The call is read before the match, with the opaque operands (`VisitSharperOpaquePatternOperands`); the sub-patterns' designations are assigned as `Deconstruct`'s are (`DefiniteAssignment.VisitPattern`, `VariablesDeclaredWalker`). A conditional access before a pattern that calls a method on the input (a predicate or an extractor) learns nothing from a match, since the method is called with `null` too (`callsSharperMethodOnInput`; `Extractor_ConditionalAccess` covers both) |
+| Nullable | The placeholder has the input's state where the DAG calls the method (CS8604 as for the twin call); the return temp has the method's return annotation and the call's state; an `out` temp has its parameter's annotation with the when-true attributes applied (`[NotNullWhen(true)]`), since the values are read only after `true` |
+| IOperation | `IRecursivePatternOperation` with `DeconstructSymbol` the method, `MatchedType` the input type and the sub-patterns, as the pattern is written; the call does not appear, so the control flow graph needs nothing new. The test hook's `TestOperationVisitor` accepted only a method named `Deconstruct` there, and now accepts any method in a Sharper tree |
+| Primary constructor captures | The finders of captured parameters skip names in type-only contexts (`MethodCompiler`'s identifier map assertion, `Binder.IdentifierUsedAsValueFinder`); a positional pattern's name now may read a parameter (`s is digits.TryParse(var n)`), so both ask `IsInSharperExtractorPatternName` |
+| Refinements | `string s is TryParse(_)` is an extractor, which `SharperRefinement.FindOpenPattern` rejects (CS20058); its purity is not checked there |
+| Left out | Shape 4 (unions, after #31), union matching, `dynamic` inputs, lambdas and delegate-typed values, a property clause or designation on the extractor, and the `or` operand check inside an extractor's sub-patterns (it is one operand there, as an opaque pattern is) |
+
 ## Feature 14: purity, slice 1, second part: virtual and interface members
 
 `[Pure]` on virtual, abstract, override and interface members, with the rule that every override and implementation of
@@ -1732,7 +1854,7 @@ built.
    `if (!(...)) throw`; IOperation shows that `if` and `throw`.
 4. **Tests** in `SharperTests_Assume.cs`, next to the C# `if` and `throw` they stand for.
 
-Later: step 4's call-site hook (part of step 4) and mutable targets with slice 3.
+Later: mutable targets with slice 3. Step 4's hook exists: the scope binder overrides `Binder.GetSharperRefinementInScope`.
 
 **Size:** S–M, about 1k to 1.5k lines with tests.
 
@@ -1829,7 +1951,7 @@ building it.
 - **Visibility.** Every inconsistent accessibility error of a signature (methods, operators, constructors, properties,
   indexers, events, fields, delegate declarations), of a base type or interface, and of a constraint goes through
   `SharperFunctionTypeVisibility.AddInconsistentAccessibility`. In a Sharper file, when the type that
-  `FindTypeLessVisibleThan` finds is an anonymous delegate, it reports CS20075 instead, with the delegate written as a
+  `FindTypeLessVisibleThan` finds is an anonymous delegate, it reports CS20082 instead, with the delegate written as a
   function type. An `infer` member's inferred type goes through the same checks, so it needs nothing else.
 - **Parsing `scoped`.** `IsSharperFunctionTypeScopedModifier` decides it in the parser and in both scanners
   (`ScanTupleOrSharperFunctionType`, `IsSharperFunctionTypeStart`) from the next two tokens, without scanning the type
@@ -1842,7 +1964,7 @@ building it.
 | Question | Decision | Why |
 | --- | --- | --- |
 | Do N2's parameter names attach to the anonymous delegate? | No. The names are checked (CS0100) and dropped; `Invoke` has the descriptor's `arg1`, `arg2`, as for a lambda's anonymous delegate. Left for N4 | The descriptor is the anonymous delegate's identity, so names in its fields would make `(ref int a) -> int` and `(ref int b) -> int` two types. N2's storage is on `ConstructedNamedTypeSymbol`, and `AnonymousDelegatePublicSymbol` is not one, so names need storage of their own; N4 decides names in metadata, where an internal type matters little |
-| Where CS20075 replaces CS0050 to CS0061 and CS0703 | At the shared report helper, only in a Sharper file, only when the less visible type is an anonymous delegate | One rule for written and inferred types, with the C# boundary exactly. Plain C# keeps its errors |
+| Where CS20082 replaces CS0050 to CS0061 and CS0703 | At the shared report helper, only in a Sharper file, only when the less visible type is an anonymous delegate | One rule for written and inferred types, with the C# boundary exactly. Plain C# keeps its errors |
 | What `scoped` before a type means | A modifier, as in a lambda since C# 14; `(scoped) -> int` and `(scoped, int) -> int` keep a type named `scoped` | C# 11 forbids declaring a type named `scoped` (CS9062), so only old libraries have one, and the lambda rule is the one users know |
 | Modifiers that stay errors | `params`, `this`, and `readonly` without `ref`: CS20008, with a message narrowed to "declare a named delegate". Duplicates and conflicts report C#'s CS1107, CS8328 and CS9349 | `params` and `this` were decided in #56; `readonly` alone is Sharper's `readonly` parameter, which says nothing about a delegate type |
 | A static or pointer type in an anonymous delegate | As for a lambda: a static type is CS0721 or CS0722, a pointer is allowed | The anonymous delegate is not generic over a pointer, so `Func`'s constraint errors do not apply |
@@ -1918,7 +2040,7 @@ The open items are marked in code as `// PROTOTYPE(sharper):` (`git grep "PROTOT
 - [x] Function types: parentheses apply a suffix to the whole function type, `((int) -> int)?`, `((int) -> int)[]` and `((int) -> int)~`, with the new node `ParenthesizedTypeSyntax`. `((p)->F)[i]`, `((p)->F)?.X`, `((p)->F) ? a : b` and `(((p)->F))(x)` keep their C# meaning. [#58](https://github.com/ok3mad/roslyn/issues/58)
 - [x] Function types in patterns: declaration, type, recursive, list and property patterns, `switch` statements and expressions (`x is (int) -> int f`, `case () -> void a:`). In C#, `e is (p)->F` is a syntax error (the pattern parser stops at `->`), so there was no C# meaning to keep; `e is p->F` keeps its meaning. [#59](https://github.com/ok3mad/roslyn/issues/59)
 - [x] Report constraint errors of the short type forms where their C# twins do: on a function type's parameter or return type ([#62](https://github.com/ok3mad/roslyn/issues/62)), and on the element of `T[..]` ([#65](https://github.com/ok3mad/roslyn/issues/65)) and `T~`.
-- [x] Function types: `ref`, `out`, `in`, `ref readonly` and `scoped` parameters, ref returns and more than 16 parameters as the anonymous delegate of a lambda's natural type, with a "declare a named delegate" error (CS20075) on members visible outside the assembly, for written and inferred types; CS20009 retired, CS20008 narrowed to `params`, `this` and `readonly`. [#56](https://github.com/ok3mad/roslyn/issues/56)
+- [x] Function types: `ref`, `out`, `in`, `ref readonly` and `scoped` parameters, ref returns and more than 16 parameters as the anonymous delegate of a lambda's natural type, with a "declare a named delegate" error (CS20082) on members visible outside the assembly, for written and inferred types; CS20009 retired, CS20008 narrowed to `params`, `this` and `readonly`. [#56](https://github.com/ok3mad/roslyn/issues/56)
 - [ ] Function types: parameter names, `(int width, int height) -> int` ([#57](https://github.com/ok3mad/roslyn/issues/57)): N1 names in the syntax ([#212](https://github.com/ok3mad/roslyn/issues/212), done: `FunctionTypeParameterSyntax`, CS20007 retired), N2 names on the type symbol ([#213](https://github.com/ok3mad/roslyn/issues/213), done: `SharperFunctionTypeNames`, CS20066 to CS20068; left for N4: names lost when an override copies custom modifiers, names in an attribute's type argument, a method group's natural type, the names of an anonymous delegate, written or a lambda's natural type ([#56](#function-types-as-anonymous-delegates))), N3 IDE ([#214](https://github.com/ok3mad/roslyn/issues/214)), N4 names in metadata and named arguments ([#215](https://github.com/ok3mad/roslyn/issues/215)). N2 to N4 are decided (see Decisions).
 - [ ] Sharpener: rewrite `F<a[..]>(x)` (two comparisons in C#) as `F < (a[..]) > (x)`, the sequence type's accepted break. [#66](https://github.com/ok3mad/roslyn/issues/66)
 - [ ] Sharpener: rewrite `F<(p)->b>(x)` (two comparisons in C#) as `F < ((p)->b) > (x)`, the function type's accepted break, which was documented only in the feature page. Like `F<a[..]>(x)`, it also covers the argument-list form `M(F < (p)->b, c > (x))`. [#114](https://github.com/ok3mad/roslyn/issues/114)

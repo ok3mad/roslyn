@@ -136,7 +136,7 @@ as anonymous delegates"):
    modifiers.
 2. **An internal type in a signature goes through one helper.** `SharperFunctionTypeVisibility.AddInconsistentAccessibility`
    reports every inconsistent accessibility error (CS0050 to CS0061, CS0703) and turns the ones caused by an
-   anonymous delegate into CS20075, in Sharper files only. A new member kind or signature check reports through it.
+   anonymous delegate into CS20082, in Sharper files only. A new member kind or signature check reports through it.
 3. **Test against the lambda twin** with `SymbolEqualityComparer.Default` and, ignoring the top-level annotation of a
    `var` local, `IncludeNullability`; give the twin an explicit return type where the inferred one would differ.
 
@@ -518,6 +518,33 @@ inferred return type binds the same body with the same member.
    being compiled (`ModuleBuilderOpt.AddSynthesizedDefinition`, bodies through `TypeCompilationState.AddSynthesizedMethod`):
    a top-level class cannot implement a private or protected interface. A `None` operation whose child has the same syntax
    must be implicit, or the IOperation test hook reports a duplicate node.
+48. **A new DAG evaluation and a name that changes from type to value meet their own lists.** The extractor pattern
+   (`BoundDagExtractorEvaluation`) needed `IsEquivalentTo` (calls compared by structure, `BoundDagOpaqueTest.IsSameValue`),
+   `BoundDagEvaluation.Symbol`, the two temp maps of `RemoveEvaluationAndUpdateTempReferences` (each output, the return
+   value included), the debug names of its temps, `LowerEvaluation`, and both nullable switches
+   (`LearnFromDecisionDag` and `getOrMakeAndRegisterDagTempSlot`); grep `BoundDagDeconstructEvaluation`. Its outputs are
+   DAG temps, so sub-patterns on them narrow and subsume like `Deconstruct`'s, while the input learns nothing. A positional
+   pattern's name, a type-only context in C#, can now read a parameter (`s is p.TryX(var n)`): the primary constructor
+   capture finders skip type-only names (`MethodCompiler`'s identifier map and `Binder.IdentifierUsedAsValueFinder`), so
+   both ask `IsInSharperExtractorPatternName`, or the parameter is reported unread. Test-only checks can encode C#'s
+   shapes too: `TestOperationVisitor` required a recursive pattern's method to be named `Deconstruct`.
+
+48. **Knowledge seeded into a decision DAG must be applied to the root's tests, and kept out of lowering.** The DAG
+   builder simplifies a case's tests only when it splits on a test, so values seeded into the root state
+   (`DecisionDagBuilder`'s `inputRefinement`, a refined switch input) leave the first test undecided: an impossible
+   outcome gets an empty state, which reaches the default label and makes a covered switch non-exhaustive. Decide such
+   tests by sending both branches to the possible state, which `removeUnnecessaryStates` drops
+   (`KnownFromSharperInputRefinement`). Value sets hold no null, and the builder prunes a case once its input's set is
+   empty, so seed only facts that exclude null. Mark a seeded DAG unsuitable for lowering so that lowering rebuilds C#'s
+   and a broken promise still throws, and give `PatternExplainer` the same values, or CS8509 names a value outside the
+   domain. To tell "unreachable because of the seed" from C#'s subsumption, build the unseeded DAG only when a label is
+   unreachable.
+
+49. **A fact for everything inside a sub-part belongs on the binder the map gives that sub-part.** A binder made on the
+   spot to bind one expression is not on the chain of the binders `LocalBinderFactory` made for lambdas and nested
+   constructs inside it, so they miss what it knows. Arm narrowing records the arm's refinement on the
+   `SwitchExpressionArmBinder` the map holds for the arm and answers the scope hook (`GetSharperRefinementInScope`)
+   there; computing it while the arms bind in order needs no second binding of earlier patterns (trap 25).
 
 ## Testing
 

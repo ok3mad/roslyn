@@ -2241,7 +2241,8 @@ namespace Microsoft.CodeAnalysis.CSharp
                             case ExpressionSyntax expression:
                                 if (SyntaxFacts.IsInTypeOnlyContext(expression) &&
                                     !(expression.Parent is BinaryExpressionSyntax { RawKind: (int)SyntaxKind.IsExpression } isExpression &&
-                                      isExpression.Right == expression))
+                                      isExpression.Right == expression) &&
+                                    !Binder.IsInSharperExtractorPatternName(expression))
                                 {
                                     return false;
                                 }
@@ -2281,7 +2282,8 @@ namespace Microsoft.CodeAnalysis.CSharp
 
                         if (SyntaxFacts.IsInTypeOnlyContext(id) &&
                             !(id.Parent is BinaryExpressionSyntax { RawKind: (int)SyntaxKind.IsExpression } isExpression &&
-                                isExpression.Right == id))
+                                isExpression.Right == id) &&
+                            !Binder.IsInSharperExtractorPatternName(id))
                         {
                             return false;
                         }
@@ -2328,6 +2330,12 @@ namespace Microsoft.CodeAnalysis.CSharp
                                     }
 
                                     if (parent is BinaryExpressionSyntax { RawKind: (int)SyntaxKind.IsExpression } isExpression && isExpression.Right == child)
+                                    {
+                                        continue;
+                                    }
+
+                                    // Sharper: the name of a positional pattern binds as an expression only when it names no type.
+                                    if (Binder.IsInSharperExtractorPatternName(id))
                                     {
                                         continue;
                                     }

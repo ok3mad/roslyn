@@ -1492,8 +1492,11 @@ namespace Microsoft.CodeAnalysis.Test.Utilities
                 case null: // OK: indicates deconstruction of a tuple, or an error case
                     break;
                 case IMethodSymbol method:
-                    // when we have a method, it is a `Deconstruct` method
-                    Assert.Equal("Deconstruct", method.Name);
+                    // when we have a method, it is a `Deconstruct` method, or the method of a Sharper extractor pattern
+                    if (!operation.Syntax.SyntaxTree.Options.Features.ContainsKey("sharper"))
+                    {
+                        Assert.Equal("Deconstruct", method.Name);
+                    }
                     break;
                 case ITypeSymbol type:
                     // when we have a type, it is the type "ITuple"

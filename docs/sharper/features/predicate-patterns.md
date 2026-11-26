@@ -3,7 +3,7 @@
 **Status:** Prototype of slice 2 of patterns on pure functions, on `sharper/predicate-patterns`. Requires
 `/features:sharper`. Issue: [#35](https://github.com/ok3mad/roslyn/issues/35); the design is in the implementation plan,
 [Feature 13](../planning/implementation-plan.md#feature-13-patterns-on-pure-functions-design). Extractors with
-sub-patterns (`s is Parse(val n)`) are slice 3.
+sub-patterns (`s is TryParse(var n)`) are slice 3: [extractor patterns](extractor-patterns.md).
 
 ## Summary
 
@@ -40,7 +40,7 @@ expressions.
   if nothing is applicable, C#'s error stays.
 - The method found must return `bool` (not `bool?`, not by reference) and take the input as its only argument: no
   default values filled in and no `params` expansion. Anything else (`int F(int)`, `bool M(int, int y = 0)`) keeps C#'s
-  error; `U F(T)` will be an extractor in slice 3.
+  error; `U F(T)` with a sub-pattern is an [extractor](extractor-patterns.md), `x is F(> 0)`.
 - A type or constant of that name keeps the C# meaning: with a class `IsEven` in scope, `o is IsEven` is a type
   pattern, and with a constant `IsOdd`, `x is IsOdd` compares with it. An instance method named from a static context
   keeps C#'s error.
@@ -90,7 +90,8 @@ receiver as the instance), as the pattern is written; the call and its argument 
   there.
 - Lambdas and delegate-typed values as predicates (`x is isValid` with a `Func<int, bool> isValid` is a constant
   pattern, and an error).
-- Extractors with sub-patterns (`s is Parse(val n)`, `TryX(T, out U)`, `U F(T)`): slice 3.
+- Extractors with sub-patterns (`s is TryParse(var n)`, `s is Length(> 0)`) are slice 3, on their own page:
+  [extractor patterns](extractor-patterns.md).
 - A predicate's call cannot be intercepted (interceptors), as the target of a method group conversion cannot.
 
 ## Code

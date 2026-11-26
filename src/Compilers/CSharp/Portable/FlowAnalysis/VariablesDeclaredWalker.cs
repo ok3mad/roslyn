@@ -111,6 +111,13 @@ namespace Microsoft.CodeAnalysis.CSharp
                     // Sharper: the base visited the operand before the match.
                     break;
 
+                case BoundExtractorPattern extractorPattern:
+                    // Sharper: the base visited the call before the match.
+                    foreach (var subpattern in extractorPattern.Subpatterns)
+                        NoteDeclaredPatternVariables(subpattern.Pattern);
+
+                    break;
+
                 case BoundNegatedPattern negatedPattern:
                     NoteDeclaredPatternVariables(negatedPattern.Negated);
                     break;
