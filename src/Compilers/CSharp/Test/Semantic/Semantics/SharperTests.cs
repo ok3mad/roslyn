@@ -9727,6 +9727,145 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
         }
 
         [Fact]
+        public void ImplicitIt_DeclarationNextToLambda()
+        {
+            // A variable declared in another argument than the implicit lambda (#125), each Sharper line next to its C# twin.
+            // 'G' takes a function or a value, with 'out' variables of different types: the trial that loses must not give
+            // 'v' its type.
+            var source = """
+                using System;
+                using System.Linq;
+
+                class Box
+                {
+                    public string Kind;
+                    public Box(Func<int, int> f, out int v) { v = f(1); Kind = "box" + v; }
+                }
+
+                class Base
+                {
+                    public Base(Func<int, int> f, out int v) { v = f(2); Console.Write("base" + v + ";"); }
+                }
+
+                class Derived : Base
+                {
+                    public Derived() : base(it * 10, out var v) => Console.Write(v + 1);
+                }
+
+                class C
+                {
+                    static int F(Func<int, int> f, out int v) { v = f(1); return v; }
+                    static string G(Func<int, int> f, out string s) { s = "function" + f(1); return s; }
+                    static string G(int x, out int n) { n = x; return "value"; }
+
+                    static void Main()
+                    {
+                        int[] xs = [1, 2, 3];
+                        F(it + 1, out var a1);
+                        F(x => x + 1, out var a2);
+                        Console.Write(a1 + a2 + ";");
+                        G(it * 2, out var b1);
+                        G(x => x * 2, out var b2);
+                        Console.Write(b1 + b2 + ";");
+                        G(xs.Count(it > 1), out var c1);
+                        G(xs.Count(x => x > 1), out var c2);
+                        Console.Write(c1 + c2 + ";");
+                        F(it + 1, out int d1);
+                        F(x => x + 1, out int d2);
+                        Console.Write(d1 + d2 + ";");
+                        F(it + 1, out _);
+                        F(x => x + 1, out _);
+                        object o = 5;
+                        Console.Write(F(it + 1, out var e1) + (o is int n1 ? n1 : 0) + e1 + ";");
+                        Console.Write(F(x => x + 1, out var e2) + (o is int n2 ? n2 : 0) + e2 + ";");
+                        Console.Write(G(it * 3, out var h1) + h1 + ";");
+                        Console.Write(G(x => x * 3, out var h2) + h2 + ";");
+                        Box box1 = new(it + 1, out var f1);
+                        Box box2 = new(x => x + 1, out var f2);
+                        Console.Write(box1.Kind + box2.Kind + f1 + f2 + ";");
+                        var box3 = new Box(it + 2, out var g1);
+                        var box4 = new Box(x => x + 2, out var g2);
+                        Console.Write(box3.Kind + box4.Kind + g1 + g2 + ";");
+                        _ = new Derived();
+                    }
+                }
+                """;
+            var comp = CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90, options: TestOptions.ReleaseExe);
+            var verifier = CompileAndVerify(comp, expectedOutput: ExecutionConditionUtil.IsCoreClr ? "4;function2function2;4;4;9;9;function3function3;function3function3;box2box222;box3box333;base20;21" : null);
+            verifier.VerifyDiagnostics();
+
+            var tree = comp.SyntaxTrees[0];
+            var model = comp.GetSemanticModel(tree);
+            var designations = tree.GetRoot().DescendantNodes().OfType<SingleVariableDesignationSyntax>().ToArray();
+            var types = string.Join(", ", designations
+                .Where(d => d.Identifier.ValueText is "b1" or "b2" or "c1" or "c2" or "e1" or "h1" or "h2" or "f1" or "g1")
+                .Select(d => d.Identifier.ValueText + ": " + ((ILocalSymbol)model.GetDeclaredSymbol(d)!).Type.ToTestDisplayString()));
+            Assert.Equal("b1: System.String, b2: System.String, c1: System.Int32, c2: System.Int32, e1: System.Int32, h1: System.String, h2: System.String, f1: System.Int32, g1: System.Int32", types);
+        }
+
+        [Fact]
+        public void ImplicitIt_DeclarationNextToLambda_Errors()
+        {
+            // Each error is reported once, from the chosen trial. A declaration inside an argument that can be a lambda is
+            // still CS20022, and makes the argument a value.
+            var source = """
+                using System;
+                using System.Linq;
+
+                class C
+                {
+                    static int F(Func<int, int> f, out int v) { v = f(1); return v; }
+                    static string G(Func<int, int> f, out string s) { s = "function"; return s; }
+                    static string G(int x, out int n) { n = x; return "value"; }
+                    static string P(bool b, out int n) { n = 1; return "value"; }
+                    static string P(Func<int, bool> f, out string s) { s = "function"; return s; }
+                    static int Make(int x, out int y) { y = x; return x; }
+                    class Box { public Box(Func<int, int> f) { } }
+
+                    void M(int[] xs)
+                    {
+                        F(it.Nope, out var a);
+                        F(it + b, out var b);
+                        F(it + 1, out var c, c);
+                        G(it.Nope, out var d);
+                        var e = 1 |> P(it > 0, out var v);
+                        xs.Select(F(it + 1, out var w));
+                        Box box = new(Make(it, out var y));
+                        Console.Write(a + c + d + e);
+                    }
+                }
+                """;
+            CreateCompilation(source, parseOptions: s_sharperOptions, targetFramework: TargetFramework.Net90).VerifyDiagnostics(
+                // (16,14): error CS1061: 'int' does not contain a definition for 'Nope' and no accessible extension method 'Nope' accepting a first argument of type 'int' could be found (are you missing a using directive or an assembly reference?)
+                //         F(it.Nope, out var a);
+                Diagnostic(ErrorCode.ERR_NoSuchMemberOrExtension, "Nope").WithArguments("int", "Nope").WithLocation(16, 14),
+                // (17,16): error CS0841: Cannot use local variable 'b' before it is declared
+                //         F(it + b, out var b);
+                Diagnostic(ErrorCode.ERR_VariableUsedBeforeDeclaration, "b").WithArguments("b").WithLocation(17, 16),
+                // (18,30): error CS8196: Reference to an implicitly-typed variable 'c' is not permitted in this location.
+                //         F(it + 1, out var c, c);
+                Diagnostic(ErrorCode.ERR_ImplicitlyTypedVariableUsedInForbiddenZone, "c").WithArguments("c").WithLocation(18, 30),
+                // (19,14): error CS1061: 'int' does not contain a definition for 'Nope' and no accessible extension method 'Nope' accepting a first argument of type 'int' could be found (are you missing a using directive or an assembly reference?)
+                //         G(it.Nope, out var d);
+                Diagnostic(ErrorCode.ERR_NoSuchMemberOrExtension, "Nope").WithArguments("int", "Nope").WithLocation(19, 14),
+                // (20,24): error CS20021: 'it' is ambiguous here: 'P' takes a value or a function at this argument, and the outer 'it' fits both. Write the lambda, as in 'x => ...', or name the outer value.
+                //         var e = 1 |> P(it > 0, out var v);
+                Diagnostic(ErrorCode.ERR_SharperItValueOrFunction, "it").WithArguments("P").WithLocation(20, 24),
+                // (21,12): error CS0411: The type arguments for method 'Enumerable.Select<TSource, TResult>(IEnumerable<TSource>, Func<TSource, int, TResult>)' cannot be inferred from the usage. Try specifying the type arguments explicitly.
+                //         xs.Select(F(it + 1, out var w));
+                Diagnostic(ErrorCode.ERR_CantInferMethTypeArgs, "Select").WithArguments("System.Linq.Enumerable.Select<TSource, TResult>(System.Collections.Generic.IEnumerable<TSource>, System.Func<TSource, int, TResult>)").WithLocation(21, 12),
+                // (21,37): error CS20022: Cannot declare 'w' in an implicit 'it' lambda. Write the lambda, as in 'x => ...'.
+                //         xs.Select(F(it + 1, out var w));
+                Diagnostic(ErrorCode.ERR_SharperItDeclaration, "w").WithArguments("w").WithLocation(21, 37),
+                // (22,28): error CS20019: 'it' has no lambda here. 'it' is the parameter of an argument that takes a function with one parameter, such as 'xs.Select(it.Name)'.
+                //         Box box = new(Make(it, out var y));
+                Diagnostic(ErrorCode.ERR_SharperItNoLambda, "it").WithLocation(22, 28),
+                // (22,40): error CS20022: Cannot declare 'y' in an implicit 'it' lambda. Write the lambda, as in 'x => ...'.
+                //         Box box = new(Make(it, out var y));
+                Diagnostic(ErrorCode.ERR_SharperItDeclaration, "y").WithArguments("y").WithLocation(22, 40));
+        }
+
+        [Fact]
         public void ImplicitIt_MoreArgumentLists()
         {
             // Object creation, target-typed 'new', indexers and constructor initializers (#122), each next to its C# twin.

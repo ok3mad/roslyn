@@ -4952,14 +4952,15 @@ namespace Microsoft.CodeAnalysis.CSharp
                 return BindSharperImplicitItConstructorInitializer(initializerArgumentListOpt, constructor, diagnostics);
             }
 
-            return BindConstructorInitializerCore(initializerArgumentListOpt, constructor, diagnostics, sharperImplicitItArguments: null);
+            return BindConstructorInitializerCore(initializerArgumentListOpt, constructor, diagnostics, sharperBoundArguments: null);
         }
 
+        /// <param name="sharperBoundArguments">The arguments, already bound by a Sharper implicit <c>it</c> trial, or null to bind them here.</param>
         private BoundExpression BindConstructorInitializerCore(
             ArgumentListSyntax initializerArgumentListOpt,
             MethodSymbol constructor,
             BindingDiagnosticBag diagnostics,
-            ArrayBuilder<ArgumentSyntax> sharperImplicitItArguments)
+            AnalyzedArguments sharperBoundArguments)
         {
             // Either our base type is not object, or we have an initializer syntax, or both. We're going to
             // need to do overload resolution on the set of constructors of the base type, either on
@@ -4994,7 +4995,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 return null;
             }
 
-            AnalyzedArguments analyzedArguments = AnalyzedArguments.GetInstance();
+            AnalyzedArguments analyzedArguments = sharperBoundArguments is null ? AnalyzedArguments.GetInstance() : AnalyzedArguments.GetInstance(sharperBoundArguments);
             try
             {
                 TypeSymbol constructorReturnType = constructor.ReturnType;
@@ -5002,9 +5003,9 @@ namespace Microsoft.CodeAnalysis.CSharp
 
                 // Get the bound arguments and the argument names.
                 // : this(__arglist()) is legal
-                if (initializerArgumentListOpt != null)
+                if (initializerArgumentListOpt != null && sharperBoundArguments is null)
                 {
-                    this.BindArgumentsAndNames(initializerArgumentListOpt, diagnostics, analyzedArguments, allowArglist: true, sharperImplicitItArguments: sharperImplicitItArguments);
+                    this.BindArgumentsAndNames(initializerArgumentListOpt, diagnostics, analyzedArguments, allowArglist: true);
                 }
 
                 NamedTypeSymbol initializerType = containingType;
